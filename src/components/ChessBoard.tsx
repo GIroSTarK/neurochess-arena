@@ -72,12 +72,30 @@ export function ChessBoardComponent() {
 
   // Handle square click (click-to-move)
   const onSquareClick = useCallback(
-    ({ square }: SquareHandlerArgs) => {
+    ({ piece, square }: SquareHandlerArgs) => {
       if (!isHumanTurn() || isThinking) {
         return;
       }
 
+      // Check if clicked square has our own piece
+      const isOwnPiece =
+        piece &&
+        ((currentTurn === 'white' && piece.pieceType[0] === 'w') ||
+          (currentTurn === 'black' && piece.pieceType[0] === 'b'));
+
       if (moveFrom) {
+        // Clicking on the same square - deselect
+        if (square === moveFrom) {
+          setMoveFrom(null);
+          return;
+        }
+
+        // Clicking on another own piece - select that piece instead
+        if (isOwnPiece) {
+          setMoveFrom(square);
+          return;
+        }
+
         // Try to make the move
         const uci = `${moveFrom}${square}`;
         let success = makeHumanMove(uci);
@@ -89,10 +107,13 @@ export function ChessBoardComponent() {
 
         setMoveFrom(null);
       } else {
-        setMoveFrom(square);
+        // Only select if it's our own piece
+        if (isOwnPiece) {
+          setMoveFrom(square);
+        }
       }
     },
-    [isHumanTurn, isThinking, moveFrom, makeHumanMove]
+    [isHumanTurn, isThinking, moveFrom, makeHumanMove, currentTurn]
   );
 
   // Check if piece is draggable
