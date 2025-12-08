@@ -3,10 +3,12 @@ import { getMaterialBalance } from '../lib/chessEngine';
 import { useMemo } from 'react';
 
 export function MoveHistory() {
-  const { game, moveHistory } = useGameStore();
+  const { game, moveHistory, fen } = useGameStore();
 
   // Calculate material balance
-  const material = useMemo(() => getMaterialBalance(game), [game]);
+  // Note: `game` is mutable and doesn't change reference, so we use `fen` to trigger recalculation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const material = useMemo(() => getMaterialBalance(game), [fen]);
 
   // Group moves into pairs (white, black)
   const movePairs = useMemo(() => {

@@ -10,6 +10,7 @@ import type {
   DebugEntry,
   PieceSet,
 } from '../types';
+import { INITIAL_FEN } from '../types';
 import {
   createGame,
   makeMove,
@@ -19,9 +20,6 @@ import {
   exportPGN,
 } from '../lib/chessEngine';
 import { requestLLMMove } from '../lib/llm';
-
-// Constants
-const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 // Default configurations
 const defaultPlayerConfig: PlayerConfig = {
@@ -280,10 +278,13 @@ export const useGameStore = create<GameStore>()(
           }
 
           // Continue auto-play if enabled and game is not over
+          // Check get().autoPlay inside setTimeout to handle race condition
+          // when user stops auto-play during the delay
           if (autoPlay && newStatus === 'playing') {
-            // Small delay before next move
             setTimeout(() => {
-              get().requestAIMove();
+              if (get().autoPlay && get().status === 'playing') {
+                get().requestAIMove();
+              }
             }, 500);
           }
         } catch (error) {

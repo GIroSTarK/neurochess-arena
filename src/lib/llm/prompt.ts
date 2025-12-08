@@ -53,64 +53,85 @@ Think step by step, then provide your move in the JSON format above.`;
 /**
  * Extracts move from LLM response text
  * Tries multiple patterns to find the UCI move
+ * Priority: JSON block > JSON object > "move" property > explicit phrases > last UCI move in text
  */
 export function extractMoveFromResponse(
   responseText: string
 ): { move: string; thoughts?: string } | null {
-  // Try to find JSON block first
+  // 1. Try to find JSON block first (highest priority)
   const jsonMatch = responseText.match(/```json\s*\n?([\s\S]*?)\n?```/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[1]);
       if (parsed.move && typeof parsed.move === 'string') {
-        return {
-          move: parsed.move.toLowerCase().trim(),
-          thoughts: parsed.explanation || parsed.thoughts || undefined,
-        };
+        const move = parsed.move.toLowerCase().trim();
+        if (isValidUciMove(move)) {
+          return {
+            move,
+            thoughts: parsed.explanation || parsed.thoughts || undefined,
+          };
+        }
       }
     } catch {
       // JSON parsing failed, try other methods
     }
   }
 
-  // Try to find JSON without code block
+  // 2. Try to find JSON object without code block
   const jsonObjectMatch = responseText.match(
     /\{[^{}]*"move"\s*:\s*"([a-h][1-8][a-h][1-8][qrbn]?)"[^{}]*\}/i
   );
   if (jsonObjectMatch) {
     try {
       const parsed = JSON.parse(jsonObjectMatch[0]);
-      return {
-        move: parsed.move.toLowerCase().trim(),
-        thoughts: parsed.explanation || parsed.thoughts || undefined,
-      };
+      const move = parsed.move.toLowerCase().trim();
+      if (isValidUciMove(move)) {
+        return {
+          move,
+          thoughts: parsed.explanation || parsed.thoughts || undefined,
+        };
+      }
     } catch {
-      // If we found the move pattern, use regex capture
+      // If JSON parsing failed but we found the move pattern, use regex capture
       if (jsonObjectMatch[1]) {
         return { move: jsonObjectMatch[1].toLowerCase() };
       }
     }
   }
 
-  // Try to find move in "move": "e2e4" format
+  // 3. Try to find move in "move": "e2e4" format
   const movePropertyMatch = responseText.match(/"move"\s*:\s*"([a-h][1-8][a-h][1-8][qrbn]?)"/i);
   if (movePropertyMatch) {
     return { move: movePropertyMatch[1].toLowerCase() };
   }
 
-  // Try to find standalone UCI move (4-5 character pattern)
-  // Look for it after common phrases
-  const uciPatterns = [
-    /(?:my move is|i (?:will )?play|best move(?:\s+is)?|i choose|move:)\s*[:\s]*([a-h][1-8][a-h][1-8][qrbn]?)/i,
-    /\b([a-h][1-8][a-h][1-8][qrbn]?)\b(?:\s*(?:is|as)\s+(?:my|the)\s+(?:move|choice))?/i,
+  // 4. Try to find move after explicit phrases (more reliable than generic UCI pattern)
+  const explicitPhrases = [
+    /(?:my (?:final )?move is|i (?:will )?play|best move(?:\s+is)?|i choose|final move:?|move:)\s*[:\s]*\**([a-h][1-8][a-h][1-8][qrbn]?)\**/i,
+    /(?:therefore|thus|so),?\s+(?:i (?:will )?play|my move is)\s*[:\s]*\**([a-h][1-8][a-h][1-8][qrbn]?)\**/i,
   ];
 
-  for (const pattern of uciPatterns) {
+  for (const pattern of explicitPhrases) {
     const match = responseText.match(pattern);
     if (match) {
       return { move: match[1].toLowerCase() };
     }
   }
 
+  // 5. Last resort: find the LAST UCI move mentioned in the text
+  // This is more likely to be the final answer rather than analysis of alternatives
+  const allUciMoves = responseText.match(/\b[a-h][1-8][a-h][1-8][qrbn]?\b/gi);
+  if (allUciMoves && allUciMoves.length > 0) {
+    // Return the last match as it's most likely the final decision
+    return { move: allUciMoves[allUciMoves.length - 1].toLowerCase() };
+  }
+
   return null;
+}
+
+/**
+ * Validates if a string is a valid UCI move format
+ */
+function isValidUciMove(move: string): boolean {
+  return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move);
 }

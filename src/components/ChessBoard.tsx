@@ -1,8 +1,8 @@
 import { Chessboard } from 'react-chessboard';
 import { useGameStore } from '../store/gameStore';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
-// Types from react-chessboard
+// Types matching react-chessboard's internal types
 interface PieceDataType {
   pieceType: string;
 }
@@ -45,55 +45,67 @@ export function ChessBoardComponent() {
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
 
   // Check if it's human's turn to move
-  const isHumanTurn = () => {
+  const isHumanTurn = useCallback(() => {
     if (status !== 'playing' && status !== 'idle') return false;
     const currentPlayer = currentTurn === 'white' ? whitePlayer : blackPlayer;
     return currentPlayer.type === 'human';
-  };
+  }, [status, currentTurn, whitePlayer, blackPlayer]);
 
   // Handle piece drop (drag and drop)
-  const onPieceDrop = ({ piece, sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
-    if (!isHumanTurn() || isThinking || !targetSquare) {
-      return false;
-    }
-
-    // Handle promotion (piece.pieceType is like 'wP' or 'bP')
-    const pieceType = piece.pieceType;
-    const isPawn = pieceType[1] === 'P';
-    const isPromotion = isPawn && (targetSquare[1] === '8' || targetSquare[1] === '1');
-    const promotion = isPromotion ? 'q' : undefined; // Default to queen promotion
-
-    const uci = `${sourceSquare}${targetSquare}${promotion || ''}`;
-    return makeHumanMove(uci);
-  };
-
-  // Handle square click (click-to-move)
-  const onSquareClick = ({ square }: SquareHandlerArgs) => {
-    if (!isHumanTurn() || isThinking) {
-      return;
-    }
-
-    if (moveFrom) {
-      // Try to make the move
-      const uci = `${moveFrom}${square}`;
-      const success = makeHumanMove(uci);
-
-      // If not successful, try with queen promotion
-      if (!success && (square[1] === '8' || square[1] === '1')) {
-        makeHumanMove(`${moveFrom}${square}q`);
+  const onPieceDrop = useCallback(
+    ({ piece, sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
+      if (!isHumanTurn() || isThinking || !targetSquare) {
+        return false;
       }
 
-      setMoveFrom(null);
-    } else {
-      setMoveFrom(square);
-    }
-  };
+      // Handle promotion (piece.pieceType is like 'wP' or 'bP')
+      const pieceType = piece.pieceType;
+      const isPawn = pieceType[1] === 'P';
+      const isPromotion = isPawn && (targetSquare[1] === '8' || targetSquare[1] === '1');
+      const promotion = isPromotion ? 'q' : ''; // Default to queen promotion
 
-  // Can drag piece check
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const canDragPiece = (_args: PieceHandlerArgs) => {
-    return isHumanTurn() && !isThinking;
-  };
+      const uci = `${sourceSquare}${targetSquare}${promotion}`;
+      return makeHumanMove(uci);
+    },
+    [isHumanTurn, isThinking, makeHumanMove]
+  );
+
+  // Handle square click (click-to-move)
+  const onSquareClick = useCallback(
+    ({ square }: SquareHandlerArgs) => {
+      if (!isHumanTurn() || isThinking) {
+        return;
+      }
+
+      if (moveFrom) {
+        // Try to make the move
+        const uci = `${moveFrom}${square}`;
+        let success = makeHumanMove(uci);
+
+        // If not successful and target is last rank, try with queen promotion
+        if (!success && (square[1] === '8' || square[1] === '1')) {
+          success = makeHumanMove(`${moveFrom}${square}q`);
+        }
+
+        setMoveFrom(null);
+      } else {
+        setMoveFrom(square);
+      }
+    },
+    [isHumanTurn, isThinking, moveFrom, makeHumanMove]
+  );
+
+  // Check if piece is draggable
+  const canDragPiece = useCallback(
+    ({ piece }: PieceHandlerArgs): boolean => {
+      if (!isHumanTurn() || isThinking) return false;
+
+      // Only allow dragging pieces of current turn color
+      const pieceColor = piece.pieceType[0] === 'w' ? 'white' : 'black';
+      return pieceColor === currentTurn;
+    },
+    [isHumanTurn, isThinking, currentTurn]
+  );
 
   // Custom square styles
   const squareStyles = useMemo(() => {
