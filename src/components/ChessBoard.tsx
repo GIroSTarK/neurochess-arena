@@ -1,7 +1,7 @@
 import { Chessboard } from 'react-chessboard';
 import { useGameStore } from '../store/gameStore';
 import { getLegalMovesFromSquare } from '../lib/chessEngine';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 
 // Types matching react-chessboard's internal types
 interface PieceDataType {
@@ -60,6 +60,12 @@ export function ChessBoardComponent() {
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
 
+  // Clear selection when game status changes (new game, reset, or game ends)
+  useEffect(() => {
+    setMoveFrom(null);
+    setPendingPromotion(null);
+  }, [status]);
+
   // Check if it's human's turn to move (only when game is actively playing)
   const isHumanTurn = useCallback(() => {
     if (status !== 'playing') return false;
@@ -103,17 +109,13 @@ export function ChessBoardComponent() {
 
   // Handle piece drop (drag and drop)
   const onPieceDrop = useCallback(
-    ({ piece, sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
+    ({ sourceSquare, targetSquare }: PieceDropHandlerArgs): boolean => {
       if (!isHumanTurn() || isThinking || !targetSquare) {
         return false;
       }
 
-      // Check if this is a promotion move
-      const pieceType = piece.pieceType;
-      const isPawn = pieceType[1] === 'P';
-      const isPromotion = isPawn && (targetSquare[1] === '8' || targetSquare[1] === '1');
-
-      if (isPromotion) {
+      // Check if this is a legal promotion move (validates using game.moves())
+      if (isPromotionMove(sourceSquare, targetSquare)) {
         // Show promotion dialog instead of auto-promoting to queen
         setPendingPromotion({ from: sourceSquare, to: targetSquare });
         return true; // Return true to show the piece moved visually
@@ -122,7 +124,7 @@ export function ChessBoardComponent() {
       const uci = `${sourceSquare}${targetSquare}`;
       return makeHumanMove(uci);
     },
-    [isHumanTurn, isThinking, makeHumanMove]
+    [isHumanTurn, isThinking, makeHumanMove, isPromotionMove]
   );
 
   // Handle square click (click-to-move)
