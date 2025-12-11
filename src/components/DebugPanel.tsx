@@ -23,13 +23,13 @@ export function DebugPanel() {
         </h4>
         <div className="flex gap-2">
           <button
-            className="text-xs text-(--text-muted) hover:text-(--text-primary)"
+            className="text-xs text-(--text-muted) hover:text-(--text-primary) cursor-pointer"
             onClick={clearDebugLogs}
           >
             Clear
           </button>
           <button
-            className="text-xs text-(--text-muted) hover:text-(--text-primary)"
+            className="text-xs text-(--text-muted) hover:text-(--text-primary) cursor-pointer"
             onClick={toggleDebugMode}
           >
             ✕

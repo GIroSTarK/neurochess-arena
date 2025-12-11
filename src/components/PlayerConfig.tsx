@@ -36,7 +36,7 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
         <label className="label">Player Type</label>
         <div className="flex gap-2">
           <button
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all cursor-pointer disabled:cursor-not-allowed ${
               config.type === 'human'
                 ? 'bg-(--accent-primary) text-white'
                 : 'bg-(--bg-tertiary) text-(--text-secondary) hover:bg-(--border-color)'
@@ -47,7 +47,7 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
             👤 Human
           </button>
           <button
-            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all cursor-pointer disabled:cursor-not-allowed ${
               config.type === 'ai'
                 ? 'bg-(--accent-primary) text-white'
                 : 'bg-(--bg-tertiary) text-(--text-secondary) hover:bg-(--border-color)'
@@ -142,7 +142,7 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
               />
               <button
                 type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-primary) transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-primary) transition-colors cursor-pointer"
                 onClick={() => setShowApiKey(!showApiKey)}
               >
                 {showApiKey ? '🙈' : '👁️'}

@@ -317,7 +317,7 @@ export function ChessBoardComponent() {
               <button
                 key={piece}
                 onClick={() => handlePromotionSelect(piece)}
-                className="w-[70px] h-[70px] flex items-center justify-center text-5xl hover:bg-(--accent-primary)/30 rounded-lg transition-colors"
+                className="w-[70px] h-[70px] flex items-center justify-center text-5xl hover:bg-(--accent-primary)/30 rounded-lg transition-colors cursor-pointer"
                 style={{
                   color: currentTurn === 'white' ? '#fff' : '#333',
                   textShadow:
