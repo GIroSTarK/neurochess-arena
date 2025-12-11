@@ -60,9 +60,9 @@ export function ChessBoardComponent() {
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
 
-  // Check if it's human's turn to move
+  // Check if it's human's turn to move (only when game is actively playing)
   const isHumanTurn = useCallback(() => {
-    if (status !== 'playing' && status !== 'idle') return false;
+    if (status !== 'playing') return false;
     const currentPlayer = currentTurn === 'white' ? whitePlayer : blackPlayer;
     return currentPlayer.type === 'human';
   }, [status, currentTurn, whitePlayer, blackPlayer]);

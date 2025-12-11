@@ -15,6 +15,7 @@ export function ControlsPanel() {
     requestAIMove,
     toggleAutoPlay,
     stopAutoPlay,
+    resetGame,
     flipBoard,
     copyPGN,
   } = useGameStore();
@@ -22,7 +23,8 @@ export function ControlsPanel() {
   const [copySuccess, setCopySuccess] = useState(false);
 
   const isGameOver = ['white_wins', 'black_wins', 'draw', 'stalemate'].includes(status);
-  const canMakeMove = (status === 'playing' || status === 'idle') && !isThinking;
+  const isGameActive = status === 'playing';
+  const canMakeMove = isGameActive && !isThinking;
 
   // Check if current player is AI
   const currentPlayerConfig = currentTurn === 'white' ? whitePlayer : blackPlayer;
@@ -92,8 +94,12 @@ export function ControlsPanel() {
 
       {/* Main Controls */}
       <div className="grid grid-cols-2 gap-2">
-        <button className="btn btn-success col-span-2" onClick={startNewGame}>
-          🎮 Start New Game
+        <button className="btn btn-success" onClick={startNewGame}>
+          🎮 New Game
+        </button>
+
+        <button className="btn btn-secondary" onClick={resetGame} disabled={isThinking}>
+          ⏹️ End Game
         </button>
 
         {/* Make Move / Auto button for AI */}

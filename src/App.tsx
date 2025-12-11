@@ -85,7 +85,6 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-(--text-muted)">
             <p>Built with React, TypeScript, chess.js & Zustand</p>
-            <p>Inspired by LLM Chess Arena • Not affiliated with any LLM provider</p>
           </div>
         </div>
       </footer>

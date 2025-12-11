@@ -69,6 +69,7 @@ interface GameStore {
   requestAIMove: () => Promise<void>;
   toggleAutoPlay: () => void;
   stopAutoPlay: () => void;
+  resetGame: () => void;
 
   // Configuration actions
   setWhitePlayer: (config: Partial<PlayerConfig>) => void;
@@ -130,7 +131,8 @@ export const useGameStore = create<GameStore>()(
       makeHumanMove: (uci: string) => {
         const { game, status, currentTurn, moveHistory } = get();
 
-        if (status !== 'playing' && status !== 'idle') {
+        // Only allow moves when game is actively playing
+        if (status !== 'playing') {
           return false;
         }
 
@@ -195,8 +197,8 @@ export const useGameStore = create<GameStore>()(
           autoPlay,
         } = get();
 
-        // Don't proceed if game is over or already thinking
-        if ((status !== 'playing' && status !== 'idle') || get().isThinking) {
+        // Don't proceed if game is not actively playing or already thinking
+        if (status !== 'playing' || get().isThinking) {
           return;
         }
 
@@ -219,7 +221,6 @@ export const useGameStore = create<GameStore>()(
           isThinking: true,
           thinkingPlayer: currentTurn,
           statusMessage: `${currentTurn === 'white' ? 'White' : 'Black'} AI is thinking...`,
-          status: status === 'idle' ? 'playing' : status,
         });
 
         try {
@@ -317,8 +318,8 @@ export const useGameStore = create<GameStore>()(
           set({ autoPlay: false });
         } else {
           set({ autoPlay: true });
-          // Start auto-play if game is in progress
-          if (status === 'playing' || status === 'idle') {
+          // Start auto-play if game is actively playing
+          if (status === 'playing') {
             get().requestAIMove();
           }
         }
@@ -327,6 +328,22 @@ export const useGameStore = create<GameStore>()(
       // Stop auto-play
       stopAutoPlay: () => {
         set({ autoPlay: false });
+      },
+
+      // Reset game to initial idle state (allows changing player types)
+      resetGame: () => {
+        const newGame = createGame();
+        set({
+          game: newGame,
+          fen: newGame.fen(),
+          moveHistory: [],
+          currentTurn: 'white',
+          status: 'idle',
+          statusMessage: 'Ready to play',
+          isThinking: false,
+          thinkingPlayer: null,
+          autoPlay: false,
+        });
       },
 
       // Set white player configuration
