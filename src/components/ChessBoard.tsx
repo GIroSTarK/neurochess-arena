@@ -244,6 +244,10 @@ export function ChessBoardComponent() {
     return styles;
   }, [moveFrom, legalMoves, game, pendingPromotion]);
 
+  // Board size constant - matches the height of PlayerConfig when AI is selected
+  const BOARD_SIZE = 560;
+  const SQUARE_SIZE = BOARD_SIZE / 8; // 70px per square
+
   // Board colors matching our theme
   const lightSquareStyle: React.CSSProperties = { backgroundColor: '#e8dcc8' };
   const darkSquareStyle: React.CSSProperties = { backgroundColor: '#7d945d' };
@@ -255,22 +259,25 @@ export function ChessBoardComponent() {
     const file = pendingPromotion.to.charCodeAt(0) - 'a'.charCodeAt(0); // 0-7
     const rank = parseInt(pendingPromotion.to[1]) - 1; // 0-7
 
-    // Calculate position (each square is 60px = 480px / 8)
-    const squareSize = 60;
-    let left = file * squareSize;
+    // Calculate position based on square size
+    let left = file * SQUARE_SIZE;
     let top: number;
 
     // Flip coordinates if board is flipped
     if (boardConfig.flipped) {
-      left = (7 - file) * squareSize;
-      top = rank * squareSize;
+      left = (7 - file) * SQUARE_SIZE;
+      top = rank * SQUARE_SIZE;
     } else {
-      top = (7 - rank) * squareSize;
+      top = (7 - rank) * SQUARE_SIZE;
     }
 
     // Adjust to center the dialog on the square
-    // Dialog is ~240px wide (4 pieces * 60px), so offset by half
-    left = Math.max(0, Math.min(left - 90, 480 - 240));
+    // Dialog is ~280px wide (4 pieces * 70px), so offset by half
+    const dialogWidth = 280;
+    left = Math.max(
+      0,
+      Math.min(left - (dialogWidth / 2 - SQUARE_SIZE / 2), BOARD_SIZE - dialogWidth)
+    );
 
     return {
       left: `${left}px`,
@@ -310,7 +317,7 @@ export function ChessBoardComponent() {
               <button
                 key={piece}
                 onClick={() => handlePromotionSelect(piece)}
-                className="w-14 h-14 flex items-center justify-center text-4xl hover:bg-(--accent-primary)/30 rounded-lg transition-colors"
+                className="w-[70px] h-[70px] flex items-center justify-center text-5xl hover:bg-(--accent-primary)/30 rounded-lg transition-colors"
                 style={{
                   color: currentTurn === 'white' ? '#fff' : '#333',
                   textShadow:
@@ -330,7 +337,7 @@ export function ChessBoardComponent() {
       {/* Chess board */}
       <div
         className="rounded-lg overflow-hidden shadow-2xl glow-accent"
-        style={{ width: '480px', height: '480px' }}
+        style={{ width: `${BOARD_SIZE}px`, height: `${BOARD_SIZE}px` }}
       >
         <Chessboard
           options={{

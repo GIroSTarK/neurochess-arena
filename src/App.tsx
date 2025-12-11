@@ -53,25 +53,23 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-6">
+      <main className="max-w-[1400px] mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 items-start">
           {/* Left Panel - White Player Config */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             <PlayerConfig color="white" />
           </div>
 
           {/* Center - Chess Board & Controls */}
           <div className="flex flex-col items-center gap-6">
-            <div className="relative pl-8 pb-8">
-              <ChessBoardComponent />
-            </div>
-            <div className="w-full max-w-[480px]">
+            <ChessBoardComponent />
+            <div className="w-[560px]">
               <ControlsPanel />
             </div>
           </div>
 
           {/* Right Panel - Black Player Config & Move History */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             <PlayerConfig color="black" />
             <MoveHistory />
           </div>
