@@ -73,9 +73,7 @@ function App() {
           {/* Right Panel - Black Player Config & Move History */}
           <div className="space-y-4">
             <PlayerConfig color="black" />
-            <div className="h-[400px]">
-              <MoveHistory />
-            </div>
+            <MoveHistory />
           </div>
         </div>
       </main>

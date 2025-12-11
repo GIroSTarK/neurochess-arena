@@ -32,7 +32,7 @@ export function MoveHistory() {
   };
 
   return (
-    <div className="glass-panel p-4 h-full flex flex-col">
+    <div className="glass-panel p-4 min-h-[410px] max-h-[500px] flex flex-col overflow-hidden">
       {/* Header */}
       <h3 className="text-lg font-semibold text-(--text-primary) border-b border-(--border-color) pb-3 mb-3">
         📜 Move History
