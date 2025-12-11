@@ -91,6 +91,19 @@ export function getLegalMoves(game: Chess): string[] {
 }
 
 /**
+ * Gets legal moves from a specific square
+ * Returns array of target squares
+ */
+export function getLegalMovesFromSquare(game: Chess, square: string): string[] {
+  try {
+    const moves = game.moves({ square: square as Square, verbose: true });
+    return moves.map((move) => move.to);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Gets the current turn as PlayerColor
  */
 export function getCurrentTurn(game: Chess): PlayerColor {

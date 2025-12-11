@@ -1,5 +1,6 @@
 import { Chessboard } from 'react-chessboard';
 import { useGameStore } from '../store/gameStore';
+import { getLegalMovesFromSquare } from '../lib/chessEngine';
 import { useState, useMemo, useCallback } from 'react';
 
 // Types matching react-chessboard's internal types
@@ -32,6 +33,7 @@ interface PieceDropHandlerArgs {
 
 export function ChessBoardComponent() {
   const {
+    game,
     fen,
     boardConfig,
     isThinking,
@@ -128,6 +130,13 @@ export function ChessBoardComponent() {
     [isHumanTurn, isThinking, currentTurn]
   );
 
+  // Get legal moves for selected piece
+  const legalMoves = useMemo(() => {
+    if (!moveFrom) return [];
+    return getLegalMovesFromSquare(game, moveFrom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveFrom, fen]); // Use fen to recalculate when position changes
+
   // Custom square styles
   const squareStyles = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
@@ -139,8 +148,28 @@ export function ChessBoardComponent() {
       };
     }
 
+    // Show legal move indicators
+    legalMoves.forEach((targetSquare) => {
+      const pieceOnSquare = game.get(targetSquare as Parameters<typeof game.get>[0]);
+
+      if (pieceOnSquare) {
+        // Capture move - show ring around the square
+        styles[targetSquare] = {
+          ...styles[targetSquare],
+          boxShadow: 'inset 0 0 0 4px rgba(124, 92, 255, 0.6)',
+          borderRadius: '50%',
+        };
+      } else {
+        // Empty square - show dot in center
+        styles[targetSquare] = {
+          ...styles[targetSquare],
+          background: `radial-gradient(circle, rgba(124, 92, 255, 0.5) 20%, transparent 20%)`,
+        };
+      }
+    });
+
     return styles;
-  }, [moveFrom]);
+  }, [moveFrom, legalMoves, game]);
 
   // Board colors matching our theme
   const lightSquareStyle: React.CSSProperties = { backgroundColor: '#e8dcc8' };
