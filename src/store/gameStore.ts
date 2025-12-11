@@ -196,6 +196,7 @@ export const useGameStore = create<GameStore>()(
           debugMode,
           autoPlay,
         } = get();
+        const gameRef = game;
 
         // Don't proceed if game is not actively playing or already thinking
         if (status !== 'playing' || get().isThinking) {
@@ -235,6 +236,12 @@ export const useGameStore = create<GameStore>()(
             debugMode ? get().addDebugLog : undefined
           );
 
+          // If the game was reset/restarted while we were waiting for the LLM,
+          // ignore this response to avoid corrupting the new game state.
+          if (get().game !== gameRef) {
+            return;
+          }
+
           // Validate and make the move
           if (!isLegalMove(game, response.move)) {
             throw new Error(`Illegal move from AI: ${response.move}`);
@@ -256,18 +263,22 @@ export const useGameStore = create<GameStore>()(
             else newStatus = 'draw';
           }
 
-          set({
-            fen: game.fen(),
-            moveHistory: newMoveHistory,
-            currentTurn: newTurn,
-            status: newStatus,
-            statusMessage: gameStatus.status,
-            isThinking: false,
-            thinkingPlayer: null,
+          set((state) => {
+            // Atomic guard: don't apply results to a different/new game.
+            if (state.game !== gameRef) return {};
+            return {
+              fen: game.fen(),
+              moveHistory: newMoveHistory,
+              currentTurn: newTurn,
+              status: newStatus,
+              statusMessage: gameStatus.status,
+              isThinking: false,
+              thinkingPlayer: null,
+            };
           });
 
           // Log the successful move
-          if (debugMode) {
+          if (debugMode && get().game === gameRef) {
             get().addDebugLog({
               timestamp: new Date(),
               type: 'move',
@@ -291,15 +302,19 @@ export const useGameStore = create<GameStore>()(
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-          set({
-            isThinking: false,
-            thinkingPlayer: null,
-            status: 'ai_error',
-            statusMessage: `AI Error: ${errorMessage}`,
-            autoPlay: false,
+          set((state) => {
+            // Atomic guard: don't surface errors from an old request onto a new game.
+            if (state.game !== gameRef) return {};
+            return {
+              isThinking: false,
+              thinkingPlayer: null,
+              status: 'ai_error',
+              statusMessage: `AI Error: ${errorMessage}`,
+              autoPlay: false,
+            };
           });
 
-          if (debugMode) {
+          if (debugMode && get().game === gameRef) {
             get().addDebugLog({
               timestamp: new Date(),
               type: 'error',

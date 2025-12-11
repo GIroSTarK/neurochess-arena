@@ -22,7 +22,7 @@ export function ControlsPanel() {
 
   const [copySuccess, setCopySuccess] = useState(false);
 
-  const isGameOver = ['white_wins', 'black_wins', 'draw', 'stalemate'].includes(status);
+  const isGameOver = ['white_wins', 'black_wins', 'draw', 'stalemate', 'ai_error'].includes(status);
   const isGameActive = status === 'playing';
   const canMakeMove = isGameActive && !isThinking;
 
@@ -94,7 +94,7 @@ export function ControlsPanel() {
 
       {/* Main Controls */}
       <div className="grid grid-cols-2 gap-2">
-        <button className="btn btn-success" onClick={startNewGame}>
+        <button className="btn btn-success" onClick={startNewGame} disabled={isThinking}>
           🎮 New Game
         </button>
 

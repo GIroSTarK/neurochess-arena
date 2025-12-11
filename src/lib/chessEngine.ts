@@ -258,14 +258,13 @@ export function getGameStatus(game: Chess): {
  * Exports the game as PGN
  */
 export function exportPGN(game: Chess, whitePlayer: string, blackPlayer: string): string {
-  // Set headers
-  const date = new Date().toISOString().split('T')[0].replace(/-/g, '.');
+  // NOTE:
+  // `chess.js` returns PGN with default headers (Event "?", Result "*", etc.)
+  // even if you never set headers. If we append `game.pgn()` to our own headers,
+  // we end up with duplicated headers and an incorrect/duplicated result.
+  // So we generate the movetext from SAN history and add the computed result ourselves.
 
-  let pgn = `[Event "NeuroChess Arena"]\n`;
-  pgn += `[Site "Browser"]\n`;
-  pgn += `[Date "${date}"]\n`;
-  pgn += `[White "${whitePlayer}"]\n`;
-  pgn += `[Black "${blackPlayer}"]\n`;
+  const date = new Date().toISOString().split('T')[0].replace(/-/g, '.');
 
   const { isGameOver, winner } = getGameStatus(game);
   let result = '*';
@@ -274,12 +273,32 @@ export function exportPGN(game: Chess, whitePlayer: string, blackPlayer: string)
     else if (winner === 'black') result = '0-1';
     else result = '1/2-1/2';
   }
+
+  let pgn = `[Event "NeuroChess Arena"]\n`;
+  pgn += `[Site "Browser"]\n`;
+  pgn += `[Date "${date}"]\n`;
+  pgn += `[White "${whitePlayer}"]\n`;
+  pgn += `[Black "${blackPlayer}"]\n`;
   pgn += `[Result "${result}"]\n\n`;
 
-  pgn += game.pgn() || '(No moves)';
-  if (isGameOver) {
-    pgn += ` ${result}`;
+  const sanMoves = game.history(); // SAN moves only (no headers)
+
+  let movetext = '';
+  for (let i = 0; i < sanMoves.length; i++) {
+    if (i % 2 === 0) {
+      movetext += `${Math.floor(i / 2) + 1}. `;
+    }
+    movetext += `${sanMoves[i]} `;
+  }
+  movetext = movetext.trim();
+
+  // PGN requires a result token at the end of movetext
+  if (movetext.length === 0) {
+    movetext = result;
+  } else {
+    movetext = `${movetext} ${result}`;
   }
 
+  pgn += movetext;
   return pgn;
 }
