@@ -178,28 +178,6 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
                 />
               </div>
 
-              {/* Max Tokens */}
-              <div>
-                <label className="label">Max Tokens</label>
-                <input
-                  type="number"
-                  className="input"
-                  min="100"
-                  max="4000"
-                  step="100"
-                  value={config.llmConfig.maxTokens}
-                  onChange={(e) =>
-                    setConfig({
-                      llmConfig: {
-                        ...config.llmConfig,
-                        maxTokens: parseInt(e.target.value) || 500,
-                      },
-                    })
-                  }
-                  disabled={isPlaying}
-                />
-              </div>
-
               {/* Max Retries */}
               <div>
                 <label className="label">Max Retries</label>

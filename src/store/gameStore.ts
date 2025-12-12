@@ -29,7 +29,6 @@ const defaultPlayerConfig: PlayerConfig = {
     modelId: 'openai/gpt-4o',
     apiKey: '',
     temperature: 0.3,
-    maxTokens: 500,
     maxRetries: 3,
   },
 };

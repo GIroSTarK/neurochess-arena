@@ -9,7 +9,7 @@ export type PlayerColor = 'white' | 'black';
 // LLM Provider Types
 // ==========================================
 
-export type ProviderId = 'openrouter' | 'openai' | 'anthropic';
+export type ProviderId = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'xai';
 
 export interface LLMModel {
   id: string;
@@ -23,7 +23,6 @@ export interface LLMConfig {
   customModelSlug?: string; // Overrides modelId if provided
   apiKey: string;
   temperature: number;
-  maxTokens: number;
   maxRetries: number;
 }
 
@@ -157,7 +156,6 @@ export const DEFAULT_LLM_CONFIG: LLMConfig = {
   modelId: 'openai/gpt-4o',
   apiKey: '',
   temperature: 0.3,
-  maxTokens: 500,
   maxRetries: 3,
 };
 

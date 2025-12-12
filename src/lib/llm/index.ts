@@ -9,6 +9,8 @@ import type {
 import { openRouterProvider } from './providers/openrouter';
 import { openAIProvider } from './providers/openai';
 import { anthropicProvider } from './providers/anthropic';
+import { googleProvider } from './providers/google';
+import { xaiProvider } from './providers/xai';
 import { buildChessPrompt } from './prompt';
 
 // Registry of all available providers
@@ -16,6 +18,8 @@ const providers: Record<ProviderId, LLMProvider> = {
   openrouter: openRouterProvider,
   openai: openAIProvider,
   anthropic: anthropicProvider,
+  google: googleProvider,
+  xai: xaiProvider,
 };
 
 /**

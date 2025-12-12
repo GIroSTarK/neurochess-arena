@@ -7,10 +7,18 @@ import type {
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
+// Anthropic Messages API requires `max_tokens` in the request body.
+// We keep it internal (not user-configurable in UI) to reduce complexity.
+const DEFAULT_MAX_TOKENS = 2048;
+
 const ANTHROPIC_MODELS: LLMModel[] = [
+  // Newer generation (best-effort IDs; Anthropic model slugs sometimes include dates/aliases)
+  { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', providerId: 'anthropic' },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', providerId: 'anthropic' },
+  { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', providerId: 'anthropic' },
+  { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', providerId: 'anthropic' },
   { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', providerId: 'anthropic' },
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', providerId: 'anthropic' },
-  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', providerId: 'anthropic' },
+  { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', providerId: 'anthropic' },
   { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', providerId: 'anthropic' },
 ];
 
@@ -33,7 +41,7 @@ export const anthropicProvider: LLMProvider = {
       },
       body: {
         model: modelId,
-        max_tokens: config.maxTokens,
+        max_tokens: DEFAULT_MAX_TOKENS,
         temperature: config.temperature,
         messages: [
           {
