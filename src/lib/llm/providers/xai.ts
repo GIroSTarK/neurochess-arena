@@ -9,15 +9,16 @@ import { extractMoveFromResponse } from '../prompt';
 
 const XAI_MODELS: LLMModel[] = [
   // Newer generation (best-effort IDs; availability depends on your xAI account access)
+  { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', providerId: 'xai' },
+  { id: 'grok-4-fast-reasoning', name: 'Grok 4 Fast Reasoning', providerId: 'xai' },
+  { id: 'grok-4-0709', name: 'Grok 4', providerId: 'xai' },
   { id: 'grok-3', name: 'Grok 3', providerId: 'xai' },
   { id: 'grok-3-mini', name: 'Grok 3 Mini', providerId: 'xai' },
-  { id: 'grok-2', name: 'Grok 2', providerId: 'xai' },
-  { id: 'grok-2-mini', name: 'Grok 2 Mini', providerId: 'xai' },
 ];
 
 export const xaiProvider: LLMProvider = {
   id: 'xai',
-  name: 'xAI (Grok)',
+  name: 'xAI',
   models: XAI_MODELS,
 
   buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {

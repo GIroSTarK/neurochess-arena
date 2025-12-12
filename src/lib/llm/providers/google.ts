@@ -9,18 +9,19 @@ import { extractMoveFromResponse } from '../prompt';
 
 const GOOGLE_MODELS: LLMModel[] = [
   // Gemini
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', providerId: 'google' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', providerId: 'google' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', providerId: 'google' },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerId: 'google' },
-  { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro (latest)', providerId: 'google' },
-  { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash (latest)', providerId: 'google' },
 
   // Gemma (best-effort IDs; availability may vary by API/product)
-  { id: 'gemma-2-9b-it', name: 'Gemma 2 9B IT', providerId: 'google' },
-  { id: 'gemma-2-27b-it', name: 'Gemma 2 27B IT', providerId: 'google' },
+  { id: 'gemma-3-12b-it', name: 'Gemma 3 12B', providerId: 'google' },
+  { id: 'gemma-3-27b-it', name: 'Gemma 3 27B IT', providerId: 'google' },
 ];
 
 export const googleProvider: LLMProvider = {
   id: 'google',
-  name: 'Google (Gemini/Gemma)',
+  name: 'Google',
   models: GOOGLE_MODELS,
 
   buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
