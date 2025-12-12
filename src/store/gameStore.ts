@@ -169,6 +169,7 @@ export const useGameStore = create<GameStore>()(
           currentTurn: newTurn,
           status: newStatus,
           statusMessage: gameStatus.status,
+          autoPlay: gameStatus.isGameOver ? false : get().autoPlay,
         });
 
         // Log the move in debug mode
@@ -276,6 +277,7 @@ export const useGameStore = create<GameStore>()(
               statusMessage: gameStatus.status,
               isThinking: false,
               thinkingPlayer: null,
+              autoPlay: gameStatus.isGameOver ? false : state.autoPlay,
             };
           });
 
