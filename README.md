@@ -1,73 +1,96 @@
-# React + TypeScript + Vite
+## NeuroChess Arena
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Арена для шахових партій **людина vs AI** або **AI vs AI**, де роль “двигуна” виконує LLM. Додаток працює **повністю в браузері**: позиція ведеться через `chess.js`, а AI отримує **FEN + список легальних ходів** і повертає один хід у форматі **UCI**.
 
-Currently, two official plugins are available:
+### Можливості
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Режими гри**: Human vs AI, AI vs AI (автогра / “Auto-Play”).
+- **Провайдери LLM**: OpenRouter, OpenAI, Anthropic, Google, xAI.
+- **Вибір моделі**: пресети + **Custom Model Slug** (необов’язково).
+- **Керування AI**: temperature, кількість ретраїв.
+- **Валідація ходів**: AI ходить лише легальними ходами (перевірка `chess.js`).
+- **Зручності UI**: перетягування фігур, click-to-move, вибір фігури при перетворенні пішака, Flip Board.
+- **Історія ходів + матеріал**: SAN-нотація та баланс матеріалу.
+- **PGN**: кнопка “Copy PGN” копіює партію в буфер.
+- **Debug Console**: показує промпти/відповіді/помилки (останні ~100 записів).
 
-## React Compiler
+### Технології
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React + TypeScript + Vite
+- **UI**: Tailwind CSS
+- **State**: Zustand (+ persist у localStorage)
+- **Chess**: `chess.js` + `react-chessboard`
 
-## Expanding the ESLint configuration
+### Швидкий старт (локально)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+**Вимоги**:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Node.js**: 18+ (рекомендовано 20+)
+- **npm**: з Node (або будь-який сумісний менеджер пакетів)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Встановлення та запуск:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Після запуску відкрийте адресу, яку покаже Vite (зазвичай `http://localhost:5173`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x';
-import reactDom from 'eslint-plugin-react-dom';
+### Як користуватися
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
-```
+1. У блоці **White Player / Black Player** виберіть тип:
+
+- **Human**: ходите ви.
+- **AI**: ходи робить LLM.
+
+2. Якщо обрали **AI**, налаштуйте:
+
+- **Provider** (OpenRouter / OpenAI / Anthropic / Google / xAI)
+- **Model**
+- **API Key**
+- (опційно) **Custom Model Slug**
+- (опційно) **Advanced Settings** → temperature / max retries
+
+3. Натисніть **New Game**.
+
+4. Далі:
+
+- **Human хід**: перетягніть фігуру або клікніть “звідки → куди”. Для перетворення пішака з’явиться вибір фігури.
+- **AI хід**: якщо зараз хід AI — натисніть **Make AI Move**.
+- **AI vs AI**: увімкніть **Auto-Play (LLM vs LLM)** (і зупиняйте кнопкою Stop).
+
+5. Корисне:
+
+- **Flip Board**: розвернути дошку.
+- **Copy PGN**: скопіювати PGN партії.
+
+### Debug
+
+У правому нижньому куті є кнопка **🐛 Debug**. Вона відкриває консоль, де можна побачити:
+
+- **prompt**: що саме відправляється в модель
+- **response**: що повернула модель
+- **error**: помилки API / парсингу / нелегальні ходи
+
+### API keys та безпека
+
+- **Ключі вводяться в UI** і зберігаються локально у вашому браузері в **localStorage** (ключ сховища: `neurochess-storage`).
+- Додаток робить запити **напряму з браузера** до обраного провайдера. Це означає:
+  - **Не використовуйте “бойові” ключі** на чужих/публічних пристроях.
+  - Деякі провайдери можуть мати обмеження на запити з браузера (CORS). Якщо стикаєтесь із цим — найпростіше зазвичай використовувати **OpenRouter**.
+
+### Скрипти
+
+- **dev**: `npm run dev`
+- **build**: `npm run build`
+- **preview**: `npm run preview`
+- **lint**: `npm run lint`
+- **format**: `npm run format`
+
+### Структура проєкту (корисно для розробки)
+
+- `src/components/` — UI-компоненти (дошка, налаштування гравців, панель керування, історія, debug)
+- `src/store/gameStore.ts` — Zustand store (стан гри, автогра, debug, persist)
+- `src/lib/chessEngine.ts` — обгортка над `chess.js` (легальні ходи, UCI↔SAN, PGN)
+- `src/lib/llm/` — промпти та провайдери API (OpenRouter/OpenAI/Anthropic/Google/xAI)
