@@ -330,11 +330,11 @@ export const useGameStore = create<GameStore>()(
         if (autoPlay) {
           set({ autoPlay: false });
         } else {
-          set({ autoPlay: true });
-          // Start auto-play if game is actively playing
-          if (status === 'playing') {
-            get().requestAIMove();
+          if (status !== 'playing') {
+            return;
           }
+          set({ autoPlay: true });
+          get().requestAIMove();
         }
       },
 

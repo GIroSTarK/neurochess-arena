@@ -125,7 +125,7 @@ export function ControlsPanel() {
           <button
             className={`btn col-span-2 ${autoPlay ? 'btn-danger' : 'btn-secondary'}`}
             onClick={autoPlay ? stopAutoPlay : toggleAutoPlay}
-            disabled={isGameOver}
+            disabled={autoPlay ? false : !isGameActive || isThinking}
           >
             {autoPlay ? <>⏹️ Stop Auto-Play</> : <>▶️ Auto-Play (LLM vs LLM)</>}
           </button>
