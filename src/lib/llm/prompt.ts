@@ -128,7 +128,6 @@ export function extractMoveFromResponse(
 
   return null;
 }
-
 /**
  * Validates if a string is a valid UCI move format
  */

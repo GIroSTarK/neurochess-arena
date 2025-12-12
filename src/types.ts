@@ -52,14 +52,7 @@ export interface PlayerConfig {
 // Game State Types
 // ==========================================
 
-export type GameStatus =
-  | 'idle'
-  | 'playing'
-  | 'white_wins'
-  | 'black_wins'
-  | 'draw'
-  | 'stalemate'
-  | 'ai_error';
+export type GameStatus = 'idle' | 'playing' | 'white_wins' | 'black_wins' | 'draw' | 'stalemate';
 
 export interface GameState {
   fen: string;

@@ -22,7 +22,8 @@ export function ControlsPanel() {
 
   const [copySuccess, setCopySuccess] = useState(false);
 
-  const isGameOver = ['white_wins', 'black_wins', 'draw', 'stalemate', 'ai_error'].includes(status);
+  const isAiError = statusMessage.startsWith('AI Error:');
+  const isGameOver = ['white_wins', 'black_wins', 'draw', 'stalemate'].includes(status);
   const isGameActive = status === 'playing';
   const canMakeMove = isGameActive && !isThinking;
 
@@ -47,7 +48,7 @@ export function ControlsPanel() {
     if (status === 'white_wins') return 'text-[var(--accent-success)]';
     if (status === 'black_wins') return 'text-[var(--accent-success)]';
     if (status === 'draw' || status === 'stalemate') return 'text-[var(--accent-warning)]';
-    if (status === 'ai_error') return 'text-[var(--accent-danger)]';
+    if (isAiError) return 'text-[var(--accent-danger)]';
     if (isThinking) return 'text-[var(--accent-secondary)]';
     return 'text-[var(--text-primary)]';
   };

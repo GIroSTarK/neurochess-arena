@@ -307,7 +307,6 @@ export const useGameStore = create<GameStore>()(
             return {
               isThinking: false,
               thinkingPlayer: null,
-              status: 'ai_error',
               statusMessage: `AI Error: ${errorMessage}`,
               autoPlay: false,
             };
