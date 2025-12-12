@@ -5,12 +5,9 @@ import { useMemo } from 'react';
 export function MoveHistory() {
   const { game, moveHistory, fen } = useGameStore();
 
-  // Calculate material balance
-  // Note: `game` is mutable and doesn't change reference, so we use `fen` to trigger recalculation
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const material = useMemo(() => getMaterialBalance(game), [fen]);
 
-  // Group moves into pairs (white, black)
   const movePairs = useMemo(() => {
     const pairs: { number: number; white?: string; black?: string }[] = [];
 
@@ -26,26 +23,22 @@ export function MoveHistory() {
     return pairs;
   }, [moveHistory]);
 
-  // Render piece symbols
   const renderPieces = (count: number, symbol: string) => {
     return Array(count).fill(symbol).join('');
   };
 
   return (
     <div className="glass-panel p-4 min-h-[410px] max-h-[500px] flex flex-col overflow-hidden">
-      {/* Header */}
       <h3 className="text-lg font-semibold text-(--text-primary) border-b border-(--border-color) pb-3 mb-3">
         📜 Move History
       </h3>
 
-      {/* Material Balance */}
       <div className="bg-(--bg-secondary) rounded-lg p-3 mb-4">
         <div className="text-xs text-(--text-muted) uppercase tracking-wider mb-2">
           Material Balance
         </div>
 
         <div className="space-y-2">
-          {/* White material */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 bg-white rounded-full shadow-sm" />
@@ -58,7 +51,6 @@ export function MoveHistory() {
             </div>
           </div>
 
-          {/* White pieces display */}
           <div className="text-sm text-(--text-muted) pl-6">
             {renderPieces(material.white.queens, '♕')}
             {renderPieces(material.white.rooks, '♖')}
@@ -67,7 +59,6 @@ export function MoveHistory() {
             {renderPieces(material.white.pawns, '♙')}
           </div>
 
-          {/* Black material */}
           <div className="flex items-center justify-between mt-3">
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 bg-[#333] rounded-full shadow-sm border border-(--border-color)" />
@@ -80,7 +71,6 @@ export function MoveHistory() {
             </div>
           </div>
 
-          {/* Black pieces display */}
           <div className="text-sm text-(--text-muted) pl-6">
             {renderPieces(material.black.queens, '♛')}
             {renderPieces(material.black.rooks, '♜')}
@@ -90,7 +80,6 @@ export function MoveHistory() {
           </div>
         </div>
 
-        {/* Advantage indicator */}
         <div className="mt-3 pt-3 border-t border-(--border-color)">
           <div
             className={`text-center text-sm font-medium ${
@@ -108,7 +97,6 @@ export function MoveHistory() {
         </div>
       </div>
 
-      {/* Moves List */}
       <div className="flex-1 overflow-y-auto">
         {movePairs.length === 0 ? (
           <div className="text-center text-(--text-muted) py-8">
@@ -130,7 +118,6 @@ export function MoveHistory() {
         )}
       </div>
 
-      {/* Move count */}
       {moveHistory.length > 0 && (
         <div className="mt-3 pt-3 border-t border-(--border-color) text-center text-xs text-(--text-muted)">
           {moveHistory.length} moves played

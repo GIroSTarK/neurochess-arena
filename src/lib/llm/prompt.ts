@@ -1,9 +1,5 @@
 import type { PlayerColor } from '../../types';
 
-/**
- * System prompt for chess engine role
- * Contains static instructions that don't change between moves
- */
 export const CHESS_SYSTEM_PROMPT = `You are a chess engine. Your task is to select the best move from a list of legal moves.
 
 ## Response Format
@@ -24,10 +20,6 @@ You MUST respond with a JSON block in exactly this format:
 
 const RECENT_MOVES_CONTEXT = 10;
 
-/**
- * Builds the user prompt with current game state
- * Contains dynamic information that changes each turn
- */
 export function buildChessUserPrompt(
   fen: string,
   _pgn: string,
@@ -61,10 +53,6 @@ ${legalMovesDisplay}
 Select the best move.`;
 }
 
-/**
- * Builds a combined prompt for providers that don't support system messages well
- * (e.g., some reasoning models like o1, o3)
- */
 export function buildChessPrompt(
   fen: string,
   pgn: string,
@@ -79,15 +67,9 @@ export function buildChessPrompt(
 ${buildChessUserPrompt(fen, pgn, currentTurn, moveHistory, legalMoves)}`;
 }
 
-/**
- * Extracts move from LLM response text
- * Tries multiple patterns to find the UCI move
- * Priority: JSON block > JSON object > "move" property > explicit phrases > last UCI move in text
- */
 export function extractMoveFromResponse(
   responseText: string
 ): { move: string; thoughts?: string } | null {
-  // 1. Try to find JSON block first (highest priority)
   const jsonMatch = responseText.match(/```json\s*\n?([\s\S]*?)\n?```/);
   if (jsonMatch) {
     try {
@@ -102,11 +84,10 @@ export function extractMoveFromResponse(
         }
       }
     } catch {
-      // JSON parsing failed, try other methods
+      /* ignore */
     }
   }
 
-  // 2. Try to find JSON object without code block
   const jsonObjectMatch = responseText.match(
     /\{[^{}]*"move"\s*:\s*"([a-h][1-8][a-h][1-8][qrbn]?)"[^{}]*\}/i
   );
@@ -121,20 +102,17 @@ export function extractMoveFromResponse(
         };
       }
     } catch {
-      // If JSON parsing failed but we found the move pattern, use regex capture
       if (jsonObjectMatch[1]) {
         return { move: jsonObjectMatch[1].toLowerCase() };
       }
     }
   }
 
-  // 3. Try to find move in "move": "e2e4" format
   const movePropertyMatch = responseText.match(/"move"\s*:\s*"([a-h][1-8][a-h][1-8][qrbn]?)"/i);
   if (movePropertyMatch) {
     return { move: movePropertyMatch[1].toLowerCase() };
   }
 
-  // 4. Try to find move after explicit phrases (more reliable than generic UCI pattern)
   const explicitPhrases = [
     /(?:my (?:final )?move is|i (?:will )?play|best move(?:\s+is)?|i choose|final move:?|move:)\s*[:\s]*\**([a-h][1-8][a-h][1-8][qrbn]?)\**/i,
     /(?:therefore|thus|so),?\s+(?:i (?:will )?play|my move is)\s*[:\s]*\**([a-h][1-8][a-h][1-8][qrbn]?)\**/i,
@@ -147,19 +125,14 @@ export function extractMoveFromResponse(
     }
   }
 
-  // 5. Last resort: find the LAST UCI move mentioned in the text
-  // This is more likely to be the final answer rather than analysis of alternatives
   const allUciMoves = responseText.match(/\b[a-h][1-8][a-h][1-8][qrbn]?\b/gi);
   if (allUciMoves && allUciMoves.length > 0) {
-    // Return the last match as it's most likely the final decision
     return { move: allUciMoves[allUciMoves.length - 1].toLowerCase() };
   }
 
   return null;
 }
-/**
- * Validates if a string is a valid UCI move format
- */
+
 function isValidUciMove(move: string): boolean {
   return /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move);
 }

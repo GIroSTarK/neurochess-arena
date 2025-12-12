@@ -9,7 +9,6 @@ import type {
 import { extractMoveFromResponse } from '../prompt';
 
 const XAI_MODELS: LLMModel[] = [
-  // Newer generation (best-effort IDs; availability depends on your xAI account access)
   { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', providerId: 'xai' },
   { id: 'grok-4-fast-reasoning', name: 'Grok 4 Fast Reasoning', providerId: 'xai' },
   { id: 'grok-4-0709', name: 'Grok 4', providerId: 'xai' },

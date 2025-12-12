@@ -2,7 +2,6 @@ import { Chess } from 'chess.js';
 import type { Square, PieceSymbol, Color } from 'chess.js';
 import type { MaterialBalance, MaterialCount, MoveRecord, PlayerColor } from '../types';
 
-// Piece values for material calculation
 const PIECE_VALUES_MAP: Record<PieceSymbol, number> = {
   p: 1,
   n: 3,
@@ -12,16 +11,10 @@ const PIECE_VALUES_MAP: Record<PieceSymbol, number> = {
   k: 0,
 };
 
-/**
- * Creates a new Chess instance
- */
 export function createGame(fen?: string): Chess {
   return fen ? new Chess(fen) : new Chess();
 }
 
-/**
- * Converts UCI move format (e.g., "e2e4") to chess.js move object
- */
 export function uciToMove(uci: string): {
   from: Square;
   to: Square;
@@ -34,10 +27,6 @@ export function uciToMove(uci: string): {
   return { from, to, promotion };
 }
 
-/**
- * Validates and makes a move on the board
- * Returns the move in SAN notation if successful, null if invalid
- */
 export function makeMove(game: Chess, uci: string): MoveRecord | null {
   try {
     const { from, to, promotion } = uciToMove(uci);
@@ -62,9 +51,6 @@ export function makeMove(game: Chess, uci: string): MoveRecord | null {
   }
 }
 
-/**
- * Checks if a UCI move is legal
- */
 export function isLegalMove(game: Chess, uci: string): boolean {
   try {
     const { from, to, promotion } = uciToMove(uci);
@@ -81,19 +67,12 @@ export function isLegalMove(game: Chess, uci: string): boolean {
   }
 }
 
-/**
- * Gets all legal moves for the current position
- */
 export function getLegalMoves(game: Chess): string[] {
   return game
     .moves({ verbose: true })
     .map((move) => `${move.from}${move.to}${move.promotion || ''}`);
 }
 
-/**
- * Gets legal moves from a specific square
- * Returns array of target squares
- */
 export function getLegalMovesFromSquare(game: Chess, square: string): string[] {
   try {
     const moves = game.moves({ square: square as Square, verbose: true });
@@ -103,16 +82,10 @@ export function getLegalMovesFromSquare(game: Chess, square: string): string[] {
   }
 }
 
-/**
- * Gets the current turn as PlayerColor
- */
 export function getCurrentTurn(game: Chess): PlayerColor {
   return game.turn() === 'w' ? 'white' : 'black';
 }
 
-/**
- * Calculates material count for a color
- */
 function countMaterial(game: Chess, color: Color): MaterialCount {
   const board = game.board();
   const count: MaterialCount = {
@@ -150,9 +123,6 @@ function countMaterial(game: Chess, color: Color): MaterialCount {
   return count;
 }
 
-/**
- * Calculates total material value
- */
 function calculateTotalValue(count: MaterialCount): number {
   return (
     count.pawns * PIECE_VALUES_MAP.p +
@@ -163,9 +133,6 @@ function calculateTotalValue(count: MaterialCount): number {
   );
 }
 
-/**
- * Calculates material balance for both sides
- */
 export function getMaterialBalance(game: Chess): MaterialBalance {
   const white = countMaterial(game, 'w');
   const black = countMaterial(game, 'b');
@@ -183,9 +150,6 @@ export function getMaterialBalance(game: Chess): MaterialBalance {
   };
 }
 
-/**
- * Formats the move history as PGN-style moves
- */
 export function formatMoveHistory(moves: MoveRecord[]): string {
   let result = '';
   for (let i = 0; i < moves.length; i++) {
@@ -197,9 +161,6 @@ export function formatMoveHistory(moves: MoveRecord[]): string {
   return result.trim();
 }
 
-/**
- * Gets the game status message
- */
 export function getGameStatus(game: Chess): {
   isGameOver: boolean;
   status: string;
@@ -254,16 +215,7 @@ export function getGameStatus(game: Chess): {
   };
 }
 
-/**
- * Exports the game as PGN
- */
 export function exportPGN(game: Chess, whitePlayer: string, blackPlayer: string): string {
-  // NOTE:
-  // `chess.js` returns PGN with default headers (Event "?", Result "*", etc.)
-  // even if you never set headers. If we append `game.pgn()` to our own headers,
-  // we end up with duplicated headers and an incorrect/duplicated result.
-  // So we generate the movetext from SAN history and add the computed result ourselves.
-
   const date = new Date().toISOString().split('T')[0].replace(/-/g, '.');
 
   const { isGameOver, winner } = getGameStatus(game);
@@ -281,7 +233,7 @@ export function exportPGN(game: Chess, whitePlayer: string, blackPlayer: string)
   pgn += `[Black "${blackPlayer}"]\n`;
   pgn += `[Result "${result}"]\n\n`;
 
-  const sanMoves = game.history(); // SAN moves only (no headers)
+  const sanMoves = game.history();
 
   let movetext = '';
   for (let i = 0; i < sanMoves.length; i++) {
@@ -292,7 +244,6 @@ export function exportPGN(game: Chess, whitePlayer: string, blackPlayer: string)
   }
   movetext = movetext.trim();
 
-  // PGN requires a result token at the end of movetext
   if (movetext.length === 0) {
     movetext = result;
   } else {

@@ -25,13 +25,11 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
 
   return (
     <div className="glass-panel p-4 space-y-4">
-      {/* Header */}
       <div className="flex items-center gap-2 border-b border-(--border-color) pb-3">
         <span className="text-2xl">{colorIcon}</span>
         <h3 className="text-lg font-semibold text-(--text-primary)">{colorLabel} Player</h3>
       </div>
 
-      {/* Player Type Selection */}
       <div>
         <label className="label">Player Type</label>
         <div className="flex gap-2">
@@ -60,10 +58,8 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
         </div>
       </div>
 
-      {/* AI Configuration */}
       {config.type === 'ai' && (
         <div className="space-y-3 pt-2 border-t border-(--border-color)">
-          {/* Provider Selection */}
           <div>
             <label className="label">Provider</label>
             <select
@@ -90,7 +86,6 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
             </select>
           </div>
 
-          {/* Model Selection */}
           <div>
             <label className="label">Model</label>
             <select
@@ -109,7 +104,6 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
             </select>
           </div>
 
-          {/* Custom Model Slug */}
           <div>
             <label className="label">
               Custom Model Slug
@@ -127,7 +121,6 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
             />
           </div>
 
-          {/* API Key */}
           <div>
             <label className="label">API Key</label>
             <div className="relative">
@@ -150,13 +143,11 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
             </div>
           </div>
 
-          {/* Advanced Settings */}
           <details className="group">
             <summary className="cursor-pointer text-sm text-(--text-secondary) hover:text-(--text-primary) transition-colors">
               ⚙️ Advanced Settings
             </summary>
             <div className="mt-3 space-y-3 pl-2 border-l-2 border-(--border-color)">
-              {/* Temperature */}
               <div>
                 <label className="label flex justify-between">
                   <span>Temperature</span>
@@ -178,7 +169,6 @@ export function PlayerConfig({ color }: PlayerConfigProps) {
                 />
               </div>
 
-              {/* Max Retries */}
               <div>
                 <label className="label">Max Retries</label>
                 <input

@@ -9,13 +9,10 @@ import type {
 import { extractMoveFromResponse } from '../prompt';
 
 const GOOGLE_MODELS: LLMModel[] = [
-  // Gemini
   { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', providerId: 'google' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', providerId: 'google' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', providerId: 'google' },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerId: 'google' },
-
-  // Gemma (best-effort IDs; availability may vary by API/product)
   { id: 'gemma-3-12b-it', name: 'Gemma 3 12B', providerId: 'google' },
   { id: 'gemma-3-27b-it', name: 'Gemma 3 27B IT', providerId: 'google' },
 ];
@@ -28,7 +25,6 @@ export const googleProvider: LLMProvider = {
   buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const modelId = config.customModelSlug?.trim() || config.modelId;
 
-    // Google Generative Language API uses an API key in the query string for browser-friendly usage.
     const url =
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent` +
       `?key=${encodeURIComponent(config.apiKey)}`;

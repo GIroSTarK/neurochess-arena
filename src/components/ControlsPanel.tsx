@@ -27,14 +27,11 @@ export function ControlsPanel() {
   const isGameActive = status === 'playing';
   const canMakeMove = isGameActive && !isThinking;
 
-  // Check if current player is AI
   const currentPlayerConfig = currentTurn === 'white' ? whitePlayer : blackPlayer;
   const isCurrentPlayerAI = currentPlayerConfig.type === 'ai';
 
-  // Check if both players are AI
   const isBothAI = whitePlayer.type === 'ai' && blackPlayer.type === 'ai';
 
-  // Handle copy PGN
   const handleCopyPGN = async () => {
     const success = await copyPGN();
     if (success) {
@@ -43,7 +40,6 @@ export function ControlsPanel() {
     }
   };
 
-  // Get status color based on game state
   const getStatusColor = () => {
     if (status === 'white_wins') return 'text-[var(--accent-success)]';
     if (status === 'black_wins') return 'text-[var(--accent-success)]';
@@ -55,7 +51,6 @@ export function ControlsPanel() {
 
   return (
     <div className="glass-panel p-4 space-y-4">
-      {/* Game Status */}
       <div className="text-center p-3 bg-(--bg-secondary) rounded-lg">
         <div className="text-xs text-(--text-muted) uppercase tracking-wider mb-1">Game Status</div>
         <div className={`font-semibold ${getStatusColor()}`}>{statusMessage}</div>
@@ -66,7 +61,6 @@ export function ControlsPanel() {
         )}
       </div>
 
-      {/* Turn Indicator */}
       {!isGameOver && (
         <div className="flex items-center justify-center gap-3 py-2">
           <div
@@ -93,7 +87,6 @@ export function ControlsPanel() {
         </div>
       )}
 
-      {/* Main Controls */}
       <div className="grid grid-cols-2 gap-2">
         <button className="btn btn-success" onClick={startNewGame} disabled={isThinking}>
           🎮 New Game
@@ -103,7 +96,6 @@ export function ControlsPanel() {
           ⏹️ End Game
         </button>
 
-        {/* Make Move / Auto button for AI */}
         {isCurrentPlayerAI && canMakeMove && !autoPlay && (
           <button
             className="btn btn-primary col-span-2"
@@ -120,7 +112,6 @@ export function ControlsPanel() {
           </button>
         )}
 
-        {/* Auto-play toggle for LLM vs LLM */}
         {isBothAI && (
           <button
             className={`btn col-span-2 ${autoPlay ? 'btn-danger' : 'btn-secondary'}`}
@@ -132,7 +123,6 @@ export function ControlsPanel() {
         )}
       </div>
 
-      {/* Secondary Controls */}
       <div className="grid grid-cols-2 gap-2">
         <button className="btn btn-secondary" onClick={flipBoard}>
           🔄 Flip Board
@@ -147,7 +137,6 @@ export function ControlsPanel() {
         </button>
       </div>
 
-      {/* Security Note */}
       <div className="text-xs text-(--text-muted) bg-(--bg-secondary) p-3 rounded-lg">
         <div className="flex items-start gap-2">
           <span className="text-(--accent-warning)">🔒</span>

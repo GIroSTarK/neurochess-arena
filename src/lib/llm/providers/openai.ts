@@ -9,7 +9,6 @@ import type {
 import { extractMoveFromResponse } from '../prompt';
 
 const OPENAI_MODELS: LLMModel[] = [
-  // Newer generation (best-effort IDs; may depend on your OpenAI account access)
   { id: 'gpt-5.2', name: 'GPT-5.2', providerId: 'openai' },
   { id: 'gpt-5.2-high', name: 'GPT-5.2 High', providerId: 'openai' },
   { id: 'gpt-5.1', name: 'GPT-5.1', providerId: 'openai' },
@@ -41,10 +40,8 @@ export const openAIProvider: LLMProvider = {
     const modelId = effortMatch ? effortMatch[1] : selectedModelId;
     const reasoningEffort = effortMatch ? effortMatch[2] : undefined;
 
-    const isOModule = /^o\d/.test(modelId); // o1, o3, o4-mini, ...
+    const isOModule = /^o\d/.test(modelId);
 
-    // For reasoning models (o1, o3, etc.), combine system+user into single user message
-    // as they have limited system prompt support
     const messages = isOModule
       ? [{ role: 'user', content: `${prompt.system}\n\n---\n\n${prompt.user}` }]
       : [
@@ -55,8 +52,6 @@ export const openAIProvider: LLMProvider = {
     const body: Record<string, unknown> = {
       model: modelId,
       messages,
-      // Ask OpenAI to enforce a valid JSON object response (when supported by the model).
-      // This improves parse reliability for extracting the UCI move.
       response_format: { type: 'json_object' },
     };
 

@@ -14,7 +14,6 @@ import { googleProvider } from './providers/google';
 import { xaiProvider } from './providers/xai';
 import { CHESS_SYSTEM_PROMPT, buildChessUserPrompt } from './prompt';
 
-// Registry of all available providers
 const providers: Record<ProviderId, LLMProvider> = {
   openrouter: openRouterProvider,
   openai: openAIProvider,
@@ -23,9 +22,6 @@ const providers: Record<ProviderId, LLMProvider> = {
   xai: xaiProvider,
 };
 
-/**
- * Get a provider by ID
- */
 export function getProvider(providerId: ProviderId): LLMProvider {
   const provider = providers[providerId];
   if (!provider) {
@@ -34,17 +30,10 @@ export function getProvider(providerId: ProviderId): LLMProvider {
   return provider;
 }
 
-/**
- * Get all available providers
- */
 export function getAllProviders(): LLMProvider[] {
   return Object.values(providers);
 }
 
-/**
- * Request a move from an LLM
- * Handles retries and error handling
- */
 export async function requestLLMMove(
   config: LLMConfig,
   fen: string,
@@ -60,7 +49,6 @@ export async function requestLLMMove(
     user: buildChessUserPrompt(fen, pgn, currentTurn, moveHistory, legalMoves),
   };
 
-  // Log the prompt if debug is enabled
   if (onDebug) {
     onDebug({
       timestamp: new Date(),
@@ -101,7 +89,6 @@ export async function requestLLMMove(
       const responseJson = await response.json();
       const result = provider.parseResponse(responseJson);
 
-      // Log the response if debug is enabled
       if (onDebug) {
         onDebug({
           timestamp: new Date(),
@@ -116,7 +103,6 @@ export async function requestLLMMove(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Log the error if debug is enabled
       if (onDebug) {
         onDebug({
           timestamp: new Date(),
@@ -126,12 +112,10 @@ export async function requestLLMMove(
         });
       }
 
-      // Don't retry if it's the last attempt
       if (attempt === config.maxRetries) {
         break;
       }
 
-      // Wait before retrying (exponential backoff)
       await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 500));
     }
   }
@@ -139,6 +123,5 @@ export async function requestLLMMove(
   throw lastError || new Error('Failed to get move from LLM');
 }
 
-// Re-export for convenience
 export { CHESS_SYSTEM_PROMPT, buildChessUserPrompt, buildChessPrompt } from './prompt';
 export type { LLMProvider };

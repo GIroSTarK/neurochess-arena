@@ -1,9 +1,7 @@
-/* Custom fonts - using Instrument Sans for modern geometric feel */
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @import 'tailwindcss';
 
-/* CSS Variables for consistent theming */
 :root {
   --bg-primary: #0a0a0f;
   --bg-secondary: #12121a;
@@ -45,7 +43,6 @@ body {
   min-height: 100vh;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -64,7 +61,6 @@ body {
   background: var(--text-muted);
 }
 
-/* Custom utility classes */
 .glass-panel {
   background: linear-gradient(135deg, rgba(21, 21, 31, 0.9), rgba(26, 26, 37, 0.8));
   backdrop-filter: blur(10px);
@@ -76,7 +72,6 @@ body {
   box-shadow: 0 0 20px rgba(124, 92, 255, 0.15);
 }
 
-/* Button base styles */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -141,7 +136,6 @@ body {
   box-shadow: none !important;
 }
 
-/* Input styles */
 .input {
   width: 100%;
   padding: 0.625rem 0.875rem;
@@ -164,7 +158,6 @@ body {
   color: var(--text-muted);
 }
 
-/* Select styles */
 .select {
   width: 100%;
   padding: 0.625rem 0.875rem;
@@ -194,7 +187,6 @@ body {
   color: var(--text-primary);
 }
 
-/* Label styles */
 .label {
   display: block;
   font-size: 0.75rem;
@@ -205,12 +197,10 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Monospace text for moves/PGN */
 .mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Chess piece animations */
 @keyframes piece-drop {
   0% {
     transform: translateY(-10px);

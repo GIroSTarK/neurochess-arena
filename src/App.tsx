@@ -9,7 +9,6 @@ import {
 function App() {
   return (
     <div className="min-h-screen bg-(--bg-primary)">
-      {/* Background gradient */}
       <div className="fixed inset-0 bg-linear-to-br from-[#0a0a0f] via-[#12121a] to-[#1a1525] -z-10" />
       <div
         className="fixed inset-0 opacity-30 -z-10"
@@ -19,7 +18,6 @@ function App() {
         }}
       />
 
-      {/* Header */}
       <header className="border-b border-(--border-color) bg-(--bg-secondary)/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -52,15 +50,12 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 items-start">
-          {/* Left Panel - White Player Config */}
           <div className="space-y-6">
             <PlayerConfig color="white" />
           </div>
 
-          {/* Center - Chess Board & Controls */}
           <div className="flex flex-col items-center gap-6">
             <ChessBoardComponent />
             <div className="w-[560px]">
@@ -68,7 +63,6 @@ function App() {
             </div>
           </div>
 
-          {/* Right Panel - Black Player Config & Move History */}
           <div className="space-y-6">
             <PlayerConfig color="black" />
             <MoveHistory />
@@ -76,7 +70,6 @@ function App() {
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-(--border-color) bg-(--bg-secondary)/50 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-(--text-muted)">
@@ -85,7 +78,6 @@ function App() {
         </div>
       </footer>
 
-      {/* Debug Panel */}
       <DebugPanel />
     </div>
   );

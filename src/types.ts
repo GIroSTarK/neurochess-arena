@@ -1,13 +1,5 @@
-// ==========================================
-// Player Types
-// ==========================================
-
 export type PlayerType = 'human' | 'ai';
 export type PlayerColor = 'white' | 'black';
-
-// ==========================================
-// LLM Provider Types
-// ==========================================
 
 export type ProviderId = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'xai';
 
@@ -20,7 +12,7 @@ export interface LLMModel {
 export interface LLMConfig {
   providerId: ProviderId;
   modelId: string;
-  customModelSlug?: string; // Overrides modelId if provided
+  customModelSlug?: string;
   apiKey: string;
   temperature: number;
   maxRetries: number;
@@ -34,23 +26,15 @@ export interface LLMRequestConfig {
 }
 
 export interface LLMResponse {
-  move: string; // UCI format: "e2e4"
-  thoughts?: string; // Optional explanation from the model
-  rawResponse?: string; // For debugging
+  move: string;
+  thoughts?: string;
+  rawResponse?: string;
 }
-
-// ==========================================
-// Player Configuration
-// ==========================================
 
 export interface PlayerConfig {
   type: PlayerType;
   llmConfig: LLMConfig;
 }
-
-// ==========================================
-// Game State Types
-// ==========================================
 
 export type GameStatus = 'idle' | 'playing' | 'white_wins' | 'black_wins' | 'draw' | 'stalemate';
 
@@ -65,16 +49,12 @@ export interface GameState {
 }
 
 export interface MoveRecord {
-  san: string; // Standard Algebraic Notation: "e4", "Nf3"
-  uci: string; // UCI format: "e2e4", "g1f3"
-  fen: string; // Position after the move
+  san: string;
+  uci: string;
+  fen: string;
   color: PlayerColor;
   moveNumber: number;
 }
-
-// ==========================================
-// Material Balance
-// ==========================================
 
 export interface MaterialCount {
   pawns: number;
@@ -93,10 +73,6 @@ export interface MaterialBalance {
   advantageValue: number;
 }
 
-// ==========================================
-// UI Configuration
-// ==========================================
-
 export type PieceSet = 'default' | 'neo' | 'alpha' | 'merida' | 'cburnett';
 
 export interface BoardConfig {
@@ -105,10 +81,6 @@ export interface BoardConfig {
   showCoordinates: boolean;
 }
 
-// ==========================================
-// Debug Types
-// ==========================================
-
 export interface DebugEntry {
   timestamp: Date;
   type: 'prompt' | 'response' | 'error' | 'move';
@@ -116,10 +88,6 @@ export interface DebugEntry {
   content: string;
   raw?: string;
 }
-
-// ==========================================
-// LLM Provider Interface
-// ==========================================
 
 export interface ChessPrompt {
   system: string;
@@ -134,17 +102,13 @@ export interface LLMProvider {
   parseResponse(responseJson: unknown): LLMResponse;
 }
 
-// ==========================================
-// Constants
-// ==========================================
-
 export const PIECE_VALUES = {
-  p: 1, // pawn
-  n: 3, // knight
-  b: 3, // bishop
-  r: 5, // rook
-  q: 9, // queen
-  k: 0, // king (infinite value, but 0 for material count)
+  p: 1,
+  n: 3,
+  b: 3,
+  r: 5,
+  q: 9,
+  k: 0,
 } as const;
 
 export const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';

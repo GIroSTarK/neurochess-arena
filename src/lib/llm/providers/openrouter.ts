@@ -9,7 +9,6 @@ import type {
 import { extractMoveFromResponse } from '../prompt';
 
 const OPENROUTER_MODELS: LLMModel[] = [
-  // OpenAI (via OpenRouter)
   { id: 'openai/gpt-5.2', name: 'GPT-5.2', providerId: 'openrouter' },
   { id: 'openai/gpt-5.1', name: 'GPT-5.1', providerId: 'openrouter' },
   { id: 'openai/gpt-5', name: 'GPT-5', providerId: 'openrouter' },
@@ -21,29 +20,21 @@ const OPENROUTER_MODELS: LLMModel[] = [
   { id: 'openai/gpt-4o', name: 'GPT-4o', providerId: 'openrouter' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', providerId: 'openrouter' },
   { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo', providerId: 'openrouter' },
-
-  // Anthropic (via OpenRouter)
   { id: 'anthropic/claude-4.5-opus', name: 'Claude 4.5 Opus', providerId: 'openrouter' },
   { id: 'anthropic/claude-4.5-sonnet', name: 'Claude 4.5 Sonnet', providerId: 'openrouter' },
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', providerId: 'openrouter' },
   { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus', providerId: 'openrouter' },
   { id: 'anthropic/claude-3-haiku', name: 'Claude 3 Haiku', providerId: 'openrouter' },
-
-  // Google (via OpenRouter)
   { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerId: 'openrouter' },
   { id: 'google/gemini-2.0-pro', name: 'Gemini 2.0 Pro', providerId: 'openrouter' },
   { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', providerId: 'openrouter' },
   { id: 'google/gemini-flash-1.5', name: 'Gemini 1.5 Flash', providerId: 'openrouter' },
   { id: 'google/gemma-2-9b-it', name: 'Gemma 2 9B IT', providerId: 'openrouter' },
   { id: 'google/gemma-2-27b-it', name: 'Gemma 2 27B IT', providerId: 'openrouter' },
-
-  // xAI (via OpenRouter)
   { id: 'x-ai/grok-3', name: 'Grok 3', providerId: 'openrouter' },
   { id: 'x-ai/grok-3-mini', name: 'Grok 3 Mini', providerId: 'openrouter' },
   { id: 'x-ai/grok-2', name: 'Grok 2', providerId: 'openrouter' },
   { id: 'x-ai/grok-2-mini', name: 'Grok 2 Mini', providerId: 'openrouter' },
-
-  // Open models
   { id: 'meta-llama/llama-3.1-405b-instruct', name: 'Llama 3.1 405B', providerId: 'openrouter' },
   { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', providerId: 'openrouter' },
   { id: 'mistralai/mistral-large', name: 'Mistral Large', providerId: 'openrouter' },

@@ -16,7 +16,6 @@ export function DebugPanel() {
 
   return (
     <div className="fixed bottom-4 right-4 w-[500px] max-h-[400px] glass-panel overflow-hidden flex flex-col z-50">
-      {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-(--border-color)">
         <h4 className="font-semibold text-(--text-primary) flex items-center gap-2">
           🐛 Debug Console
@@ -37,7 +36,6 @@ export function DebugPanel() {
         </div>
       </div>
 
-      {/* Logs */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[320px]">
         {debugLogs.length === 0 ? (
           <div className="text-center text-(--text-muted) py-4 text-sm">
