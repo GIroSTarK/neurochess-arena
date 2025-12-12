@@ -34,7 +34,7 @@ function App() {
             </div>
             <div className="flex items-center gap-4">
               <a
-                href="https://github.com"
+                href="https://github.com/GIroSTarK/neurochess-arena"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-(--text-muted) hover:text-(--text-primary) transition-colors"
