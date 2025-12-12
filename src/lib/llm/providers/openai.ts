@@ -4,6 +4,7 @@ import type {
   LLMRequestConfig,
   LLMResponse,
   LLMModel,
+  ChessPrompt,
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
@@ -33,7 +34,7 @@ export const openAIProvider: LLMProvider = {
   name: 'OpenAI',
   models: OPENAI_MODELS,
 
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const selectedModelId = config.customModelSlug?.trim() || config.modelId;
 
     const effortMatch = selectedModelId.match(/^(.*)-(none|minimal|low|medium|high|xhigh)$/);
@@ -42,14 +43,18 @@ export const openAIProvider: LLMProvider = {
 
     const isOModule = /^o\d/.test(modelId); // o1, o3, o4-mini, ...
 
+    // For reasoning models (o1, o3, etc.), combine system+user into single user message
+    // as they have limited system prompt support
+    const messages = isOModule
+      ? [{ role: 'user', content: `${prompt.system}\n\n---\n\n${prompt.user}` }]
+      : [
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
+        ];
+
     const body: Record<string, unknown> = {
       model: modelId,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      messages,
       // Ask OpenAI to enforce a valid JSON object response (when supported by the model).
       // This improves parse reliability for extracting the UCI move.
       response_format: { type: 'json_object' },

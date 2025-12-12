@@ -4,6 +4,7 @@ import type {
   LLMRequestConfig,
   LLMResponse,
   LLMModel,
+  ChessPrompt,
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
@@ -21,7 +22,7 @@ export const xaiProvider: LLMProvider = {
   name: 'xAI',
   models: XAI_MODELS,
 
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const modelId = config.customModelSlug?.trim() || config.modelId;
 
     return {
@@ -34,10 +35,8 @@ export const xaiProvider: LLMProvider = {
       body: {
         model: modelId,
         messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
         ],
         temperature: config.temperature,
       },

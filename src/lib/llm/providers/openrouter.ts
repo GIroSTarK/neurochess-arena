@@ -4,6 +4,7 @@ import type {
   LLMRequestConfig,
   LLMResponse,
   LLMModel,
+  ChessPrompt,
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
@@ -55,7 +56,7 @@ export const openRouterProvider: LLMProvider = {
   name: 'OpenRouter',
   models: OPENROUTER_MODELS,
 
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const modelId = config.customModelSlug?.trim() || config.modelId;
 
     return {
@@ -70,10 +71,8 @@ export const openRouterProvider: LLMProvider = {
       body: {
         model: modelId,
         messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user },
         ],
         temperature: config.temperature,
       },

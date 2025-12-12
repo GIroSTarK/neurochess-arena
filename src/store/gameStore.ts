@@ -15,6 +15,7 @@ import {
   createGame,
   makeMove,
   isLegalMove,
+  getLegalMoves,
   getCurrentTurn,
   getGameStatus,
   exportPGN,
@@ -225,6 +226,7 @@ export const useGameStore = create<GameStore>()(
 
         try {
           const moveHistorySan = moveHistory.map((m) => m.san);
+          const legalMoves = getLegalMoves(game);
 
           const response = await requestLLMMove(
             playerConfig.llmConfig,
@@ -232,6 +234,7 @@ export const useGameStore = create<GameStore>()(
             game.pgn(),
             currentTurn,
             moveHistorySan,
+            legalMoves,
             debugMode ? get().addDebugLog : undefined
           );
 

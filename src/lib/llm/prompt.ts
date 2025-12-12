@@ -1,53 +1,82 @@
 import type { PlayerColor } from '../../types';
 
 /**
- * Builds a chess move prompt for LLM
- * Returns a structured prompt that asks the model to return a move in UCI format
+ * System prompt for chess engine role
+ * Contains static instructions that don't change between moves
+ */
+export const CHESS_SYSTEM_PROMPT = `You are a chess engine. Your task is to select the best move from a list of legal moves.
+
+## Response Format
+You MUST respond with a JSON block in exactly this format:
+
+\`\`\`json
+{
+  "move": "UCI_MOVE",
+  "explanation": "Brief explanation"
+}
+\`\`\`
+
+## Rules
+- Choose ONE move from the provided legal moves list
+- Use UCI format exactly as shown (e.g., "e2e4", "g1f3", "e7e8q")
+- Focus on selecting the strategically best move
+- Do NOT suggest multiple moves`;
+
+const RECENT_MOVES_CONTEXT = 10;
+
+/**
+ * Builds the user prompt with current game state
+ * Contains dynamic information that changes each turn
+ */
+export function buildChessUserPrompt(
+  fen: string,
+  _pgn: string,
+  currentTurn: PlayerColor,
+  moveHistory: string[],
+  legalMoves: string[]
+): string {
+  const colorName = currentTurn === 'white' ? 'White' : 'Black';
+  const legalMovesDisplay = legalMoves.join(', ');
+
+  const recentMoves =
+    moveHistory.length > RECENT_MOVES_CONTEXT
+      ? moveHistory.slice(-RECENT_MOVES_CONTEXT)
+      : moveHistory;
+  const recentMovesDisplay =
+    recentMoves.length > 0
+      ? `${moveHistory.length > RECENT_MOVES_CONTEXT ? '... ' : ''}${recentMoves.join(' ')}`
+      : '(Opening)';
+
+  return `## Position (FEN)
+${fen}
+
+## Recent Moves
+${recentMovesDisplay}
+
+## ${colorName} to move
+
+## Legal Moves (${legalMoves.length})
+${legalMovesDisplay}
+
+Select the best move.`;
+}
+
+/**
+ * Builds a combined prompt for providers that don't support system messages well
+ * (e.g., some reasoning models like o1, o3)
  */
 export function buildChessPrompt(
   fen: string,
   pgn: string,
   currentTurn: PlayerColor,
-  moveHistory: string[]
+  moveHistory: string[],
+  legalMoves: string[]
 ): string {
-  const colorName = currentTurn === 'white' ? 'White' : 'Black';
-  const movesDisplay =
-    moveHistory.length > 0 ? moveHistory.join(' ') : '(Game just started, no moves yet)';
+  return `${CHESS_SYSTEM_PROMPT}
 
-  return `You are a chess engine. Your task is to find the best legal chess move for the current position.
+---
 
-## Current Position (FEN)
-${fen}
-
-## Game History (PGN)
-${pgn || '(No moves yet)'}
-
-## Move History
-${movesDisplay}
-
-## Your Color
-You are playing as ${colorName}. It is ${colorName}'s turn to move.
-
-## Rules for Your Response
-1. Analyze the position carefully
-2. Choose the best legal move
-3. Return your move in UCI format (e.g., "e2e4", "g1f3", "e7e8q" for promotion)
-4. Your response MUST contain a JSON block with exactly this format:
-
-\`\`\`json
-{
-  "move": "YOUR_UCI_MOVE_HERE",
-  "explanation": "Brief explanation of why this move is good"
-}
-\`\`\`
-
-## Important
-- The move MUST be in UCI format: source square + destination square (e.g., "e2e4")
-- For pawn promotion, add the piece letter at the end (e.g., "e7e8q" for queen)
-- Only legal moves will be accepted
-- Do NOT suggest multiple moves - only ONE move
-
-Think step by step, then provide your move in the JSON format above.`;
+${buildChessUserPrompt(fen, pgn, currentTurn, moveHistory, legalMoves)}`;
 }
 
 /**

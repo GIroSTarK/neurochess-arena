@@ -4,6 +4,7 @@ import type {
   LLMRequestConfig,
   LLMResponse,
   LLMModel,
+  ChessPrompt,
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
@@ -27,7 +28,7 @@ export const anthropicProvider: LLMProvider = {
   name: 'Anthropic',
   models: ANTHROPIC_MODELS,
 
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const modelId = config.customModelSlug?.trim() || config.modelId;
 
     return {
@@ -43,10 +44,11 @@ export const anthropicProvider: LLMProvider = {
         model: modelId,
         max_tokens: DEFAULT_MAX_TOKENS,
         temperature: config.temperature,
+        system: prompt.system,
         messages: [
           {
             role: 'user',
-            content: prompt,
+            content: prompt.user,
           },
         ],
       },

@@ -121,11 +121,16 @@ export interface DebugEntry {
 // LLM Provider Interface
 // ==========================================
 
+export interface ChessPrompt {
+  system: string;
+  user: string;
+}
+
 export interface LLMProvider {
   id: ProviderId;
   name: string;
   models: LLMModel[];
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig;
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig;
   parseResponse(responseJson: unknown): LLMResponse;
 }
 

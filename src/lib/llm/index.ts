@@ -5,13 +5,14 @@ import type {
   ProviderId,
   PlayerColor,
   DebugEntry,
+  ChessPrompt,
 } from '../../types';
 import { openRouterProvider } from './providers/openrouter';
 import { openAIProvider } from './providers/openai';
 import { anthropicProvider } from './providers/anthropic';
 import { googleProvider } from './providers/google';
 import { xaiProvider } from './providers/xai';
-import { buildChessPrompt } from './prompt';
+import { CHESS_SYSTEM_PROMPT, buildChessUserPrompt } from './prompt';
 
 // Registry of all available providers
 const providers: Record<ProviderId, LLMProvider> = {
@@ -50,10 +51,14 @@ export async function requestLLMMove(
   pgn: string,
   currentTurn: PlayerColor,
   moveHistory: string[],
+  legalMoves: string[],
   onDebug?: (entry: DebugEntry) => void
 ): Promise<LLMResponse> {
   const provider = getProvider(config.providerId);
-  const prompt = buildChessPrompt(fen, pgn, currentTurn, moveHistory);
+  const prompt: ChessPrompt = {
+    system: CHESS_SYSTEM_PROMPT,
+    user: buildChessUserPrompt(fen, pgn, currentTurn, moveHistory, legalMoves),
+  };
 
   // Log the prompt if debug is enabled
   if (onDebug) {
@@ -61,7 +66,7 @@ export async function requestLLMMove(
       timestamp: new Date(),
       type: 'prompt',
       player: currentTurn,
-      content: prompt,
+      content: `[System]\n${prompt.system}\n\n[User]\n${prompt.user}`,
     });
   }
 
@@ -135,5 +140,5 @@ export async function requestLLMMove(
 }
 
 // Re-export for convenience
-export { buildChessPrompt } from './prompt';
+export { CHESS_SYSTEM_PROMPT, buildChessUserPrompt, buildChessPrompt } from './prompt';
 export type { LLMProvider };

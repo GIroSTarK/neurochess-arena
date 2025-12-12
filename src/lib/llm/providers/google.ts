@@ -4,6 +4,7 @@ import type {
   LLMRequestConfig,
   LLMResponse,
   LLMModel,
+  ChessPrompt,
 } from '../../../types';
 import { extractMoveFromResponse } from '../prompt';
 
@@ -24,7 +25,7 @@ export const googleProvider: LLMProvider = {
   name: 'Google',
   models: GOOGLE_MODELS,
 
-  buildRequest(prompt: string, config: LLMConfig): LLMRequestConfig {
+  buildRequest(prompt: ChessPrompt, config: LLMConfig): LLMRequestConfig {
     const modelId = config.customModelSlug?.trim() || config.modelId;
 
     // Google Generative Language API uses an API key in the query string for browser-friendly usage.
@@ -39,10 +40,13 @@ export const googleProvider: LLMProvider = {
         'Content-Type': 'application/json',
       },
       body: {
+        systemInstruction: {
+          parts: [{ text: prompt.system }],
+        },
         contents: [
           {
             role: 'user',
-            parts: [{ text: prompt }],
+            parts: [{ text: prompt.user }],
           },
         ],
         generationConfig: {
