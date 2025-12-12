@@ -2,7 +2,7 @@
 
 Арена для шахових партій **людина vs AI** або **AI vs AI**, де роль “двигуна” виконує LLM. Додаток працює **повністю в браузері**: позиція ведеться через `chess.js`, а AI отримує **FEN + список легальних ходів** і повертає один хід у форматі **UCI**.
 
-<img width="261" height="57" alt="image" src="https://github.com/user-attachments/assets/cff7546b-07de-4b54-9749-7d0fab58297b" />
+<img width="1462" height="908" alt="image" src="https://github.com/user-attachments/assets/f0076652-95d4-4633-9141-ebd3984b8b55" />
 
 ## Можливості
 
