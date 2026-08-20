@@ -1,0 +1,46 @@
+# Architecture decision records
+
+Architecture decision records (ADRs) capture decisions that are consequential, cross-cutting, or expensive to reverse. Product behavior belongs in `docs/product.md`; implementation detail that can change locally does not need an ADR.
+
+## Index
+
+| ADR                                                   | Status   | Decision                                                  |
+| ----------------------------------------------------- | -------- | --------------------------------------------------------- |
+| [0001](0001-typescript-monorepo-and-data-stack.md)    | Accepted | TypeScript monorepo, PostgreSQL, Drizzle, and Better Auth |
+| [0002](0002-deterministic-chess-authority.md)         | Accepted | Deterministic chess engine is authoritative               |
+| [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted | Normalize providers behind one move contract              |
+| [0004](0004-bring-your-own-key-security.md)           | Accepted | Session-only by default, encrypted saved keys by opt-in   |
+
+## Status values
+
+- `Proposed`: under discussion and not yet binding.
+- `Accepted`: current direction for implementation.
+- `Superseded`: replaced by a later ADR; retain the historical record.
+- `Rejected`: considered but intentionally not selected.
+
+## Template
+
+```markdown
+# ADR-NNNN: Decision title
+
+**Status:** Proposed  
+**Date:** YYYY-MM-DD
+
+## Context
+
+What forces or constraints require a decision?
+
+## Decision
+
+What will the project do?
+
+## Consequences
+
+What becomes easier, harder, or constrained?
+
+## Alternatives considered
+
+What credible options were not selected and why?
+```
+
+Never rewrite an accepted ADR to hide a changed decision. Add a new ADR and mark the old one as superseded.
