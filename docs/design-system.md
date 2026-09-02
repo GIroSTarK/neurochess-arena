@@ -1,7 +1,9 @@
 # Neurochess Arena design system
 
-**Version:** 1.0  
-**Status:** Design specification; production components follow the MVP roadmap  
+**Version:** 1.0
+
+**Status:** Sandbox shell, board, and localization implemented; remaining components follow the MVP roadmap
+
 **Last updated:** 2026-09-02
 
 ## Purpose and authority
@@ -10,7 +12,7 @@ An arena for understanding LLM chess decisions: the board is the focal point, th
 
 The direction is **refined sci-fi**: deep navy, precise cyan accents, a restrained angular frame, and readable conventional chess pieces. Use visual emphasis to communicate the next action or a change in state.
 
-[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation. It introduces no transport types, backend changes, dependency changes, or new product modes. The current foundation screen predates these reusable components; this milestone does not replace it.
+[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation. PR 3 applies the shell, board, controls, dialog, history, and localization to the development sandbox. AI, authentication, room, and replay concepts remain references for their later roadmap phases.
 
 Start with the [eight screen concepts](design-system/concepts/README.md). Their exact copy and sample game are recorded in the [concept fixtures](design-system/fixtures.md). The images establish composition; the token values, interaction rules, and text in this guide are the implementation reference. [Validation notes](design-system/validation.md) summarize reference limitations and remaining implementation checks.
 
@@ -47,13 +49,13 @@ Hover and pressed states add a neutral surface or an inset contrasting keyline. 
 
 ### Typography
 
-| Role                      | Token               | Family                                                                   |
-| ------------------------- | ------------------- | ------------------------------------------------------------------------ |
-| Wordmark and display      | `--nc-font-display` | `"Orbitron Variable", ui-sans-serif, system-ui, sans-serif`              |
-| Interface and commentary  | `--nc-font-ui`      | `Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
-| Notation and measurements | `--nc-font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`   |
+| Role                      | Token               | Family                                                                                     |
+| ------------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
+| Wordmark and display      | `--nc-font-display` | `"Orbitron Variable", ui-sans-serif, system-ui, sans-serif`                                |
+| Interface and commentary  | `--nc-font-ui`      | `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
+| Notation and measurements | `--nc-font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`                     |
 
-Orbitron is already bundled by the foundation app. Inter is currently only named in the fallback stack; bundle a local font asset when implementing this specification. Keep body copy and control labels in the UI family. Use `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
+Orbitron and Inter are bundled locally by the sandbox app. Keep body copy and control labels in the UI family. Use `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
 
 | Style / size token  | Size / line height   | Weight | Application                                   |
 | ------------------- | -------------------- | ------ | --------------------------------------------- |
@@ -86,11 +88,11 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 
 ## Layout and hierarchy
 
-| Width            | Composition                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1024px and above | Centered shell, maximum 1280px; 24–32px outer gutters; dominant board region beside a 320–400px information rail with a 24px gap. Board maximum 640px. |
-| 768–1023px       | One column, 24px gutters, board centered and capped at 640px; supporting content follows it.                                                           |
-| 320–767px        | One column, 16px gutters; equal-width compact player summaries, full-width square board, controls, commentary, then detail tabs.                       |
+| Width        | Composition                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Above 1024px | Centered shell, maximum 1280px; 24–32px outer gutters; dominant board region beside a 320–400px information rail with a 24–32px gap. Board maximum 640px. |
+| 768–1024px   | One column, 24px gutters, board centered and capped at 640px; supporting content follows it.                                                              |
+| 320–767px    | One column, 16px gutters; equal-width compact player summaries, full-width square board, controls, commentary, then detail tabs.                          |
 
 The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
 

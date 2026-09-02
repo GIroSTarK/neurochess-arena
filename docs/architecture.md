@@ -154,6 +154,22 @@ Write transactions use `READ COMMITTED`, locking the guest row before the game r
 
 Snapshot reads use a read-only `REPEATABLE READ` transaction so history and version come from one database view. The service restores ordered UCI history, checks persisted FEN/PGN and per-move projections, and rejects inconsistencies without repairing data or changing lifecycle. See [ADR-0006](decisions/0006-guest-owned-game-commands.md) for identity, authority, concurrency, and follow-up boundaries.
 
+### Sandbox web client (PR 3)
+
+`apps/web/src/api.ts` validates HTTP requests and responses with the existing contracts, uses credentialed/no-store requests, and cancels requests after ten seconds or when their owner disconnects. It retains only safe error codes and validated conflict snapshots; server message fields and exception text never enter the UI. The FEN presentation parser checks display syntax without generating moves or adjudicating games.
+
+The sandbox controller owns networking and complete accepted snapshots. React subscribes through `useSyncExternalStore`; square selection, focus, orientation, and promotion remain separate component state. Only `legalMoves` supplies selectable sources, destinations, and promotion suffixes. A synchronous guard serializes creation and moves before React can render pending feedback. Commands use the actual snapshot revision and a fresh UUID, and responses must belong to the current game/request generation without regressing the accepted revision.
+
+- Initial mounting checks `GET /ready` only. Explicit Start serializes `POST /guest-session {}` before `POST /sandbox/games {}`. Readiness does not imply sandbox availability; a creation 404 has its own unavailable state and retry.
+- Creation conflicts reopen the authorized snapshot. Move conflicts replace the complete snapshot and invalidate stale selection/promotion without automatically replaying the move.
+- Rejected moves synchronize with an authorized GET before permitting another move. A failed synchronization keeps the board inspectable and movement blocked.
+- Network, timeout, server, or malformed-response failures retain the original command and fetch the authorized snapshot. An unchanged revision cannot prove that the original request will not commit; new moves remain blocked. Explicit retry reuses the identical UUID, revision, and UCI. A newer revision makes that old command unable to commit, so the returned position can be adopted safely.
+- Access failures on loaded games clear the snapshot and require explicit action before another guest bootstrap. No game state is persisted in browser storage.
+
+The web localization layer uses bundled, typed i18next/react-i18next English resources with English fallback. Metadata, configuration errors, controls, board descriptions, and one polite atomic live region use the catalog. There is no language selector or browser-language detection. The [design guide](design-system.md#keyboard-and-chess-interaction) defines grid/dialog semantics and focus behavior; the [browser tests](development.md#browser-tests) exercise the real guest-command flow.
+
+Reload returns to the entry screen. Starting again can reopen an unfinished game but does not change its server lifecycle. This slice introduces no transport changes, migrations, lifecycle commands, WebSocket client, AI orchestration, or replay/export.
+
 ### AI turns
 
 The browser requests one AI turn at a time. The API:
@@ -183,7 +199,7 @@ Phase 1 provides an explicitly labeled development screen where one guest sessio
 - Keep sandbox records in the development/test database. The sandbox creates no room, invitation, join flow, public spectator access, or additional public game mode.
 - Start each sandbox game from the standard position. Special FEN positions are allowed only as internal test fixtures, never through a game-creation API.
 
-Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). The Phase 1 target is to restore an unfinished sandbox game as `paused` on refresh/reopening and require explicit resume. PR 2 deliberately provides read-only snapshots that preserve stored lifecycle; recovery and resume are the next slice. Completed or aborted records remain readable by their owning guest during the retained session, with replay and PGN export endpoints still pending. They do not become account history. The production guest retention period remains an open product decision.
+Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). The Phase 1 target is to restore an unfinished sandbox game as `paused` on refresh/reopening and require explicit resume. PR 2 snapshots and the PR 3 client preserve stored lifecycle; paused recovery and resume remain later Phase 1 work. Completed or aborted records remain readable by their owning guest during the retained session, with replay and PGN export endpoints still pending. They do not become account history. The production guest retention period remains an open product decision.
 
 ## AI provider boundary
 

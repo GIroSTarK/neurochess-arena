@@ -1,15 +1,19 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { I18nextProvider } from "react-i18next";
 import "@fontsource-variable/orbitron";
+import "@fontsource-variable/inter/wght.css";
 
 import { App } from "./App";
+import { ConfigurationError } from "./ConfigurationError";
 import { parseWebEnvironment } from "./env";
+import { i18n } from "./i18n";
 import "./styles.css";
 
 const rootElement = document.querySelector<HTMLDivElement>("#root");
 
 if (rootElement === null) {
-  throw new Error("Application root element is missing");
+  throw new Error(i18n.t("configuration.rootMissing"));
 }
 
 const root = createRoot(rootElement);
@@ -18,17 +22,17 @@ try {
   const environment = parseWebEnvironment(import.meta.env);
   root.render(
     <StrictMode>
-      <App apiBaseUrl={environment.VITE_API_BASE_URL} />
+      <I18nextProvider i18n={i18n}>
+        <App apiBaseUrl={environment.VITE_API_BASE_URL} />
+      </I18nextProvider>
     </StrictMode>,
   );
 } catch (error: unknown) {
-  const message = error instanceof Error ? error.message : "Invalid application configuration";
   root.render(
     <StrictMode>
-      <main className="configuration-error" role="alert">
-        <h1>Configuration unavailable</h1>
-        <p>{message}</p>
-      </main>
+      <I18nextProvider i18n={i18n}>
+        <ConfigurationError error={error} />
+      </I18nextProvider>
     </StrictMode>,
   );
 }

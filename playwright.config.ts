@@ -1,0 +1,41 @@
+import { defineConfig, devices } from "@playwright/test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { WEB_ORIGIN } from "./test/e2e/environment";
+
+export default defineConfig({
+  testDir: "./test/e2e",
+  testMatch: "**/*.spec.ts",
+  fullyParallel: false,
+  forbidOnly: Boolean(process.env.CI),
+  retries: 0,
+  workers: 1,
+  timeout: 45_000,
+  expect: { timeout: 8_000 },
+  reporter: "list",
+  outputDir: join(tmpdir(), "neurochess-playwright-results"),
+  use: {
+    baseURL: WEB_ORIGIN,
+    // Traces/HARs can retain guest cookie headers. Capture only rendered pixels.
+    trace: "off",
+    screenshot: "only-on-failure",
+    video: "off",
+  },
+  projects: [
+    {
+      name: "desktop",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1080 } },
+    },
+    { name: "mobile-touch", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
+  ],
+  webServer: {
+    command: "node --conditions=development --import tsx test/e2e/server.ts",
+    url: WEB_ORIGIN,
+    timeout: 30_000,
+    reuseExistingServer: false,
+    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
+    stdout: "pipe",
+    stderr: "pipe",
+  },
+});

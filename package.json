@@ -28,6 +28,7 @@
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.tests.json --pretty false",
     "test": "npm run test:unit && npm run test:integration && npm run test:architecture",
     "test:unit": "vitest run",
+    "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:architecture": "depcruise --config dependency-cruiser.config.mjs apps packages && node scripts/check-architecture-fixture.mjs",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
@@ -41,7 +42,9 @@
     "db:studio": "npm run db:studio --workspace @neurochess/database"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.6",

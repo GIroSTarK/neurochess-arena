@@ -14,6 +14,8 @@
     "packages/**/*.test.ts",
     "vitest.config.ts",
     "vitest.integration.config.ts",
+    "playwright.config.ts",
+    "apps/web/src/i18n/*.d.ts",
     "test/**/*.ts"
   ]
 }

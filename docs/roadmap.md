@@ -24,13 +24,13 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** PR 1 (deterministic domain/contracts) and PR 2 (guest-owned persistence and human-command API) are implemented. UI integration, paused recovery, lifecycle commands, and replay/export endpoints remain pending; the vertical-slice exit condition is not yet met.
+**Status:** PR 1 (deterministic domain/contracts), PR 2 (guest-owned persistence and human-command API), and PR 3 (localized sandbox and accessible board) are implemented. Paused recovery, lifecycle commands, and replay/export endpoints remain pending; the vertical-slice exit condition is not yet met.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
 Deliverables:
 
-- [ ] dark responsive application shell and chessboard;
+- [x] dark responsive application shell and accessible keyboard/touch chessboard, explicit promotion, and read-only SAN history;
 - [x] standard initial position and complete legal move handling;
 - [x] server-authoritative sandbox creation and human move command;
 - [x] guest-cookie bootstrap, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` owned game per guest session;
@@ -39,7 +39,8 @@ Deliverables:
 - [ ] recovery of an unfinished sandbox game as `paused`, with explicit resume;
 - [ ] lifecycle command endpoints, replay, and PGN export;
 - [x] unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
-- [ ] UI localization layer with English strings (the API error catalog is implemented).
+- [x] typed UI localization layer with bundled English strings, fallback, safe API-code mapping, and localized announcements;
+- [x] client command/recovery tests and desktop/mobile Playwright gameplay and accessibility checks against the disposable PostgreSQL database.
 
 Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](architecture.md#verification-strategy).
 

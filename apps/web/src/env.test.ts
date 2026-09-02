@@ -20,8 +20,20 @@ describe("parseWebEnvironment", () => {
       throw new Error("Expected environment parsing to fail");
     } catch (error: unknown) {
       expect(error).toBeInstanceOf(WebEnvironmentValidationError);
-      expect((error as Error).message).toContain("VITE_API_BASE_URL");
+      expect((error as WebEnvironmentValidationError).variables).toEqual(["VITE_API_BASE_URL"]);
       expect((error as Error).message).not.toContain(canary);
     }
+  });
+
+  it.each([
+    "ftp://localhost",
+    "https://user:secret@example.test",
+    "https://example.test/path",
+    "https://example.test?token=secret",
+    "https://example.test#secret",
+  ])("rejects an API value that is not a public HTTP origin", (value) => {
+    expect(() => parseWebEnvironment({ VITE_API_BASE_URL: value })).toThrow(
+      WebEnvironmentValidationError,
+    );
   });
 });

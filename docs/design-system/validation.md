@@ -1,14 +1,46 @@
 # Design-system validation
 
-**Scope:** Static reference limitations and implementation checks
+**Scope:** PR 3 development sandbox and static reference limitations
 
-## Limitations
+## PR 3 validation — 2026-09-02
+
+Validated on Windows with Node 24.19.0, npm 11.17.0, and Playwright 1.62.1 Chromium. Browser tests use desktop and Pixel 7 mobile-touch emulation against real Fastify services and the guarded, disposable PostgreSQL test database. See the [development guide](../development.md#browser-tests) for setup, isolated ports, and cleanup.
+
+| Check                          | Actual result                                                                                                                                                                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run verify`               | Passed formatting, lint, typecheck, 464 unit tests, 49 database integration tests, architecture checks (including all nine negative fixtures), and the production build.                                                                                |
+| `npm run test:e2e`             | All eight desktop/mobile tests passed. Both profiles completed Fool's Mate, read the persisted result, started a new game, promoted both colors through legal moves from the standard position, and reopened an unchanged active game after reload.     |
+| `npm run smoke`                | Built API and web preview passed startup checks.                                                                                                                                                                                                        |
+| Automated accessibility        | No axe violations for the initial active board, promotion dialog, and enlarged/expanded-text states, using WCAG A/AA tags through 2.2.                                                                                                                  |
+| Keyboard and modal interaction | Both orientations, roving focus, arrows, row/corner navigation, Escape, and Tab order passed. Native promotion trapped focus, supported cancellation with destination focus return, and required an explicit piece choice.                              |
+| Responsive layout              | Inspected captures at 320, 390, 768, 1024, and 1440px. Bounds checks found no horizontal page overflow; player summaries have equal widths, the board stays square and at most 640px, and primary controls remain reachable.                            |
+| Enlarged/localized text        | At 320px, 200% text and a test-only translation with at least 50% expansion remained readable in a single scrolling column. Controls wrap, with no hidden action or horizontal page overflow.                                                           |
+| Focus, contrast, and motion    | Inspected outlined pieces, board coordinates, last-move corner marks, the check badge, and promotion focus keylines. The decorative frame does not clip focus. Primary controls meet the 44px target; reduced-motion styles remove control transitions. |
+
+The 100 web unit/component tests cover localized metadata, configuration errors and announcements, duplicate-command guards, accepted-state preservation, conflict replacement, rejection synchronization, uncertain outcomes with identical-command retry, stale responses, session loss, disabled sandbox, and malformed payloads. Board coverage includes all four promotion suffixes for each color, castling, en passant, cancellation, and paused/terminal inspection. These fixtures use the public deterministic chess interface and do not expose arbitrary starting positions in the application.
+
+### Comparison with the live concepts
+
+The [desktop and mobile live references](concepts/README.md) informed the navy/cyan palette, local Orbitron/Inter typography, equal player summaries, outlined Staunton pieces, and board-first hierarchy. Above 1024px the board and information rail share one decorative angular frame within the 1280px shell. At and below 1024px the rail follows the board in normal document order; mobile retains 16px gutters and omits the decorative frame.
+
+The sandbox labels both seats as the guest and provides status and SAN history in the rail. AI commentary, evaluation, telemetry, account controls, and replay belong to later roadmap slices. The rendered board follows accepted server FEN, so its position intentionally differs from the illustrative concept fixture. Reload reopens through an explicit creation conflict without changing the stored lifecycle.
+
+Each browser run writes `layout-*.png`, `text-200-percent.png`, `expanded-translation.png`, `promotion.png`, and `checkmate.png` under the operating system's temporary `neurochess-playwright-results` directory. The captures were visually reviewed. Traces, HAR files, and video are disabled to avoid recording guest credentials. An additional in-app browser check confirmed rendering, explicit reopening, flipped keyboard navigation, and no unexpected console warnings/errors.
+
+### Remaining limitations
+
+- Screen-reader-facing names, roles, grid structure, modal focus, and the single polite atomic live region were reviewed through DOM inspection and interaction tests. Actual speech with NVDA, JAWS, VoiceOver, or Narrator has not been reviewed; automated checks do not establish full accessibility conformance.
+- Firefox, WebKit, physical touch devices, operating-system zoom, and on-screen keyboards have not been tested. The enlargement fixture changes root text size; it is not a substitute for browser/OS zoom review.
+- Vite reports a non-failing bundle-size warning: the initial JavaScript chunk is approximately 568 kB minified / 169 kB gzip. No performance budget or field performance claim is established by this slice.
+- Paused refresh recovery, resume/abort commands, replay/export, AI/provider states, authentication, and realtime rooms remain outside this checkpoint. Their interaction and accessibility checks remain due when implemented.
+
+## Static reference limitations
 
 - The [eight screen concepts](concepts/README.md) are static browser captures. They illustrate composition and reference states; they do not prove working gameplay, responsive behavior, accessibility, or credential security.
 - Models, telemetry, costs, and evaluation samples are illustrative [fixture data](fixtures.md). They are not provider benchmarks or measured Stockfish results.
-- Reference fonts and chess glyphs need verification in the production UI. Token contrast alone does not establish contrast for rendered pieces, focus rings, overlays, or disabled controls.
+- PR 3 bundles local fonts and replaces reference glyphs with SVG pieces. Token contrast alone does not establish contrast for all future components, focus rings, overlays, or disabled controls.
 
-## Before accepting implementation
+## Subsequent implementation checks
 
 1. Apply the [design guide's acceptance checklist](../design-system.md#accessibility-and-acceptance) to rendered components, including narrow screens, enlarged text, keyboard and assistive-technology use, reduced motion, and the [edge-case fixtures](fixtures.md#review-only-edge-cases).
 2. Add behavior tests for chess interaction, retry and recovery states, credential handling, privacy, and authorized reconnection as the corresponding features are implemented.

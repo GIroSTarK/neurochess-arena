@@ -27,20 +27,20 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 
 ## Environment contract
 
-| Variable                    | Consumer   | Purpose                                                                |
-| --------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `NODE_ENV`                  | API        | `development`, `test`, or `production`                                 |
-| `API_HOST`                  | API        | Fastify listen address                                                 |
-| `API_PORT`                  | API        | Fastify listen port                                                    |
-| `WEB_ORIGIN`                | API        | Exact browser origin allowed by CORS                                   |
-| `DATABASE_URL`              | API, tools | PostgreSQL connection URL                                              |
-| `LOG_LEVEL`                 | API        | Pino log level                                                         |
-| `SANDBOX_ENABLED`           | API        | Exactly `true` or `false`; defaults to false; production rejects true  |
-| `GUEST_SESSION_TTL_SECONDS` | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400               |
-| `VITE_API_BASE_URL`         | web        | Public API origin compiled into the web app                            |
-| `POSTGRES_*`                | Compose    | Local database name, user, password, and port                          |
-| `TEST_DATABASE_URL`         | Tests      | Explicit disposable PostgreSQL database ending in `_test`; no fallback |
-| `TEST_POSTGRES_PORT`        | Compose    | Separate test-service port, defaults to 5433                           |
+| Variable                    | Consumer   | Purpose                                                                   |
+| --------------------------- | ---------- | ------------------------------------------------------------------------- |
+| `NODE_ENV`                  | API        | `development`, `test`, or `production`                                    |
+| `API_HOST`                  | API        | Fastify listen address                                                    |
+| `API_PORT`                  | API        | Fastify listen port                                                       |
+| `WEB_ORIGIN`                | API        | Exact browser origin allowed by CORS                                      |
+| `DATABASE_URL`              | API, tools | PostgreSQL connection URL                                                 |
+| `LOG_LEVEL`                 | API        | Pino log level                                                            |
+| `SANDBOX_ENABLED`           | API        | Exactly `true` or `false`; defaults to false; production rejects true     |
+| `GUEST_SESSION_TTL_SECONDS` | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400                  |
+| `VITE_API_BASE_URL`         | web        | Public HTTP(S) API origin, without credentials, paths, query, or fragment |
+| `POSTGRES_*`                | Compose    | Local database name, user, password, and port                             |
+| `TEST_DATABASE_URL`         | Tests      | Explicit disposable PostgreSQL database ending in `_test`; no fallback    |
+| `TEST_POSTGRES_PORT`        | Compose    | Separate test-service port, defaults to 5433                              |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
 
@@ -56,6 +56,7 @@ Invalid environment errors contain variable names only. Never add server secrets
 | `npm test`                   | Run unit, PostgreSQL integration, and dependency-boundary checks |
 | `npm run test:unit`          | Run database-free unit tests                                     |
 | `npm run test:integration`   | Run required PostgreSQL-backed tests; fail if unavailable        |
+| `npm run test:e2e`           | Run desktop/mobile browser gameplay and accessibility checks     |
 | `npm run format:check`       | Verify Prettier formatting                                       |
 | `npm run verify`             | Run formatting, lint, types, tests, and build                    |
 | `npm run smoke`              | Start and probe both built services                              |
@@ -90,9 +91,21 @@ npm run test:architecture
 
 Special-position fixtures live in `packages/chess/test`, outside the production TypeScript root and package exports. They exercise the internal adapter through the same aggregate used by public factories. Do not export a FEN constructor, import fixtures into production, or replace the normalized repetition key with the engine's built-in hash. The regression tests cover pinned en passant, restoration between repetition cycles, and the 99-to-100 half-move boundary.
 
+## Sandbox UI
+
+Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173` and choose **Start sandbox**. The service readiness indicator checks the database through `/ready`; sandbox availability is determined by creation, so a healthy server can still report that its sandbox is disabled. Enable it on the development server and choose **Retry sandbox**.
+
+One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.
+
+An uncertain submission keeps the original command in memory. **Check game status** reads the authorized snapshot; **Retry same move** reuses the original command without selecting a different move. A same-version GET is still uncertain because the first request could commit later. Rejections also require synchronization before movement resumes. Access loss clears the board and requires **Start sandbox again**.
+
+Reload returns to the entry screen. Start reopens the existing unfinished game through a creation conflict and preserves its stored lifecycle. Paused games remain inspectable; no refresh-to-paused simulation, resume, abort, replay, export, AI, sign-in, or WebSocket UI is included in this checkpoint. Completed games offer **New game**.
+
+Visible copy and document metadata come from `apps/web/src/i18n/en.ts`. Use complete messages and named placeholders; keep UCI, SAN, and coordinates unchanged. The i18next resource declaration type-checks keys, falls back to English, and ships no browser-language detection. Inter and Orbitron are bundled locally. API error codes map to catalog entries; do not display server messages or caught exceptions.
+
 ## Sandbox API
 
-Set `NODE_ENV=development` and `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and start the API. Production configuration rejects enablement; disabled servers also reject access to already-persisted sandbox games. The web gameplay screen is not implemented yet.
+Set `NODE_ENV=development` and `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and start the API. Production configuration rejects enablement; disabled servers also reject access to already-persisted sandbox games. The [web sandbox](#sandbox-ui) uses these endpoints unchanged.
 
 | Endpoint                    | Request                                        | Success                                            |
 | --------------------------- | ---------------------------------------------- | -------------------------------------------------- |
@@ -136,6 +149,25 @@ npm run verify
 The test service binds loopback port 5433 and uses tmpfs instead of the development volume. Its data is disposable when the container stops. Tests require an explicit PostgreSQL URL whose database name ends in `_test` and reject connection-level `options`; they never fall back to `DATABASE_URL`. Global setup applies reviewed migrations twice. Fixtures use unique guest IDs and cleanup deletes only those guests' games and sessions, not whole tables. Concurrent scenarios use independent pools/API instances, and rollback tests fail after an actual SQL insert. Tests never silently skip when PostgreSQL is unavailable.
 
 CI uses its own ephemeral `neurochess_test` database and runs integration tests through `npm test`. Unit tests and architecture checks remain runnable without PostgreSQL. Keep `TEST_DATABASE_URL` pointed only at a dedicated disposable database, never shared or production data.
+
+## Browser tests
+
+After installing dependencies, prepare Chromium and the disposable database:
+
+```text
+npm exec playwright -- install chromium
+npm run infra:test:up
+npm run verify
+npm run test:e2e
+```
+
+Playwright starts the actual Fastify guest/game services and Vite app at `http://localhost:3101` and `http://localhost:5174`. These ports must be free; the suite refuses to reuse existing servers. The test entrypoint validates `TEST_DATABASE_URL` with the same `_test`/no-options guard as integration tests before opening a connection or applying reviewed migrations. It never falls back to `DATABASE_URL`. No arbitrary-position endpoint or mocked gameplay API is used.
+
+Desktop Chromium and a Chromium mobile-touch context complete Fool's Mate, verify persisted snapshots, create a new game, and reach White knight/Black rook underpromotions through legal moves from the standard position. Further checks cover explicit refresh reopening, keyboard directions and Tab order, modal focus containment/return, 44px controls, reduced motion, 320/390/768/1024/1440px layouts, 200% text, 50% expanded test resources, and axe accessibility checks. Expansion is injected by the test into the dev module; it is not a product locale or flag.
+
+Each browser context has an isolated guest. Cleanup deletes only guests/games created by that test; the server also tracks guests it created for graceful shutdown. Screenshots and failure context go to `neurochess-playwright-results` in the OS temporary directory, outside the repository. Traces, HARs, and videos are disabled so guest cookie headers are not recorded. CI installs Chromium and runs this suite after the full build in `npm run verify`. The separate `npm run smoke` checks built-service startup.
+
+Automated checks do not certify screen-reader behavior or every browser engine. Keep the [design validation record](design-system/validation.md) current with actual visual review and remaining assistive-technology/cross-browser checks.
 
 ## Migrations
 
