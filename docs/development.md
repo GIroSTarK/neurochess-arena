@@ -8,6 +8,8 @@ Use Node.js 24 and npm 11. From a clean clone:
 npm ci
 ```
 
+Build, watch, and type-check commands use the native TypeScript 7 compiler through the `@typescript/native` npm alias, which provides `tsc`. Keep `typescript` aliased to `@typescript/typescript6` so ESLint and dependency-cruiser can use the TypeScript 6 compiler API. Retain both aliases when updating the toolchain; see the [upstream compatibility guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
+
 Copy `.env.example` to `.env`. The committed values are local placeholders only; never place production credentials in the repository.
 
 Start PostgreSQL and wait for its health check:
