@@ -56,9 +56,9 @@ export function Chessboard({
   const lastMove = snapshot.moves.at(-1)?.uci;
   const promotion = selected?.promotion;
 
-  function focus(square: Square) {
+  function focus(square: Square, options?: FocusOptions) {
     setFocusedSquare(square);
-    buttons.current.get(square)?.focus({ preventScroll: true });
+    buttons.current.get(square)?.focus(options);
   }
 
   function activate(square: Square) {
@@ -249,11 +249,11 @@ export function Chessboard({
           })}
           onCancel={() => {
             if (selected) setSelection({ ...selected, promotion: null });
-            focus(promotion.destination);
+            focus(promotion.destination, { preventScroll: true });
           }}
           onChoose={(move) => {
             if (selected) setSelection({ ...selected, promotion: null });
-            if (isSquare(move.slice(2, 4))) focus(promotion.destination);
+            if (isSquare(move.slice(2, 4))) focus(promotion.destination, { preventScroll: true });
             onMove(move);
           }}
         />

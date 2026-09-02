@@ -19,6 +19,12 @@ Validated on Windows with Node 24.19.0, npm 11.17.0, and Playwright 1.62.1 Chrom
 
 The 100 web unit/component tests cover localized metadata, configuration errors and announcements, duplicate-command guards, accepted-state preservation, conflict replacement, rejection synchronization, uncertain outcomes with identical-command retry, stale responses, session loss, disabled sandbox, and malformed payloads. Board coverage includes all four promotion suffixes for each color, castling, en passant, cancellation, and paused/terminal inspection. These fixtures use the public deterministic chess interface and do not expose arbitrary starting positions in the application.
 
+### Keyboard focus visibility follow-up — 2026-09-02
+
+Keyboard navigation now scrolls its destination into view; promotion-dialog focus restoration preserves the scroll position. The added browser regression passed on desktop at 1280×600 and mobile-touch at 390×400, covering both orientations, corner jumps, Home/End, and vertical arrow traversal. Its bounds assertion permits at most one CSS pixel of native scroll rounding. The existing eight browser cases also passed after the focus change, including promotion cancellation and underpromotion.
+
+`npm run verify` passed the formatting, lint, typecheck, 464 unit tests, 49 integration tests, architecture checks, and production build. An in-app browser check at both viewport sizes confirmed that clicking h1 and pressing Ctrl+Home brings a8 fully into view, with no console warnings or errors. The existing bundle-size warning and cross-browser limitations below still apply.
+
 ### Comparison with the live concepts
 
 The [desktop and mobile live references](concepts/README.md) informed the navy/cyan palette, local Orbitron/Inter typography, equal player summaries, outlined Staunton pieces, and board-first hierarchy. Above 1024px the board and information rail share one decorative angular frame within the 1280px shell. At and below 1024px the rail follows the board in normal document order; mobile retains 16px gutters and omits the decorative frame.

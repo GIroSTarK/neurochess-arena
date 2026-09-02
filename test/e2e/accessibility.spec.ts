@@ -60,6 +60,50 @@ async function checkBounds(page: Page) {
   expect(bounds.controlsReachable).toBe(true);
 }
 
+test("keeps keyboard-focused squares in view on short viewports in both orientations", async ({
+  page,
+}, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  await page.setViewportSize(touch ? { width: 390, height: 400 } : { width: 1280, height: 600 });
+  await startSandbox(page, touch);
+
+  async function navigateTo(key: string, coordinate: string) {
+    await page.keyboard.press(key);
+    const destination = square(page, coordinate);
+    await expect(destination).toBeFocused();
+    // Native focus scrolling rounds fractional square bounds to CSS pixels.
+    await expect
+      .poll(() =>
+        destination.evaluate((element) => {
+          const { top, right, bottom, left } = element.getBoundingClientRect();
+          return Math.max(-top, -left, bottom - window.innerHeight, right - window.innerWidth);
+        }),
+      )
+      .toBeLessThanOrEqual(1);
+  }
+
+  for (const orientation of ["white", "black"] as const) {
+    if (orientation === "black") {
+      await activate(page.getByRole("button", { name: "Flip board" }), touch);
+    }
+    await expect(page.getByRole("grid")).toHaveAttribute("data-orientation", orientation);
+    const leftFile = orientation === "white" ? "a" : "h";
+    const rightFile = orientation === "white" ? "h" : "a";
+    const ranks = orientation === "white" ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
+    const first = leftFile + ranks[7];
+    const last = rightFile + ranks[0];
+
+    await activate(square(page, last), touch);
+    await expect(square(page, first)).not.toBeInViewport();
+    await navigateTo("Control+Home", first);
+    await navigateTo("End", rightFile + ranks[7]);
+    await navigateTo("Control+End", last);
+    await navigateTo("Home", leftFile + ranks[0]);
+    for (const rank of ranks.slice(1)) await navigateTo("ArrowUp", leftFile + rank);
+    for (const rank of ranks.toReversed().slice(1)) await navigateTo("ArrowDown", leftFile + rank);
+  }
+});
+
 test("supports keyboard inspection in both orientations, reflow, and enlarged localized text", async ({
   page,
 }, testInfo) => {
