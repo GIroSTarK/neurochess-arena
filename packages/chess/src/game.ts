@@ -22,6 +22,10 @@ export function createGame(): ChessGame {
 
 /** Internal composition seam used by package-local position fixtures. */
 export function createGameWithRules(rules: ChessRules): ChessGame {
+  return createAggregate(rules).game;
+}
+
+function createAggregate(rules: ChessRules) {
   let lifecycle: GameLifecycle = { state: "configuring", result: "*", terminationReason: null };
   const moves: MoveRecord[] = [];
 
@@ -37,7 +41,7 @@ export function createGameWithRules(rules: ChessRules): ChessGame {
     };
   }
 
-  function transition(event: LifecycleEvent): DomainResult<ChessSnapshot> {
+  function transition(event: LifecycleEvent): DomainResult<GameLifecycle> {
     const next = transitionLifecycle(lifecycle, event);
     if (!next.ok) {
       return next;
@@ -49,13 +53,17 @@ export function createGameWithRules(rules: ChessRules): ChessGame {
         lifecycle = { state: "completed", ...outcome };
       }
     }
-    return success(snapshot());
+    return success(lifecycle);
+  }
+
+  function withSnapshot(result: DomainResult<GameLifecycle>): DomainResult<ChessSnapshot> {
+    return result.ok ? success(snapshot()) : result;
   }
 
   function completeLoss(
     losingColor: ChessColor,
     terminationReason: "human_resignation" | "model_technical_loss",
-  ): DomainResult<ChessSnapshot> {
+  ): DomainResult<GameLifecycle> {
     if (losingColor !== "white" && losingColor !== "black") {
       return failure("INVALID_COLOR");
     }
@@ -65,31 +73,35 @@ export function createGameWithRules(rules: ChessRules): ChessGame {
     });
   }
 
-  return Object.freeze({
+  function playMove(uci: string): DomainResult<GameLifecycle> {
+    if (lifecycle.state !== "active") {
+      return failure("INVALID_GAME_STATE");
+    }
+    const accepted = rules.playMove(uci, moves.length + 1);
+    if (!accepted.ok) {
+      return accepted;
+    }
+    moves.push(accepted.value);
+    const outcome = rules.outcome();
+    return outcome === null ? success(lifecycle) : transition({ type: "complete", outcome });
+  }
+
+  const game: ChessGame = Object.freeze({
     snapshot,
-    start: () => transition({ type: "start" }),
-    pause: () => transition({ type: "pause" }),
-    resume: () => transition({ type: "resume" }),
-    abort: () => transition({ type: "abort" }),
-    resignHuman: (losingColor: ChessColor) => completeLoss(losingColor, "human_resignation"),
+    start: () => withSnapshot(transition({ type: "start" })),
+    pause: () => withSnapshot(transition({ type: "pause" })),
+    resume: () => withSnapshot(transition({ type: "resume" })),
+    abort: () => withSnapshot(transition({ type: "abort" })),
+    resignHuman: (losingColor: ChessColor) =>
+      withSnapshot(completeLoss(losingColor, "human_resignation")),
     recordTechnicalLoss: (losingColor: ChessColor) =>
-      completeLoss(losingColor, "model_technical_loss"),
-    playMove(uci: string): DomainResult<ChessSnapshot> {
-      if (lifecycle.state !== "active") {
-        return failure("INVALID_GAME_STATE");
-      }
-      const accepted = rules.playMove(uci, moves.length + 1);
-      if (!accepted.ok) {
-        return accepted;
-      }
-      moves.push(accepted.value);
-      const outcome = rules.outcome();
-      if (outcome !== null) {
-        return transition({ type: "complete", outcome });
-      }
-      return success(snapshot());
-    },
+      withSnapshot(completeLoss(losingColor, "model_technical_loss")),
+    playMove: (uci: string) => withSnapshot(playMove(uci)),
   });
+
+  // Restoration shares live command validation/adjudication without projecting
+  // PGN, legal moves, or copied history for every intermediate position.
+  return { game, transition, playMove, completeLoss, getLifecycle: () => lifecycle };
 }
 
 export function restoreGame(input: RestoreGameInput): DomainResult<ChessGame> {
@@ -106,18 +118,19 @@ export function restoreGame(input: RestoreGameInput): DomainResult<ChessGame> {
     return failure("INVALID_LIFECYCLE");
   }
   const { lifecycle } = input;
-  const game = createGame();
+  const aggregate = createAggregate(new ChessRules());
+  const { game } = aggregate;
   if (lifecycle.state === "configuring") {
     return input.moves.length === 0 ? success(game) : failure("INVALID_LIFECYCLE");
   }
 
-  game.start();
+  aggregate.transition({ type: "start" });
   for (const [index, uci] of input.moves.entries()) {
-    if (!game.playMove(uci).ok) {
+    if (!aggregate.playMove(uci).ok) {
       return failure("INVALID_HISTORY", index + 1);
     }
   }
-  const replayed = game.snapshot();
+  const replayed = aggregate.getLifecycle();
   if (replayed.state === "completed") {
     return lifecycle.state === "completed" &&
       lifecycle.result === replayed.result &&
@@ -130,17 +143,17 @@ export function restoreGame(input: RestoreGameInput): DomainResult<ChessGame> {
     case "active":
       break;
     case "paused":
-      game.pause();
+      aggregate.transition({ type: "pause" });
       break;
     case "aborted":
-      game.abort();
+      aggregate.transition({ type: "abort" });
       break;
     case "completed": {
       const loser = lifecycle.result === "1-0" ? "black" : "white";
       if (lifecycle.terminationReason === "human_resignation") {
-        game.resignHuman(loser);
+        aggregate.completeLoss(loser, "human_resignation");
       } else if (lifecycle.terminationReason === "model_technical_loss") {
-        game.recordTechnicalLoss(loser);
+        aggregate.completeLoss(loser, "model_technical_loss");
       } else {
         return failure("INVALID_LIFECYCLE");
       }

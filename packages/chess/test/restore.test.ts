@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createGame,
@@ -7,10 +7,12 @@ import {
   type GameLifecycle,
   type RestoreGameInput,
 } from "../src/index.js";
+import { ChessRules } from "../src/rules.js";
 
 import {
   ACTIVE,
   activeGame,
+  FIFTY_MOVE_HISTORY,
   FOOLS_MATE,
   INITIAL_FEN,
   KNIGHT_CYCLE,
@@ -32,6 +34,81 @@ const histories = [
 ];
 
 describe("history restoration and PGN", () => {
+  it.each([
+    { name: "configuring", moves: [], ending: "configuring" },
+    { name: "active", moves: FIFTY_MOVE_HISTORY.slice(0, 99), ending: null },
+    { name: "paused", moves: KNIGHT_CYCLE, ending: "pause" },
+    { name: "aborted", moves: KNIGHT_CYCLE, ending: "abort" },
+    { name: "human resignation", moves: KNIGHT_CYCLE, ending: "resignHuman" },
+    { name: "technical loss", moves: KNIGHT_CYCLE, ending: "recordTechnicalLoss" },
+    { name: "checkmate", moves: FOOLS_MATE, ending: null },
+    { name: "repetition", moves: [...KNIGHT_CYCLE, ...KNIGHT_CYCLE], ending: null },
+    { name: "fifty-move draw", moves: FIFTY_MOVE_HISTORY, ending: null },
+  ] as const)("defers snapshot projection while restoring $name history", ({ moves, ending }) => {
+    const original = ending === "configuring" ? createGame() : activeGame();
+    play(original, moves);
+    if (ending !== null && ending !== "configuring") {
+      unwrap(
+        ending === "resignHuman" || ending === "recordTechnicalLoss"
+          ? original[ending]("black")
+          : original[ending](),
+      );
+    }
+    const expected = original.snapshot();
+    const lifecycle = lifecycleOf(original);
+    const pgn = vi.spyOn(ChessRules.prototype, "pgn");
+    const legalMoves = vi.spyOn(ChessRules.prototype, "legalMoves");
+    try {
+      const restored = unwrap(restoreGame({ moves, lifecycle }));
+      expect(pgn).not.toHaveBeenCalled();
+      expect(legalMoves).not.toHaveBeenCalled();
+
+      expect(restored.snapshot()).toEqual(expected);
+      expect(pgn).toHaveBeenCalledExactlyOnceWith(expected.result);
+      expect(legalMoves).toHaveBeenCalledTimes(expected.state === "active" ? 1 : 0);
+    } finally {
+      pgn.mockRestore();
+      legalMoves.mockRestore();
+    }
+  });
+
+  it("returns a normal defensive command snapshot after projection-free restoration", () => {
+    const original = activeGame();
+    play(original, KNIGHT_CYCLE);
+    const expected = unwrap(original.playMove("e2e4"));
+    const pgn = vi.spyOn(ChessRules.prototype, "pgn");
+    const legalMoves = vi.spyOn(ChessRules.prototype, "legalMoves");
+    try {
+      const restored = unwrap(restoreGame({ moves: KNIGHT_CYCLE, lifecycle: ACTIVE }));
+      expect(pgn).not.toHaveBeenCalled();
+      expect(legalMoves).not.toHaveBeenCalled();
+      expect(Object.keys(restored).sort()).toEqual([
+        "abort",
+        "pause",
+        "playMove",
+        "recordTechnicalLoss",
+        "resignHuman",
+        "resume",
+        "snapshot",
+        "start",
+      ]);
+
+      const returned = unwrap(restored.playMove("e2e4"));
+      expect(returned).toEqual(expected);
+      expect(pgn).toHaveBeenCalledExactlyOnceWith("*");
+      expect(legalMoves).toHaveBeenCalledTimes(1);
+
+      Object.assign(returned, { fen: "changed", state: "completed" });
+      (returned.legalMoves as string[]).splice(0);
+      Object.assign(returned.moves[0] ?? {}, { uci: "a1a8", san: "changed" });
+      (returned.moves as unknown[]).splice(0);
+      expect(restored.snapshot()).toEqual(expected);
+    } finally {
+      pgn.mockRestore();
+      legalMoves.mockRestore();
+    }
+  });
+
   it.each(histories)(
     "reconstructs $name from UCI and round-trips the resulting PGN",
     ({ moves }) => {
