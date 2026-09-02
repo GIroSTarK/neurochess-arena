@@ -25,6 +25,14 @@ Keyboard navigation now scrolls its destination into view; promotion-dialog focu
 
 `npm run verify` passed the formatting, lint, typecheck, 464 unit tests, 49 integration tests, architecture checks, and production build. An in-app browser check at both viewport sizes confirmed that clicking h1 and pressing Ctrl+Home brings a8 fully into view, with no console warnings or errors. The existing bundle-size warning and cross-browser limitations below still apply.
 
+### Move history stability follow-up — 2026-09-02
+
+Holding a real move response reproduced a 90px downward shift of the Moves section during submission, followed by its return after acceptance, on desktop and mobile. Active games now reserve space for activity feedback; overlapping localized message variants determine the height naturally, and inactive feedback is hidden visually and from assistive technology.
+
+The regression covers `e2e4`, `e7e5`, and `g1f3`, including empty and populated history, at 1440×1080 and 390×844. It also passes with 200% text and longer activity translations. The Moves section shifts by less than one CSS pixel during submission and after acceptance; pending moves remain absent from history, and only current activity feedback is exposed. All 14 browser tests passed, including the existing gameplay, focus, promotion, reflow, and accessibility checks.
+
+`npm run verify` passed formatting, lint, typecheck, 464 unit tests, 49 integration tests, architecture checks, and the production build. A final in-app browser check at 1280×720 and 390×844 confirmed accepted moves, unchanged history coordinates, no horizontal overflow, and no console warnings/errors. The existing bundle-size warning and cross-browser limitations below still apply.
+
 ### Comparison with the live concepts
 
 The [desktop and mobile live references](concepts/README.md) informed the navy/cyan palette, local Orbitron/Inter typography, equal player summaries, outlined Staunton pieces, and board-first hierarchy. Above 1024px the board and information rail share one decorative angular frame within the 1280px shell. At and below 1024px the rail follows the board in normal document order; mobile retains 16px gutters and omits the decorative frame.

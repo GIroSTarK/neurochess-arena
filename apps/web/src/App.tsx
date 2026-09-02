@@ -14,12 +14,18 @@ export interface AppProps {
   readonly apiBaseUrl: string;
 }
 
+const activityMessages = [
+  { phase: "starting", key: "actions.starting" },
+  { phase: "submitting", key: "game.submitting" },
+  { phase: "synchronizing", key: "game.synchronizing" },
+] as const;
+
 export function App({ apiBaseUrl }: AppProps) {
   const { t } = useTranslation();
   const { state, controller } = useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const { snapshot } = state;
-  const busy = ["starting", "submitting", "synchronizing"].includes(state.phase);
+  const busy = activityMessages.some(({ phase }) => phase === state.phase);
 
   return (
     <div className="app-shell">
@@ -126,18 +132,16 @@ export function App({ apiBaseUrl }: AppProps) {
               ) : null}
               {snapshot?.state === "paused" ? <p>{t("game.pausedHint")}</p> : null}
               {snapshot?.state === "configuring" ? <p>{t("game.configuringHint")}</p> : null}
-              {busy ? (
-                <div className="activity-feedback" aria-busy="true">
+              {busy || snapshot?.state === "active" ? (
+                <div className="activity-feedback" aria-busy={busy} aria-hidden={!busy}>
                   <span className="activity-feedback__mark" aria-hidden="true" />
-                  <p>
-                    {t(
-                      state.phase === "starting"
-                        ? "actions.starting"
-                        : state.phase === "submitting"
-                          ? "game.submitting"
-                          : "game.synchronizing",
-                    )}
-                  </p>
+                  <div className="activity-feedback__messages">
+                    {activityMessages.map(({ phase, key }) => (
+                      <p key={phase} aria-hidden={state.phase !== phase}>
+                        {t(key)}
+                      </p>
+                    ))}
+                  </div>
                   {snapshot ? (
                     <p className="activity-feedback__hint">{t("game.pendingHint")}</p>
                   ) : null}

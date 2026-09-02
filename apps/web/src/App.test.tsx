@@ -128,7 +128,12 @@ describe("localized sandbox application", () => {
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
-    await screen.findByText("Checking the accepted position…");
+    await waitFor(() =>
+      expect(screen.getByText("Checking the accepted position…")).toHaveAttribute(
+        "aria-hidden",
+        "false",
+      ),
+    );
     expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
     expect(square("e2")).toHaveAccessibleName(/White pawn/);
     await act(async () => read.resolve(jsonResponse(snapshot())));

@@ -623,11 +623,24 @@ a:focus-visible {
   margin-top: var(--nc-space-4);
   color: var(--nc-color-accent);
 }
+.activity-feedback[aria-hidden="true"],
+.activity-feedback__messages > [aria-hidden="true"] {
+  visibility: hidden;
+}
+.activity-feedback__messages {
+  display: grid;
+}
+.activity-feedback__messages > p {
+  /* Reserve the tallest localized message without fixing the card's height. */
+  grid-area: 1 / 1;
+}
 .activity-feedback__mark {
   width: 0.4rem;
   height: 1rem;
   margin-top: 0.2rem;
   background: currentColor;
+}
+.activity-feedback[aria-busy="true"] .activity-feedback__mark {
   animation: activity-pulse 1.3s ease-in-out infinite;
 }
 .activity-feedback__hint {
