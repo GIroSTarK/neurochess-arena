@@ -9,6 +9,9 @@ import { announcementMessage, gameStatus, noticeMessage, resultTitle } from "./i
 import { MoveHistory } from "./sandbox/MoveHistory";
 import type { SandboxController, SandboxState } from "./sandbox/controller";
 import { useSandbox } from "./sandbox/use-sandbox";
+import { LifecycleControls } from "./sandbox/LifecycleControls";
+import { PgnActions, ReplayControls } from "./sandbox/ReplayControls";
+import { replayView } from "./sandbox/replay";
 
 export interface AppProps {
   readonly apiBaseUrl: string;
@@ -18,6 +21,7 @@ const activityMessages = [
   { phase: "starting", key: "actions.starting" },
   { phase: "submitting", key: "game.submitting" },
   { phase: "synchronizing", key: "game.synchronizing" },
+  { phase: "recovering", key: "game.recovering" },
 ] as const;
 
 export function App({ apiBaseUrl }: AppProps) {
@@ -71,24 +75,30 @@ export function App({ apiBaseUrl }: AppProps) {
                   onMove={(move) => {
                     void controller.submit(move);
                   }}
+                  view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
                   toolbar={
-                    <div className="board-toolbar">
-                      <button
-                        type="button"
-                        className="button button--secondary"
-                        onClick={() =>
-                          setOrientation((previous) => (previous === "white" ? "black" : "white"))
-                        }
-                      >
-                        <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                          <path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
-                        </svg>
-                        {t("actions.flip")}
-                      </button>
-                      <span>
-                        {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-                      </span>
-                    </div>
+                    <>
+                      <div className="board-toolbar">
+                        <button
+                          type="button"
+                          className="button button--secondary"
+                          onClick={() =>
+                            setOrientation((previous) => (previous === "white" ? "black" : "white"))
+                          }
+                        >
+                          <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                            <path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
+                          </svg>
+                          {t("actions.flip")}
+                        </button>
+                        <span>
+                          {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
+                        </span>
+                      </div>
+                      {snapshot.state === "completed" || snapshot.state === "aborted" ? (
+                        <ReplayControls state={state} controller={controller} />
+                      ) : null}
+                    </>
                   }
                 />
               </>
@@ -138,7 +148,11 @@ export function App({ apiBaseUrl }: AppProps) {
                   <div className="activity-feedback__messages">
                     {activityMessages.map(({ phase, key }) => (
                       <p key={phase} aria-hidden={state.phase !== phase}>
-                        {t(key)}
+                        {phase === "submitting" &&
+                        state.pendingCommand &&
+                        "action" in state.pendingCommand
+                          ? t("lifecycle.submitting")
+                          : t(key)}
                       </p>
                     ))}
                   </div>
@@ -166,7 +180,11 @@ export function App({ apiBaseUrl }: AppProps) {
                         void controller.retryMove();
                       }}
                     >
-                      {t("actions.retryMove")}
+                      {t(
+                        state.pendingCommand && "action" in state.pendingCommand
+                          ? "actions.retryCommand"
+                          : "actions.retryMove",
+                      )}
                     </button>
                   ) : null}
                   <button
@@ -179,6 +197,24 @@ export function App({ apiBaseUrl }: AppProps) {
                     {t("actions.synchronize")}
                   </button>
                 </div>
+              ) : null}
+              {state.phase === "recovery-required" ? (
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={() => {
+                    void controller.recover();
+                  }}
+                >
+                  {t("actions.retryRecovery")}
+                </button>
+              ) : null}
+              {snapshot?.state === "active" || snapshot?.state === "paused" ? (
+                <LifecycleControls
+                  key={snapshot.gameId + ":" + snapshot.version}
+                  state={state}
+                  controller={controller}
+                />
               ) : null}
               {snapshot && ["completed", "aborted"].includes(snapshot.state) ? (
                 <button
@@ -204,7 +240,14 @@ export function App({ apiBaseUrl }: AppProps) {
                 </button>
               ) : null}
             </section>
-            <MoveHistory moves={snapshot?.moves ?? []} />
+            <MoveHistory
+              moves={snapshot?.moves ?? []}
+              selectedPly={state.replay ? state.replayPly : undefined}
+              onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+            />
+            {snapshot?.state === "completed" || snapshot?.state === "aborted" ? (
+              <PgnActions state={state} controller={controller} />
+            ) : null}
             <div className="session-note">
               <span className="session-note__title">
                 <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
@@ -272,7 +315,10 @@ function StartButton({
     <button
       type="button"
       className="button button--primary"
-      disabled={state.readiness !== "ready" || state.phase === "starting"}
+      disabled={
+        state.readiness !== "ready" ||
+        !["entry", "access-error", "unavailable"].includes(state.phase)
+      }
       onClick={() => {
         void controller.start();
       }}

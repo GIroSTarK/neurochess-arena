@@ -1,7 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
-import { gameErrorResponseSchema, gameSnapshotSchema } from "@neurochess/contracts";
+import { gameSnapshotSchema } from "@neurochess/contracts";
+import { readFile } from "node:fs/promises";
 
-import { API_ORIGIN } from "./environment";
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import {
   acceptedMove,
   activate,
@@ -15,8 +16,9 @@ import {
 
 const promotionApproach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2"];
 
-test("completes Fool's Mate, reads the persisted result, and starts a new game", async ({
+test("creates, recovers, completes, replays and exports a private game", async ({
   page,
+  context,
 }, testInfo) => {
   const touch = testInfo.project.name === "mobile-touch";
   let current = await startSandbox(page, touch);
@@ -24,9 +26,25 @@ test("completes Fool's Mate, reads the persisted result, and starts a new game",
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(accessibility.violations).toEqual([]);
-  for (const move of ["f2f3", "e7e5", "g2g4", "d8h4"]) {
+  for (const move of ["f2f3", "e7e5"]) {
     current = await playMove(page, current, move, touch);
   }
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  const paused = await readSnapshot(page, current.gameId);
+  expect(paused).toEqual({
+    ...current,
+    version: current.version + 1,
+    state: "paused",
+    legalMoves: [],
+  });
+  const resume = page.waitForResponse(
+    (response) => response.url().endsWith("/lifecycle") && response.status() === 200,
+  );
+  await activate(page.getByRole("button", { name: "Resume", exact: true }), touch);
+  current = gameSnapshotSchema.parse(await (await resume).json());
+  await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
+  for (const move of ["g2g4", "d8h4"]) current = await playMove(page, current, move, touch);
   await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
   await expect(square(page, "e1")).toHaveAttribute("data-check", "true");
@@ -40,6 +58,39 @@ test("completes Fool's Mate, reads the persisted result, and starts a new game",
   expect(restored.pgn).toContain("Qh4#");
   expect(restored.pgn.trim().endsWith("0-1")).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("checkmate.png"), fullPage: true });
+  await expect(page.getByRole("button", { name: "First", exact: true })).toBeEnabled();
+  await activate(page.getByRole("button", { name: "First", exact: true }), touch);
+  await expect(page.getByRole("grid")).toHaveAttribute(
+    "data-fen",
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  );
+  await expect(square(page, "e1")).not.toHaveAttribute("data-check");
+  for (const move of restored.moves) {
+    await activate(
+      page.getByRole("button", { name: "View ply " + move.ply + ": " + move.san, exact: true }),
+      touch,
+    );
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", move.fen);
+  }
+  await activate(page.getByRole("button", { name: "Previous", exact: true }), touch);
+  await expect(square(page, "e1")).not.toHaveAttribute("data-check");
+  await activate(page.getByRole("button", { name: "Next", exact: true }), touch);
+  await expect(square(page, "e1")).toHaveAttribute("data-check", "true");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: WEB_ORIGIN });
+  await activate(page.getByRole("button", { name: "Copy PGN", exact: true }), touch);
+  await expect(page.getByText("PGN copied.", { exact: true }).first()).toBeVisible();
+  // Windows normalizes native clipboard newlines; the download below remains byte-exact.
+  expect((await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")).toBe(
+    restored.pgn,
+  );
+  const downloading = page.waitForEvent("download");
+  await activate(page.getByRole("button", { name: "Download PGN", exact: true }), touch);
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe("neurochess-" + current.gameId + ".pgn");
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  expect(await readFile(path!, "utf8")).toBe(restored.pgn);
+  expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(
     (response) => response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 201,
   );
@@ -49,6 +100,10 @@ test("completes Fool's Mate, reads the persisted result, and starts a new game",
   expect(next.version).toBe(0);
   expect(next.moves).toEqual([]);
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("game")).toBe(restored.gameId);
+  expect(await readSnapshot(page, restored.gameId)).toEqual(restored);
 });
 
 test("promotes both colors from the standard position with modal cancellation and underpromotion", async ({
@@ -102,27 +157,126 @@ test("promotes both colors from the standard position with modal cancellation an
   expect(restored.moves.slice(-2).map((move) => move.uci)).toEqual(["b7a8n", "g2h1r"]);
 });
 
-test("reloads to the entry screen and explicitly reopens the unchanged active game", async ({
+test("discovers an unfinished game on reopening and keeps repeated recovery paused", async ({
   page,
 }, testInfo) => {
   const touch = testInfo.project.name === "mobile-touch";
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  const paused = await readSnapshot(page, current.gameId);
+  expect(paused).toEqual({
+    ...current,
+    state: "paused",
+    version: current.version + 1,
+    legalMoves: [],
+  });
   await page.reload();
-  await expect(page.getByRole("grid")).toHaveCount(0);
-  const start = page.getByRole("button", { name: "Start sandbox", exact: true });
-  await expect(start).toBeEnabled();
-  const response = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 409,
-  );
-  await activate(start, touch);
-  const conflict = gameErrorResponseSchema.parse(await (await response).json());
-  expect(conflict.code).toBe("GAME_CONFLICT");
-  if (conflict.code !== "GAME_CONFLICT") throw new Error("Expected the current authorized game");
-  expect(conflict.currentSnapshot).toEqual(current);
-  await expect(
-    page.getByText("You already have a game in progress. Your current position is open."),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Black to move" })).toBeVisible();
-  expect((await readSnapshot(page, current.gameId)).state).toBe("active");
+  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  expect(await readSnapshot(page, current.gameId)).toEqual(paused);
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+});
+
+test("confirms both resignation colors and abortion with accessible cancellation", async ({
+  page,
+}, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  for (const ending of [
+    {
+      action: "Resign White",
+      title: "Resign White?",
+      confirm: "Confirm resignation",
+      heading: "Black wins",
+      result: "0-1",
+      reason: "human_resignation",
+    },
+    {
+      action: "Resign Black",
+      title: "Resign Black?",
+      confirm: "Confirm resignation",
+      heading: "White wins",
+      result: "1-0",
+      reason: "human_resignation",
+    },
+    {
+      action: "Abort game",
+      title: "Stop this game?",
+      confirm: "Stop game",
+      heading: "Game stopped",
+      result: "*",
+      reason: "aborted",
+    },
+  ]) {
+    const initial = await startSandbox(page, touch);
+    const trigger = page.getByRole("button", { name: ending.action, exact: true });
+    await activate(trigger, touch);
+    let dialog = page.getByRole("dialog", { name: ending.title, exact: true });
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: ending.confirm })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+    expect(await readSnapshot(page, initial.gameId)).toEqual(initial);
+    await activate(trigger, touch);
+    dialog = page.getByRole("dialog", { name: ending.title, exact: true });
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+    await activate(dialog.getByRole("button", { name: ending.confirm }), touch);
+    await expect(page.getByRole("heading", { name: ending.heading })).toBeVisible();
+    const terminal = await readSnapshot(page, initial.gameId);
+    expect(terminal).toMatchObject({
+      result: ending.result,
+      terminationReason: ending.reason,
+      moves: [],
+    });
+    await expect(page.getByRole("button", { name: "First", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Last", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New game" })).toBeEnabled();
+  }
+});
+
+test("an isolated browser guest cannot open, replay or export another guest's private URL", async ({
+  page,
+  browser,
+}, testInfo) => {
+  const initial = await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const isolated = await browser.newContext();
+  try {
+    const stranger = await isolated.newPage();
+    await stranger.goto(page.url());
+    await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
+    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    for (const suffix of ["replay", "pgn"])
+      expect(
+        (
+          await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
+        ).status(),
+      ).toBe(401);
+    expect(
+      (
+        await isolated.request.post(API_ORIGIN + "/guest-session", {
+          data: {},
+          headers: { Origin: WEB_ORIGIN },
+        })
+      ).status(),
+    ).toBe(200);
+    await stranger.reload();
+    await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
+    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    for (const suffix of ["replay", "pgn"])
+      expect(
+        (
+          await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
+        ).status(),
+      ).toBe(404);
+  } finally {
+    await isolated.close();
+  }
 });

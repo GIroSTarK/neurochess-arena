@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 ## Architectural drivers
 
@@ -101,6 +101,7 @@ Core tables are expected to include:
 | `games`                | mode, state, result, FEN, PGN, ownership, privacy, version         |
 | `game_participants`    | human, guest, or AI seat configuration                             |
 | `moves`                | canonical move, position, commentary, timing, evaluation           |
+| `game_commands`        | accepted command identity, kind, and aggregate revision            |
 | `model_invocations`    | attempts, provider/model, parameters, usage, cost estimate, errors |
 | `rooms`                | private invitation code, owner, membership, lifecycle              |
 | `guest_sessions`       | expiring identity and active-game recovery metadata                |
@@ -136,7 +137,7 @@ Reconstruct the chess engine from the ordered, persisted UCI moves starting at t
 
 `@neurochess/chess` wraps pinned `chess.js` 1.4.0 behind an opaque synchronous aggregate. `createGame()` creates the standard position in `configuring`; callers explicitly start it. Commands return either a defensive `ChessSnapshot` or a code-based domain failure, without transport identifiers, clocks, I/O, display text, or engine objects. Only active games expose playable moves. The internal lifecycle reducer handles start, pause, resume, abort, and completion. Trusted `resignHuman(losingColor)` and `recordTechnicalLoss(losingColor)` hooks require the caller to verify seat type, authorization, and retry policy.
 
-`restoreGame({ moves, lifecycle })` requires the complete ordered UCI history and explicit lifecycle metadata. It replays the same internal move/adjudication path without constructing intermediate snapshots; PGN, legal-move lists, and defensive history copies are projected only when a snapshot is requested. It rejects entries after a terminal outcome and lifecycle metadata that contradicts the replay. Paused, aborted, and non-board completion states are preserved. Session recovery must explicitly supply `paused` for unfinished active games; domain restoration does not infer browser presence. FEN, SAN, legal moves, and identity/commentary-free PGN are derived, never restored from cached strings. PGN's result header and final marker always reflect the domain result. Unfinished games use `*` with a null reason; aborted games use `*` with reason `aborted`.
+`restoreGame({ moves, lifecycle })` requires the complete ordered UCI history and explicit lifecycle metadata. It replays the same internal move/adjudication path without constructing intermediate snapshots; PGN, legal-move lists, and defensive history copies are projected only when a snapshot is requested. It rejects entries after a terminal outcome and lifecycle metadata that contradicts the replay. Paused, aborted, and non-board completion states are preserved. Session recovery restores the persisted lifecycle before submitting an explicit pause command; domain restoration does not infer browser presence. FEN, SAN, legal moves, and identity/commentary-free PGN are derived, never restored from cached strings. PGN's result header and final marker always reflect the domain result. Unfinished games use `*` with a null reason; aborted games use `*` with reason `aborted`.
 
 Repetition uses occurrence counts keyed by the first four fields of the engine's normalized FEN, including legal en passant availability and excluding move counters. Do not substitute `chess.js` 1.4.0's repetition hash: it retains an en passant target when an adjacent pawn is pinned and cannot capture. A regression fixture demonstrates the resulting missed third occurrence. The adapter counts the initial position and every accepted move, rebuilding counts on restoration. The engine's half-move counter supplies the fifty-move threshold; specific predicates are evaluated in the [product-defined order](product.md#automatic-draw-policy), not through generic `isDraw()` or `isGameOver()`.
 
@@ -144,31 +145,33 @@ Repetition uses occurrence counts keyed by the first four fields of the engine's
 
 The two shared packages remain separate leaves. Their duplicated stable literals, database literals, and snapshot compatibility are checked in the API test suite. Contracts validate wire structure and lifecycle/result combinations, not chess semantics. Arbitrary-FEN fixtures are package-internal, outside production compilation and exports. HTTP orchestration and persistence are consumers of these packages, not dependencies of them.
 
-### Persisted guest commands (PR 2)
+### Persisted guest commands
 
-Fastify exposes `POST /guest-session`, `POST /sandbox/games`, `GET /games/:gameId`, and `POST /games/:gameId/moves`. Routes validate strict request/response schemas and delegate to injected guest and game services. The game service composes the chess aggregate with database-owned repository interfaces; the database package does not import chess or contracts. The [development guide](development.md#sandbox-api) specifies the wire behavior.
+Fastify exposes guest bootstrap, sandbox creation/discovery, snapshots, moves, lifecycle commands, replay, and PGN. Routes validate strict request/response schemas and delegate to injected guest and game services. The game service composes the chess aggregate with database-owned repository interfaces; the database package does not import chess or contracts. The [development guide](development.md#sandbox-api) specifies the wire behavior.
 
 PostgreSQL stores normalized `guest_sessions`, `games`, `game_participants`, and `moves`. The server creates an active standard-position game at revision zero, with a human White seat assigned to the owner and an unassigned human Black seat. An internal `is_sandbox` marker and enabled non-production policy are both required for the owner to control both seats. Ordinary-game ownership is not move authority; the current human seat must be assigned to the requester. No ordinary-game creation or joining route is introduced here.
 
-Write transactions use `READ COMMITTED`, locking the guest row before the game row. A partial unique owner index enforces the active/paused slot; per-game unique ply, command ID, and move-version indexes defend accepted history. A move insert and all resulting position/result fields commit together, advancing the aggregate revision once. No provider call occurs inside these transactions.
+Write transactions use `READ COMMITTED`, locking the guest row before the game row. A partial unique owner index enforces the active/paused slot. Normalized `game_commands` receipts enforce accepted command-ID and revision uniqueness across moves, pause, resume, abort, and human resignation; the forward migration backfills old move receipts. Each successful command commits its receipt, position/result fields, and any move insert together, advancing the aggregate revision once. Lifecycle commands add no move. Completion and abortion release the slot in that transaction. No provider call occurs inside these transactions. See [ADR-0007](decisions/0007-lifecycle-recovery-and-private-replay.md).
 
 Snapshot reads use a read-only `REPEATABLE READ` transaction so history and version come from one database view. The service restores ordered UCI history, checks persisted FEN/PGN and per-move projections, and rejects inconsistencies without repairing data or changing lifecycle. See [ADR-0006](decisions/0006-guest-owned-game-commands.md) for identity, authority, concurrency, and follow-up boundaries.
 
-### Sandbox web client (PR 3)
+### Sandbox web client
 
 `apps/web/src/api.ts` validates HTTP requests and responses with the existing contracts, uses credentialed/no-store requests, and cancels requests after ten seconds or when their owner disconnects. It retains only safe error codes and validated conflict snapshots; server message fields and exception text never enter the UI. The FEN presentation parser checks display syntax without generating moves or adjudicating games.
 
-The sandbox controller owns networking and complete accepted snapshots. React subscribes through `useSyncExternalStore`; square selection, focus, orientation, and promotion remain separate component state. Only `legalMoves` supplies selectable sources, destinations, and promotion suffixes. A synchronous guard serializes creation and moves before React can render pending feedback. Commands use the actual snapshot revision and a fresh UUID, and responses must belong to the current game/request generation without regressing the accepted revision.
+The sandbox controller owns networking and complete accepted snapshots. React subscribes through `useSyncExternalStore`; square selection, focus, orientation, and promotion remain separate component state. Only `legalMoves` supplies selectable sources, destinations, and promotion suffixes. A synchronous guard serializes creation, moves, and lifecycle commands before React can render pending feedback. Commands use the actual snapshot revision and a fresh UUID, and responses must belong to the current game/request generation without regressing the accepted revision.
 
-- Initial mounting checks `GET /ready` only. Explicit Start serializes `POST /guest-session {}` before `POST /sandbox/games {}`. Readiness does not imply sandbox availability; a creation 404 has its own unavailable state and retry.
-- Creation conflicts reopen the authorized snapshot. Move conflicts replace the complete snapshot and invalidate stale selection/promotion without automatically replaying the move.
+- Mounting checks readiness and reads the URL's game or discovers the existing guest's unfinished sandbox. Anonymous discovery returns to entry; only explicit Start bootstraps a guest before creation. Readiness does not imply sandbox availability.
+- Creation conflicts recover the authorized game paused. Command conflicts replace the complete snapshot and invalidate stale selection/promotion without automatically repeating a user command.
 - Rejected moves synchronize with an authorized GET before permitting another move. A failed synchronization keeps the board inspectable and movement blocked.
 - Network, timeout, server, or malformed-response failures retain the original command and fetch the authorized snapshot. An unchanged revision cannot prove that the original request will not commit; new moves remain blocked. Explicit retry reuses the identical UUID, revision, and UCI. A newer revision makes that old command unable to commit, so the returned position can be adopted safely.
 - Access failures on loaded games clear the snapshot and require explicit action before another guest bootstrap. No game state is persisted in browser storage.
 
 The web localization layer uses bundled, typed i18next/react-i18next English resources with English fallback. Metadata, configuration errors, controls, board descriptions, and one polite atomic live region use the catalog. There is no language selector or browser-language detection. The [design guide](design-system.md#keyboard-and-chess-interaction) defines grid/dialog semantics and focus behavior; the [browser tests](development.md#browser-tests) exercise the real guest-command flow.
 
-Reload returns to the entry screen. Starting again can reopen an unfinished game but does not change its server lifecycle. This slice introduces no transport changes, migrations, lifecycle commands, WebSocket client, AI orchestration, or replay/export.
+Recovery sends the same versioned pause command as the Pause control. It reconciles active conflict snapshots with at most three automatic attempts, then requires Retry recovery. An uncertain pause keeps its original command for explicit retry. No recovered active snapshot enables play; an already-paused game needs no write, and Resume is always explicit. Snapshot/discovery GETs never change game lifecycle. URL navigation cancels obsolete requests, clears private view state, and resolves the target through guest authorization.
+
+Terminal replay and PGN use the same authorized full-history verification as snapshots. Replay returns the terminal snapshot and initial FEN; a separate client cursor selects the displayed verified FEN/SAN/UCI without modifying the accepted snapshot. Export returns the verified canonical PGN in JSON. Copy and UTF-8 file download use identical text, with a selectable-text clipboard fallback. These endpoints reject unfinished games; access loss clears loaded private data. There are no provider adapters, rooms, or WebSockets in this flow.
 
 ### AI turns
 
@@ -199,7 +202,7 @@ Phase 1 provides an explicitly labeled development screen where one guest sessio
 - Keep sandbox records in the development/test database. The sandbox creates no room, invitation, join flow, public spectator access, or additional public game mode.
 - Start each sandbox game from the standard position. Special FEN positions are allowed only as internal test fixtures, never through a game-creation API.
 
-Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). The Phase 1 target is to restore an unfinished sandbox game as `paused` on refresh/reopening and require explicit resume. PR 2 snapshots and the PR 3 client preserve stored lifecycle; paused recovery and resume remain later Phase 1 work. Completed or aborted records remain readable by their owning guest during the retained session, with replay and PGN export endpoints still pending. They do not become account history. The production guest retention period remains an open product decision.
+Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). Unfinished sandbox games recover as paused on refresh/reopening and require explicit resume. Completed or aborted records remain available for private replay and PGN export at their game URL during the retained guest session, including after a new game starts. They do not become account history. The production guest retention period and automated cleanup remain follow-up decisions.
 
 ## AI provider boundary
 

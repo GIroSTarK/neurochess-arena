@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
@@ -9,6 +10,7 @@ import {
   games,
   guestSessions,
   moves,
+  gameCommands,
   runMigrations,
   type DatabaseConnection,
   type NewGame,
@@ -74,6 +76,73 @@ function moveValues(gameId: string): NewMove {
 }
 
 describe("reviewed PostgreSQL migration and structural constraints", () => {
+  it("backfills pre-existing move identities with the actual forward migration", async () => {
+    const schemaName = "migration_" + randomUUID().replaceAll("-", "");
+    const oldSql = await readFile(
+      new URL("../drizzle/0001_guest_owned_games.sql", import.meta.url),
+      "utf8",
+    );
+    const nextSql = await readFile(
+      new URL("../drizzle/0002_game_command_receipts.sql", import.meta.url),
+      "utf8",
+    );
+    const ownerId = randomUUID();
+    const gameId = randomUUID();
+    const commandId = randomUUID();
+    await database.db.transaction(async (tx) => {
+      await tx.execute(sql`create schema ${sql.identifier(schemaName)}`);
+      await tx.execute(sql`set local search_path to ${sql.identifier(schemaName)}`);
+      for (const statement of oldSql
+        .split("--> statement-breakpoint")
+        .filter((statement) => statement.trim()))
+        await tx.execute(sql.raw(statement.replaceAll('"public"', '"' + schemaName + '"')));
+      await tx.execute(
+        sql`insert into guest_sessions(id, token_hash, expires_at) values (${ownerId}, ${"1".repeat(64)}, clock_timestamp() + interval '1 hour')`,
+      );
+      await tx.execute(
+        sql`insert into games(id, owner_guest_session_id, state, result, fen, pgn, version) values (${gameId}, ${ownerId}, 'active', '*', 'fixture', 'fixture', 1)`,
+      );
+      await tx.execute(
+        sql`insert into moves(game_id, ply, uci, san, fen, command_id, version) values (${gameId}, 1, 'e2e4', 'e4', 'fixture', ${commandId}, 1)`,
+      );
+      for (const statement of nextSql
+        .split("--> statement-breakpoint")
+        .filter((statement) => statement.trim()))
+        await tx.execute(sql.raw(statement.replaceAll('"public"', '"' + schemaName + '"')));
+      const receipts = await tx.execute(
+        sql`select game_id, command_id, kind, version from game_commands`,
+      );
+      expect(receipts.rows).toEqual([
+        { game_id: gameId, command_id: commandId, kind: "move", version: "1" },
+      ]);
+      await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
+    });
+  });
+
+  it("enforces receipt identity/version uniqueness and cascades receipts only with their game", async () => {
+    const created = await game();
+    const other = await game();
+    const receipt = {
+      gameId: created.id,
+      commandId: randomUUID(),
+      kind: "pause" as const,
+      version: 1,
+    };
+    await database.db.insert(gameCommands).values(receipt);
+    for (const duplicate of [
+      { ...receipt, version: 2, kind: "abort" as const },
+      { ...receipt, commandId: randomUUID() },
+    ])
+      await expect(database.db.insert(gameCommands).values(duplicate)).rejects.toThrow();
+    await expect(
+      database.db.insert(gameCommands).values({ ...receipt, version: 0, commandId: randomUUID() }),
+    ).rejects.toThrow();
+    await database.db.insert(gameCommands).values({ ...receipt, gameId: other.id });
+    await database.db.delete(games).where(eq(games.id, created.id));
+    expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, created.id))).toBe(0);
+    expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, other.id))).toBe(1);
+  });
+
   it("reapplies migrations without changing persisted data and installs exactly one unfinished-owner index", async () => {
     const created = await game();
     await runMigrations(database);

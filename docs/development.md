@@ -97,9 +97,13 @@ Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm r
 
 One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.
 
-An uncertain submission keeps the original command in memory. **Check game status** reads the authorized snapshot; **Retry same move** reuses the original command without selecting a different move. A same-version GET is still uncertain because the first request could commit later. Rejections also require synchronization before movement resumes. Access loss clears the board and requires **Start sandbox again**.
+An uncertain submission keeps the original move or lifecycle command in memory. **Check game status** reads the authorized snapshot; **Retry same move** or **Retry same command** reuses the original ID, version, and payload. A same-version GET is still uncertain because the first request could commit later. Rejections also require synchronization before another command. Access loss clears the board, replay, and export text and requires **Start sandbox again**.
 
-Reload returns to the entry screen. Start reopens the existing unfinished game through a creation conflict and preserves its stored lifecycle. Paused games remain inspectable; no refresh-to-paused simulation, resume, abort, replay, export, AI, sign-in, or WebSocket UI is included in this checkpoint. Completed games offer **New game**.
+Creation updates the private URL to `/?game=<uuid>`. Refresh, reopening that URL, or opening the root page with an existing guest discovers the game without bootstrapping a new guest. Recovery pauses an active game through a versioned command before enabling controls; an already-paused game requires no write. Choose **Resume** explicitly to continue. Concurrent active snapshots are reconciled with at most three pause attempts before **Retry recovery** is offered. An uncertain pause follows the same command retry flow as a move.
+
+**Pause** and **Resume** preserve the position and history. **Abort**, **Resign White**, and **Resign Black** are available while active or paused. The confirmation dialog initially focuses Cancel and explains the outcome. Abortion displays **Game stopped**, keeps result `*`, and releases the unfinished-game slot. Resignation awards the other color the win, including when the resigning color is off-turn.
+
+Completed and aborted games show their result and termination reason, open replay at the final ply, and offer **First**, **Previous**, **Next**, **Last**, and selectable SAN moves. Replay changes only the displayed position. **Copy PGN** and **Download PGN** fetch the private, authorized export endpoint; clipboard failure reveals selectable text. A download contains the canonical UTF-8 text in `neurochess-<uuid>.pgn`. **New game** preserves the previous record and private URL; browser Back can reopen it. Access remains limited to the owning guest until the existing inactivity expiry (24 hours by default). There is no recent-games list or retention cleanup in Phase 1.
 
 Visible copy and document metadata come from `apps/web/src/i18n/en.ts`. Use complete messages and named placeholders; keep UCI, SAN, and coordinates unchanged. The i18next resource declaration type-checks keys, falls back to English, and ships no browser-language detection. Inter and Orbitron are bundled locally. API error codes map to catalog entries; do not display server messages or caught exceptions.
 
@@ -107,12 +111,18 @@ Visible copy and document metadata come from `apps/web/src/i18n/en.ts`. Use comp
 
 Set `NODE_ENV=development` and `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and start the API. Production configuration rejects enablement; disabled servers also reject access to already-persisted sandbox games. The [web sandbox](#sandbox-ui) uses these endpoints unchanged.
 
-| Endpoint                    | Request                                        | Success                                            |
-| --------------------------- | ---------------------------------------------- | -------------------------------------------------- |
-| `POST /guest-session`       | `{}`                                           | `200 { "status": "ready" }` plus guest cookie      |
-| `POST /sandbox/games`       | `{}`                                           | `201` standard-position active snapshot, version 0 |
-| `GET /games/:gameId`        | UUID parameter, no query fields                | `200` current authorized snapshot                  |
-| `POST /games/:gameId/moves` | `{ gameId, move, expectedVersion, commandId }` | `200` accepted snapshot                            |
+| Endpoint                        | Request                                                        | Success                                            |
+| ------------------------------- | -------------------------------------------------------------- | -------------------------------------------------- |
+| `POST /guest-session`           | `{}`                                                           | `200 { "status": "ready" }` plus guest cookie      |
+| `POST /sandbox/games`           | `{}`                                                           | `201` standard-position active snapshot, version 0 |
+| `GET /sandbox/games/unfinished` | No query fields                                                | `200 { snapshot }`, unfinished game or `null`      |
+| `GET /games/:gameId`            | UUID parameter, no query fields                                | `200` current authorized snapshot                  |
+| `POST /games/:gameId/moves`     | `{ gameId, move, expectedVersion, commandId }`                 | `200` accepted snapshot                            |
+| `POST /games/:gameId/lifecycle` | `{ gameId, action, expectedVersion, commandId, losingColor? }` | `200` accepted snapshot                            |
+| `GET /games/:gameId/replay`     | UUID parameter, no query fields                                | `200 { snapshot, initialFen }`, terminal only      |
+| `GET /games/:gameId/pgn`        | UUID parameter, no query fields                                | `200 { gameId, version, pgn }`, terminal only      |
+
+Lifecycle actions are `pause`, `resume`, `abort`, and `resign`. Only resignation accepts and requires `losingColor` (`white` or `black`). Control commands require ownership; resignation requires authority over the chosen human seat. Only the enabled development sandbox grants its owner authority over both human seats. Discovery never creates a guest; a `401` discovery response tells the browser to show the entry screen. All reads preserve lifecycle and verify complete persisted history and projections.
 
 Bootstrap once and await the cookie before issuing game requests; clients must coordinate first-use bootstrap instead of racing cookie-less initializations. Missing, invalid, or expired cookies on game requests return `401`, with no implicit replacement. Bootstrap alone can replace an expired session; replacement never recovers that session's old games.
 
@@ -132,9 +142,9 @@ curl.exe -sS -b $guestCookieJar -c $guestCookieJar "http://localhost:3001/games/
 Remove-Item -LiteralPath $guestCookieJar
 ```
 
-Use a new command UUID for each move and reuse that UUID for retries. The body game ID must match the path. Stale/future versions, duplicate accepted IDs (including changed payloads), and an occupied active/paused slot return `409 GAME_CONFLICT` with `currentSnapshot`. Refresh client state from that snapshot; never automatically apply a stale move to a new position. Versions advance once per accepted move, including the terminal move. A duplicate terminal command still returns a conflict snapshot; a fresh terminal or paused move returns `409 INVALID_GAME_STATE`. Illegal moves return `422`; malformed requests return `400`.
+Use a new command UUID for each move or lifecycle action and reuse the identical command for retries. The body game ID must match the path. After read authorization, stale/future versions and duplicate accepted IDs (including changed payloads or command kinds) return `409 GAME_CONFLICT` with `currentSnapshot`. An occupied active/paused slot returns the same authorized conflict envelope. Refresh client state from that snapshot; never automatically apply a stale move or user action to a new version. Versions advance once per accepted command, including the terminal command; lifecycle commands add no move. A duplicate terminal command still returns a conflict snapshot; a fresh terminal or paused move returns `409 INVALID_GAME_STATE`. Illegal moves return `422`; malformed requests return `400`.
 
-Requests cannot select FEN, history, owner, seat, public mode, or sandbox authority; unknown body/query fields are rejected. Snapshot reads never pause or resume a game. Completed records remain readable until guest access expires; lifecycle/recovery, replay/export endpoints, and retention cleanup remain follow-up work.
+Requests cannot select FEN, history, owner, seat, public mode, or sandbox authority; unknown body/query fields are rejected. Missing or expired sessions receive `401`; inaccessible games receive `404` without snapshots. Replay and export reject unfinished games with `409 INVALID_GAME_STATE`. Completed and aborted records remain private and readable until guest access expires. Pausing occurs only through an authorized POST, never as a side effect of a read.
 
 ## PostgreSQL integration tests
 
@@ -163,7 +173,9 @@ npm run test:e2e
 
 Playwright starts the actual Fastify guest/game services and Vite app at `http://localhost:3101` and `http://localhost:5174`. These ports must be free; the suite refuses to reuse existing servers. The test entrypoint validates `TEST_DATABASE_URL` with the same `_test`/no-options guard as integration tests before opening a connection or applying reviewed migrations. It never falls back to `DATABASE_URL`. No arbitrary-position endpoint or mocked gameplay API is used.
 
-Desktop Chromium and a Chromium mobile-touch context complete Fool's Mate, verify persisted snapshots, create a new game, and reach White knight/Black rook underpromotions through legal moves from the standard position. Further checks cover explicit refresh reopening, keyboard directions and Tab order, modal focus containment/return, 44px controls, reduced motion, 320/390/768/1024/1440px layouts, 200% text, 50% expanded test resources, and axe accessibility checks. Expansion is injected by the test into the dev module; it is not a product locale or flag.
+Desktop Chromium and a Chromium mobile-touch context create a game, play part of Fool's Mate, refresh into paused recovery, explicitly resume, complete checkmate, navigate every replay position, copy/download PGN, start another game, and reopen the previous private URL. Downloaded text must exactly equal persisted PGN; clipboard readback normalizes Windows CRLF conversion while the client writes the canonical text unchanged. Further cases cover both resignation colors, neutral abortion, isolated-guest access denial, root-page recovery, and White knight/Black rook underpromotions through legal moves from the standard position.
+
+Accessibility and layout checks cover keyboard directions and Tab order, modal focus containment/return, 44px controls, reduced motion, 320/390/768/1024/1440px layouts, 200% text, 50% expanded test resources, stable move-history placement during commands, and axe checks. Expansion is injected by the test into the dev module; it is not a product locale or flag.
 
 Each browser context has an isolated guest. Cleanup deletes only guests/games created by that test; the server also tracks guests it created for graceful shutdown. Screenshots and failure context go to `neurochess-playwright-results` in the OS temporary directory, outside the repository. Traces, HARs, and videos are disabled so guest cookie headers are not recorded. CI installs Chromium and runs this suite after the full build in `npm run verify`. The separate `npm run smoke` checks built-service startup.
 
@@ -174,6 +186,8 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
 
 Never edit an applied migration or use schema push as a substitute for reviewed SQL. Better Auth schema generation will feed this same migration history when authentication is implemented.
+
+Migration `0002_game_command_receipts.sql` creates the shared accepted-command receipts and backfills existing moves. Stop old API writers before applying it, then start the API version that writes receipts for every move and lifecycle action. See [ADR-0007](decisions/0007-lifecycle-recovery-and-private-replay.md). Integration tests exercise this backfill on a populated prior schema, receipt uniqueness, cascading deletion, and atomic rollback.
 
 ## Logging and errors
 

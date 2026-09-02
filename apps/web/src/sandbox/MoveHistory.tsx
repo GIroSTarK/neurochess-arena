@@ -4,9 +4,11 @@ import { useTranslation } from "react-i18next";
 
 interface MoveHistoryProps {
   readonly moves: readonly MoveRecord[];
+  readonly selectedPly?: number | undefined;
+  readonly onSelect?: ((ply: number) => void) | undefined;
 }
 
-export function MoveHistory({ moves }: MoveHistoryProps) {
+export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) {
   const { t, i18n } = useTranslation();
   const scroller = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
@@ -25,6 +27,18 @@ export function MoveHistory({ moves }: MoveHistoryProps) {
         <span className="empty-ply" aria-label={t("moves.pending")}>
           —
         </span>
+      );
+    if (onSelect)
+      return (
+        <button
+          type="button"
+          className="move-notation move-notation--selectable"
+          aria-current={move.ply === selectedPly ? "step" : undefined}
+          aria-label={t("replay.selectMove", { ply: move.ply, move: move.san })}
+          onClick={() => onSelect(move.ply)}
+        >
+          {move.san}
+        </button>
       );
     return (
       <span className="move-notation" aria-current={move.ply === moves.length ? "true" : undefined}>

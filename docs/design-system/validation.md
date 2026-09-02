@@ -1,6 +1,27 @@
 # Design-system validation
 
-**Scope:** PR 3 development sandbox and static reference limitations
+**Scope:** Completed Phase 1 development sandbox and static reference limitations
+
+## PR 4 validation — 2026-09-03
+
+Validated on Windows with Node 24.19.0, npm 11.17.0, and Playwright 1.62.1 Chromium against the actual Fastify API and disposable PostgreSQL database. In-app Browser was available and used for visual and interaction checks at 1440×1080 and 390×844. The repository's requested desktop/mobile Playwright suite supplies repeatable end-to-end coverage. The PR 3 entries below are historical; PR 4 supersedes their recovery, lifecycle, replay, and export exclusions.
+
+| Check                       | Actual result                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run verify`            | Passed formatting, lint, typecheck, 479 unit tests across 21 files, 69 PostgreSQL integration tests across three files, all nine negative architecture fixtures, and the production build.                                                                                                                                                              |
+| `npm run db:check`          | Passed migration metadata checks. Integration tests applied the migration history and verified move-receipt backfill against a populated prior schema, uniqueness, cascade, and rollback.                                                                                                                                                               |
+| `npm run test:e2e`          | All 18 desktop/mobile tests passed, including the complete private game flow, both resignation colors, abortion, and isolated-guest denial.                                                                                                                                                                                                             |
+| Recovery and command safety | Verified explicit Resume after refresh/reopening, repeated recovery without another pause write, duplicate mounts, identical retries after lost responses, bounded conflict recovery, and obsolete-response rejection. Restoring between knight cycles finishes repetition at ply eight; restoring at half-move 99 finishes the fifty-move draw at 100. |
+| Replay and export           | Checked every Fool's Mate replay ply against persisted FEN, SAN, and UCI, including check and last-move markers. Integration coverage also includes resignation, draws, empty abortion, castling, en passant, and promotion. Replay/export leave game rows, moves, and revisions unchanged and reject unfinished or inaccessible games.                 |
+| Clipboard and download      | Copy passes canonical PGN unchanged to the clipboard API. Readback accounts for Windows LF-to-CRLF conversion. The UTF-8 download exactly matches persisted PGN and has a UUID-based filename. Unit coverage verifies selectable-text fallback when clipboard access is denied.                                                                         |
+| Accessibility and layout    | Desktop/mobile tests pass keyboard board inspection, focus visibility, Cancel-first confirmation dialogs, Escape/Tab containment and focus return, 44px controls, reduced motion, stable move history, narrow layouts, enlarged/expanded text, and axe checks.                                                                                          |
+| Rendered evidence           | In-app Browser confirmed page identity, meaningful content, no framework overlay, and no console warnings/errors. Visual captures show the final result, SAN selection, replay controls, and private export on desktop and in a reachable mobile column.                                                                                                |
+
+The tested flow is **Start sandbox → f3/e5 → refresh → paused recovery → Resume → g4/Qh4# → First/Previous/Next/Last and SAN selection → Copy/Download PGN → New game → browser Back to the previous private URL**. Abort displays **Game stopped** with no winner; resignation displays the opposite color's win. No provider adapters or realtime rooms participate in this flow.
+
+In-app screenshots `neurochess-pr4-replay-desktop.png` and `neurochess-pr4-replay-mobile.png` are stored in the OS temporary directory. Playwright evidence remains under `neurochess-playwright-results` there. No credential-bearing traces, HARs, or videos were recorded. The sandbox retains the existing navy/cyan shell and board-first layout; lifecycle controls, confirmations, replay, and export use its existing tokens and semantic controls.
+
+Actual screen-reader speech, Firefox, WebKit, physical devices, and operating-system zoom remain untested. Vite still emits its non-failing large-chunk warning (approximately 586 kB minified / 174 kB gzip); this validation establishes no field-performance claim. AI/provider states, authentication, and realtime rooms remain in later phases.
 
 ## PR 3 validation — 2026-09-02
 

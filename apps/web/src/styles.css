@@ -801,6 +801,76 @@ a:focus-visible {
   height: 3rem;
 }
 
+.lifecycle-controls,
+.replay-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nc-space-3);
+  margin-top: var(--nc-space-4);
+}
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nc-space-3);
+  margin-block: var(--nc-space-4);
+}
+.dialog-actions .button {
+  flex: 1 1 8rem;
+}
+.button--danger {
+  background: var(--nc-color-surface);
+  color: var(--nc-color-text);
+  border-color: var(--nc-color-danger);
+}
+.replay-controls,
+.pgn-actions {
+  min-width: 0;
+  padding: var(--nc-space-4);
+  border: 1px solid var(--nc-color-control-border);
+  border-radius: var(--nc-radius-control);
+  background: var(--nc-color-surface);
+}
+.replay-controls {
+  margin-top: var(--nc-space-4);
+}
+.replay-controls h2,
+.pgn-actions h2 {
+  font-size: var(--nc-type-label);
+}
+.replay-controls p,
+.pgn-actions p {
+  margin-top: var(--nc-space-3);
+}
+.move-notation--selectable {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--nc-radius-control);
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  font: inherit;
+  padding: var(--nc-space-2);
+}
+.move-notation--selectable[aria-current] {
+  border-color: var(--nc-color-accent);
+  color: var(--nc-color-accent);
+}
+.pgn-label {
+  display: grid;
+  gap: var(--nc-space-2);
+}
+.pgn-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 8rem;
+  padding: var(--nc-space-3);
+  background: var(--nc-color-canvas);
+  color: var(--nc-color-text);
+  border: 1px solid var(--nc-color-control-border);
+  border-radius: var(--nc-radius-control);
+}
+
 .configuration-error {
   display: grid;
   align-content: center;

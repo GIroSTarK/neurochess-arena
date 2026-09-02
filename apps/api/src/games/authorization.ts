@@ -18,7 +18,7 @@ export function authorizeGameRead(
   if (!allowed) throw new GameRequestError("NOT_FOUND");
 }
 
-export function authorizeHumanMove(
+export function authorizeHumanSeat(
   principal: GuestPrincipal,
   game: StoredGame,
   participants: readonly StoredParticipant[],
@@ -35,4 +35,9 @@ export function authorizeHumanMove(
   ) {
     throw new GameRequestError("FORBIDDEN");
   }
+}
+
+export function authorizeGameControl(principal: GuestPrincipal, game: StoredGame): void {
+  if (game.ownerGuestSessionId !== principal.guestSessionId)
+    throw new GameRequestError("FORBIDDEN");
 }

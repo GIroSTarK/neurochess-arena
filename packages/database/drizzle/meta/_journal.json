@@ -15,6 +15,13 @@
       "when": 1788360471634,
       "tag": "0001_guest_owned_games",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788382198372,
+      "tag": "0002_game_command_receipts",
+      "breakpoints": true
     }
   ]
 }

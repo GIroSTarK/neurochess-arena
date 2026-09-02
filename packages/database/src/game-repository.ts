@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
-import { gameParticipants, games, guestSessions, moves } from "./schema/index.js";
+import { gameCommands, gameParticipants, games, guestSessions, moves } from "./schema/index.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type StoredGame = typeof games.$inferSelect;
@@ -10,6 +10,7 @@ export type StoredMove = typeof moves.$inferSelect;
 export type NewGame = typeof games.$inferInsert;
 export type NewParticipant = typeof gameParticipants.$inferInsert;
 export type NewMove = typeof moves.$inferInsert;
+export type NewGameCommand = typeof gameCommands.$inferInsert;
 export type GamePositionUpdate = Pick<
   StoredGame,
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
@@ -20,12 +21,14 @@ export interface GameReader {
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
   getMoves(gameId: string): Promise<StoredMove[]>;
+  findUnfinishedGame(guestId: string, sandboxOnly?: boolean): Promise<StoredGame | undefined>;
 }
 
 export interface GameTransaction extends GameReader {
   lockGuest(id: string): Promise<StoredGuestSession | undefined>;
   lockGame(id: string): Promise<StoredGame | undefined>;
-  findUnfinishedGame(guestId: string): Promise<StoredGame | undefined>;
+  hasCommand(gameId: string, commandId: string): Promise<boolean>;
+  appendCommand(command: NewGameCommand): Promise<void>;
   insertGame(game: NewGame, participants: NewParticipant[]): Promise<void>;
   appendMove(move: NewMove): Promise<void>;
   updatePosition(
@@ -65,6 +68,19 @@ function readerFor(db: Executor): GameReader {
         .orderBy(asc(gameParticipants.color)),
     getMoves: (gameId) =>
       db.select().from(moves).where(eq(moves.gameId, gameId)).orderBy(asc(moves.ply)),
+    async findUnfinishedGame(guestId, sandboxOnly = false) {
+      const [game] = await db
+        .select()
+        .from(games)
+        .where(
+          and(
+            eq(games.ownerGuestSessionId, guestId),
+            inArray(games.state, ["active", "paused"]),
+            sandboxOnly ? eq(games.isSandbox, true) : undefined,
+          ),
+        );
+      return game;
+    },
   };
 }
 
@@ -122,17 +138,15 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
               const [game] = await tx.select().from(games).where(eq(games.id, id)).for("update");
               return game;
             },
-            async findUnfinishedGame(guestId) {
-              const [game] = await tx
-                .select()
-                .from(games)
-                .where(
-                  and(
-                    eq(games.ownerGuestSessionId, guestId),
-                    inArray(games.state, ["active", "paused"]),
-                  ),
-                );
-              return game;
+            async hasCommand(gameId, commandId) {
+              const [receipt] = await tx
+                .select({ commandId: gameCommands.commandId })
+                .from(gameCommands)
+                .where(and(eq(gameCommands.gameId, gameId), eq(gameCommands.commandId, commandId)));
+              return receipt !== undefined;
+            },
+            async appendCommand(command) {
+              await tx.insert(gameCommands).values(command);
             },
             async insertGame(game, participants) {
               await tx.insert(games).values(game);

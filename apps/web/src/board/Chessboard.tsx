@@ -13,6 +13,13 @@ import {
   type Square,
 } from "./position";
 
+export interface BoardView {
+  readonly fen: string;
+  readonly turn: ChessColor;
+  readonly inCheck: boolean;
+  readonly lastMove: string | undefined;
+}
+
 interface ChessboardProps {
   readonly snapshot: GameSnapshot;
   readonly orientation: ChessColor;
@@ -20,6 +27,7 @@ interface ChessboardProps {
   readonly interactionRevision: number;
   readonly onMove: (move: string) => void;
   readonly toolbar?: ReactNode;
+  readonly view?: BoardView | undefined;
 }
 
 interface Selection {
@@ -37,23 +45,25 @@ export function Chessboard({
   interactionRevision,
   onMove,
   toolbar,
+  view,
 }: ChessboardProps) {
   const { t } = useTranslation();
   const helpId = useId();
-  const position = useMemo(() => parsePosition(snapshot.fen), [snapshot.fen]);
+  const fen = view?.fen ?? snapshot.fen;
+  const position = useMemo(() => parsePosition(fen), [fen]);
   const rows = useMemo(() => visualRows(orientation), [orientation]);
   const buttons = useRef(new Map<Square, HTMLButtonElement>());
   const [focusedSquare, setFocusedSquare] = useState<Square>("e2");
   const [selection, setSelection] = useState<Selection | null>(null);
   const epoch = snapshot.gameId + ":" + snapshot.version + ":" + interactionRevision;
   const selected = selection?.epoch === epoch ? selection : null;
-  const enabled = canMove && snapshot.state === "active" && position !== null;
+  const enabled = !view && canMove && snapshot.state === "active" && position !== null;
   const sources = new Set(snapshot.legalMoves.map((move) => move.slice(0, 2)));
   const selectedMoves = selected
     ? snapshot.legalMoves.filter((move) => move.startsWith(selected.source))
     : [];
   const targets = new Set(selectedMoves.map((move) => move.slice(2, 4)));
-  const lastMove = snapshot.moves.at(-1)?.uci;
+  const lastMove = view ? view.lastMove : snapshot.moves.at(-1)?.uci;
   const promotion = selected?.promotion;
 
   function focus(square: Square, options?: FocusOptions) {
@@ -131,6 +141,7 @@ export function Chessboard({
         aria-rowcount={8}
         aria-colcount={8}
         data-orientation={orientation}
+        data-fen={fen}
       >
         {rows.map((row, rowIndex) => (
           <div
@@ -151,7 +162,9 @@ export function Chessboard({
                 selected?.source[0] !== square[0];
               const capture = target && (piece !== undefined || enPassant);
               const inCheck =
-                snapshot.inCheck && piece?.kind === "k" && piece.color === snapshot.turn;
+                (view?.inCheck ?? snapshot.inCheck) &&
+                piece?.kind === "k" &&
+                piece.color === (view?.turn ?? snapshot.turn);
               const isSelected = selected?.source === square;
               const isLastMove =
                 lastMove?.slice(0, 2) === square || lastMove?.slice(2, 4) === square;

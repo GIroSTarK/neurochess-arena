@@ -2,9 +2,9 @@
 
 **Version:** 1.0
 
-**Status:** Sandbox shell, board, and localization implemented; remaining components follow the MVP roadmap
+**Status:** Phase 1 sandbox, lifecycle, recovery, replay, export, and localization implemented; remaining components follow the MVP roadmap
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 ## Purpose and authority
 
@@ -12,7 +12,7 @@ An arena for understanding LLM chess decisions: the board is the focal point, th
 
 The direction is **refined sci-fi**: deep navy, precise cyan accents, a restrained angular frame, and readable conventional chess pieces. Use visual emphasis to communicate the next action or a change in state.
 
-[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation. PR 3 applies the shell, board, controls, dialog, history, and localization to the development sandbox. AI, authentication, room, and replay concepts remain references for their later roadmap phases.
+[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation. PR 3 applies the shell, board, controls, dialog, history, and localization to the development sandbox; PR 4 completes lifecycle controls, paused recovery, private replay, and PGN export. AI, authentication, and room concepts remain references for their later roadmap phases.
 
 Start with the [eight screen concepts](design-system/concepts/README.md). Their exact copy and sample game are recorded in the [concept fixtures](design-system/fixtures.md). The images establish composition; the token values, interaction rules, and text in this guide are the implementation reference. [Validation notes](design-system/validation.md) summarize reference limitations and remaining implementation checks.
 

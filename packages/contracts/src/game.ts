@@ -111,6 +111,38 @@ export const moveCommandSchema = z.strictObject({
   commandId: commandIdSchema,
 });
 
+const commandFields = {
+  gameId: gameIdSchema,
+  expectedVersion: gameVersionSchema,
+  commandId: commandIdSchema,
+};
+
+export const lifecycleCommandSchema = z.discriminatedUnion("action", [
+  z.strictObject({ ...commandFields, action: z.literal("pause") }),
+  z.strictObject({ ...commandFields, action: z.literal("resume") }),
+  z.strictObject({ ...commandFields, action: z.literal("abort") }),
+  z.strictObject({ ...commandFields, action: z.literal("resign"), losingColor: chessColorSchema }),
+]);
+
+export const unfinishedGameResponseSchema = z.strictObject({
+  snapshot: gameSnapshotSchema
+    .refine((snapshot) => snapshot.state === "active" || snapshot.state === "paused")
+    .nullable(),
+});
+
+export const gameReplayResponseSchema = z.strictObject({
+  snapshot: gameSnapshotSchema.refine(
+    (snapshot) => snapshot.state === "completed" || snapshot.state === "aborted",
+  ),
+  initialFen: z.string().min(1),
+});
+
+export const gamePgnResponseSchema = z.strictObject({
+  gameId: gameIdSchema,
+  version: gameVersionSchema,
+  pgn: z.string().min(1),
+});
+
 export const gameErrorCodeSchema = z.enum([
   "INVALID_REQUEST",
   "INVALID_UCI",
@@ -149,5 +181,9 @@ export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export type MoveRecord = z.infer<typeof moveRecordSchema>;
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
 export type MoveCommand = z.infer<typeof moveCommandSchema>;
+export type LifecycleCommand = z.infer<typeof lifecycleCommandSchema>;
+export type UnfinishedGameResponse = z.infer<typeof unfinishedGameResponseSchema>;
+export type GameReplayResponse = z.infer<typeof gameReplayResponseSchema>;
+export type GamePgnResponse = z.infer<typeof gamePgnResponseSchema>;
 export type GameErrorCode = z.infer<typeof gameErrorCodeSchema>;
 export type GameErrorResponse = z.infer<typeof gameErrorResponseSchema>;

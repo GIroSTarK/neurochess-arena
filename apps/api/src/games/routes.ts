@@ -7,6 +7,10 @@ import {
   guestSessionRequestSchema,
   guestSessionResponseSchema,
   moveCommandSchema,
+  lifecycleCommandSchema,
+  unfinishedGameResponseSchema,
+  gameReplayResponseSchema,
+  gamePgnResponseSchema,
   type GameErrorCode,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -123,6 +127,63 @@ export async function registerGameRoutes(
       const snapshot = await options.games.createSandbox(principal);
       return reply.code(201).send(snapshot);
     },
+  );
+
+  routes.get(
+    "/sandbox/games/unfinished",
+    {
+      onRequest: async () => {
+        if (!options.games.sandboxEnabled) throw new GameRequestError("NOT_FOUND");
+      },
+      schema: {
+        querystring: emptyQuerySchema,
+        response: { 200: unfinishedGameResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => options.games.unfinished(await principalFor(request, reply)),
+  );
+
+  routes.post(
+    "/games/:gameId/lifecycle",
+    {
+      schema: {
+        params: gameParamsSchema,
+        body: lifecycleCommandSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameSnapshotSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase())
+        throw new GameRequestError("INVALID_REQUEST");
+      return options.games.lifecycle(await principalFor(request, reply), request.body);
+    },
+  );
+
+  routes.get(
+    "/games/:gameId/replay",
+    {
+      schema: {
+        params: gameParamsSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameReplayResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.replay(await principalFor(request, reply), request.params.gameId),
+  );
+
+  routes.get(
+    "/games/:gameId/pgn",
+    {
+      schema: {
+        params: gameParamsSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gamePgnResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.pgn(await principalFor(request, reply), request.params.gameId),
   );
 
   routes.get(

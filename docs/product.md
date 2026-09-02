@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 ## Vision
 
@@ -89,9 +89,11 @@ If a participant disconnects, the game remains available for reconnection withou
 
 The [local development sandbox](architecture.md#local-development-sandbox) supports the one-browser implementation checkpoint and is outside these three public game modes.
 
-**Current implementation checkpoint (PR 3):** the localized development sandbox lets one guest play both colors through the API, with an accessible keyboard/touch board that keeps the keyboard-focused square in view, explicit promotion, game status, and a read-only SAN move table. Submission feedback reserves its layout space so move history stays in place while a move is confirmed. Start is explicit; no guest is bootstrapped on page load. Uncertain move responses retain the accepted position and block new moves until synchronization or an explicit retry of the identical command. Completion offers New game.
+**Current implementation checkpoint (PR 4):** the localized development sandbox lets one guest play both colors through the API, with an accessible keyboard/touch board, explicit promotion, and SAN history. Pause and Resume control play. Abort stops the game without awarding a win or loss; Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
 
-Game state lives in page memory. Reload returns to the entry screen; Start sandbox reopens an unfinished game through the existing creation conflict and preserves its stored lifecycle. Paused positions remain inspectable, without simulated recovery or resume controls. Refresh-to-paused recovery, lifecycle commands, and replay/export endpoints remain later Phase 1 work. Development/test guest access still expires after 24 hours of inactivity by default, configurable on the server. This checkpoint does not change MVP recovery requirements or decide production guest retention; automated expiry cleanup remains follow-up work.
+Page load discovers an existing guest's unfinished sandbox or opens the private `/?game=<uuid>` URL. An unfinished active game is recovered as paused through a server command; Resume is always explicit. No guest is bootstrapped until Start. Recovery preserves the full move history and draw counters. Uncertain move or lifecycle commands retain the accepted position and block further commands until synchronization or an explicit retry of the identical command.
+
+Completed and aborted games show their result and reason, move-by-move replay, and private PGN copy/download. Replay starts at the final position and never changes the game. New game releases the previous result view without deleting the record; the old URL remains accessible only to its owning guest session. Development/test guest access expires after 24 hours of inactivity by default, configurable on the server. There is no guest history list, production retention decision, or automated expiry cleanup in this checkpoint.
 
 ## Chess and AI behavior
 
