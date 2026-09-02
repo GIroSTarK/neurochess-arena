@@ -87,13 +87,30 @@ A registered user creates a private room, chooses their color, and shares an inv
 
 If a participant disconnects, the game remains available for reconnection without a time limit. The room owner may close the active room; this marks the game as `aborted` rather than deleting the record. Completed and aborted games appear in the history of registered participants. A guest has no durable history.
 
+The [local development sandbox](architecture.md#local-development-sandbox) supports the one-browser implementation checkpoint and is outside these three public game modes.
+
 ## Chess and AI behavior
 
 ### Source of truth
 
-A deterministic chess rules engine owns the position, legal move generation, and result detection. The MVP supports the complete rules of standard chess, including checkmate, stalemate, threefold repetition, the fifty-move rule, insufficient material, and human resignation.
+A deterministic chess rules engine owns the position, legal move generation, and result detection. The MVP uses standard chess move legality, including castling, en passant, and all promotion choices. It supports checkmate, stalemate, insufficient material, human resignation, and the automatic draw policy below.
 
 AI models cannot resign in the MVP.
+
+### Automatic draw policy
+
+All three game modes and the development sandbox use the same automatic adjudication. Neither a person nor a model submits a draw claim, and play cannot continue after a draw threshold is reached.
+
+| Condition after an accepted move                                | Outcome                        |
+| --------------------------------------------------------------- | ------------------------------ |
+| The current position occurs for the third time                  | Draw by threefold repetition   |
+| 100 consecutive half-moves occur without a pawn move or capture | Draw under the fifty-move rule |
+
+A half-move is one move by one side: 100 half-moves means 50 moves by each side. A pawn move or capture resets that counter. Repetition counts positions across the complete game, including the initial position; occurrences need not be consecutive. Position equality includes side to move, piece placement, castling rights, and legal en passant availability.
+
+Evaluate results before allowing the next turn, in this order: checkmate, stalemate, insufficient material, threefold repetition, then the fifty-move rule. Checkmate on the accepted move takes priority even at the half-move threshold. A draw records `completed`, result `1/2-1/2`, and its specific termination reason. Pausing, restoring, or replaying a game never resets its history or counters.
+
+This policy keeps the model's action limited to selecting a legal move and requires no draw-claim or draw-offer flow. It deliberately differs from the FIDE claim procedure: articles 9.2–9.3 use claims for threefold repetition and fifty moves, while article 9.6 provides automatic draws at fivefold repetition and 75 moves. Arena finishes at the earlier thresholds. See the [FIDE Laws of Chess, article 9](https://handbook.fide.com/chapter/e012023).
 
 ### Model input
 
@@ -174,7 +191,7 @@ configuring -> active <-> paused -> completed
 `completed` includes normal chess results and technical losses. The termination reason distinguishes checkmate, draw type, human resignation, and model technical loss.
 
 Only one game may be `active` or `paused` for a given authenticated user or guest session.
-Paused games count toward this limit.
+Paused games count toward this limit. Completion or abortion releases the slot. Completed and aborted games reject further moves; replay does not modify their accepted positions or result.
 
 ## Localization and responsive design
 

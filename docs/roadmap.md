@@ -24,25 +24,30 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
+Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
+
 Deliverables:
 
 - dark responsive application shell and chessboard;
 - standard initial position and complete legal move handling;
 - server-authoritative game creation and human move command;
+- guest-session identity, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` game per session;
+- recovery of an unfinished sandbox game as `paused`, with explicit resume;
 - game lifecycle, FEN/PGN persistence, result detection, replay, and PGN export;
-- unit tests for standard chess outcomes;
+- unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
 - localization layer with English strings.
 
-Exit condition: one browser can complete and replay a deterministic chess game without AI or realtime rooms.
+Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](architecture.md#verification-strategy).
 
 ## Phase 2 — AI arena core
 
 Deliverables:
 
+- mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
 - common provider adapter and runtime-validated move contract;
 - OpenAI, Anthropic, Google, and OpenRouter adapters;
 - live model discovery and capability-aware parameters;
-- session-only credential path with strict redaction;
+- session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
 - independent White and Black configuration;
 - AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
 - AI-versus-human mode with color choice;
@@ -59,10 +64,10 @@ Deliverables:
 - email verification and password reset;
 - unique usernames and avatars;
 - encrypted opt-in provider credential storage;
-- enforcement of at most one game in the `active` or `paused` state per authenticated user or guest session;
-- private game history and result pages;
+- extend guest-session ownership, single-game limits, and paused recovery to authenticated accounts;
+- durable private game history and result pages;
 - individual game deletion, history clearing, credential revocation, and account deletion;
-- guest refresh recovery with a paused game and mandatory key re-entry.
+- authenticated recovery using re-entered session-only keys or explicitly saved encrypted credentials.
 
 Exit condition: registered and guest lifecycle rules match the product specification, including deletion and credential-security tests.
 
@@ -102,14 +107,14 @@ Exit condition: every MVP acceptance criterion in `docs/product.md` is verified 
 After Phase 0, build one narrow end-to-end path before expanding the UI:
 
 ```text
-create standard game
-  -> request one mocked AI move
-  -> validate against legal moves
-  -> persist move and new FEN/PGN
-  -> render updated board and commentary
+create a standard game owned by a guest session
+  -> submit one human UCI move
+  -> authorize and validate on the server
+  -> atomically persist the move, FEN/PGN, and game version
+  -> render the accepted position and move list
 ```
 
-This slice exercises the most important boundary—LLM suggestion versus deterministic chess authority—without requiring authentication, multiple providers, or realtime rooms.
+Extend this path to a complete game, lifecycle controls, replay, and PGN copy/download. It proves legal moves, persistence, command concurrency, and board interaction before Phase 2 adds provider behavior through the same command service. Provider requests, commentary, and telemetry are not Phase 1 dependencies.
 
 ## Post-MVP candidates
 

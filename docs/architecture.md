@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-08-21
+**Last updated:** 2026-09-02
 
 ## Architectural drivers
 
@@ -107,7 +107,7 @@ Core tables are expected to include:
 
 Stable relational fields stay in typed columns. Bounded provider-specific parameter, usage, and error metadata may use `jsonb`. Provider keys never appear in JSON metadata.
 
-Enforce one active or paused game per user or guest session with a database constraint where practical and an application-level check with a clear conflict response.
+Enforce one active or paused game per user or guest session with a database constraint where practical and an application-level check with a clear conflict response. Concurrent creation requests must not bypass this limit.
 
 ### Stockfish worker
 
@@ -128,6 +128,8 @@ All game mutations are commands against a game version. The server validates:
 
 The server persists the move and updated game state atomically. Duplicate or stale commands return the current state instead of appending another move.
 
+Reconstruct the chess engine from the ordered, persisted UCI moves starting at the standard initial position. Current FEN alone cannot restore repetition history. Keep FEN, PGN, result, and termination reason consistent with this history; evaluate the [product's automatic draw policy](product.md#automatic-draw-policy) before allowing another turn.
+
 ### AI turns
 
 The browser requests one AI turn at a time. The API:
@@ -146,6 +148,18 @@ The reservation must be idempotent so multiple clicks, retries, or network dupli
 ### Human turns
 
 Human moves use the same authoritative command path without a provider call. For online games, the accepted state is broadcast to both room participants over WebSocket. Reconnecting clients fetch a full snapshot before processing later events.
+
+### Local development sandbox
+
+Phase 1 provides an explicitly labeled development screen where one guest session controls White and Black in turn. It uses the real API, PostgreSQL persistence, chess rules, and reusable UI components through the shared command service.
+
+- Enable the sandbox explicitly on the server in local development or tests; keep it disabled by default. Production configuration must reject attempts to enable it. Hiding a frontend route is insufficient.
+- Mark sandbox games internally when the server creates them. Only their owning guest session receives authority over both seats. Clients cannot grant themselves this capability or apply it to ordinary games, and production game access must not recognize sandbox authority.
+- Preserve every lifecycle, turn, legality, version, and atomic persistence check. Both-seat control never permits moving out of turn or changing an accepted position.
+- Keep sandbox records in the development/test database. The sandbox creates no room, invitation, join flow, public spectator access, or additional public game mode.
+- Start each sandbox game from the standard position. Special FEN positions are allowed only as internal test fixtures, never through a game-creation API.
+
+Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). On refresh or reopening, restore an unfinished sandbox game as `paused` and require explicit resume. Completed or aborted sandbox games remain temporarily available to their owning guest for replay and PGN export during the retained session; they do not become account history. The production guest retention period remains an open product decision.
 
 ## AI provider boundary
 
@@ -194,7 +208,9 @@ Better Auth manages email/password, Google, GitHub, email verification, password
 
 Guests receive an opaque, expiring identifier in a Secure, HttpOnly cookie. Temporary active-game metadata may be retained long enough to recover from a refresh but does not appear in durable history and is deleted after the configured inactivity period.
 
-After refresh, an AI game is restored as paused. Provider keys must be entered again unless the authenticated user previously opted into encrypted storage.
+Guest identity, ownership checks on snapshots/commands/replay/PGN, and the active-or-paused game limit are required from Phase 1. A game ID alone never grants access. Phase 3 extends these foundations to authenticated users and durable private history.
+
+After refresh, an AI game is restored as paused and requires explicit resume. Session-only key loss and mandatory re-entry are required when AI games arrive in Phase 2; an authenticated user's explicitly saved credential may be resolved through the saved-credential path introduced in Phase 3.
 
 ## Credential lifecycle
 
@@ -257,6 +273,16 @@ Generate OpenAPI from Fastify route schemas. Version WebSocket event payloads th
 - WebSocket tests: invitation join, move broadcast, disconnect/reconnect snapshot, owner abort, and unauthorized access.
 - Provider contract tests: recorded or mocked responses for every adapter; no live paid calls in the default suite.
 - End-to-end tests: the three game modes, guest restrictions, history/replay/PGN, responsive layouts, and key lifecycle.
+
+Phase 1 acceptance must additionally verify:
+
+- one guest completes a game through human commands, replays it, and exports PGN without loading a provider adapter; another guest cannot read or mutate any of these resources;
+- sandbox creation/control paths are unavailable when disabled, production cannot enable them, and ordinary games never inherit authority over both seats;
+- concurrent game creation respects the active/paused limit, completion or abortion releases the slot, and duplicate move submissions append only one move;
+- refresh recovers an unfinished game paused, and resume preserves the full move history;
+- repeating `g1f3 g8f6 f3g1 f6g8` twice from the initial position ends the game on the eighth half-move, including after database restoration between the cycles;
+- internal fixtures verify the 99-to-100 half-move boundary, pawn/capture counter resets, repetition identity, and checkmate priority without exposing arbitrary-FEN creation;
+- completed and aborted games reject new moves, and replay/PGN agree with the persisted result and termination reason.
 
 ## Deployment constraints
 
