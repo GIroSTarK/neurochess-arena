@@ -1,7 +1,18 @@
 import { z } from "zod";
 
 const webEnvironmentSchema = z.object({
-  VITE_API_BASE_URL: z.string().url(),
+  VITE_API_BASE_URL: z.url().refine((value) => {
+    if (!URL.canParse(value)) return false;
+    const url = new URL(value);
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.pathname === "/"
+    );
+  }),
 });
 
 export interface WebEnvironment {
@@ -12,7 +23,7 @@ export class WebEnvironmentValidationError extends Error {
   readonly variables: readonly string[];
 
   constructor(variables: readonly string[]) {
-    super(`Invalid environment variables: ${variables.join(", ")}`);
+    super("INVALID_WEB_ENVIRONMENT");
     this.name = "WebEnvironmentValidationError";
     this.variables = variables;
   }

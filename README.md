@@ -2,7 +2,7 @@
 
 Neurochess Arena is a web application for watching and comparing large language models while they play chess. AI versus AI is the flagship experience, supported by AI versus human and private online human versus human games.
 
-> Status: Phase 1 in progress. The deterministic chess domain and guest-owned development sandbox API are implemented, including PostgreSQL persistence, private ownership, and atomic human moves. The gameplay UI, paused recovery, lifecycle controls, and replay/export endpoints are still pending; AI and online rooms arrive in later phases.
+> Status: Phase 1 in progress. The localized development sandbox now lets one guest play both colors through the server-authoritative API and PostgreSQL. It includes an accessible board, explicit promotion, SAN history, and command recovery. Paused refresh recovery, lifecycle controls, and replay/export endpoints remain pending; AI and online rooms arrive in later phases.
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ The development services are available at:
 
 `npm run infra:down` stops PostgreSQL but preserves its named data volume.
 
-The sandbox is disabled by default. For local API gameplay, set `SANDBOX_ENABLED=true` in `.env` and follow the [bootstrap-first sandbox walkthrough](docs/development.md#sandbox-api). Production cannot enable it.
+The sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env`, restart the API, and select **Start sandbox** in the web app. The guest controls both colors. Reload returns to the entry screen; starting again reopens an unfinished game with its stored lifecycle. See the [sandbox walkthrough](docs/development.md#sandbox-ui). Production cannot enable it.
 
 ## Verification
 
@@ -48,6 +48,8 @@ The sandbox is disabled by default. For local API gameplay, set `SANDBOX_ENABLED
 ```text
 npm run infra:test:up
 npm run verify
+npm exec playwright -- install chromium
+npm run test:e2e
 ```
 
 The repository also exposes the required checks individually:
@@ -62,6 +64,8 @@ npm run build
 After a successful build, `npm start` runs the compiled API and the Vite production preview. With PostgreSQL running, `npm run smoke` checks both built services.
 
 Use `npm run test:unit` for database-free checks. The separate test service uses disposable storage on port 5433; it does not share the development database volume.
+
+The [browser suite](docs/development.md#browser-tests) starts isolated Fastify/Vite services on localhost ports 3101/5174. It covers desktop and mobile touch gameplay, promotion, keyboard navigation, responsive layouts, and automated accessibility. Browser traces are disabled to avoid recording guest cookie headers.
 
 ## Database workflow
 
