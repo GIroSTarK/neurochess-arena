@@ -47,6 +47,36 @@ export default {
       to: { path: "(^|/)(apps|packages/(?!chess/))" },
     },
     {
+      name: "chess-engine-is-encapsulated",
+      comment: "Consumers must use the chess domain, never the underlying rules engine.",
+      severity: "error",
+      from: { pathNot: "(^|/)packages/chess/" },
+      to: { path: "(^|/)node_modules/chess\\.js/" },
+    },
+    {
+      name: "shared-leaves-no-infrastructure",
+      comment: "The chess domain and transport schemas cannot import server infrastructure.",
+      severity: "error",
+      from: { path: "(^|/)packages/(chess|contracts)/" },
+      to: {
+        path: "(^|/)node_modules/(fastify|fastify-type-provider-zod|@fastify/[^/]+|pg|pg-[^/]+|postgres|drizzle-orm|drizzle-kit|better-auth|pino)(/|$)",
+      },
+    },
+    {
+      name: "shared-leaves-no-node-builtins",
+      comment: "Browser-safe shared leaves cannot depend on Node.js infrastructure.",
+      severity: "error",
+      from: { path: "(^|/)packages/(chess|contracts)/" },
+      to: { dependencyTypes: ["core"] },
+    },
+    {
+      name: "chess-production-no-test-helpers",
+      comment: "Position fixtures cannot enter the production chess graph.",
+      severity: "error",
+      from: { path: "(^|/)packages/chess/src/", pathNot: "\\.test\\.ts$" },
+      to: { path: "(^|/)packages/chess/(test/|src/.*\\.test\\.ts$)" },
+    },
+    {
       name: "database-remains-server-only",
       comment: "Database code cannot depend on applications or browser-facing packages.",
       severity: "error",
@@ -81,7 +111,9 @@ export default {
       conditionNames: ["types", "import", "node", "default"],
       exportsFields: ["exports"],
     },
-    exclude: { path: "(^|/)(coverage|dist|node_modules)/" },
+    // Keep external dependency edges visible, including entrypoints in dist.
+    // doNotFollow prevents traversing their implementations.
+    exclude: { path: "^(apps|packages)/[^/]+/(coverage|dist)/|^coverage/" },
     tsConfig: { fileName: "tsconfig.json" },
     tsPreCompilationDeps: true,
   },

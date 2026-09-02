@@ -68,7 +68,20 @@ Invalid environment errors contain variable names only. Never add server secrets
 - `packages/database` is server-only and does not depend on application code.
 - Product packages expose explicit entrypoints; consumers must not deep-import their source files.
 
-`npm run test:architecture` validates the real graph and also proves the web-to-database rule against a deliberately invalid fixture.
+`npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, the shared-package infrastructure restrictions, and exclusion of chess test helpers from production imports.
+
+## Chess domain development
+
+The [domain and core contract boundary](architecture.md#deterministic-domain-and-core-contracts) is implemented without game routes or database tables. Import only package entrypoints. `createGame()` starts in `configuring`; call `start()` before submitting canonical UCI. Snapshot and command results contain copied data. `restoreGame({ moves, lifecycle })` replays ordered UCI moves and validates the supplied lifecycle instead of accepting a cached FEN or PGN.
+
+Focused checks require neither PostgreSQL nor provider credentials:
+
+```text
+npm exec vitest -- run packages/chess/test packages/contracts apps/api/src/game-contracts.test.ts
+npm run test:architecture
+```
+
+Special-position fixtures live in `packages/chess/test`, outside the production TypeScript root and package exports. They exercise the internal adapter through the same aggregate used by public factories. Do not export a FEN constructor, import fixtures into production, or replace the normalized repetition key with the engine's built-in hash. The regression tests cover pinned en passant, restoration between repetition cycles, and the 99-to-100 half-move boundary.
 
 ## Migrations
 
@@ -82,4 +95,4 @@ The API logger omits request bodies, retains only method/path/request ID for req
 
 Idle PostgreSQL pool errors write a fixed, credential-free diagnostic to stderr without terminating the API. The pool remains available for new connections, and `/ready` checks current database availability on every request, returning `503` when its query fails.
 
-Public errors contain only `code`, `message`, and `requestId`. Add logging and error tests whenever a new boundary accepts credentials or provider payloads.
+System errors retain `code`, `message`, and `requestId`. Structured game errors use the same envelope with enumerated codes; only `GAME_CONFLICT` additionally requires `currentSnapshot`, which a future command handler must authorize before returning. Messages are safe application-supplied display text, never domain/engine exceptions. Domain failures expose codes and, for an invalid history entry, its one-based ply only. No error accepts arbitrary details or raw exception payloads. Add logging and error tests whenever a new boundary accepts credentials or provider payloads.
