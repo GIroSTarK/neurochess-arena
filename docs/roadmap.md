@@ -24,7 +24,7 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** Completed through PR 4. The deterministic domain, guest-owned persistence, localized accessible sandbox, lifecycle controls, paused recovery, private replay, and PGN export pass the vertical-slice acceptance checks. See the [validation record](design-system/validation.md#pr-4-validation--2026-09-03).
+**Status:** Completed. See the [sandbox walkthrough](development.md#sandbox-ui) for usage and [verification strategy](architecture.md#verification-strategy) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system/validation.md) and Phase 5 below.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
@@ -107,20 +107,6 @@ Deliverables:
 - deployment selection, production configuration, monitoring, and release checklist.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
-
-## Completed first implementation slice
-
-Phase 1 established one narrow end-to-end path before adding provider behavior:
-
-```text
-create a standard game owned by a guest session
-  -> submit one human UCI move
-  -> authorize and validate on the server
-  -> atomically persist the move, FEN/PGN, and game version
-  -> render the accepted position and move list
-```
-
-This path now extends to completion, lifecycle controls, paused recovery, replay, and PGN copy/download. It proves legal moves, persistence, command concurrency, and board interaction before Phase 2 adds provider behavior through the same command service. Provider requests, commentary, and telemetry are not Phase 1 dependencies.
 
 ## Post-MVP candidates
 

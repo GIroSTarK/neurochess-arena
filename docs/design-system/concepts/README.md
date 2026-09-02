@@ -2,7 +2,7 @@
 
 Eight coordinated references for the [Neurochess Arena design system](../../design-system.md). Desktop layouts establish the board/information-rail composition; mobile layouts preserve the same content and actions in a single column.
 
-These are static design references. The [guide](../../design-system.md) defines exact implementation tokens and interactions. [Fixtures](../fixtures.md) define the legal positions, fictional models, exact labels, and illustrative telemetry. [Validation](../validation.md) summarizes reference limitations and implementation checks.
+These are static design references. The [guide](../../design-system.md) defines exact implementation tokens and interactions. [Fixtures](../fixtures.md) define the legal positions, fictional models, exact labels, and illustrative telemetry. [Validation limits](../validation.md) track current coverage gaps and reference limitations.
 
 | Journey  | Desktop                                            | Mobile                                           | Review focus                                                                   |
 | -------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
