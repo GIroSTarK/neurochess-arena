@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import type { LifecycleAction, SandboxController, SandboxState } from "./controller";
+import { StableText } from "./StableText";
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: "white" | "black" };
 
@@ -50,7 +51,10 @@ export function LifecycleControls({
         aria-disabled={disabled}
         onClick={() => submit({ action: paused ? "resume" : "pause" })}
       >
-        {t(paused ? "lifecycle.resume" : "lifecycle.pause")}
+        <StableText
+          value={t(paused ? "lifecycle.resume" : "lifecycle.pause")}
+          variants={[t("lifecycle.pause"), t("lifecycle.resume")]}
+        />
       </button>
       <button
         type="button"

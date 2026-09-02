@@ -2,6 +2,18 @@
 
 **Scope:** Completed Phase 1 development sandbox and static reference limitations
 
+## Lifecycle layout stability follow-up — 2026-09-03
+
+A new real-API browser regression reproduced the existing 30px card resize after Pause before the fix. The status panel now follows the [stable feedback and focus contract](../design-system.md#keyboard-and-chess-interaction): routine feedback shares one naturally sized slot, and localized titles, badges, player activity, and Pause/Resume labels reserve their variants without fixed heights or duplicated interactive controls.
+
+- `npm run verify` passed formatting, lint, typecheck, 495 unit tests across 23 files, 69 PostgreSQL integration tests, all nine architecture guard fixtures, and the production build.
+- `npm run test:e2e` passed all 26 desktop/mobile cases. The new cases hold real responses while checking card/button/history geometry through Pause/Resume, active recovery, reopening an already-paused game, and destructive confirmation/pending frames. Enlarged cases use 200% text and longer lifecycle, title, player-activity, and recovery translations. Existing move-history, keyboard-focus, accessibility, replay, export, and privacy coverage also passed.
+- In-app Browser at 1280×720 and 390×844 confirmed page identity, meaningful content, no framework overlay, no console warnings/errors, and no horizontal overflow. Native-click Pause/Resume kept card height, control/history coordinates, and scroll position exactly unchanged (0px delta). Desktop card height stayed 328.796875px; mobile stayed 307.390625px. Recovered-game Resume also retained the desktop geometry.
+
+Active/paused screenshots are stored under `neurochess-status-layout-fixed` in the OS temporary directory; automated evidence remains under `neurochess-playwright-results`. No credentials, traces, HARs, or videos were captured. Error recovery may expand for readable details, and entering the terminal replay/result view remains a distinct layout transition.
+
+Firefox, WebKit, physical devices, and actual screen-reader speech remain untested. The existing non-failing Vite chunk-size warning remains (approximately 589 kB minified / 174 kB gzip); no bundle optimization or performance claim is part of this fix.
+
 ## PR 4 validation — 2026-09-03
 
 Validated on Windows with Node 24.19.0, npm 11.17.0, and Playwright 1.62.1 Chromium against the actual Fastify API and disposable PostgreSQL database. In-app Browser was available and used for visual and interaction checks at 1440×1080 and 390×844. The repository's requested desktop/mobile Playwright suite supplies repeatable end-to-end coverage. The PR 3 entries below are historical; PR 4 supersedes their recovery, lifecycle, replay, and export exclusions.
