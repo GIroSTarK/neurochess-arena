@@ -1,3 +1,4 @@
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import {
   healthResponseSchema,
@@ -12,6 +13,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
+import { registerGameRoutes, type GameApiOptions } from "./games/routes.js";
+
 export interface ReadinessProbe {
   check(): Promise<void>;
 }
@@ -20,6 +23,7 @@ export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions["logger"];
   readonly readiness: ReadinessProbe;
   readonly webOrigin: string;
+  readonly gameApi?: Omit<GameApiOptions, "webOrigin">;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -29,8 +33,11 @@ export async function buildApp(options: BuildAppOptions) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  await app.register(cookie);
+
   await app.register(cors, {
-    methods: ["GET", "HEAD", "OPTIONS"],
+    methods: ["GET", "HEAD", "OPTIONS", "POST"],
+    credentials: true,
     origin(origin, callback) {
       callback(null, origin === options.webOrigin);
     },
@@ -66,6 +73,10 @@ export async function buildApp(options: BuildAppOptions) {
       }
     },
   );
+
+  if (options.gameApi) {
+    await app.register(registerGameRoutes, { ...options.gameApi, webOrigin: options.webOrigin });
+  }
 
   app.setNotFoundHandler((request, reply) => {
     return reply.code(404).send(

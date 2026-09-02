@@ -2,7 +2,7 @@
 
 Neurochess Arena is a web application for watching and comparing large language models while they play chess. AI versus AI is the flagship experience, supported by AI versus human and private online human versus human games.
 
-> Status: Phase 0 repository foundation. The empty React application, Fastify API, PostgreSQL connection, migrations, tests, builds, and CI are operational. Product gameplay begins in Phase 1.
+> Status: Phase 1 in progress. The deterministic chess domain and guest-owned development sandbox API are implemented, including PostgreSQL persistence, private ownership, and atomic human moves. The gameplay UI, paused recovery, lifecycle controls, and replay/export endpoints are still pending; AI and online rooms arrive in later phases.
 
 ## Prerequisites
 
@@ -39,11 +39,14 @@ The development services are available at:
 
 `npm run infra:down` stops PostgreSQL but preserves its named data volume.
 
+The sandbox is disabled by default. For local API gameplay, set `SANDBOX_ENABLED=true` in `.env` and follow the [bootstrap-first sandbox walkthrough](docs/development.md#sandbox-api). Production cannot enable it.
+
 ## Verification
 
-Run the complete local baseline with:
+`npm test` includes real PostgreSQL integration tests. Ensure `.env` contains the explicit `TEST_DATABASE_URL` from `.env.example`, then run the complete local baseline:
 
 ```text
+npm run infra:test:up
 npm run verify
 ```
 
@@ -58,6 +61,8 @@ npm run build
 
 After a successful build, `npm start` runs the compiled API and the Vite production preview. With PostgreSQL running, `npm run smoke` checks both built services.
 
+Use `npm run test:unit` for database-free checks. The separate test service uses disposable storage on port 5433; it does not share the development database volume.
+
 ## Database workflow
 
 Drizzle schema source and migrations live in `packages/database`. Use:
@@ -71,7 +76,7 @@ npm run db:studio
 
 Review generated SQL before applying or committing it. Do not use `drizzle-kit push`, and never edit an already-applied migration; add a forward migration instead.
 
-Phase 0 contains only a no-op bootstrap migration. Domain and Better Auth tables are intentionally deferred to the phases that implement them.
+The no-op Phase 0 bootstrap migration is retained. The next migration adds guest sessions, games, participants, and moves. Better Auth tables remain deferred to the authentication phase.
 
 ## Workspace boundaries
 

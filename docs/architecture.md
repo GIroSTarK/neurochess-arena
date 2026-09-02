@@ -128,6 +128,8 @@ All game mutations are commands against a game version. The server validates:
 
 The server persists the move and updated game state atomically. Duplicate or stale commands return the current state instead of appending another move.
 
+For conflict handling, establish read authorization first, then check the accepted command ID and expected version before fresh-command lifecycle and current-seat checks. This lets an authorized retry return the current snapshot even when the accepted move changed the turn or completed the game.
+
 Reconstruct the chess engine from the ordered, persisted UCI moves starting at the standard initial position. Current FEN alone cannot restore repetition history. Keep FEN, PGN, result, and termination reason consistent with this history; evaluate the [product's automatic draw policy](product.md#automatic-draw-policy) before allowing another turn.
 
 ### Deterministic domain and core contracts
@@ -138,9 +140,19 @@ Reconstruct the chess engine from the ordered, persisted UCI moves starting at t
 
 Repetition uses occurrence counts keyed by the first four fields of the engine's normalized FEN, including legal en passant availability and excluding move counters. Do not substitute `chess.js` 1.4.0's repetition hash: it retains an en passant target when an adjacent pawn is pinned and cannot capture. A regression fixture demonstrates the resulting missed third occurrence. The adapter counts the initial position and every accepted move, rebuilding counts on restoration. The engine's half-move counter supplies the fifty-move threshold; specific predicates are evaluated in the [product-defined order](product.md#automatic-draw-policy), not through generic `isDraw()` or `isGameOver()`.
 
-`@neurochess/contracts` independently defines strict Zod schemas for core creation, snapshots, move commands, and errors. Creation currently accepts only `{}`; it grants no sandbox privilege and does not select a public mode. Snapshots add a UUID `gameId` and nonnegative safe-integer `version` to domain data. Move commands contain `gameId`, canonical UCI `move`, `expectedVersion`, and UUID `commandId`. Clients reuse a command ID for retries of the same command. Version is an aggregate revision, not the number of plies: the future application layer owns version advancement for persisted state changes, atomic writes, and deduplication. A `GAME_CONFLICT` error carries the current authorized snapshot for stale or duplicate commands; other errors cannot carry snapshots.
+`@neurochess/contracts` independently defines strict Zod schemas for bootstrap, creation, route parameters, snapshots, move commands, and errors. Creation accepts only `{}`; it grants no sandbox privilege and does not select a public mode. Snapshots add a UUID `gameId` and nonnegative safe-integer `version` to domain data. Move commands contain `gameId`, canonical UCI `move`, `expectedVersion`, and UUID `commandId`. Clients reuse a command ID for retries of the same command. Version is an aggregate revision, not the number of plies: the application layer owns version advancement for persisted state changes, atomic writes, and deduplication. A `GAME_CONFLICT` error carries the current authorized snapshot for stale or duplicate commands; other errors cannot carry snapshots.
 
-The two shared packages remain separate leaves. Their duplicated stable literals and snapshot compatibility are checked in the API test suite. Contracts validate wire structure and lifecycle/result combinations, not chess semantics. Arbitrary-FEN fixtures are package-internal, outside production compilation and exports. This foundation does not introduce game routes, persistence, provider/room setup, or UI integration.
+The two shared packages remain separate leaves. Their duplicated stable literals, database literals, and snapshot compatibility are checked in the API test suite. Contracts validate wire structure and lifecycle/result combinations, not chess semantics. Arbitrary-FEN fixtures are package-internal, outside production compilation and exports. HTTP orchestration and persistence are consumers of these packages, not dependencies of them.
+
+### Persisted guest commands (PR 2)
+
+Fastify exposes `POST /guest-session`, `POST /sandbox/games`, `GET /games/:gameId`, and `POST /games/:gameId/moves`. Routes validate strict request/response schemas and delegate to injected guest and game services. The game service composes the chess aggregate with database-owned repository interfaces; the database package does not import chess or contracts. The [development guide](development.md#sandbox-api) specifies the wire behavior.
+
+PostgreSQL stores normalized `guest_sessions`, `games`, `game_participants`, and `moves`. The server creates an active standard-position game at revision zero, with a human White seat assigned to the owner and an unassigned human Black seat. An internal `is_sandbox` marker and enabled non-production policy are both required for the owner to control both seats. Ordinary-game ownership is not move authority; the current human seat must be assigned to the requester. No ordinary-game creation or joining route is introduced here.
+
+Write transactions use `READ COMMITTED`, locking the guest row before the game row. A partial unique owner index enforces the active/paused slot; per-game unique ply, command ID, and move-version indexes defend accepted history. A move insert and all resulting position/result fields commit together, advancing the aggregate revision once. No provider call occurs inside these transactions.
+
+Snapshot reads use a read-only `REPEATABLE READ` transaction so history and version come from one database view. The service restores ordered UCI history, checks persisted FEN/PGN and per-move projections, and rejects inconsistencies without repairing data or changing lifecycle. See [ADR-0006](decisions/0006-guest-owned-game-commands.md) for identity, authority, concurrency, and follow-up boundaries.
 
 ### AI turns
 
@@ -171,7 +183,7 @@ Phase 1 provides an explicitly labeled development screen where one guest sessio
 - Keep sandbox records in the development/test database. The sandbox creates no room, invitation, join flow, public spectator access, or additional public game mode.
 - Start each sandbox game from the standard position. Special FEN positions are allowed only as internal test fixtures, never through a game-creation API.
 
-Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). On refresh or reopening, restore an unfinished sandbox game as `paused` and require explicit resume. Completed or aborted sandbox games remain temporarily available to their owning guest for replay and PGN export during the retained session; they do not become account history. The production guest retention period remains an open product decision.
+Apply the [guest identity and ownership rules](#authentication-and-guest-sessions). The Phase 1 target is to restore an unfinished sandbox game as `paused` on refresh/reopening and require explicit resume. PR 2 deliberately provides read-only snapshots that preserve stored lifecycle; recovery and resume are the next slice. Completed or aborted records remain readable by their owning guest during the retained session, with replay and PGN export endpoints still pending. They do not become account history. The production guest retention period remains an open product decision.
 
 ## AI provider boundary
 
@@ -218,7 +230,9 @@ Missing commentary is not an error.
 
 Better Auth manages email/password, Google, GitHub, email verification, password reset, and authenticated sessions in PostgreSQL. Profiles add a unique username and avatar metadata.
 
-Guests receive an opaque, expiring identifier in a Secure, HttpOnly cookie. Temporary active-game metadata may be retained long enough to recover from a refresh but does not appear in durable history and is deleted after the configured inactivity period.
+Guests explicitly bootstrap an opaque 256-bit token in a host-only Secure, HttpOnly, SameSite=Strict cookie before creating a game. Only its SHA-256 digest is stored with an internal guest UUID. Bootstrap reuses valid identities; other endpoints reject missing or expired identities rather than creating replacements. Valid activity renews the configured inactivity expiry without rotating the token (24 hours by default). Exact-Origin POST enforcement and credentialed CORS complement the cookie policy. See [ADR-0006](decisions/0006-guest-owned-game-commands.md).
+
+Temporary game metadata does not appear in durable history. Access expires now; automated deletion after inactivity and the production retention duration are follow-up work and must be resolved before production guest gameplay.
 
 Guest identity, ownership checks on snapshots/commands/replay/PGN, and the active-or-paused game limit are required from Phase 1. A game ID alone never grants access. Phase 3 extends these foundations to authenticated users and durable private history.
 

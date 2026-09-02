@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
 import { baseTestConfig } from "@neurochess/config/vitest";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 function workspacePath(relativePath: string): string {
   return fileURLToPath(new URL(relativePath, import.meta.url));
@@ -21,6 +21,7 @@ export default defineConfig({
     ...baseTestConfig,
     environment: "node",
     include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts"],
+    exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
     setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
   },
 });

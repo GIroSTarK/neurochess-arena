@@ -12,11 +12,13 @@
     "start": "node dist/server.js"
   },
   "devDependencies": {
-    "@neurochess/chess": "*"
+    "drizzle-orm": "0.45.2"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.2",
     "@fastify/cors": "11.3.0",
     "@fastify/swagger": "9.8.1",
+    "@neurochess/chess": "*",
     "@neurochess/contracts": "*",
     "@neurochess/database": "*",
     "fastify": "5.12.1",

@@ -12,6 +12,48 @@ const validEnvironment = {
 };
 
 describe("parseApiEnvironment", () => {
+  it("disables the sandbox by default and gives guests a 24-hour inactivity expiry", () => {
+    expect(parseApiEnvironment(validEnvironment)).toMatchObject({
+      SANDBOX_ENABLED: false,
+      GUEST_SESSION_TTL_SECONDS: 86_400,
+    });
+  });
+
+  it.each(["development", "test"])("allows explicit sandbox enablement in %s", (NODE_ENV) => {
+    expect(
+      parseApiEnvironment({ ...validEnvironment, NODE_ENV, SANDBOX_ENABLED: "true" })
+        .SANDBOX_ENABLED,
+    ).toBe(true);
+  });
+
+  it("rejects production enablement but accepts an explicitly disabled production sandbox", () => {
+    expect(() =>
+      parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "true" }),
+    ).toThrow("SANDBOX_ENABLED");
+    expect(
+      parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "false" })
+        .SANDBOX_ENABLED,
+    ).toBe(false);
+  });
+
+  it.each(["TRUE", "1", "yes", "", true, 1])(
+    "rejects ambiguous sandbox flags: %j",
+    (SANDBOX_ENABLED) => {
+      expect(() => parseApiEnvironment({ ...validEnvironment, SANDBOX_ENABLED })).toThrow(
+        "SANDBOX_ENABLED",
+      );
+    },
+  );
+
+  it.each(["0", "-1", "1.5", "", "31536001", "secret-canary"])(
+    "rejects invalid guest expiry: %s",
+    (GUEST_SESSION_TTL_SECONDS) => {
+      expect(() => parseApiEnvironment({ ...validEnvironment, GUEST_SESSION_TTL_SECONDS })).toThrow(
+        "GUEST_SESSION_TTL_SECONDS",
+      );
+    },
+  );
+
   it("coerces and validates the public API configuration", () => {
     expect(parseApiEnvironment(validEnvironment)).toMatchObject({
       API_PORT: 3001,
