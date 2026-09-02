@@ -6,6 +6,11 @@ import type { LifecycleAction, SandboxController, SandboxState } from "./control
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: "white" | "black" };
 
+interface PendingConfirmation {
+  readonly epoch: string;
+  readonly action: Confirmation;
+}
+
 export function LifecycleControls({
   state,
   controller,
@@ -14,18 +19,35 @@ export function LifecycleControls({
   readonly controller: SandboxController;
 }) {
   const { t } = useTranslation();
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [pendingConfirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const disabled = state.phase !== "ready";
   const paused = state.snapshot?.state === "paused";
+  const epoch =
+    state.snapshot?.gameId + ":" + state.snapshot?.version + ":" + state.interactionRevision;
+  // Invalidate the dialog without replacing the controls or moving their focus.
+  const confirmation =
+    !disabled && pendingConfirmation?.epoch === epoch ? pendingConfirmation.action : null;
   function submit(action: LifecycleAction) {
+    if (disabled) return;
     void controller.lifecycle(action);
   }
+  function confirm(action: Confirmation) {
+    if (!disabled) setConfirmation({ epoch, action });
+  }
   return (
-    <div className="lifecycle-controls" aria-label={t("lifecycle.controls")} role="group">
+    <div
+      className="lifecycle-controls"
+      aria-label={t("lifecycle.controls")}
+      role="group"
+      onKeyDown={(event) => {
+        if ((event.key === "Enter" || event.key === " ") && event.repeat) event.preventDefault();
+      }}
+    >
+      {/* aria-disabled blocks activation through the guards without blurring focus. */}
       <button
         type="button"
         className="button button--primary"
-        disabled={disabled}
+        aria-disabled={disabled}
         onClick={() => submit({ action: paused ? "resume" : "pause" })}
       >
         {t(paused ? "lifecycle.resume" : "lifecycle.pause")}
@@ -33,24 +55,24 @@ export function LifecycleControls({
       <button
         type="button"
         className="button button--secondary"
-        disabled={disabled}
-        onClick={() => setConfirmation({ action: "abort" })}
+        aria-disabled={disabled}
+        onClick={() => confirm({ action: "abort" })}
       >
         {t("lifecycle.abort")}
       </button>
       <button
         type="button"
         className="button button--secondary"
-        disabled={disabled}
-        onClick={() => setConfirmation({ action: "resign", losingColor: "white" })}
+        aria-disabled={disabled}
+        onClick={() => confirm({ action: "resign", losingColor: "white" })}
       >
         {t("lifecycle.resignWhite")}
       </button>
       <button
         type="button"
         className="button button--secondary"
-        disabled={disabled}
-        onClick={() => setConfirmation({ action: "resign", losingColor: "black" })}
+        aria-disabled={disabled}
+        onClick={() => confirm({ action: "resign", losingColor: "black" })}
       >
         {t("lifecycle.resignBlack")}
       </button>

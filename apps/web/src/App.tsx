@@ -210,11 +210,7 @@ export function App({ apiBaseUrl }: AppProps) {
                 </button>
               ) : null}
               {snapshot?.state === "active" || snapshot?.state === "paused" ? (
-                <LifecycleControls
-                  key={snapshot.gameId + ":" + snapshot.version}
-                  state={state}
-                  controller={controller}
-                />
+                <LifecycleControls key={snapshot.gameId} state={state} controller={controller} />
               ) : null}
               {snapshot && ["completed", "aborted"].includes(snapshot.state) ? (
                 <button

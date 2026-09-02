@@ -110,6 +110,91 @@ describe("localized sandbox application", () => {
     observer.disconnect();
   });
 
+  it("keeps the same focused control during delayed Pause and Resume commands", async () => {
+    const pause = Promise.withResolvers<Response>();
+    const resume = Promise.withResolvers<Response>();
+    let requests = 0;
+    mockApi((path) =>
+      path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
+    );
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+    const user = userEvent.setup();
+    const control = screen.getByRole("button", { name: "Pause" });
+    act(() => control.focus());
+
+    await user.keyboard("{Enter}");
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute("aria-disabled", "true");
+    expect(control).not.toBeDisabled();
+    await act(async () =>
+      pause.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    expect(await screen.findByRole("button", { name: "Resume" })).toBe(control);
+    expect(control).not.toHaveAttribute("aria-disabled", "true");
+    expect(control).toHaveFocus();
+
+    await user.keyboard(" ");
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute("aria-disabled", "true");
+    expect(control).not.toBeDisabled();
+    await act(async () => resume.resolve(jsonResponse(snapshot([], { version: 2 }))));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBe(control);
+    expect(control).not.toHaveAttribute("aria-disabled", "true");
+    expect(control).toHaveFocus();
+    expect(requests).toBe(2);
+  });
+
+  it("blocks repeat lifecycle activation and destructive dialogs while a command is pending", async () => {
+    const pending = Promise.withResolvers<Response>();
+    const fetch = mockApi((path) => (path.endsWith("/lifecycle") ? pending.promise : undefined));
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    for (const name of ["Pause", "Abort game", "Resign White", "Resign Black"]) {
+      const control = screen.getByRole("button", { name });
+      expect(control).toHaveAttribute("aria-disabled", "true");
+      await user.click(control);
+      await user.keyboard("{Enter} ");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    }
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/lifecycle"))).toHaveLength(1);
+    await act(async () =>
+      pending.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    await screen.findByRole("button", { name: "Resume" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not steal board focus when a delayed Pause or Resume completes", async () => {
+    const pause = Promise.withResolvers<Response>();
+    const resume = Promise.withResolvers<Response>();
+    let requests = 0;
+    mockApi((path) =>
+      path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
+    );
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await userEvent.click(square("e2"));
+    expect(square("e2")).toHaveFocus();
+    await act(async () =>
+      pause.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    await screen.findByRole("button", { name: "Resume" });
+    expect(square("e2")).toHaveFocus();
+
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await userEvent.click(square("e2"));
+    expect(square("e2")).toHaveFocus();
+    await act(async () => resume.resolve(jsonResponse(snapshot([], { version: 2 }))));
+    await screen.findByRole("button", { name: "Pause" });
+    expect(square("e2")).toHaveFocus();
+  });
+
   it("adopts a conflict without replay or server prose and clears stale selection", async () => {
     const current = snapshot(["d2d4"]);
     const fetch = mockApi((path) =>

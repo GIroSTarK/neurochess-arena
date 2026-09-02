@@ -16,6 +16,51 @@ import {
 
 const promotionApproach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2"];
 
+test("preserves lifecycle keyboard focus through pending commands without stealing it back", async ({
+  page,
+}, testInfo) => {
+  await startSandbox(page, testInfo.project.name === "mobile-touch");
+  let release = Promise.withResolvers<void>();
+  let requests = 0;
+  await page.route(API_ORIGIN + "/games/*/lifecycle", async (route) => {
+    requests += 1;
+    await release.promise;
+    await route.continue();
+  });
+
+  try {
+    for (const [index, action] of ["Pause", "Resume", "Pause"].entries()) {
+      release = Promise.withResolvers<void>();
+      const control = page.getByRole("button", { name: action, exact: true });
+      await control.focus();
+      await page.keyboard.press("Enter");
+      await expect.poll(() => requests).toBe(index + 1);
+      await expect(control).toBeFocused();
+      await expect(control).toHaveAttribute("aria-disabled", "true");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Space");
+      expect(requests).toBe(index + 1);
+
+      if (index === 2) {
+        await square(page, "e2").focus();
+        await expect(square(page, "e2")).toBeFocused();
+      }
+      release.resolve();
+      const next = page.getByRole("button", {
+        name: action === "Pause" ? "Resume" : "Pause",
+        exact: true,
+      });
+      await expect(next).toHaveAttribute("aria-disabled", "false");
+      if (index === 2) await expect(square(page, "e2")).toBeFocused();
+      else await expect(next).toBeFocused();
+    }
+    expect(requests).toBe(3);
+  } finally {
+    release.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 test("creates, recovers, completes, replays and exports a private game", async ({
   page,
   context,

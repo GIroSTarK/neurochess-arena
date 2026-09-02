@@ -163,6 +163,8 @@ Support click/tap source then destination as well as optional dragging. A promot
 
 Announce accepted moves, turn changes, check, and results through a concise polite live region. Do not steal focus on a move or announce every changing metric. A reconnect must restore an authorized snapshot before interaction resumes.
 
+Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable lifecycle actions remain focusable and visibly disabled, but reject activation. Returning responses must not steal focus if the user has moved elsewhere; updated game state invalidates destructive confirmations independently of control focus.
+
 ## Game state and recovery
 
 Keep **game lifecycle**, **turn activity**, and **connection status** separate. “Thinking”, “Retrying”, and “Reconnecting” are presentation/activity descriptions, not additional canonical game states.
