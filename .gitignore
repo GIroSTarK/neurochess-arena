@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and process output
+*.log
+logs/
+pids/
+
+# Local tools and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local database state
+.postgres-data/

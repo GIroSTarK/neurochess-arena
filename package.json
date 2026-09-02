@@ -1,0 +1,74 @@
+{
+  "name": "neurochess-arena",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "workspaces": [
+    "packages/config",
+    "packages/contracts",
+    "packages/chess",
+    "packages/database",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "predev": "npm run build:packages",
+    "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web --host localhost --port 5173\"",
+    "build:packages": "tsc -b packages/contracts packages/chess packages/database",
+    "build": "npm run build:packages && npm run build --workspace @neurochess/api && npm run build --workspace @neurochess/web",
+    "start": "concurrently --kill-others-on-fail --names api,web \"npm run start --workspace @neurochess/api\" \"npm run preview --workspace @neurochess/web\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.tests.json --pretty false",
+    "test": "vitest run && npm run test:architecture",
+    "test:architecture": "depcruise --config dependency-cruiser.config.mjs apps packages && node scripts/check-architecture-fixture.mjs",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "smoke": "node scripts/smoke.mjs",
+    "infra:up": "docker compose up -d --wait postgres",
+    "infra:down": "docker compose down",
+    "db:generate": "npm run db:generate --workspace @neurochess/database --",
+    "db:check": "npm run db:check --workspace @neurochess/database",
+    "db:migrate": "npm run db:migrate --workspace @neurochess/database",
+    "db:studio": "npm run db:studio --workspace @neurochess/database"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.6",
+    "@types/node": "24.13.3",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "concurrently": "10.0.5",
+    "dependency-cruiser": "18.2.0",
+    "drizzle-kit": "0.31.10",
+    "eslint": "10.9.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.5",
+    "globals": "17.12.0",
+    "jsdom": "30.0.1",
+    "prettier": "3.9.6",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.69.0",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

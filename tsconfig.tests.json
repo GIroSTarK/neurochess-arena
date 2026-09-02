@@ -1,0 +1,17 @@
+{
+  "extends": "@neurochess/config/tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "apps/**/*.test.ts",
+    "apps/**/*.test.tsx",
+    "packages/**/*.test.ts",
+    "vitest.config.ts"
+  ]
+}

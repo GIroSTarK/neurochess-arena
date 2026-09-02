@@ -10,6 +10,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0002](0002-deterministic-chess-authority.md)         | Accepted | Deterministic chess engine is authoritative               |
 | [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted | Normalize providers behind one move contract              |
 | [0004](0004-bring-your-own-key-security.md)           | Accepted | Session-only by default, encrypted saved keys by opt-in   |
+| [0005](0005-zod-runtime-contracts.md)                 | Accepted | Zod 4 validates runtime boundaries and shared contracts   |
 
 ## Status values
 

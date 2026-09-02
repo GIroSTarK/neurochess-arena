@@ -1,21 +1,24 @@
 # MVP roadmap
 
-**Status:** Proposed delivery sequence  
-**Last updated:** 2026-09-01
+**Status:** Phase 0 completed; remaining phases planned
+
+**Last updated:** 2026-09-02
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
 ## Phase 0 — Repository foundation
 
+**Status:** Completed
+
 Deliverables:
 
-- initialize Git and the npm workspaces monorepo;
-- create `apps/web`, `apps/api`, and shared packages;
-- configure TypeScript, linting, formatting, tests, and CI;
-- add Docker Compose with PostgreSQL;
-- configure environment validation and secret-safe logging;
-- establish Drizzle schema and migration workflow;
-- add basic architecture tests that prevent forbidden package imports.
+- [x] initialize Git and the npm workspaces monorepo;
+- [x] create `apps/web`, `apps/api`, and shared packages;
+- [x] configure TypeScript, linting, formatting, tests, and CI;
+- [x] add Docker Compose with PostgreSQL;
+- [x] configure environment validation and secret-safe logging;
+- [x] establish Drizzle schema and migration workflow;
+- [x] add basic architecture tests that prevent forbidden package imports.
 
 Exit condition: a clean clone can install, start, test, and build the empty web/API system using documented commands.
 

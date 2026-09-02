@@ -1,0 +1,1 @@
+-- Phase 0 establishes Drizzle migration history without creating application tables.

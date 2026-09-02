@@ -1,0 +1,26 @@
+import { fileURLToPath } from "node:url";
+
+import react from "@vitejs/plugin-react";
+import { baseTestConfig } from "@neurochess/config/vitest";
+import { defineConfig } from "vitest/config";
+
+function workspacePath(relativePath: string): string {
+  return fileURLToPath(new URL(relativePath, import.meta.url));
+}
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@neurochess/chess": workspacePath("./packages/chess/src/index.ts"),
+      "@neurochess/contracts": workspacePath("./packages/contracts/src/index.ts"),
+      "@neurochess/database": workspacePath("./packages/database/src/index.ts"),
+    },
+  },
+  test: {
+    ...baseTestConfig,
+    environment: "node",
+    include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts"],
+    setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
+  },
+});

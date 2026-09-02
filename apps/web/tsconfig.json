@@ -1,0 +1,9 @@
+{
+  "extends": "@neurochess/config/tsconfig/react.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"],
+  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/chess" }]
+}

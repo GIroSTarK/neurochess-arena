@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: neurochess
+          POSTGRES_PASSWORD: neurochess_ci
+          POSTGRES_USER: neurochess
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U neurochess -d neurochess"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      API_HOST: 127.0.0.1
+      API_PORT: 3001
+      DATABASE_URL: postgresql://neurochess:neurochess_ci@127.0.0.1:5432/neurochess
+      LOG_LEVEL: info
+      NODE_ENV: test
+      VITE_API_BASE_URL: http://localhost:3001
+      WEB_ORIGIN: http://localhost:5173
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Docker Compose
+        run: docker compose config --quiet
+
+      - name: Apply migrations twice
+        run: npm run db:migrate && npm run db:migrate
+
+      - name: Verify workspace
+        run: npm run verify
+
+      - name: Smoke-test built services
+        run: npm run smoke
