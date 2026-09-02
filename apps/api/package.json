@@ -11,6 +11,9 @@
     "build": "tsc -b",
     "start": "node dist/server.js"
   },
+  "devDependencies": {
+    "@neurochess/chess": "*"
+  },
   "dependencies": {
     "@fastify/cors": "11.3.0",
     "@fastify/swagger": "9.8.1",

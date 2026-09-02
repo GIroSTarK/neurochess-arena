@@ -1,3 +1,25 @@
-// Phase 1 will add the deterministic chess domain. This module intentionally
-// exports nothing so consumers cannot rely on placeholder behavior.
-export {};
+export { createGame, restoreGame } from "./game.js";
+export {
+  CHESS_COLORS,
+  DOMAIN_ERROR_CODES,
+  DRAW_REASONS,
+  GAME_RESULTS,
+  GAME_STATES,
+  TERMINATION_REASONS,
+  WIN_REASONS,
+  type ChessColor,
+  type ChessGame,
+  type ChessSnapshot,
+  type CompletedOutcome,
+  type DomainError,
+  type DomainErrorCode,
+  type DomainResult,
+  type DrawReason,
+  type GameLifecycle,
+  type GameResult,
+  type GameState,
+  type MoveRecord,
+  type RestoreGameInput,
+  type TerminationReason,
+  type WinReason,
+} from "./types.js";

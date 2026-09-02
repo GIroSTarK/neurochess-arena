@@ -1,6 +1,6 @@
 # MVP roadmap
 
-**Status:** Phase 0 completed; remaining phases planned
+**Status:** Phase 0 completed; Phase 1 in progress
 
 **Last updated:** 2026-09-02
 
@@ -23,6 +23,8 @@ Deliverables:
 Exit condition: a clean clone can install, start, test, and build the empty web/API system using documented commands.
 
 ## Phase 1 — Chess vertical slice
+
+**Status:** Deterministic domain, core runtime contracts, and their tests implemented. API, persistence, ownership, and UI integration remain in progress/planned; the vertical-slice exit condition is not yet met.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
