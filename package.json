@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "predev": "npm run build:packages",
-    "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web --host localhost --port 5173\"",
+    "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --watch-preserve-output --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web --host localhost --port 5173\"",
     "build:packages": "tsc -b packages/contracts packages/chess packages/database",
     "build": "npm run build:packages && npm run build --workspace @neurochess/api && npm run build --workspace @neurochess/web",
     "start": "concurrently --kill-others-on-fail --names api,web \"npm run start --workspace @neurochess/api\" \"npm run preview --workspace @neurochess/web\"",

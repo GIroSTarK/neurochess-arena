@@ -7,7 +7,7 @@
     ".": "./dist/app.js"
   },
   "scripts": {
-    "dev": "node --watch --conditions=development --import tsx src/server.ts",
+    "dev": "node --watch --watch-preserve-output --conditions=development --import tsx src/server.ts",
     "build": "tsc -b",
     "start": "node dist/server.js"
   },
