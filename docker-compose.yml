@@ -19,5 +19,23 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  postgres-test:
+    image: postgres:18-alpine
+    profiles: [test]
+    environment:
+      POSTGRES_DB: neurochess_test
+      POSTGRES_PASSWORD: neurochess_test
+      POSTGRES_USER: neurochess
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-5433}:5432"
+    # Disposable test data only; the development database volume is never touched.
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neurochess -d neurochess_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
 volumes:
   neurochess_postgres_data:

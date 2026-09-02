@@ -1,5 +1,6 @@
 import * as domain from "@neurochess/chess";
 import * as contracts from "@neurochess/contracts";
+import { games, gameParticipants, type StoredGame } from "@neurochess/database";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 // Compatibility belongs at a consumer, never in either independent leaf package.
@@ -34,6 +35,15 @@ describe("chess/transport compatibility", () => {
     expectTypeOf<domain.GameLifecycle>().toExtend<Readonly<contracts.GameLifecycle>>();
     expectTypeOf<Readonly<contracts.GameLifecycle>>().toExtend<domain.GameLifecycle>();
     expectTypeOf<domain.MoveRecord>().toEqualTypeOf<Readonly<contracts.MoveRecord>>();
+    expect(games.state.enumValues).toEqual(domain.GAME_STATES);
+    expect(games.result.enumValues).toEqual(domain.GAME_RESULTS);
+    expect(games.terminationReason.enumValues).toEqual(domain.TERMINATION_REASONS);
+    expect(gameParticipants.color.enumValues).toEqual(domain.CHESS_COLORS);
+    expectTypeOf<StoredGame["state"]>().toEqualTypeOf<contracts.GameState>();
+    expectTypeOf<StoredGame["result"]>().toEqualTypeOf<contracts.GameResult>();
+    expectTypeOf<
+      NonNullable<StoredGame["terminationReason"]>
+    >().toEqualTypeOf<contracts.TerminationReason>();
   });
 
   it("validates every lifecycle snapshot without importing either leaf into the other", () => {

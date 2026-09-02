@@ -4,13 +4,14 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 
 ## Index
 
-| ADR                                                   | Status   | Decision                                                  |
-| ----------------------------------------------------- | -------- | --------------------------------------------------------- |
-| [0001](0001-typescript-monorepo-and-data-stack.md)    | Accepted | TypeScript monorepo, PostgreSQL, Drizzle, and Better Auth |
-| [0002](0002-deterministic-chess-authority.md)         | Accepted | Deterministic chess engine is authoritative               |
-| [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted | Normalize providers behind one move contract              |
-| [0004](0004-bring-your-own-key-security.md)           | Accepted | Session-only by default, encrypted saved keys by opt-in   |
-| [0005](0005-zod-runtime-contracts.md)                 | Accepted | Zod 4 validates runtime boundaries and shared contracts   |
+| ADR                                                   | Status   | Decision                                                    |
+| ----------------------------------------------------- | -------- | ----------------------------------------------------------- |
+| [0001](0001-typescript-monorepo-and-data-stack.md)    | Accepted | TypeScript monorepo, PostgreSQL, Drizzle, and Better Auth   |
+| [0002](0002-deterministic-chess-authority.md)         | Accepted | Deterministic chess engine is authoritative                 |
+| [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted | Normalize providers behind one move contract                |
+| [0004](0004-bring-your-own-key-security.md)           | Accepted | Session-only by default, encrypted saved keys by opt-in     |
+| [0005](0005-zod-runtime-contracts.md)                 | Accepted | Zod 4 validates runtime boundaries and shared contracts     |
+| [0006](0006-guest-owned-game-commands.md)             | Accepted | Guest identity, sandbox authority, and atomic game commands |
 
 ## Status values
 

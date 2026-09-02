@@ -24,20 +24,22 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** Deterministic domain, core runtime contracts, and their tests implemented. API, persistence, ownership, and UI integration remain in progress/planned; the vertical-slice exit condition is not yet met.
+**Status:** PR 1 (deterministic domain/contracts) and PR 2 (guest-owned persistence and human-command API) are implemented. UI integration, paused recovery, lifecycle commands, and replay/export endpoints remain pending; the vertical-slice exit condition is not yet met.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
 Deliverables:
 
-- dark responsive application shell and chessboard;
-- standard initial position and complete legal move handling;
-- server-authoritative game creation and human move command;
-- guest-session identity, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` game per session;
-- recovery of an unfinished sandbox game as `paused`, with explicit resume;
-- game lifecycle, FEN/PGN persistence, result detection, replay, and PGN export;
-- unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
-- localization layer with English strings.
+- [ ] dark responsive application shell and chessboard;
+- [x] standard initial position and complete legal move handling;
+- [x] server-authoritative sandbox creation and human move command;
+- [x] guest-cookie bootstrap, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` owned game per guest session;
+- [x] atomic move/FEN/PGN/version persistence, natural result detection, and full-history database restoration;
+- [x] PostgreSQL integration tests for ownership, concurrency, rollback, migration constraints, and restoration;
+- [ ] recovery of an unfinished sandbox game as `paused`, with explicit resume;
+- [ ] lifecycle command endpoints, replay, and PGN export;
+- [x] unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
+- [ ] UI localization layer with English strings (the API error catalog is implemented).
 
 Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](architecture.md#verification-strategy).
 

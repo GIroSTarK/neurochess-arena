@@ -59,6 +59,10 @@ export const gameLifecycleSchema = z.union([
 
 /** Phase 1 core: the server supplies context; clients cannot choose a position or privileges. */
 export const createGameRequestSchema = z.strictObject({});
+export const guestSessionRequestSchema = z.strictObject({});
+export const guestSessionResponseSchema = z.strictObject({ status: z.literal("ready") });
+export const gameParamsSchema = z.strictObject({ gameId: gameIdSchema });
+export const emptyQuerySchema = z.strictObject({});
 
 export const moveRecordSchema = z.strictObject({
   ply: z.number().int().positive(),
@@ -141,6 +145,7 @@ export type CommandId = z.infer<typeof commandIdSchema>;
 export type GameVersion = z.infer<typeof gameVersionSchema>;
 export type GameLifecycle = z.infer<typeof gameLifecycleSchema>;
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
+export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export type MoveRecord = z.infer<typeof moveRecordSchema>;
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
 export type MoveCommand = z.infer<typeof moveCommandSchema>;

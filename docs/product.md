@@ -89,6 +89,8 @@ If a participant disconnects, the game remains available for reconnection withou
 
 The [local development sandbox](architecture.md#local-development-sandbox) supports the one-browser implementation checkpoint and is outside these three public game modes.
 
+**Current implementation checkpoint (PR 2):** the sandbox has a guest-cookie bootstrap, private snapshots, and persisted human moves through the API. Development/test guest access expires after 24 hours of inactivity by default, configurable on the server. Snapshots preserve the stored lifecycle; refresh-to-paused recovery, resume/abort controls, the gameplay UI, and replay/export endpoints are not yet implemented. This does not change the MVP recovery requirements or decide production guest retention; automated expiry cleanup remains follow-up work.
+
 ## Chess and AI behavior
 
 ### Source of truth

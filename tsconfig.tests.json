@@ -12,6 +12,8 @@
     "apps/**/*.test.ts",
     "apps/**/*.test.tsx",
     "packages/**/*.test.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.integration.config.ts",
+    "test/**/*.ts"
   ]
 }

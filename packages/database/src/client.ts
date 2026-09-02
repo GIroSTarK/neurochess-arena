@@ -1,8 +1,10 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import * as schema from "./schema/index.js";
+
 export interface DatabaseConnection {
-  readonly db: NodePgDatabase;
+  readonly db: NodePgDatabase<typeof schema>;
   check(): Promise<void>;
   close(): Promise<void>;
 }
@@ -14,7 +16,7 @@ export function createDatabase(connectionString: string): DatabaseConnection {
     // Do not log the raw error or client, which can contain connection credentials.
     process.stderr.write("Idle database connection failed.\n");
   });
-  const db = drizzle(pool);
+  const db = drizzle(pool, { schema });
 
   return {
     db,
