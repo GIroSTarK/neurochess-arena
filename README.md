@@ -95,6 +95,7 @@ Raw provider keys must never be committed, logged, included in analytics, or sto
 ## Project documentation
 
 - [Product specification](docs/product.md)
+- [Design system](docs/design-system.md) and [screen concepts](docs/design-system/concepts/README.md)
 - [Architecture](docs/architecture.md)
 - [MVP roadmap](docs/roadmap.md)
 - [Development guide](docs/development.md)
