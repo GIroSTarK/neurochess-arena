@@ -2,9 +2,9 @@
 
 **Version:** 1.0
 
-**Status:** Sandbox shell, board, and localization implemented; remaining components follow the MVP roadmap
+**Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 ## Purpose and authority
 
@@ -12,9 +12,9 @@ An arena for understanding LLM chess decisions: the board is the focal point, th
 
 The direction is **refined sci-fi**: deep navy, precise cyan accents, a restrained angular frame, and readable conventional chess pieces. Use visual emphasis to communicate the next action or a change in state.
 
-[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation. PR 3 applies the shell, board, controls, dialog, history, and localization to the development sandbox. AI, authentication, room, and replay concepts remain references for their later roadmap phases.
+[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation; concepts are not evidence of implemented features.
 
-Start with the [eight screen concepts](design-system/concepts/README.md). Their exact copy and sample game are recorded in the [concept fixtures](design-system/fixtures.md). The images establish composition; the token values, interaction rules, and text in this guide are the implementation reference. [Validation notes](design-system/validation.md) summarize reference limitations and remaining implementation checks.
+Use the [screen concepts](design-system/concepts/README.md) when reviewing composition and their [fixtures](design-system/fixtures.md) when checking sample copy or positions. The token values, interaction rules, and text in this guide are the implementation reference. [Validation limits](design-system/validation.md) track current coverage gaps and reference limitations.
 
 ## Foundations
 
@@ -163,6 +163,10 @@ Support click/tap source then destination as well as optional dragging. A promot
 
 Announce accepted moves, turn changes, check, and results through a concise polite live region. Do not steal focus on a move or announce every changing metric. A reconnect must restore an authorized snapshot before interaction resumes.
 
+Routine move/lifecycle feedback preserves the status panel's geometry and the positions of controls and move history. Reserve localized variants without fixed heights or duplicated interactive controls. Error details may expand for readability; the terminal result/replay view is a separate layout transition.
+
+Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable lifecycle actions remain focusable and visibly disabled, but reject activation. Returning responses must not steal focus if the user has moved elsewhere; updated game state invalidates destructive confirmations independently of control focus.
+
 ## Game state and recovery
 
 Keep **game lifecycle**, **turn activity**, and **connection status** separate. “Thinking”, “Retrying”, and “Reconnecting” are presentation/activity descriptions, not additional canonical game states.
@@ -253,7 +257,7 @@ Copy should identify the condition and the useful next action. Avoid technical e
 | Recovery | Same accepted position and player identities; paused banner, key re-entry dialog, Resume gated on missing inputs           | Scrollable recovery sheet with both required provider fields and reachable actions               |
 | Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow |
 
-Generate desktop live first to establish the family; derive the other seven concepts from the same palette, typography, frame, controls, and sample game. Reference images contain fictional model labels and explicitly illustrative telemetry. They are not provider performance claims or live provider output.
+The eight concepts share the same palette, typography, frame, controls, and sample game. Reference images contain fictional model labels and explicitly illustrative telemetry. They are not provider performance claims or live provider output.
 
 ## Accessibility and acceptance
 
@@ -270,4 +274,4 @@ Review the following before accepting an implementation:
 5. Compare each rendered screen to its concept for copy, hierarchy, typography, tokens, geometry, and board position. Validate legal positions independently; visual appeal cannot excuse a wrong square or piece.
 6. Run the configured formatting, lint, typecheck, test, and build baseline. Add behavior tests when components are implemented; static concept images do not establish runtime accessibility or game correctness.
 
-Record verification results with each change and keep [validation notes](design-system/validation.md) current as limitations are resolved. Deliver this specification ahead of the roadmap's application shell/chessboard work, then apply it across the AI, account, room, and analysis phases without marking those phases complete prematurely.
+Record change-specific verification results in the change summary, PR, or CI. Update [validation limits](design-system/validation.md) only when a coverage gap or reference limitation changes; do not append run logs. Apply this guide to each delivered flow and track milestone completion only in the [roadmap](roadmap.md).

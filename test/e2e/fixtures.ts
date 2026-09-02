@@ -30,7 +30,10 @@ export const test = base.extend({
       if (["error", "warning"].includes(message.type())) {
         // HTTP error statuses are expected during creation conflicts. Never
         // copy arbitrary console text or request/cookie headers into reports.
-        if (!message.text().includes("409 (Conflict)"))
+        const anonymousDiscovery =
+          message.location().url === API_ORIGIN + "/sandbox/games/unfinished" &&
+          message.text().includes("401 (Unauthorized)");
+        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery)
           errors.push("Application console " + message.type());
       }
     });

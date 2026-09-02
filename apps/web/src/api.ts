@@ -6,10 +6,17 @@ import {
   guestSessionRequestSchema,
   guestSessionResponseSchema,
   moveCommandSchema,
+  lifecycleCommandSchema,
+  unfinishedGameResponseSchema,
+  gameReplayResponseSchema,
+  gamePgnResponseSchema,
   readinessResponseSchema,
   type GameErrorCode,
   type GameSnapshot,
   type MoveCommand,
+  type LifecycleCommand,
+  type GameReplayResponse,
+  type GamePgnResponse,
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
@@ -35,6 +42,10 @@ export interface SandboxApi {
   create(signal: AbortSignal): Promise<GameSnapshot>;
   snapshot(gameId: string, signal: AbortSignal): Promise<GameSnapshot>;
   move(command: MoveCommand, signal: AbortSignal): Promise<GameSnapshot>;
+  lifecycle(command: LifecycleCommand, signal: AbortSignal): Promise<GameSnapshot>;
+  unfinished(signal: AbortSignal): Promise<GameSnapshot | null>;
+  replay(gameId: string, signal: AbortSignal): Promise<GameReplayResponse>;
+  pgn(gameId: string, signal: AbortSignal): Promise<GamePgnResponse>;
 }
 
 export function validateSnapshot(input: unknown): GameSnapshot {
@@ -164,6 +175,43 @@ export function createSandboxApi(
         command.gameId,
         result.data,
       );
+    },
+    lifecycle(command, signal) {
+      const result = lifecycleCommandSchema.safeParse(command);
+      if (!result.success) return Promise.reject(new ApiFailure("malformed"));
+      return gameRequest(
+        "/games/" + command.gameId + "/lifecycle",
+        signal,
+        command.gameId,
+        result.data,
+      );
+    },
+    async unfinished(signal) {
+      const response = await request(
+        "/sandbox/games/unfinished",
+        unfinishedGameResponseSchema,
+        signal,
+      );
+      return response.snapshot ? validateSnapshot(response.snapshot) : null;
+    },
+    async replay(gameId, signal) {
+      if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
+      const response = await request(
+        "/games/" + gameId + "/replay",
+        gameReplayResponseSchema,
+        signal,
+      );
+      const snapshot = forGame(validateSnapshot(response.snapshot), gameId);
+      if (!parsePosition(response.initialFen)) throw new ApiFailure("malformed");
+      for (const move of snapshot.moves)
+        if (!parsePosition(move.fen)) throw new ApiFailure("malformed");
+      return response;
+    },
+    async pgn(gameId, signal) {
+      if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
+      const response = await request("/games/" + gameId + "/pgn", gamePgnResponseSchema, signal);
+      if (response.gameId !== gameId) throw new ApiFailure("malformed");
+      return response;
     },
   };
 }

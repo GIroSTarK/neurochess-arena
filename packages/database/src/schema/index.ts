@@ -7,6 +7,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -34,6 +35,13 @@ export const terminationReason = pgEnum("termination_reason", [
 ]);
 export const chessColor = pgEnum("chess_color", ["white", "black"]);
 export const seatType = pgEnum("seat_type", ["human", "ai"]);
+export const gameCommandKind = pgEnum("game_command_kind", [
+  "move",
+  "pause",
+  "resume",
+  "abort",
+  "resign",
+]);
 
 export const guestSessions = pgTable(
   "guest_sessions",
@@ -141,5 +149,23 @@ export const moves = pgTable(
     and length(${table.uci}) in (4, 5) and left(${table.uci}, 2) <> substring(${table.uci} from 3 for 2)`,
     ),
     check("moves_position_check", sql`length(${table.san}) > 0 and length(${table.fen}) > 0`),
+  ],
+);
+
+export const gameCommands = pgTable(
+  "game_commands",
+  {
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    commandId: uuid("command_id").notNull(),
+    kind: gameCommandKind("kind").notNull(),
+    version: bigint("version", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.gameId, table.commandId] }),
+    uniqueIndex("game_commands_version_unique").on(table.gameId, table.version),
+    check("game_commands_version_check", sql`${table.version} between 1 and 9007199254740991`),
   ],
 );

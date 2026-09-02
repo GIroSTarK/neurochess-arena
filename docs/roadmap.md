@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phase 0 completed; Phase 1 in progress
+**Status:** Phases 0 and 1 completed
 
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -24,7 +24,7 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** PR 1 (deterministic domain/contracts), PR 2 (guest-owned persistence and human-command API), and PR 3 (localized sandbox and accessible board) are implemented. Paused recovery, lifecycle commands, and replay/export endpoints remain pending; the vertical-slice exit condition is not yet met.
+**Status:** Completed. See the [sandbox walkthrough](development.md#sandbox-ui) for usage and [verification strategy](architecture.md#verification-strategy) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system/validation.md) and Phase 5 below.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
@@ -36,8 +36,9 @@ Deliverables:
 - [x] guest-cookie bootstrap, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` owned game per guest session;
 - [x] atomic move/FEN/PGN/version persistence, natural result detection, and full-history database restoration;
 - [x] PostgreSQL integration tests for ownership, concurrency, rollback, migration constraints, and restoration;
-- [ ] recovery of an unfinished sandbox game as `paused`, with explicit resume;
-- [ ] lifecycle command endpoints, replay, and PGN export;
+- [x] recovery of an unfinished sandbox game as `paused`, with explicit resume and complete draw history;
+- [x] pause, resume, abort, and human-resignation commands with shared accepted-command receipts;
+- [x] private terminal replay and PGN copy/download, with guest-session access to previous game URLs;
 - [x] unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
 - [x] typed UI localization layer with bundled English strings, fallback, safe API-code mapping, and localized announcements;
 - [x] client command/recovery tests and desktop/mobile Playwright gameplay and accessibility checks against the disposable PostgreSQL database.
@@ -106,20 +107,6 @@ Deliverables:
 - deployment selection, production configuration, monitoring, and release checklist.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
-
-## Recommended first implementation slice
-
-After Phase 0, build one narrow end-to-end path before expanding the UI:
-
-```text
-create a standard game owned by a guest session
-  -> submit one human UCI move
-  -> authorize and validate on the server
-  -> atomically persist the move, FEN/PGN, and game version
-  -> render the accepted position and move list
-```
-
-Extend this path to a complete game, lifecycle controls, replay, and PGN copy/download. It proves legal moves, persistence, command concurrency, and board interaction before Phase 2 adds provider behavior through the same command service. Provider requests, commentary, and telemetry are not Phase 1 dependencies.
 
 ## Post-MVP candidates
 

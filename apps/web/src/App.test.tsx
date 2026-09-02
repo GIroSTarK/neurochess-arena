@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { I18nextProvider } from "react-i18next";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { createWebI18n } from "./i18n";
@@ -22,6 +22,12 @@ function mockApi(route: Route = () => undefined) {
     const response = route(path, options);
     if (response) return Promise.resolve(response);
     if (path === "/ready") return Promise.resolve(jsonResponse({ status: "ready" }));
+    if (path === "/sandbox/games/unfinished")
+      return Promise.resolve(jsonResponse({ snapshot: null }));
+    if (path.endsWith("/replay"))
+      return Promise.resolve(
+        jsonResponse({ snapshot: snapshot(FOOLS_MATE), initialFen: snapshot().fen }),
+      );
     if (path === "/guest-session") return Promise.resolve(jsonResponse({ status: "ready" }));
     if (path === "/sandbox/games") return Promise.resolve(jsonResponse(snapshot(), 201));
     if (path.endsWith("/moves")) return Promise.resolve(jsonResponse(snapshot(["e2e4"])));
@@ -45,6 +51,7 @@ async function start() {
 }
 
 describe("localized sandbox application", () => {
+  beforeEach(() => window.history.replaceState(null, "", "/"));
   it("boots only on action under Strict Mode and orders cookie bootstrap before creation", async () => {
     const bootstrap = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path === "/guest-session" ? bootstrap.promise : undefined));
@@ -56,7 +63,11 @@ describe("localized sandbox application", () => {
     expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toBeEnabled());
-    expect(fetch.mock.calls.every(([url]) => String(url).endsWith("/ready"))).toBe(true);
+    expect(
+      fetch.mock.calls.every(([url]) =>
+        ["/ready", "/sandbox/games/unfinished"].some((path) => String(url).endsWith(path)),
+      ),
+    ).toBe(true);
     fireEvent.click(button);
     fireEvent.click(button);
     expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/guest-session"))).toHaveLength(
@@ -97,6 +108,91 @@ describe("localized sandbox application", () => {
     expect(announcements.filter((message) => message.includes("White played e4"))).toHaveLength(1);
     expect(live.closest("[aria-busy=true]")).toBeNull();
     observer.disconnect();
+  });
+
+  it("keeps the same focused control during delayed Pause and Resume commands", async () => {
+    const pause = Promise.withResolvers<Response>();
+    const resume = Promise.withResolvers<Response>();
+    let requests = 0;
+    mockApi((path) =>
+      path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
+    );
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+    const user = userEvent.setup();
+    const control = screen.getByRole("button", { name: "Pause" });
+    act(() => control.focus());
+
+    await user.keyboard("{Enter}");
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute("aria-disabled", "true");
+    expect(control).not.toBeDisabled();
+    await act(async () =>
+      pause.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    expect(await screen.findByRole("button", { name: "Resume" })).toBe(control);
+    expect(control).not.toHaveAttribute("aria-disabled", "true");
+    expect(control).toHaveFocus();
+
+    await user.keyboard(" ");
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute("aria-disabled", "true");
+    expect(control).not.toBeDisabled();
+    await act(async () => resume.resolve(jsonResponse(snapshot([], { version: 2 }))));
+    expect(await screen.findByRole("button", { name: "Pause" })).toBe(control);
+    expect(control).not.toHaveAttribute("aria-disabled", "true");
+    expect(control).toHaveFocus();
+    expect(requests).toBe(2);
+  });
+
+  it("blocks repeat lifecycle activation and destructive dialogs while a command is pending", async () => {
+    const pending = Promise.withResolvers<Response>();
+    const fetch = mockApi((path) => (path.endsWith("/lifecycle") ? pending.promise : undefined));
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+
+    for (const name of ["Pause", "Abort game", "Resign White", "Resign Black"]) {
+      const control = screen.getByRole("button", { name });
+      expect(control).toHaveAttribute("aria-disabled", "true");
+      await user.click(control);
+      await user.keyboard("{Enter} ");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    }
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/lifecycle"))).toHaveLength(1);
+    await act(async () =>
+      pending.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    await screen.findByRole("button", { name: "Resume" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not steal board focus when a delayed Pause or Resume completes", async () => {
+    const pause = Promise.withResolvers<Response>();
+    const resume = Promise.withResolvers<Response>();
+    let requests = 0;
+    mockApi((path) =>
+      path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
+    );
+    render(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await userEvent.click(square("e2"));
+    expect(square("e2")).toHaveFocus();
+    await act(async () =>
+      pause.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
+    );
+    await screen.findByRole("button", { name: "Resume" });
+    expect(square("e2")).toHaveFocus();
+
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await userEvent.click(square("e2"));
+    expect(square("e2")).toHaveFocus();
+    await act(async () => resume.resolve(jsonResponse(snapshot([], { version: 2 }))));
+    await screen.findByRole("button", { name: "Pause" });
+    expect(square("e2")).toHaveFocus();
   });
 
   it("adopts a conflict without replay or server prose and clears stale selection", async () => {
@@ -228,7 +324,11 @@ describe("localized sandbox application", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Start sandbox" })).toBeEnabled(),
     );
-    expect(fetch.mock.calls.every(([url]) => String(url).endsWith("/ready"))).toBe(true);
+    expect(
+      fetch.mock.calls.every(([url]) =>
+        ["/ready", "/sandbox/games/unfinished"].some((path) => String(url).endsWith(path)),
+      ),
+    ).toBe(true);
   });
 
   it("completes Fool's Mate, locks movement and offers a new game", async () => {

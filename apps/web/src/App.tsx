@@ -5,27 +5,24 @@ import { useTranslation } from "react-i18next";
 import { Chessboard } from "./board/Chessboard";
 import { PieceIcon } from "./board/PieceIcon";
 import { DocumentMetadata } from "./DocumentMetadata";
-import { announcementMessage, gameStatus, noticeMessage, resultTitle } from "./i18n/messages";
+import { announcementMessage } from "./i18n/messages";
+import { GameStatus } from "./sandbox/GameStatus";
 import { MoveHistory } from "./sandbox/MoveHistory";
 import type { SandboxController, SandboxState } from "./sandbox/controller";
 import { useSandbox } from "./sandbox/use-sandbox";
+import { StableText } from "./sandbox/StableText";
+import { PgnActions, ReplayControls } from "./sandbox/ReplayControls";
+import { replayView } from "./sandbox/replay";
 
 export interface AppProps {
   readonly apiBaseUrl: string;
 }
-
-const activityMessages = [
-  { phase: "starting", key: "actions.starting" },
-  { phase: "submitting", key: "game.submitting" },
-  { phase: "synchronizing", key: "game.synchronizing" },
-] as const;
 
 export function App({ apiBaseUrl }: AppProps) {
   const { t } = useTranslation();
   const { state, controller } = useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const { snapshot } = state;
-  const busy = activityMessages.some(({ phase }) => phase === state.phase);
 
   return (
     <div className="app-shell">
@@ -71,24 +68,30 @@ export function App({ apiBaseUrl }: AppProps) {
                   onMove={(move) => {
                     void controller.submit(move);
                   }}
+                  view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
                   toolbar={
-                    <div className="board-toolbar">
-                      <button
-                        type="button"
-                        className="button button--secondary"
-                        onClick={() =>
-                          setOrientation((previous) => (previous === "white" ? "black" : "white"))
-                        }
-                      >
-                        <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                          <path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
-                        </svg>
-                        {t("actions.flip")}
-                      </button>
-                      <span>
-                        {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-                      </span>
-                    </div>
+                    <>
+                      <div className="board-toolbar">
+                        <button
+                          type="button"
+                          className="button button--secondary"
+                          onClick={() =>
+                            setOrientation((previous) => (previous === "white" ? "black" : "white"))
+                          }
+                        >
+                          <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                            <path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
+                          </svg>
+                          {t("actions.flip")}
+                        </button>
+                        <span>
+                          {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
+                        </span>
+                      </div>
+                      {snapshot.state === "completed" || snapshot.state === "aborted" ? (
+                        <ReplayControls state={state} controller={controller} />
+                      ) : null}
+                    </>
                   }
                 />
               </>
@@ -106,105 +109,15 @@ export function App({ apiBaseUrl }: AppProps) {
             )}
           </section>
           <aside className="information-rail" aria-label={t("game.status")}>
-            <section className="game-status" aria-labelledby="status-heading">
-              <div className="section-heading">
-                <p className="eyebrow">{t("game.status")}</p>
-                {snapshot ? (
-                  <span className={"lifecycle lifecycle--" + snapshot.state}>
-                    {t(`game.${snapshot.state}`)}
-                  </span>
-                ) : null}
-              </div>
-              <h2 id="status-heading">
-                {snapshot
-                  ? snapshot.terminationReason
-                    ? resultTitle(snapshot, t)
-                    : gameStatus(snapshot, t)
-                  : t("game.beforeStart")}
-              </h2>
-              {snapshot?.terminationReason ? (
-                <p className="result-detail">
-                  {t(`reasons.${snapshot.terminationReason}`)}{" "}
-                  <span className="result-score">{snapshot.result}</span>
-                </p>
-              ) : !snapshot ? (
-                <p>{t("game.beforeStartHint")}</p>
-              ) : null}
-              {snapshot?.state === "paused" ? <p>{t("game.pausedHint")}</p> : null}
-              {snapshot?.state === "configuring" ? <p>{t("game.configuringHint")}</p> : null}
-              {busy || snapshot?.state === "active" ? (
-                <div className="activity-feedback" aria-busy={busy} aria-hidden={!busy}>
-                  <span className="activity-feedback__mark" aria-hidden="true" />
-                  <div className="activity-feedback__messages">
-                    {activityMessages.map(({ phase, key }) => (
-                      <p key={phase} aria-hidden={state.phase !== phase}>
-                        {t(key)}
-                      </p>
-                    ))}
-                  </div>
-                  {snapshot ? (
-                    <p className="activity-feedback__hint">{t("game.pendingHint")}</p>
-                  ) : null}
-                </div>
-              ) : null}
-              {state.notice ? <p className="notice">{noticeMessage(state.notice, t)}</p> : null}
-              {state.phase === "ready" &&
-              state.notice &&
-              ["INVALID_REQUEST", "INVALID_UCI", "ILLEGAL_MOVE", "INVALID_GAME_STATE"].includes(
-                state.notice,
-              ) ? (
-                <p>{t("notices.synchronized")}</p>
-              ) : null}
-              {state.phase === "uncertain" || state.phase === "sync-required" ? (
-                <div className="recovery-actions">
-                  <p>{t("game.uncertainHint")}</p>
-                  {state.phase === "uncertain" ? (
-                    <button
-                      type="button"
-                      className="button button--primary"
-                      onClick={() => {
-                        void controller.retryMove();
-                      }}
-                    >
-                      {t("actions.retryMove")}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="button button--secondary"
-                    onClick={() => {
-                      void controller.synchronize();
-                    }}
-                  >
-                    {t("actions.synchronize")}
-                  </button>
-                </div>
-              ) : null}
-              {snapshot && ["completed", "aborted"].includes(snapshot.state) ? (
-                <button
-                  type="button"
-                  className="button button--primary new-game"
-                  disabled={busy}
-                  onClick={() => {
-                    void controller.start();
-                  }}
-                >
-                  {t("actions.newGame")}
-                </button>
-              ) : null}
-              {state.readiness === "unavailable" ? (
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  onClick={() => {
-                    void controller.checkReadiness();
-                  }}
-                >
-                  {t("actions.retryConnection")}
-                </button>
-              ) : null}
-            </section>
-            <MoveHistory moves={snapshot?.moves ?? []} />
+            <GameStatus state={state} controller={controller} />
+            <MoveHistory
+              moves={snapshot?.moves ?? []}
+              selectedPly={state.replay ? state.replayPly : undefined}
+              onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+            />
+            {snapshot?.state === "completed" || snapshot?.state === "aborted" ? (
+              <PgnActions state={state} controller={controller} />
+            ) : null}
             <div className="session-note">
               <span className="session-note__title">
                 <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
@@ -245,15 +158,20 @@ function PlayerSummary({
         <span className="player-summary__color">{t(`players.${color}`)}</span>
         <strong>{t("players.guest")}</strong>
         <span className="player-summary__activity">
-          {t(
-            !snapshot
-              ? "players.ready"
-              : snapshot.state !== "active"
-                ? "players.inspecting"
-                : isTurn
-                  ? "players.toMove"
-                  : "players.waiting",
-          )}
+          <StableText
+            value={t(
+              !snapshot
+                ? "players.ready"
+                : snapshot.state !== "active"
+                  ? "players.inspecting"
+                  : isTurn
+                    ? "players.toMove"
+                    : "players.waiting",
+            )}
+            variants={(["ready", "inspecting", "toMove", "waiting"] as const).map((key) =>
+              t(`players.${key}`),
+            )}
+          />
         </span>
       </div>
     </div>
@@ -272,7 +190,10 @@ function StartButton({
     <button
       type="button"
       className="button button--primary"
-      disabled={state.readiness !== "ready" || state.phase === "starting"}
+      disabled={
+        state.readiness !== "ready" ||
+        !["entry", "access-error", "unavailable"].includes(state.phase)
+      }
       onClick={() => {
         void controller.start();
       }}

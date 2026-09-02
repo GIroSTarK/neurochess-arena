@@ -1,6 +1,6 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { runMigrations } from "./migrations.js";
-export { games, gameParticipants, guestSessions, moves } from "./schema/index.js";
+export { games, gameParticipants, guestSessions, moves, gameCommands } from "./schema/index.js";
 export {
   createGameRepository,
   type GameRepository,
@@ -13,5 +13,6 @@ export {
   type NewGame,
   type NewParticipant,
   type NewMove,
+  type NewGameCommand,
   type GamePositionUpdate,
 } from "./game-repository.js";

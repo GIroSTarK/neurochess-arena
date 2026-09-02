@@ -10,6 +10,10 @@ import {
   gameSnapshotSchema,
   gameVersionSchema,
   moveCommandSchema,
+  lifecycleCommandSchema,
+  gameReplayResponseSchema,
+  unfinishedGameResponseSchema,
+  gamePgnResponseSchema,
   safeErrorResponseSchema,
   uciMoveSchema,
   winReasonSchema,
@@ -38,6 +42,61 @@ const moveRecord = {
   fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
 };
 const errorEnvelope = { message: "application-supplied text", requestId: "request-1" };
+
+describe("lifecycle and private read contracts", () => {
+  it("requires an explicit human color only for resignation and rejects extra authority", () => {
+    const base = { gameId, commandId, expectedVersion: 4 };
+    for (const action of ["pause", "resume", "abort"]) {
+      expect(lifecycleCommandSchema.parse({ ...base, action })).toEqual({ ...base, action });
+      expect(
+        lifecycleCommandSchema.safeParse({ ...base, action, losingColor: "white" }).success,
+      ).toBe(false);
+    }
+    for (const losingColor of ["white", "black"])
+      expect(
+        lifecycleCommandSchema.safeParse({ ...base, action: "resign", losingColor }).success,
+      ).toBe(true);
+    for (const invalid of [
+      { action: "resign" },
+      { action: "resign", losingColor: "ai" },
+      { action: "pause", ownerId: gameId },
+      { action: "technical_loss" },
+      { action: "pause", expectedVersion: -1 },
+      { action: "pause", commandId: "invalid" },
+    ])
+      expect(lifecycleCommandSchema.safeParse({ ...base, ...invalid }).success).toBe(false);
+  });
+  it("separates unfinished discovery from terminal replay and bounds export shapes", () => {
+    const terminal = {
+      ...initialSnapshot,
+      state: "aborted",
+      terminationReason: "aborted",
+      legalMoves: [],
+    };
+    expect(unfinishedGameResponseSchema.safeParse({ snapshot: initialSnapshot }).success).toBe(
+      true,
+    );
+    expect(unfinishedGameResponseSchema.safeParse({ snapshot: null }).success).toBe(true);
+    expect(unfinishedGameResponseSchema.safeParse({ snapshot: terminal }).success).toBe(false);
+    expect(
+      gameReplayResponseSchema.safeParse({
+        snapshot: initialSnapshot,
+        initialFen: initialSnapshot.fen,
+      }).success,
+    ).toBe(false);
+    expect(
+      gameReplayResponseSchema.safeParse({ snapshot: terminal, initialFen: initialSnapshot.fen })
+        .success,
+    ).toBe(true);
+    expect(gamePgnResponseSchema.safeParse({ gameId, version: 1, pgn: terminal.pgn }).success).toBe(
+      true,
+    );
+    expect(
+      gamePgnResponseSchema.safeParse({ gameId, version: 1, pgn: terminal.pgn, token: "canary" })
+        .success,
+    ).toBe(false);
+  });
+});
 
 describe("standard game creation contract", () => {
   it("accepts only an empty request object", () => {

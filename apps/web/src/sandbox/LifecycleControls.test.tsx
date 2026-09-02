@@ -1,0 +1,115 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { createSandboxApi } from "../api";
+import { OTHER_GAME_ID, snapshot } from "../test/fixtures";
+
+import { SandboxController, type SandboxState } from "./controller";
+import { LifecycleControls } from "./LifecycleControls";
+
+function props() {
+  const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
+  const lifecycle = vi.spyOn(controller, "lifecycle").mockResolvedValue();
+  const state: SandboxState = {
+    ...controller.getSnapshot(),
+    phase: "ready",
+    readiness: "ready",
+    snapshot: snapshot(),
+  };
+  return { controller, state, lifecycle };
+}
+
+describe("lifecycle confirmations", () => {
+  it.each([
+    { name: "Abort game", confirm: "Stop game", action: { action: "abort" } },
+    {
+      name: "Resign White",
+      confirm: "Confirm resignation",
+      action: { action: "resign", losingColor: "white" },
+    },
+    {
+      name: "Resign Black",
+      confirm: "Confirm resignation",
+      action: { action: "resign", losingColor: "black" },
+    },
+  ])(
+    "invalidates an open $name confirmation after an accepted revision changes",
+    async ({ name, confirm, action }) => {
+      const initial = props();
+      const { rerender } = render(<LifecycleControls {...initial} />);
+      const trigger = screen.getByRole("button", { name });
+      await userEvent.click(trigger);
+      const dialog = screen.getByRole("dialog");
+      const staleConfirm = within(dialog).getByRole("button", { name: confirm });
+
+      rerender(
+        <LifecycleControls
+          {...initial}
+          state={{ ...initial.state, snapshot: snapshot(["e2e4"]) }}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name })).toBe(trigger);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      fireEvent.click(staleConfirm);
+      expect(initial.lifecycle).not.toHaveBeenCalled();
+      await userEvent.click(trigger);
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: confirm }),
+      );
+      expect(initial.lifecycle).toHaveBeenCalledExactlyOnceWith(action);
+    },
+  );
+
+  it("invalidates a confirmation when the interaction epoch changes without a new snapshot", async () => {
+    const initial = props();
+    const { rerender } = render(<LifecycleControls {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    rerender(
+      <LifecycleControls
+        {...initial}
+        state={{ ...initial.state, interactionRevision: initial.state.interactionRevision + 1 }}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(initial.lifecycle).not.toHaveBeenCalled();
+  });
+
+  it("does not carry a confirmation to another game at the same revision", async () => {
+    const initial = props();
+    const { rerender } = render(<LifecycleControls {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    rerender(
+      <LifecycleControls
+        {...initial}
+        state={{ ...initial.state, snapshot: snapshot([], { gameId: OTHER_GAME_ID }) }}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(initial.lifecycle).not.toHaveBeenCalled();
+  });
+
+  it("keeps a current confirmation and its focus during unrelated renders", async () => {
+    const initial = props();
+    const { rerender } = render(<LifecycleControls {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
+    const dialog = screen.getByRole("dialog");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+
+    rerender(<LifecycleControls {...initial} state={{ ...initial.state }} />);
+
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(cancel).toHaveFocus();
+    expect(initial.lifecycle).not.toHaveBeenCalled();
+  });
+});

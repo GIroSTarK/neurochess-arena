@@ -74,7 +74,8 @@ summary {
 button {
   cursor: pointer;
 }
-button:disabled {
+button:disabled,
+button[aria-disabled="true"] {
   cursor: default;
 }
 h1,
@@ -470,14 +471,15 @@ h2 {
   color: var(--nc-color-text);
   background: var(--nc-color-surface);
 }
-.button--primary:hover:not(:disabled),
-.button--primary:active:not(:disabled) {
+.button--primary:hover:not(:disabled, [aria-disabled="true"]),
+.button--primary:active:not(:disabled, [aria-disabled="true"]) {
   box-shadow: inset 0 0 0 2px var(--nc-color-on-accent);
 }
-.button--secondary:hover:not(:disabled) {
+.button--secondary:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--nc-color-surface-raised);
 }
-.button:disabled {
+.button:disabled,
+.button[aria-disabled="true"] {
   background: var(--nc-color-surface-raised);
   color: var(--nc-color-text-secondary);
   border-color: var(--nc-color-control-border);
@@ -612,15 +614,41 @@ a:focus-visible {
 }
 .game-status > .notice {
   margin-block: var(--nc-space-4);
+}
+.game-status > .notice,
+.status-feedback > .notice {
   padding-left: var(--nc-space-3);
   border-left: 2px solid var(--nc-color-warning);
   color: var(--nc-color-text);
+}
+.stable-text,
+.status-feedback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.stable-text > *,
+.status-feedback > * {
+  /* Every variant contributes its natural size, but only one is exposed. */
+  grid-area: 1 / 1;
+  min-width: 0;
+  align-self: start;
+}
+.stable-text > [aria-hidden="true"],
+.status-feedback > [aria-hidden="true"] {
+  visibility: hidden;
+}
+.button .stable-text > * {
+  align-self: center;
+}
+.status-feedback {
+  margin-top: var(--nc-space-4);
+  color: var(--nc-color-text-secondary);
 }
 .activity-feedback {
   display: grid;
   grid-template-columns: 0.5rem 1fr;
   gap: var(--nc-space-2);
-  margin-top: var(--nc-space-4);
   color: var(--nc-color-accent);
 }
 .activity-feedback[aria-hidden="true"],
@@ -799,6 +827,76 @@ a:focus-visible {
 .promotion-choice .piece {
   width: 3rem;
   height: 3rem;
+}
+
+.lifecycle-controls,
+.replay-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--nc-space-3);
+  margin-top: var(--nc-space-4);
+}
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nc-space-3);
+  margin-block: var(--nc-space-4);
+}
+.dialog-actions .button {
+  flex: 1 1 8rem;
+}
+.button--danger {
+  background: var(--nc-color-surface);
+  color: var(--nc-color-text);
+  border-color: var(--nc-color-danger);
+}
+.replay-controls,
+.pgn-actions {
+  min-width: 0;
+  padding: var(--nc-space-4);
+  border: 1px solid var(--nc-color-control-border);
+  border-radius: var(--nc-radius-control);
+  background: var(--nc-color-surface);
+}
+.replay-controls {
+  margin-top: var(--nc-space-4);
+}
+.replay-controls h2,
+.pgn-actions h2 {
+  font-size: var(--nc-type-label);
+}
+.replay-controls p,
+.pgn-actions p {
+  margin-top: var(--nc-space-3);
+}
+.move-notation--selectable {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--nc-radius-control);
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  font: inherit;
+  padding: var(--nc-space-2);
+}
+.move-notation--selectable[aria-current] {
+  border-color: var(--nc-color-accent);
+  color: var(--nc-color-accent);
+}
+.pgn-label {
+  display: grid;
+  gap: var(--nc-space-2);
+}
+.pgn-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 8rem;
+  padding: var(--nc-space-3);
+  background: var(--nc-color-canvas);
+  color: var(--nc-color-text);
+  border: 1px solid var(--nc-color-control-border);
+  border-radius: var(--nc-radius-control);
 }
 
 .configuration-error {

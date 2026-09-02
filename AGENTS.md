@@ -6,14 +6,16 @@ Neurochess Arena is primarily an arena for observing and comparing LLMs playing 
 
 ## Sources of truth
 
-Read these documents before making a material change:
+Rules below always apply. Before a material change, read the sources and sections relevant to the task, following linked contracts as needed. Do not read every document or ADR by default; reuse guidance already read in this task unless it changed.
 
-- `docs/product.md` for product behavior and MVP boundaries.
-- `docs/architecture.md` for component boundaries, data flow, and security constraints.
-- `docs/roadmap.md` for delivery order.
-- `docs/decisions/` for accepted architectural decisions.
+- `docs/product.md`: game behavior, permissions, and MVP scope.
+- `docs/architecture.md`: component boundaries, data flow, persistence, and security.
+- `docs/design-system.md`: presentation, UI interaction, and accessibility.
+- `docs/development.md`: setup, environment, API usage, migrations, and verification.
+- `docs/roadmap.md`: delivery order and milestone status, when planning work or assessing progress.
+- `docs/decisions/README.md`: find and read the accepted ADRs relevant to the affected area.
 
-When code and documentation disagree, do not silently choose one. Determine the intended behavior, then update both in the same change.
+When code and documentation disagree, determine the intended behavior before editing. Correct whichever is wrong; update both when the contract changes. Do not change a requirement merely to match a bug.
 
 ## Technical baseline
 
@@ -68,7 +70,7 @@ When code and documentation disagree, do not silently choose one. Determine the 
 
 ## Verification
 
-After the workspace exists, run the smallest relevant checks while iterating and the full configured baseline before handing off a change:
+Run the smallest relevant checks while iterating and the full configured baseline before handing off a change:
 
 ```text
 npm run lint
@@ -79,13 +81,14 @@ npm run build
 
 Add or update tests for behavior changes. Prioritize tests for chess-state transitions, move validation, provider normalization, retry classification, credential redaction, authorization, game privacy, WebSocket reconnection, and the three primary user flows.
 
-Do not claim a command passed if it is not configured or was not run. Until the workspace is bootstrapped, clearly state that verification is documentation-only.
+Do not claim a command passed if it is not configured or was not run.
 
 ## Documentation and decisions
 
-- Update the product document when user-visible behavior or scope changes.
-- Update the architecture document when boundaries or data flows change.
+- Update the relevant canonical document only when its contract or instructions change, or a documented claim needs correction. A fix that restores already-documented behavior does not require a documentation edit.
+- Keep implementation progress in `docs/roadmap.md`, updating it at milestones. Other documents link there instead of repeating status or per-PR implementation checkpoints.
 - Add an ADR for a consequential, difficult-to-reverse decision; do not rewrite an accepted ADR as though the old decision never existed.
+- Keep `docs/design-system/validation.md` limited to current coverage gaps and reference limitations; update it only when those change. Record per-change commands, results, and evidence in the change summary, PR, or CI, not as an accumulating documentation log.
 - Keep docs concise and current. Link to a canonical explanation instead of duplicating it.
 
 ## MVP exclusions

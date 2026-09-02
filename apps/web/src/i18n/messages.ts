@@ -21,6 +21,11 @@ const noticeKeys = {
   uncertain: "notices.uncertain",
   "sync-required": "notices.syncRequired",
   synchronized: "notices.synchronized",
+  recovered: "notices.recovered",
+  "recovery-required": "notices.recoveryRequired",
+  "pgn-copied": "export.copied",
+  "pgn-downloaded": "export.downloaded",
+  "pgn-manual": "export.manual",
 } as const satisfies Record<SandboxNotice, string>;
 
 export function noticeMessage(notice: SandboxNotice, t: TFunction): string {
@@ -53,6 +58,10 @@ export function announcementMessage(event: Announcement | null, t: TFunction): s
   if (!event) return "";
   if (event.kind === "notice") return noticeMessage(event.notice, t);
   if (event.kind === "connection") return t(`connection.${event.readiness}`);
+  if (event.kind === "replay")
+    return event.ply === 0
+      ? t("replay.initial")
+      : t("replay.selected", { ply: event.ply, move: event.san ?? "" });
   const status = gameStatus(event.snapshot, t);
   if (event.kind === "move") {
     const lastMove = event.snapshot.moves.at(-1);

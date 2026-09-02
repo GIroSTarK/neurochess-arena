@@ -1,5 +1,5 @@
 import { gameErrorResponseSchema, gameSnapshotSchema } from "@neurochess/contracts";
-import { gameParticipants, games, guestSessions, moves } from "@neurochess/database";
+import { gameCommands, gameParticipants, games, guestSessions, moves } from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -559,6 +559,9 @@ describe("atomic commands and concurrency", () => {
     expect(response.body).not.toContain("rollback-canary");
     expect(inserted).toBe(true);
     expect(await api.database.db.$count(moves, eq(moves.gameId, initial.gameId))).toBe(0);
+    expect(
+      await api.database.db.$count(gameCommands, eq(gameCommands.gameId, initial.gameId)),
+    ).toBe(0);
     expect(await snapshot(api, guest, initial.gameId)).toEqual(initial);
     expect((await submit(api, guest, attempted)).statusCode).toBe(200);
   });
@@ -699,13 +702,30 @@ describe("natural results and database restoration", () => {
         await api.database.db.update(moves).set(patch).where(eq(moves.gameId, current.gameId));
       }
       const before = await api.database.db.select().from(games).where(eq(games.id, current.gameId));
+      const readPaths = [
+        "/games/" + current.gameId,
+        "/games/" + current.gameId + "/replay",
+        "/games/" + current.gameId + "/pgn",
+        ...(field === "lifecycle" ? [] : ["/sandbox/games/unfinished"]),
+      ];
       const responses = [
-        await api.app.inject({
-          method: "GET",
-          url: `/games/${current.gameId}`,
-          headers: { cookie: guest.cookie },
-        }),
+        ...(await Promise.all(
+          readPaths.map((url) =>
+            api.app.inject({ method: "GET", url, headers: { cookie: guest.cookie } }),
+          ),
+        )),
         await submit(api, guest, command(current, "e7e5")),
+        await api.app.inject({
+          method: "POST",
+          url: "/games/" + current.gameId + "/lifecycle",
+          headers: { cookie: guest.cookie, origin: WEB_ORIGIN },
+          payload: {
+            gameId: current.gameId,
+            expectedVersion: current.version,
+            commandId: randomUUID(),
+            action: "pause",
+          },
+        }),
       ];
       for (const response of responses) {
         expect(response.statusCode).toBe(500);
@@ -715,6 +735,9 @@ describe("natural results and database restoration", () => {
         await api.database.db.select().from(games).where(eq(games.id, current.gameId)),
       ).toEqual(before);
       expect(await api.database.db.$count(moves, eq(moves.gameId, current.gameId))).toBe(1);
+      expect(
+        await api.database.db.$count(gameCommands, eq(gameCommands.gameId, current.gameId)),
+      ).toBe(1);
     },
   );
 });

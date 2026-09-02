@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-02
+**Last updated:** 2026-09-03
 
 ## Vision
 
@@ -87,11 +87,15 @@ A registered user creates a private room, chooses their color, and shares an inv
 
 If a participant disconnects, the game remains available for reconnection without a time limit. The room owner may close the active room; this marks the game as `aborted` rather than deleting the record. Completed and aborted games appear in the history of registered participants. A guest has no durable history.
 
-The [local development sandbox](architecture.md#local-development-sandbox) supports the one-browser implementation checkpoint and is outside these three public game modes.
+### Development sandbox
 
-**Current implementation checkpoint (PR 3):** the localized development sandbox lets one guest play both colors through the API, with an accessible keyboard/touch board that keeps the keyboard-focused square in view, explicit promotion, game status, and a read-only SAN move table. Submission feedback reserves its layout space so move history stays in place while a move is confirmed. Start is explicit; no guest is bootstrapped on page load. Uncertain move responses retain the accepted position and block new moves until synchronization or an explicit retry of the identical command. Completion offers New game.
+The [local development sandbox](architecture.md#local-development-sandbox) is a development/test-only flow outside the three public game modes. One guest controls both colors; only explicit Start bootstraps a guest.
 
-Game state lives in page memory. Reload returns to the entry screen; Start sandbox reopens an unfinished game through the existing creation conflict and preserves its stored lifecycle. Paused positions remain inspectable, without simulated recovery or resume controls. Refresh-to-paused recovery, lifecycle commands, and replay/export endpoints remain later Phase 1 work. Development/test guest access still expires after 24 hours of inactivity by default, configurable on the server. This checkpoint does not change MVP recovery requirements or decide production guest retention; automated expiry cleanup remains follow-up work.
+- Pause and Resume preserve the position and history. Abort stops play without awarding a win or loss. Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
+- Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.
+- Completed and aborted games show the result and reason, read-only replay starting at the final position, and private PGN copy/download. New game does not delete the previous record; its URL remains accessible only to the owning guest session until access expires. There is no guest history list.
+
+The [sandbox walkthrough](development.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production retention and automated cleanup remain separate decisions. Implementation progress belongs in the [roadmap](roadmap.md).
 
 ## Chess and AI behavior
 

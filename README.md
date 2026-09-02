@@ -2,7 +2,7 @@
 
 Neurochess Arena is a web application for watching and comparing large language models while they play chess. AI versus AI is the flagship experience, supported by AI versus human and private online human versus human games.
 
-> Status: Phase 1 in progress. The localized development sandbox now lets one guest play both colors through the server-authoritative API and PostgreSQL. It includes an accessible board, explicit promotion, SAN history, and command recovery. Paused refresh recovery, lifecycle controls, and replay/export endpoints remain pending; AI and online rooms arrive in later phases.
+Implementation status and next milestones live in the [MVP roadmap](docs/roadmap.md).
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ The development services are available at:
 
 `npm run infra:down` stops PostgreSQL but preserves its named data volume.
 
-The sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env`, restart the API, and select **Start sandbox** in the web app. The guest controls both colors. Reload returns to the entry screen; starting again reopens an unfinished game with its stored lifecycle. See the [sandbox walkthrough](docs/development.md#sandbox-ui). Production cannot enable it.
+The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env` and restart the API. See the [sandbox walkthrough](docs/development.md#sandbox-ui) for play, paused recovery, lifecycle controls, and private replay/export. Production cannot enable it.
 
 ## Verification
 
@@ -80,14 +80,14 @@ npm run db:studio
 
 Review generated SQL before applying or committing it. Do not use `drizzle-kit push`, and never edit an already-applied migration; add a forward migration instead.
 
-The no-op Phase 0 bootstrap migration is retained. The next migration adds guest sessions, games, participants, and moves. Better Auth tables remain deferred to the authentication phase.
+See the [migration guide](docs/development.md#migrations) for upgrade ordering and compatibility requirements.
 
 ## Workspace boundaries
 
 ```text
 apps/web           React, Vite, browser state
-apps/api           Fastify, HTTP and later WebSocket orchestration
-packages/chess     Deterministic chess domain (implemented in Phase 1)
+apps/api           Fastify, server-side orchestration
+packages/chess     Deterministic chess domain
 packages/contracts Runtime-validated transport contracts
 packages/database  Drizzle, PostgreSQL, repositories, and migrations
 packages/config    Shared TypeScript, lint, format, and test configuration

@@ -4,6 +4,10 @@ import {
   gameSnapshotSchema,
   type GameSnapshot,
   type MoveCommand,
+  type LifecycleCommand,
+  type GameReplayResponse,
+  type GamePgnResponse,
+  type UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import type {
   GameReader,
@@ -16,7 +20,7 @@ import { randomUUID } from "node:crypto";
 
 import type { GuestPrincipal } from "../guests/service.js";
 
-import { authorizeGameRead, authorizeHumanMove } from "./authorization.js";
+import { authorizeGameRead, authorizeHumanSeat, authorizeGameControl } from "./authorization.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 
 export interface GameService {
@@ -24,6 +28,10 @@ export interface GameService {
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
   snapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot>;
   move(principal: GuestPrincipal, command: MoveCommand): Promise<GameSnapshot>;
+  lifecycle(principal: GuestPrincipal, command: LifecycleCommand): Promise<GameSnapshot>;
+  unfinished(principal: GuestPrincipal): Promise<UnfinishedGameResponse>;
+  replay(principal: GuestPrincipal, gameId: string): Promise<GameReplayResponse>;
+  pgn(principal: GuestPrincipal, gameId: string): Promise<GamePgnResponse>;
 }
 
 interface RestoredGame {
@@ -87,6 +95,85 @@ export function createGameService(
     return { game: restored.value, snapshot, moves, participants };
   }
 
+  function readSnapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot> {
+    return repository.read(async (reader) => {
+      if (!(await reader.getGuest(principal.guestSessionId)))
+        throw new GameRequestError("UNAUTHORIZED");
+      const stored = await reader.getGame(gameId);
+      if (!stored) throw new GameRequestError("NOT_FOUND");
+      return (await restoreAuthorized(reader, principal, stored)).snapshot;
+    });
+  }
+
+  async function terminalSnapshot(principal: GuestPrincipal, gameId: string) {
+    const snapshot = await readSnapshot(principal, gameId);
+    if (snapshot.state !== "completed" && snapshot.state !== "aborted")
+      throw new GameRequestError("INVALID_GAME_STATE");
+    return snapshot;
+  }
+
+  function mutate(principal: GuestPrincipal, command: MoveCommand | LifecycleCommand) {
+    return repository.write(async (tx) => {
+      if (!(await tx.lockGuest(principal.guestSessionId)))
+        throw new GameRequestError("UNAUTHORIZED");
+      const stored = await tx.lockGame(command.gameId);
+      if (!stored) throw new GameRequestError("NOT_FOUND");
+      const restored = await restoreAuthorized(tx, principal, stored);
+      const commandId = command.commandId.toLowerCase();
+      // Accepted IDs span every command kind, including retries after completion.
+      if (command.expectedVersion !== stored.version || (await tx.hasCommand(stored.id, commandId)))
+        throw new GameConflictError(restored.snapshot);
+      const isMove = "move" in command;
+      if (isMove) {
+        if (stored.state !== "active") throw new GameRequestError("INVALID_GAME_STATE");
+        authorizeHumanSeat(
+          principal,
+          stored,
+          restored.participants,
+          restored.snapshot.turn,
+          sandboxEnabled,
+        );
+      } else if (command.action === "resign") {
+        authorizeHumanSeat(
+          principal,
+          stored,
+          restored.participants,
+          command.losingColor,
+          sandboxEnabled,
+        );
+      } else {
+        authorizeGameControl(principal, stored);
+      }
+      const accepted = isMove
+        ? restored.game.playMove(command.move)
+        : command.action === "resign"
+          ? restored.game.resignHuman(command.losingColor)
+          : restored.game[command.action]();
+      if (!accepted.ok) {
+        if (["ILLEGAL_MOVE", "INVALID_UCI", "INVALID_GAME_STATE"].includes(accepted.error.code))
+          throw new GameRequestError(
+            accepted.error.code as "ILLEGAL_MOVE" | "INVALID_UCI" | "INVALID_GAME_STATE",
+          );
+        throw new GameIntegrityError();
+      }
+      const snapshot = transportSnapshot(stored.id, stored.version + 1, accepted.value);
+      await tx.appendCommand({
+        gameId: stored.id,
+        commandId,
+        version: snapshot.version,
+        kind: isMove ? "move" : command.action,
+      });
+      if (isMove) {
+        const move = snapshot.moves.at(-1);
+        if (!move) throw new GameIntegrityError();
+        await tx.appendMove({ ...move, gameId: stored.id, commandId, version: snapshot.version });
+      }
+      if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot))))
+        throw new GameIntegrityError();
+      return snapshot;
+    });
+  }
+
   return {
     sandboxEnabled,
     createSandbox: (principal) =>
@@ -122,61 +209,28 @@ export function createGameService(
         );
         return snapshot;
       }),
-    snapshot: (principal, gameId) =>
+    snapshot: readSnapshot,
+    move: mutate,
+    lifecycle: mutate,
+    async replay(principal, gameId) {
+      return {
+        snapshot: await terminalSnapshot(principal, gameId),
+        initialFen: createGame().snapshot().fen,
+      };
+    },
+    async pgn(principal, gameId) {
+      const snapshot = await terminalSnapshot(principal, gameId);
+      return { gameId: snapshot.gameId, version: snapshot.version, pgn: snapshot.pgn };
+    },
+    unfinished: (principal) =>
       repository.read(async (reader) => {
+        if (!sandboxEnabled) throw new GameRequestError("NOT_FOUND");
         if (!(await reader.getGuest(principal.guestSessionId)))
           throw new GameRequestError("UNAUTHORIZED");
-        const stored = await reader.getGame(gameId);
-        if (!stored) throw new GameRequestError("NOT_FOUND");
-        return (await restoreAuthorized(reader, principal, stored)).snapshot;
-      }),
-    move: (principal, command) =>
-      repository.write(async (tx) => {
-        if (!(await tx.lockGuest(principal.guestSessionId)))
-          throw new GameRequestError("UNAUTHORIZED");
-        const stored = await tx.lockGame(command.gameId);
-        if (!stored) throw new GameRequestError("NOT_FOUND");
-        const restored = await restoreAuthorized(tx, principal, stored);
-        // PostgreSQL stores UUIDs in lowercase; UUID casing must not bypass accepted-ID lookup.
-        const commandId = command.commandId.toLowerCase();
-        // Conflict checks precede current-seat/state checks: even a terminal retry returns its snapshot.
-        if (
-          command.expectedVersion !== stored.version ||
-          restored.moves.some((move) => move.commandId === commandId)
-        ) {
-          throw new GameConflictError(restored.snapshot);
-        }
-        if (stored.state !== "active") throw new GameRequestError("INVALID_GAME_STATE");
-        authorizeHumanMove(
-          principal,
-          stored,
-          restored.participants,
-          restored.snapshot.turn,
-          sandboxEnabled,
-        );
-        const accepted = restored.game.playMove(command.move);
-        if (!accepted.ok) {
-          if (
-            accepted.error.code === "ILLEGAL_MOVE" ||
-            accepted.error.code === "INVALID_UCI" ||
-            accepted.error.code === "INVALID_GAME_STATE"
-          ) {
-            throw new GameRequestError(accepted.error.code);
-          }
-          throw new GameIntegrityError();
-        }
-        const snapshot = transportSnapshot(stored.id, stored.version + 1, accepted.value);
-        const move = snapshot.moves.at(-1);
-        if (!move) throw new GameIntegrityError();
-        await tx.appendMove({
-          ...move,
-          gameId: stored.id,
-          commandId,
-          version: snapshot.version,
-        });
-        if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot))))
-          throw new GameIntegrityError();
-        return snapshot;
+        const stored = await reader.findUnfinishedGame(principal.guestSessionId, true);
+        return {
+          snapshot: stored ? (await restoreAuthorized(reader, principal, stored)).snapshot : null,
+        };
       }),
   };
 }
