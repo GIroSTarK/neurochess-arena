@@ -28,8 +28,8 @@ describe("stable game status feedback", () => {
   it("retains the same feedback slot and controls through active, pending, and paused states", () => {
     const initial = props();
     const { container, rerender } = render(<GameStatus {...initial} />);
-    const feedback = container.querySelector<HTMLElement>(".status-feedback")!;
-    const activity = feedback.querySelector(".activity-feedback");
+    const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
+    const activity = feedback.querySelector("[data-testid=activity-feedback]");
     const control = screen.getByRole("button", { name: "Pause" });
     const paragraphs = () =>
       within(feedback)
@@ -72,8 +72,8 @@ describe("stable game status feedback", () => {
     expect(screen.getByRole("heading", { name: "Game paused" })).toBeInTheDocument();
 
     rerender(<GameStatus {...initial} />);
-    expect(container.querySelector(".status-feedback")).toBe(feedback);
-    expect(feedback.querySelector(".activity-feedback")).toBe(activity);
+    expect(container.querySelector("[data-testid=status-feedback]")).toBe(feedback);
+    expect(feedback.querySelector("[data-testid=activity-feedback]")).toBe(activity);
     expect(screen.getByRole("button", { name: "Pause" })).toBe(control);
     expect(paragraphs()).toEqual([]);
   });
@@ -85,7 +85,7 @@ describe("stable game status feedback", () => {
   ] as const)("exposes only the %s notice in place of the paused hint", (notice, message) => {
     const initial = props({ snapshot: paused(), notice });
     const { container, rerender } = render(<GameStatus {...initial} />);
-    const feedback = container.querySelector<HTMLElement>(".status-feedback")!;
+    const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
       within(feedback)
         .getAllByRole("paragraph")
@@ -108,7 +108,7 @@ describe("stable game status feedback", () => {
   it("keeps error explanations and their synchronization feedback accessible", () => {
     const initial = props({ phase: "synchronizing", notice: "ILLEGAL_MOVE" });
     const { container, rerender } = render(<GameStatus {...initial} />);
-    const feedback = container.querySelector<HTMLElement>(".status-feedback")!;
+    const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
       within(feedback)
         .getAllByRole("paragraph")
@@ -143,7 +143,7 @@ describe("stable game status feedback", () => {
     expect(screen.getByText("Checkmate")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
     expect(screen.queryByRole("group", { name: "Game controls" })).toBeNull();
-    expect(container.querySelector(".status-feedback")).toBeNull();
+    expect(container.querySelector("[data-testid=status-feedback]")).toBeNull();
   });
 
   it("does not duplicate an accessible label when translations are identical", () => {

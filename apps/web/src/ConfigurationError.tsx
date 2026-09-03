@@ -6,12 +6,14 @@ import { WebEnvironmentValidationError } from "./env";
 export function ConfigurationError({ error }: { readonly error: unknown }) {
   const { t } = useTranslation();
   return (
-    <main className="configuration-error">
+    <main className="grid min-h-screen content-center justify-items-center gap-6 p-6 text-center">
       <DocumentMetadata />
-      <h1>{t("configuration.title")}</h1>
-      <p>{t("configuration.description")}</p>
+      <h1 className="font-display text-title font-medium">{t("configuration.title")}</h1>
+      <p className="max-w-2xl text-text-secondary">{t("configuration.description")}</p>
       {error instanceof WebEnvironmentValidationError ? (
-        <p>{t("configuration.variables", { variables: error.variables.join(", ") })}</p>
+        <p className="max-w-2xl text-text-secondary">
+          {t("configuration.variables", { variables: error.variables.join(", ") })}
+        </p>
       ) : null}
     </main>
   );

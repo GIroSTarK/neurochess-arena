@@ -13,6 +13,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0005](0005-zod-runtime-contracts.md)                 | Accepted | Zod 4 validates runtime boundaries and shared contracts      |
 | [0006](0006-guest-owned-game-commands.md)             | Accepted | Guest identity, sandbox authority, and atomic game commands  |
 | [0007](0007-lifecycle-recovery-and-private-replay.md) | Accepted | Shared command receipts, paused recovery, and private replay |
+| [0008](0008-tailwind-css-presentation.md)             | Accepted | Tailwind CSS utilities and a semantic theme for the web app  |
 
 ## Status values
 

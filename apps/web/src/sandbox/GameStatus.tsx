@@ -1,6 +1,9 @@
+import type { GameState } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
 import { gameStatus, noticeMessage, resultTitle } from "../i18n/messages";
+import { Button } from "../ui/Button";
+import { cx } from "../ui/cx";
 
 import type { SandboxController, SandboxState } from "./controller";
 import { LifecycleControls } from "./LifecycleControls";
@@ -17,6 +20,20 @@ const activityMessages = [
 // Routine notices replace the paused hint in the same reserved feedback slot.
 // Errors and their recovery actions can grow naturally; never clip their details.
 const routineNotices = ["existing", "recovered", "synchronized"] as const;
+
+// Lifecycle always pairs the label with a shape: a dot, or a square while paused.
+const lifecycleMarks: Record<GameState, string> = {
+  configuring: "before:rounded-full before:bg-current",
+  active: "before:rounded-full before:bg-accent",
+  paused: "before:rounded-none before:bg-warning",
+  completed: "before:rounded-full before:bg-success",
+  aborted: "before:rounded-full before:bg-current",
+};
+
+// Every feedback variant shares one grid cell so only the exposed one affects layout.
+const feedbackSlotClassName = "min-w-0 self-start [grid-area:1/1] aria-hidden:invisible";
+
+const noticeClassName = "border-l-2 border-warning pl-3 text-text";
 
 export function GameStatus({
   state,
@@ -52,11 +69,16 @@ export function GameStatus({
     : [];
 
   return (
-    <section className="game-status" aria-labelledby="status-heading">
-      <div className="section-heading">
-        <p className="eyebrow">{t("game.status")}</p>
+    <section className="rounded-panel bg-surface p-6 max-sm:p-4" aria-labelledby="status-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-label text-text-secondary">{t("game.status")}</p>
         {snapshot ? (
-          <span className={"lifecycle lifecycle--" + snapshot.state}>
+          <span
+            className={cx(
+              "inline-flex items-center gap-2 text-right text-label text-text-muted before:size-[0.4rem] before:shrink-0 before:content-['']",
+              lifecycleMarks[snapshot.state],
+            )}
+          >
             <StableText
               value={t(`game.${snapshot.state}`)}
               variants={unfinished ? [t("game.active"), t("game.paused")] : []}
@@ -64,38 +86,68 @@ export function GameStatus({
           </span>
         ) : null}
       </div>
-      <h2 id="status-heading">
+      <h2 id="status-heading" className="mt-4 text-title font-semibold max-sm:text-[1.5rem]/8">
         <StableText value={title} variants={titleVariants} />
       </h2>
       {snapshot?.terminationReason ? (
-        <p className="result-detail">
+        <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 text-text-secondary">
           {t(`reasons.${snapshot.terminationReason}`)}{" "}
-          <span className="result-score">{snapshot.result}</span>
+          <span className="font-mono text-text">{snapshot.result}</span>
         </p>
       ) : !snapshot ? (
-        <p>{t("game.beforeStartHint")}</p>
+        <p className="mt-3 text-text-secondary">{t("game.beforeStartHint")}</p>
       ) : null}
-      {snapshot?.state === "configuring" ? <p>{t("game.configuringHint")}</p> : null}
+      {snapshot?.state === "configuring" ? (
+        <p className="mt-3 text-text-secondary">{t("game.configuringHint")}</p>
+      ) : null}
       {busy || unfinished ? (
-        <div className="status-feedback">
-          <div className="activity-feedback" aria-busy={busy} aria-hidden={!busy}>
-            <span className="activity-feedback__mark" aria-hidden="true" />
-            <div className="activity-feedback__messages">
+        <div
+          className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] text-text-secondary"
+          data-testid="status-feedback"
+        >
+          <div
+            className={cx(
+              feedbackSlotClassName,
+              "group grid grid-cols-[0.5rem_1fr] gap-2 text-accent",
+            )}
+            data-testid="activity-feedback"
+            aria-busy={busy}
+            aria-hidden={!busy}
+          >
+            <span
+              className="mt-[0.2rem] h-4 w-[0.4rem] bg-current motion-safe:group-aria-busy:animate-activity-pulse"
+              aria-hidden="true"
+            />
+            <div className="grid">
+              {/* Reserve the tallest localized message without fixing the card's height. */}
               {activityMessages.map(({ key }) => (
-                <p key={key} aria-hidden={activityKey !== key}>
+                <p
+                  key={key}
+                  className="[grid-area:1/1] aria-hidden:invisible"
+                  aria-hidden={activityKey !== key}
+                >
                   {t(key)}
                 </p>
               ))}
             </div>
-            {snapshot ? <p className="activity-feedback__hint">{t("game.pendingHint")}</p> : null}
+            {snapshot ? (
+              <p className="col-start-2 text-label text-text-secondary">{t("game.pendingHint")}</p>
+            ) : null}
           </div>
           {unfinished ? (
             <>
-              <p aria-hidden={busy || state.notice !== null || snapshot.state !== "paused"}>
+              <p
+                className={feedbackSlotClassName}
+                aria-hidden={busy || state.notice !== null || snapshot.state !== "paused"}
+              >
                 {t("game.pausedHint")}
               </p>
               {routineNotices.map((notice) => (
-                <p key={notice} className="notice" aria-hidden={busy || state.notice !== notice}>
+                <p
+                  key={notice}
+                  className={cx(feedbackSlotClassName, noticeClassName)}
+                  aria-hidden={busy || state.notice !== notice}
+                >
                   {noticeMessage(notice, t)}
                 </p>
               ))}
@@ -104,22 +156,21 @@ export function GameStatus({
         </div>
       ) : null}
       {state.notice && !routineNotice ? (
-        <p className="notice">{noticeMessage(state.notice, t)}</p>
+        <p className={cx("my-4", noticeClassName)}>{noticeMessage(state.notice, t)}</p>
       ) : null}
       {state.phase === "ready" &&
       state.notice &&
       ["INVALID_REQUEST", "INVALID_UCI", "ILLEGAL_MOVE", "INVALID_GAME_STATE"].includes(
         state.notice,
       ) ? (
-        <p>{t("notices.synchronized")}</p>
+        <p className="mt-3 text-text-secondary">{t("notices.synchronized")}</p>
       ) : null}
       {state.phase === "uncertain" || state.phase === "sync-required" ? (
-        <div className="recovery-actions">
-          <p>{t("game.uncertainHint")}</p>
+        <div className="flex flex-col items-stretch gap-3">
+          <p className="text-text-secondary">{t("game.uncertainHint")}</p>
           {state.phase === "uncertain" ? (
-            <button
-              type="button"
-              className="button button--primary"
+            <Button
+              variant="primary"
               onClick={() => {
                 void controller.retryMove();
               }}
@@ -129,55 +180,52 @@ export function GameStatus({
                   ? "actions.retryCommand"
                   : "actions.retryMove",
               )}
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className="button button--secondary"
+          <Button
+            variant="secondary"
             onClick={() => {
               void controller.synchronize();
             }}
           >
             {t("actions.synchronize")}
-          </button>
+          </Button>
         </div>
       ) : null}
       {state.phase === "recovery-required" ? (
-        <button
-          type="button"
-          className="button button--primary"
+        <Button
+          variant="primary"
           onClick={() => {
             void controller.recover();
           }}
         >
           {t("actions.retryRecovery")}
-        </button>
+        </Button>
       ) : null}
       {unfinished ? (
         <LifecycleControls key={snapshot.gameId} state={state} controller={controller} />
       ) : null}
       {snapshot && ["completed", "aborted"].includes(snapshot.state) ? (
-        <button
-          type="button"
-          className="button button--primary new-game"
+        <Button
+          variant="primary"
+          className="mt-6"
           disabled={busy}
           onClick={() => {
             void controller.start();
           }}
         >
           {t("actions.newGame")}
-        </button>
+        </Button>
       ) : null}
       {state.readiness === "unavailable" ? (
-        <button
-          type="button"
-          className="button button--secondary"
+        <Button
+          variant="secondary"
           onClick={() => {
             void controller.checkReadiness();
           }}
         >
           {t("actions.retryConnection")}
-        </button>
+        </Button>
       ) : null}
     </section>
   );

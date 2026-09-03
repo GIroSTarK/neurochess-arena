@@ -2,6 +2,8 @@ import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { cx } from "../ui/cx";
+
 import { PieceIcon } from "./PieceIcon";
 import { PromotionDialog } from "./PromotionDialog";
 import {
@@ -37,6 +39,28 @@ interface Selection {
 }
 
 const promotionOrder: readonly PromotionKind[] = ["q", "r", "b", "n"];
+
+// Keyboard focus uses a dual light/dark keyline plus an inner dashed frame so it
+// stays distinct from selection on both square colors.
+const squareClassName = cx(
+  "relative grid size-full place-items-center rounded-none border-0 p-0",
+  "focus-visible:z-2 focus-visible:shadow-[inset_0_0_0_3px_var(--color-board-ink-light),inset_0_0_0_5px_var(--color-board-ink-dark)] focus-visible:outline-none",
+  "focus-visible:before:pointer-events-none focus-visible:before:absolute focus-visible:before:inset-0.5 focus-visible:before:border focus-visible:before:border-dashed focus-visible:before:border-board-ink-dark focus-visible:before:content-['']",
+);
+
+const squareColors = {
+  light: "bg-board-light text-board-ink-dark",
+  dark: "bg-board-dark text-board-ink-light",
+} as const;
+
+const coordinateClassName =
+  "pointer-events-none absolute font-mono text-[clamp(0.5625rem,1vw,0.75rem)] leading-none font-medium";
+
+const targetClassName = {
+  move: "pointer-events-none absolute aspect-square w-[24%] rounded-full border-2 border-board-ink-light bg-board-ink-dark",
+  capture:
+    "pointer-events-none absolute inset-[9%] rounded-full border-[3px] border-board-ink-dark shadow-[0_0_0_2px_var(--color-board-ink-light)]",
+} as const;
 
 export function Chessboard({
   snapshot,
@@ -128,12 +152,12 @@ export function Chessboard({
     if (nextSquare) focus(nextSquare);
   }
 
-  if (!position) return <p className="notice">{t("board.invalidPosition")}</p>;
+  if (!position) return <p>{t("board.invalidPosition")}</p>;
 
   return (
     <>
       <div
-        className="chessboard"
+        className="flex aspect-square w-full touch-manipulation flex-col outline-1 outline-control-border"
         role="grid"
         aria-label={t("board.label")}
         aria-describedby={helpId}
@@ -145,7 +169,7 @@ export function Chessboard({
       >
         {rows.map((row, rowIndex) => (
           <div
-            className="chessboard__row"
+            className="grid min-h-0 flex-1 grid-cols-8"
             role="row"
             key={row[0]?.[1]}
             aria-rowindex={rowIndex + 1}
@@ -192,14 +216,14 @@ export function Chessboard({
               return (
                 <div
                   role="gridcell"
-                  className="chessboard__cell"
+                  className="relative min-h-0 min-w-0"
                   key={square}
                   aria-colindex={columnIndex + 1}
                   aria-selected={isSelected}
                 >
                   <button
                     type="button"
-                    className={"square square--" + (dark ? "dark" : "light")}
+                    className={cx(squareClassName, squareColors[dark ? "dark" : "light"])}
                     ref={(element) => {
                       if (element) buttons.current.set(square, element);
                       else buttons.current.delete(square);
@@ -216,29 +240,47 @@ export function Chessboard({
                     onKeyDown={(event) => navigate(event, rowIndex, columnIndex)}
                   >
                     {columnIndex === 0 ? (
-                      <span className="square__rank" aria-hidden="true">
+                      <span
+                        className={cx(coordinateClassName, "top-[3px] left-[3px]")}
+                        aria-hidden="true"
+                      >
                         {square[1]}
                       </span>
                     ) : null}
                     {rowIndex === 7 ? (
-                      <span className="square__file" aria-hidden="true">
+                      <span
+                        className={cx(coordinateClassName, "right-[3px] bottom-[3px]")}
+                        aria-hidden="true"
+                      >
                         {square[0]}
                       </span>
                     ) : null}
-                    {isLastMove ? <span className="square__last-move" aria-hidden="true" /> : null}
+                    {isLastMove ? (
+                      <span
+                        className="pointer-events-none absolute inset-[5%] corner-marks"
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     {piece ? <PieceIcon {...piece} /> : null}
                     {target ? (
                       <span
-                        className={
-                          "square__target square__target--" + (capture ? "capture" : "move")
-                        }
+                        className={targetClassName[capture ? "capture" : "move"]}
                         aria-hidden="true"
                       />
                     ) : null}
                     {inCheck ? (
-                      <span className="square__check" aria-hidden="true">
+                      <span
+                        className="absolute top-[4%] right-[4%] grid aspect-square w-[27%] place-items-center rounded-full border border-board-ink-dark bg-danger font-ui text-[clamp(0.625rem,1.4vw,1.125rem)] leading-none font-bold text-board-ink-dark shadow-[0_0_0_1px_var(--color-board-ink-light)]"
+                        aria-hidden="true"
+                      >
                         !
                       </span>
+                    ) : null}
+                    {isSelected ? (
+                      <span
+                        className="pointer-events-none absolute inset-[7%] border-2 border-board-ink-dark shadow-[0_0_0_2px_var(--color-board-ink-light)]"
+                        aria-hidden="true"
+                      />
                     ) : null}
                   </button>
                 </div>
@@ -248,9 +290,13 @@ export function Chessboard({
         ))}
       </div>
       {toolbar}
-      <details className="keyboard-help">
-        <summary>{t("board.keyboardHelp")}</summary>
-        <p id={helpId}>{t("board.instructions")}</p>
+      <details className="order-4 mt-2 text-text-secondary">
+        <summary className="min-h-target w-fit max-w-full cursor-pointer py-3 text-label">
+          {t("board.keyboardHelp")}
+        </summary>
+        <p id={helpId} className="py-2">
+          {t("board.instructions")}
+        </p>
       </details>
       {promotion && enabled ? (
         <PromotionDialog

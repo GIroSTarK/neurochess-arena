@@ -1,15 +1,27 @@
+import { cx } from "../ui/cx";
+
 /** Reserve the largest localized variant without fixing a control's dimensions. */
 export function StableText({
   value,
   variants,
+  align = "start",
 }: {
   readonly value: string;
   readonly variants: readonly string[];
+  readonly align?: "start" | "center";
 }) {
   return (
-    <span className="stable-text">
+    <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
+      {/* Every variant contributes its natural size, but only one is exposed. */}
       {[...new Set([...variants, value])].map((text) => (
-        <span key={text} aria-hidden={text !== value}>
+        <span
+          key={text}
+          aria-hidden={text !== value}
+          className={cx(
+            "min-w-0 [grid-area:1/1] aria-hidden:invisible",
+            align === "center" ? "self-center" : "self-start",
+          )}
+        >
           {text}
         </span>
       ))}

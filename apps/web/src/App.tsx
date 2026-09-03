@@ -13,10 +13,19 @@ import { useSandbox } from "./sandbox/use-sandbox";
 import { StableText } from "./sandbox/StableText";
 import { PgnActions, ReplayControls } from "./sandbox/ReplayControls";
 import { replayView } from "./sandbox/replay";
+import { Button } from "./ui/Button";
+import { cx } from "./ui/cx";
+import { Icon } from "./ui/Icon";
 
 export interface AppProps {
   readonly apiBaseUrl: string;
 }
+
+const connectionMarks: Record<SandboxState["readiness"], string> = {
+  checking: "",
+  ready: "text-success",
+  unavailable: "text-warning",
+};
 
 export function App({ apiBaseUrl }: AppProps) {
   const { t } = useTranslation();
@@ -25,36 +34,56 @@ export function App({ apiBaseUrl }: AppProps) {
   const { snapshot } = state;
 
   return (
-    <div className="app-shell">
+    <div className="mx-auto w-[min(1280px,calc(100%_-_2rem))] pb-[max(1.5rem,env(safe-area-inset-bottom))] md:w-[min(1280px,calc(100%_-_3rem))] lg:w-[min(1280px,calc(100%_-_4rem))]">
       <DocumentMetadata />
-      <a className="skip-link" href="#sandbox">
+      <a
+        className="fixed top-3 left-4 z-10 -translate-y-[200%] rounded-control bg-accent p-3 text-on-accent focus:translate-y-0"
+        href="#sandbox"
+      >
         {t("app.skipLink")}
       </a>
-      <header className="app-header">
-        <p className="wordmark">
-          <span>{t("app.brand")}</span> <span>{t("app.arena")}</span>
+      <header className="flex min-h-22 flex-wrap items-center justify-between gap-6 border-b border-divider py-3 max-sm:min-h-19 max-sm:gap-3">
+        <p className="font-display text-body font-semibold tracking-[0.035em] uppercase max-sm:max-w-44 max-sm:text-caption">
+          <span className="inline-block">{t("app.brand")}</span>{" "}
+          <span className="inline-block text-accent">{t("app.arena")}</span>
         </p>
-        <span className="environment-label">{t("app.localDevelopment")}</span>
+        <span className="text-right text-label text-text-muted max-sm:max-w-32 max-sm:text-caption">
+          {t("app.localDevelopment")}
+        </span>
       </header>
       <main id="sandbox" tabIndex={-1}>
-        <div className="page-heading">
+        <div className="flex items-center justify-between gap-6 py-8 max-lg:flex-col max-lg:items-start max-lg:gap-4 max-sm:py-6">
           <div>
-            <h1>{t("sandbox.title")}</h1>
-            <p>{t("sandbox.description")}</p>
+            <h1 className="font-display text-title font-medium max-sm:text-[1.5rem]/8">
+              {t("sandbox.title")}
+            </h1>
+            <p className="mt-2 text-text-secondary">{t("sandbox.description")}</p>
           </div>
           <div
-            className={"connection connection--" + state.readiness}
+            className="flex shrink-0 items-center gap-2 text-label text-text-secondary"
             aria-label={t("connection.label")}
           >
-            <span className="connection__mark" aria-hidden="true">
+            <span
+              className={cx(
+                "inline-grid size-5 shrink-0 place-items-center rounded-full border border-current font-semibold",
+                connectionMarks[state.readiness],
+              )}
+              aria-hidden="true"
+            >
               {state.readiness === "ready" ? "✓" : state.readiness === "checking" ? "…" : "!"}
             </span>
             <span>{t(`connection.${state.readiness}`)}</span>
           </div>
         </div>
-        <div className="arena-frame">
-          <section className="board-panel" aria-label={t("board.label")}>
-            <div className="player-summaries">
+        <div
+          className="relative grid min-w-0 gap-8 lg:chamfer-frame lg:grid-cols-[minmax(0,1fr)_minmax(320px,384px)] lg:p-8"
+          data-testid="arena-frame"
+        >
+          <section
+            className="mx-auto flex w-full max-w-[640px] min-w-0 flex-col self-start"
+            aria-label={t("board.label")}
+          >
+            <div className="mb-4 grid grid-cols-2 rounded-panel border border-divider bg-surface">
               <PlayerSummary color="white" snapshot={snapshot} />
               <PlayerSummary color="black" snapshot={snapshot} />
             </div>
@@ -71,20 +100,18 @@ export function App({ apiBaseUrl }: AppProps) {
                   view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
                   toolbar={
                     <>
-                      <div className="board-toolbar">
-                        <button
-                          type="button"
-                          className="button button--secondary"
+                      <div className="order-3 mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <Button
+                          variant="secondary"
+                          className="flex-auto"
                           onClick={() =>
                             setOrientation((previous) => (previous === "white" ? "black" : "white"))
                           }
                         >
-                          <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                            <path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
-                          </svg>
+                          <Icon path="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
                           {t("actions.flip")}
-                        </button>
-                        <span>
+                        </Button>
+                        <span className="text-right text-label text-text-secondary">
                           {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
                         </span>
                       </div>
@@ -96,19 +123,24 @@ export function App({ apiBaseUrl }: AppProps) {
                 />
               </>
             ) : (
-              <div className="sandbox-entry">
-                <div className="sandbox-entry__content">
-                  <div className="sandbox-entry__piece">
-                    <PieceIcon color="white" kind="n" />
+              <div className="grid aspect-square min-h-[380px] place-items-center border border-divider p-8 checkered-backdrop max-sm:aspect-auto max-sm:min-h-[340px] max-sm:px-4 max-sm:py-6">
+                <div className="w-full max-w-[23rem] text-center">
+                  <div className="mb-6 flex justify-center max-sm:mb-4">
+                    <PieceIcon color="white" kind="n" className="size-20" />
                   </div>
-                  <h2>{t("sandbox.entryTitle")}</h2>
-                  <p>{t("sandbox.entryDescription")}</p>
+                  <h2 className="font-display text-title font-semibold max-sm:text-section">
+                    {t("sandbox.entryTitle")}
+                  </h2>
+                  <p className="mt-4 text-text-secondary">{t("sandbox.entryDescription")}</p>
                   <StartButton state={state} controller={controller} />
                 </div>
               </div>
             )}
           </section>
-          <aside className="information-rail" aria-label={t("game.status")}>
+          <aside
+            className="flex min-w-0 flex-col gap-8 max-lg:mx-auto max-lg:w-full max-lg:max-w-[640px]"
+            aria-label={t("game.status")}
+          >
             <GameStatus state={state} controller={controller} />
             <MoveHistory
               moves={snapshot?.moves ?? []}
@@ -118,19 +150,19 @@ export function App({ apiBaseUrl }: AppProps) {
             {snapshot?.state === "completed" || snapshot?.state === "aborted" ? (
               <PgnActions state={state} controller={controller} />
             ) : null}
-            <div className="session-note">
-              <span className="session-note__title">
-                <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                  <path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
-                </svg>
+            <div className="text-label text-text-muted">
+              <span className="flex items-center gap-2 text-text-secondary">
+                <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
                 {t("sandbox.privacy")}
               </span>
-              <p>{t("sandbox.memoryHint")}</p>
+              <p className="mt-2">{t("sandbox.memoryHint")}</p>
             </div>
           </aside>
         </div>
       </main>
-      <footer className="app-footer">{t("sandbox.footer")}</footer>
+      <footer className="pt-8 text-center text-caption text-text-muted">
+        {t("sandbox.footer")}
+      </footer>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcementMessage(state.announcement, t)}
       </div>
@@ -149,15 +181,15 @@ function PlayerSummary({
   const isTurn = snapshot?.state === "active" && snapshot.turn === color;
   return (
     <div
-      className="player-summary"
-      data-turn={isTurn || undefined}
+      className="relative flex min-w-0 items-center gap-3 p-4 not-first:border-l not-first:border-divider max-sm:gap-[min(0.5rem,8px)] max-sm:px-[min(0.5rem,8px)] max-sm:py-[min(0.75rem,12px)]"
+      data-seat={color}
       aria-label={t("players.label", { color: t(`players.${color}`) })}
     >
-      <PieceIcon color={color} kind="k" />
-      <div className="player-summary__copy">
-        <span className="player-summary__color">{t(`players.${color}`)}</span>
-        <strong>{t("players.guest")}</strong>
-        <span className="player-summary__activity">
+      <PieceIcon color={color} kind="k" className="size-8 max-sm:size-[min(1.5rem,24px)]" />
+      <div className="flex min-w-0 flex-col wrap-anywhere">
+        <span className="text-label text-text-secondary">{t(`players.${color}`)}</span>
+        <strong className="font-semibold max-sm:text-label">{t("players.guest")}</strong>
+        <span className={cx("text-caption", isTurn ? "text-accent" : "text-text-muted")}>
           <StableText
             value={t(
               !snapshot
@@ -174,6 +206,9 @@ function PlayerSummary({
           />
         </span>
       </div>
+      {isTurn ? (
+        <span className="absolute inset-x-4 -bottom-px h-0.5 bg-accent" aria-hidden="true" />
+      ) : null}
     </div>
   );
 }
@@ -187,9 +222,9 @@ function StartButton({
 }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      className="button button--primary"
+    <Button
+      variant="primary"
+      className="mt-8"
       disabled={
         state.readiness !== "ready" ||
         !["entry", "access-error", "unavailable"].includes(state.phase)
@@ -207,9 +242,7 @@ function StartButton({
               ? "actions.restartSession"
               : "actions.start",
       )}
-      <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-        <path d="M5 12h14m-6-6 6 6-6 6" />
-      </svg>
-    </button>
+      <Icon path="M5 12h14m-6-6 6 6-6 6" />
+    </Button>
   );
 }

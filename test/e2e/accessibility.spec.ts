@@ -5,12 +5,12 @@ import { activate, expect, square, startSandbox, test } from "./fixtures";
 
 async function checkBounds(page: Page) {
   const bounds = await page.evaluate(() => {
-    const board = document.querySelector(".chessboard")?.getBoundingClientRect();
-    const summaries = [...document.querySelectorAll(".player-summary")].map(
+    const board = document.querySelector("[role=grid]")?.getBoundingClientRect();
+    const summaries = [...document.querySelectorAll("[data-seat]")].map(
       (element) => element.getBoundingClientRect().width,
     );
-    const controls = [...document.querySelectorAll("button:not(.square), summary")].map((element) =>
-      element.getBoundingClientRect(),
+    const controls = [...document.querySelectorAll("button:not([data-square]), summary")].map(
+      (element) => element.getBoundingClientRect(),
     );
     return {
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -135,7 +135,7 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   await page.keyboard.press("End");
   await expect(square(page, "a3")).toBeFocused();
   const focus = await square(page, "a3").evaluate((element) => {
-    const frame = element.closest(".arena-frame");
+    const frame = element.closest("[data-testid=arena-frame]");
     return {
       keyline: getComputedStyle(element).boxShadow,
       clip: frame ? getComputedStyle(frame).clipPath : null,
@@ -145,7 +145,7 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   expect(focus.clip).toBe("none");
   expect(
     await page
-      .locator(".square")
+      .locator("[data-square]")
       .evaluateAll(
         (squares) => squares.filter((element) => (element as HTMLElement).tabIndex === 0).length,
       ),
@@ -161,8 +161,7 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   }
   await page.emulateMedia({ reducedMotion: "reduce" });
   const animations = await page
-    .locator(".button")
-    .first()
+    .getByRole("button", { name: "Flip board" })
     .evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(animations).toBe("0s");
   await page.setViewportSize({ width: 320, height: 900 });

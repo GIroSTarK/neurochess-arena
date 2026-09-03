@@ -1,6 +1,6 @@
 # Neurochess Arena design system
 
-**Version:** 1.0
+**Version:** 1.1
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
@@ -20,28 +20,28 @@ Use the [screen concepts](design-system/concepts/README.md) when reviewing compo
 
 ### Color
 
-Use semantic CSS custom properties. Component styles consume roles rather than hardcoded hex values. Keep colors opaque when contrast depends on them; opacity on a parent also weakens text, icons, and borders.
+Tokens are Tailwind theme variables in `apps/web/src/styles.css`. Components consume roles through utilities such as `bg-surface`, `text-text-secondary`, and `border-divider` rather than hardcoded hex values; the default Tailwind palette is disabled, so a new color must be added to the theme. Keep colors opaque when contrast depends on them; opacity on a parent also weakens text, icons, and borders.
 
-| Role             | CSS custom property         | Value     | Use                                                                    |
-| ---------------- | --------------------------- | --------- | ---------------------------------------------------------------------- |
-| Canvas           | `--nc-color-canvas`         | `#020914` | Page background                                                        |
-| Surface          | `--nc-color-surface`        | `#0B1626` | Information rail, forms                                                |
-| Elevated surface | `--nc-color-surface-raised` | `#122236` | Menus, dialogs, selected neutral rows                                  |
-| Primary text     | `--nc-color-text`           | `#F3F7FB` | Headings, values, body text                                            |
-| Secondary text   | `--nc-color-text-secondary` | `#AEBDCA` | Supporting copy and labels                                             |
-| Muted text       | `--nc-color-text-muted`     | `#8B9EB3` | Timestamps, unavailable values, secondary metadata                     |
-| Primary action   | `--nc-color-accent`         | `#3DE7EF` | Primary buttons, selected tab indicator                                |
-| Text on primary  | `--nc-color-on-accent`      | `#020914` | Text and icons on cyan fills                                           |
-| Focus            | `--nc-color-focus`          | `#3DE7EF` | Keyboard focus ring; a separate role even though it matches the accent |
-| Success          | `--nc-color-success`        | `#5EE2B2` | Confirmed completion of an action                                      |
-| Warning          | `--nc-color-warning`        | `#F2C96D` | Pause, automatic retry, recoverable interruption                       |
-| Danger           | `--nc-color-danger`         | `#FF7B8F` | Invalid fields, technical loss, destructive action                     |
-| Divider          | `--nc-color-divider`        | `#22364A` | Decorative separators and frame details                                |
-| Control border   | `--nc-color-control-border` | `#586F86` | Necessary outlines of fields and unselected controls                   |
-| Light square     | `--nc-board-light`          | `#B7C7D4` | Light chess squares                                                    |
-| Dark square      | `--nc-board-dark`           | `#466177` | Dark chess squares                                                     |
-| Light piece/mark | `--nc-board-ink-light`      | `#F3F7FB` | Ivory piece fill and light contrasting keyline                         |
-| Dark piece/mark  | `--nc-board-ink-dark`       | `#020914` | Ink piece fill and dark contrasting keyline                            |
+| Role             | Theme token               | Value     | Use                                                                    |
+| ---------------- | ------------------------- | --------- | ---------------------------------------------------------------------- |
+| Canvas           | `--color-canvas`          | `#020914` | Page background                                                        |
+| Surface          | `--color-surface`         | `#0B1626` | Information rail, forms                                                |
+| Elevated surface | `--color-surface-raised`  | `#122236` | Menus, dialogs, selected neutral rows                                  |
+| Primary text     | `--color-text`            | `#F3F7FB` | Headings, values, body text                                            |
+| Secondary text   | `--color-text-secondary`  | `#AEBDCA` | Supporting copy and labels                                             |
+| Muted text       | `--color-text-muted`      | `#8B9EB3` | Timestamps, unavailable values, secondary metadata                     |
+| Primary action   | `--color-accent`          | `#3DE7EF` | Primary buttons, selected tab indicator                                |
+| Text on primary  | `--color-on-accent`       | `#020914` | Text and icons on cyan fills                                           |
+| Focus            | `--color-focus`           | `#3DE7EF` | Keyboard focus ring; a separate role even though it matches the accent |
+| Success          | `--color-success`         | `#5EE2B2` | Confirmed completion of an action                                      |
+| Warning          | `--color-warning`         | `#F2C96D` | Pause, automatic retry, recoverable interruption                       |
+| Danger           | `--color-danger`          | `#FF7B8F` | Invalid fields, technical loss, destructive action                     |
+| Divider          | `--color-divider`         | `#22364A` | Decorative separators and frame details                                |
+| Control border   | `--color-control-border`  | `#586F86` | Necessary outlines of fields and unselected controls                   |
+| Light square     | `--color-board-light`     | `#B7C7D4` | Light chess squares                                                    |
+| Dark square      | `--color-board-dark`      | `#466177` | Dark chess squares                                                     |
+| Light piece/mark | `--color-board-ink-light` | `#F3F7FB` | Ivory piece fill and light contrasting keyline                         |
+| Dark piece/mark  | `--color-board-ink-dark`  | `#020914` | Ink piece fill and dark contrasting keyline                            |
 
 The cyan filled button uses dark text; white text on cyan is unsuitable. Decorative dividers must not become the sole visible outline of an input. Status always combines a label with an icon or shape. White/Black labels and conventional piece appearance identify seats; provider branding never substitutes for them.
 
@@ -49,42 +49,42 @@ Hover and pressed states add a neutral surface or an inset contrasting keyline. 
 
 ### Typography
 
-| Role                      | Token               | Family                                                                                     |
-| ------------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
-| Wordmark and display      | `--nc-font-display` | `"Orbitron Variable", ui-sans-serif, system-ui, sans-serif`                                |
-| Interface and commentary  | `--nc-font-ui`      | `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
-| Notation and measurements | `--nc-font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`                     |
+| Role                      | Token            | Family                                                                                     |
+| ------------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| Wordmark and display      | `--font-display` | `"Orbitron Variable", ui-sans-serif, system-ui, sans-serif`                                |
+| Interface and commentary  | `--font-ui`      | `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
+| Notation and measurements | `--font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`                     |
 
-Orbitron and Inter are bundled locally by the sandbox app. Keep body copy and control labels in the UI family. Use `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
+Orbitron and Inter are bundled locally by the sandbox app. The families map to `font-display`, `font-ui`, and `font-mono`; the size tokens map to `text-caption` through `text-display` and carry their line height. Keep body copy and control labels in the UI family. The base layer sets `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
 
-| Style / size token  | Size / line height   | Weight | Application                                   |
-| ------------------- | -------------------- | ------ | --------------------------------------------- |
-| `--nc-type-caption` | `0.75rem / 1rem`     | 400    | Secondary metadata, chart labels              |
-| `--nc-type-label`   | `0.875rem / 1.25rem` | 500    | Control labels, tabs, compact metrics         |
-| `--nc-type-body`    | `1rem / 1.5rem`      | 400    | Commentary, instructions, mobile inputs       |
-| `--nc-type-section` | `1.25rem / 1.75rem`  | 600    | Section heading, result detail                |
-| `--nc-type-title`   | `1.75rem / 2.25rem`  | 500    | Page title                                    |
-| `--nc-type-display` | `2.25rem / 2.75rem`  | 500    | Large display title; use title size on mobile |
+| Style / size token | Size / line height   | Weight | Application                                   |
+| ------------------ | -------------------- | ------ | --------------------------------------------- |
+| `--text-caption`   | `0.75rem / 1rem`     | 400    | Secondary metadata, chart labels              |
+| `--text-label`     | `0.875rem / 1.25rem` | 500    | Control labels, tabs, compact metrics         |
+| `--text-body`      | `1rem / 1.5rem`      | 400    | Commentary, instructions, mobile inputs       |
+| `--text-section`   | `1.25rem / 1.75rem`  | 600    | Section heading, result detail                |
+| `--text-title`     | `1.75rem / 2.25rem`  | 500    | Page title                                    |
+| `--text-display`   | `2.25rem / 2.75rem`  | 500    | Large display title; use title size on mobile |
 
 Sizes assume a 16px browser default and scale with user preferences. Reserve uppercase and up to `0.08em` tracking for the wordmark. Essential instructions never use caption size. Let long names wrap; expose complete identifiers in details if a compact row truncates them. Do not use `white-space: nowrap` on page titles.
 
 ### Spacing, geometry, icons, and motion
 
-| Tokens                                              | Values                                                           |
-| --------------------------------------------------- | ---------------------------------------------------------------- |
-| `--nc-space-1`, `-2`, `-3`, `-4`, `-6`, `-8`, `-12` | `0.25rem`, `0.5rem`, `0.75rem`, `1rem`, `1.5rem`, `2rem`, `3rem` |
-| `--nc-radius-control`, `--nc-radius-panel`          | `0.375rem`, `0.625rem`                                           |
-| `--nc-border-width`                                 | `1px`                                                            |
-| `--nc-target-primary`                               | `2.75rem` (44px at the reference size)                           |
-| `--nc-icon-size`, `--nc-icon-stroke`                | `1.25rem`, `2px`                                                 |
-| `--nc-motion-feedback`, `--nc-motion-transition`    | `120ms`, `180ms`                                                 |
-| `--nc-motion-ease`                                  | `cubic-bezier(0.2, 0, 0, 1)`                                     |
+| Tokens                                                                    | Values                                                           |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Spacing scale `1`, `2`, `3`, `4`, `6`, `8`, `12` (`p-4`, `gap-8`, `mt-2`) | `0.25rem`, `0.5rem`, `0.75rem`, `1rem`, `1.5rem`, `2rem`, `3rem` |
+| `--radius-control`, `--radius-panel` (`rounded-control`, `rounded-panel`) | `0.375rem`, `0.625rem`                                           |
+| Border width (`border`)                                                   | `1px`                                                            |
+| `--spacing-target` (`min-h-target`, `size-target`)                        | `2.75rem` (44px at the reference size)                           |
+| Icon size and stroke (`size-5`, `stroke-2`)                               | `1.25rem`, `2px`                                                 |
+| Motion durations (`duration-120`, `duration-180`)                         | `120ms`, `180ms`                                                 |
+| `--ease-arena` (`ease-arena`)                                             | `cubic-bezier(0.2, 0, 0, 1)`                                     |
 
 Use a single chamfered arena frame as the signature motif. Buttons, forms, rows, and menus use the ordinary corner tokens. Frame geometry must not clip content, focus rings, menus, or pointer targets; apply decorative clipping to a separate non-interactive layer.
 
 Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
 
-Use restrained shadow only for overlays; ordinary panels separate through surfaces and spacing. Keep glow outside the board and away from reading surfaces. Animate accepted moves and state changes briefly. Under `prefers-reduced-motion: reduce`, remove movement and pulsing, preserving a static activity label. Do not fabricate progress percentages or countdowns for provider requests.
+Use restrained shadow only for overlays; ordinary panels separate through surfaces and spacing. Keep glow outside the board and away from reading surfaces. Animate accepted moves and state changes briefly. Apply transitions and animations only through `motion-safe:` variants so `prefers-reduced-motion: reduce` removes movement and pulsing while a static activity label remains. Do not fabricate progress percentages or countdowns for provider requests.
 
 ## Layout and hierarchy
 
@@ -94,7 +94,7 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 | 768–1024px   | One column, 24px gutters, board centered and capped at 640px; supporting content follows it.                                                              |
 | 320–767px    | One column, 16px gutters; equal-width compact player summaries, full-width square board, controls, commentary, then detail tabs.                          |
 
-The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
+Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adjustments, `md` (768px) widens the gutters, and `lg` (1025px) places the board beside the rail. The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
 
 The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest concepts show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
 

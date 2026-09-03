@@ -85,7 +85,7 @@ See the [migration guide](docs/development.md#migrations) for upgrade ordering a
 ## Workspace boundaries
 
 ```text
-apps/web           React, Vite, browser state
+apps/web           React, Vite, Tailwind CSS, browser state
 apps/api           Fastify, server-side orchestration
 packages/chess     Deterministic chess domain
 packages/contracts Runtime-validated transport contracts

@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 
+import { cx } from "../ui/cx";
+
 import type { Piece, PieceKind } from "./position";
 
 // Original, reusable Staunton silhouettes. The contrasting outline is part of
-// each piece, so neither color disappears into a light or dark square.
+// each piece, so neither color disappears into a light or dark square. Fill and
+// stroke are inherited from the root element; `currentColor` is the outline ink.
 const silhouettes: Record<PieceKind, ReactNode> = {
   p: (
     <>
@@ -22,7 +25,7 @@ const silhouettes: Record<PieceKind, ReactNode> = {
     <>
       <path d="M18 48c4-9 11-11 19-17l-9-2-8 6-8-5 6-15 9-7 1-6 8 6c17 1 18 19 12 34l-3 6z" />
       <path d="m19 17 7 1M37 16c8 8 6 16 1 23M22 49h22l5 8H16zM15 57h35v3H15z" />
-      <circle cx="28" cy="17" r="1.5" fill="var(--piece-outline)" stroke="none" />
+      <circle cx="28" cy="17" r="1.5" className="fill-current stroke-none" />
     </>
   ),
   b: (
@@ -52,22 +55,26 @@ const silhouettes: Record<PieceKind, ReactNode> = {
   ),
 };
 
-export function PieceIcon({ color, kind }: Piece) {
+const inks = {
+  white: "fill-board-ink-light text-board-ink-dark",
+  black: "fill-board-ink-dark text-board-ink-light",
+} as const;
+
+export interface PieceIconProps extends Piece {
+  /** Sizing utilities; defaults to 76% of the containing square. */
+  readonly className?: string;
+}
+
+export function PieceIcon({ color, kind, className = "size-[76%]" }: PieceIconProps) {
   return (
     <svg
-      className={"piece piece--" + color}
+      className={cx("pointer-events-none block shrink-0 stroke-current", inks[color], className)}
       viewBox="0 0 64 64"
       aria-hidden="true"
       focusable="false"
       data-piece={color + "-" + kind}
     >
-      <g
-        fill="var(--piece-fill)"
-        stroke="var(--piece-outline)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
+      <g strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         {silhouettes[kind]}
       </g>
     </svg>

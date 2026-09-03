@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { noticeMessage } from "../i18n/messages";
+import { Button } from "../ui/Button";
 
 import type { SandboxController, SandboxState } from "./controller";
 
@@ -9,18 +10,22 @@ interface Props {
   readonly controller: SandboxController;
 }
 
+const panelClassName = "min-w-0 rounded-control border border-control-border bg-surface p-4";
+
 export function ReplayControls({ state, controller }: Props) {
   const { t } = useTranslation();
   const count = state.replay?.snapshot.moves.length ?? 0;
   const ply = state.replayPly;
   return (
-    <section className="replay-controls" aria-label={t("replay.title")}>
-      <div className="section-heading">
-        <h2>{t("replay.title")}</h2>
-        <span>{t("replay.position", { ply, count })}</span>
+    <section className={"mt-4 " + panelClassName} aria-label={t("replay.title")}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-label font-semibold">{t("replay.title")}</h2>
+        <span className="text-right text-label text-text-muted">
+          {t("replay.position", { ply, count })}
+        </span>
       </div>
-      {state.replayPhase === "loading" ? <p>{t("replay.loading")}</p> : null}
-      <div className="replay-buttons">
+      {state.replayPhase === "loading" ? <p className="mt-3">{t("replay.loading")}</p> : null}
+      <div className="mt-4 grid grid-cols-2 gap-3">
         {(
           [
             { key: "first", target: 0, disabled: ply === 0 },
@@ -29,27 +34,25 @@ export function ReplayControls({ state, controller }: Props) {
             { key: "last", target: count, disabled: ply === count },
           ] as const
         ).map((control) => (
-          <button
+          <Button
             key={control.key}
-            type="button"
-            className="button button--secondary"
+            variant="secondary"
             disabled={!state.replay || control.disabled}
             onClick={() => controller.selectPly(control.target)}
           >
             {t(`replay.${control.key}`)}
-          </button>
+          </Button>
         ))}
       </div>
       {state.replayPhase === "error" ? (
-        <button
-          type="button"
-          className="button button--secondary"
+        <Button
+          variant="secondary"
           onClick={() => {
             void controller.loadReplay();
           }}
         >
           {t("replay.retry")}
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -58,41 +61,41 @@ export function ReplayControls({ state, controller }: Props) {
 export function PgnActions({ state, controller }: Props) {
   const { t } = useTranslation();
   return (
-    <section className="pgn-actions" aria-labelledby="pgn-heading">
-      <h2 id="pgn-heading">{t("export.title")}</h2>
-      <div className="dialog-actions">
-        <button
-          type="button"
-          className="button button--secondary"
+    <section className={panelClassName} aria-labelledby="pgn-heading">
+      <h2 id="pgn-heading" className="text-label font-semibold">
+        {t("export.title")}
+      </h2>
+      <div className="my-4 flex flex-wrap gap-3">
+        <Button
+          variant="secondary"
+          className="flex-[1_1_8rem]"
           disabled={state.exportPhase === "loading"}
           onClick={() => {
             void controller.exportPgn("copy");
           }}
         >
           {t("export.copy")}
-        </button>
-        <button
-          type="button"
-          className="button button--secondary"
+        </Button>
+        <Button
+          variant="secondary"
+          className="flex-[1_1_8rem]"
           disabled={state.exportPhase === "loading"}
           onClick={() => {
             void controller.exportPgn("download");
           }}
         >
           {t("export.download")}
-        </button>
+        </Button>
       </div>
       {state.exportPhase !== "idle" && state.exportPhase !== "error" ? (
-        <p>{t(`export.${state.exportPhase}`)}</p>
+        <p className="mt-3">{t(`export.${state.exportPhase}`)}</p>
       ) : null}
-      {state.archiveNotice ? (
-        <p className="notice">{noticeMessage(state.archiveNotice, t)}</p>
-      ) : null}
+      {state.archiveNotice ? <p className="mt-3">{noticeMessage(state.archiveNotice, t)}</p> : null}
       {state.exportText ? (
-        <label className="pgn-label">
+        <label className="mt-3 grid gap-2">
           {t("export.text")}
           <textarea
-            className="pgn-text"
+            className="min-h-32 w-full resize-y rounded-control border border-control-border bg-canvas p-3 text-text"
             readOnly
             rows={8}
             value={state.exportText}

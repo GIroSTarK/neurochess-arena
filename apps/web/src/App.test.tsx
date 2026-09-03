@@ -298,7 +298,7 @@ describe("localized sandbox application", () => {
     const retry = await screen.findByRole("button", { name: "Retry sandbox" });
     expect(screen.getByText("Service ready")).toBeInTheDocument();
     expect(
-      screen.getByText(/The development sandbox is unavailable/, { selector: ".notice" }),
+      screen.getByText(/The development sandbox is unavailable/, { selector: "p" }),
     ).toBeInTheDocument();
     expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/sandbox/games"))).toHaveLength(
       1,

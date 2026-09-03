@@ -172,13 +172,15 @@ test("promotes both colors from the standard position with modal cancellation an
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(accessibility.violations).toEqual([]);
-  const choices = await dialog.locator(".promotion-choice").evaluateAll((elements) =>
-    elements.map((element) => ({
-      width: element.getBoundingClientRect().width,
-      height: element.getBoundingClientRect().height,
-      top: element.getBoundingClientRect().top,
-    })),
-  );
+  const choices = await dialog
+    .getByRole("button", { name: /^Promote to / })
+    .evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: element.getBoundingClientRect().width,
+        height: element.getBoundingClientRect().height,
+        top: element.getBoundingClientRect().top,
+      })),
+    );
   expect(choices.every((choice) => choice.width >= 44 && choice.height >= 44)).toBe(true);
   if (touch) expect(new Set(choices.map((choice) => choice.top)).size).toBe(2);
   await page.screenshot({ path: testInfo.outputPath("promotion.png"), fullPage: true });

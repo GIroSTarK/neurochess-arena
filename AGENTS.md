@@ -20,7 +20,7 @@ When code and documentation disagree, determine the intended behavior before edi
 ## Technical baseline
 
 - Use npm workspaces and TypeScript throughout the product code.
-- Web: React with Vite.
+- Web: React with Vite. Presentation uses Tailwind CSS utilities and the semantic theme in `apps/web/src/styles.css`; do not add component stylesheets or re-enable the default Tailwind palette.
 - API: Fastify.
 - Persistence: PostgreSQL with the latest stable Drizzle ORM release. Do not adopt Drizzle beta or release-candidate APIs without a new ADR.
 - Authentication: Better Auth with email/password, Google, and GitHub.
