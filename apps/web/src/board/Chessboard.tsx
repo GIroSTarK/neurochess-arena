@@ -6,14 +6,7 @@ import { cx } from "../ui/cx";
 
 import { PieceIcon } from "./PieceIcon";
 import { PromotionDialog } from "./PromotionDialog";
-import {
-  FILES,
-  isSquare,
-  parsePosition,
-  visualRows,
-  type PromotionKind,
-  type Square,
-} from "./position";
+import { FILES, parsePosition, visualRows, type PromotionKind, type Square } from "./position";
 
 export interface BoardView {
   readonly fen: string;
@@ -90,9 +83,9 @@ export function Chessboard({
   const lastMove = view ? view.lastMove : snapshot.moves.at(-1)?.uci;
   const promotion = selected?.promotion;
 
-  function focus(square: Square, options?: FocusOptions) {
+  function focus(square: Square) {
     setFocusedSquare(square);
-    buttons.current.get(square)?.focus(options);
+    buttons.current.get(square)?.focus();
   }
 
   function activate(square: Square) {
@@ -308,11 +301,9 @@ export function Chessboard({
           })}
           onCancel={() => {
             if (selected) setSelection({ ...selected, promotion: null });
-            focus(promotion.destination, { preventScroll: true });
           }}
           onChoose={(move) => {
             if (selected) setSelection({ ...selected, promotion: null });
-            if (isSquare(move.slice(2, 4))) focus(promotion.destination, { preventScroll: true });
             onMove(move);
           }}
         />
