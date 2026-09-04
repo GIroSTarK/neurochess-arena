@@ -13,8 +13,8 @@ export function ReplayControls({
   readonly controller: Pick<SandboxController, "loadReplay" | "selectPly">;
 }) {
   const { t } = useTranslation();
-  const count = state.replay?.snapshot.moves.length ?? 0;
-  const ply = state.replayPly;
+  const count = state.replay?.snapshot.moves.length ?? state.snapshot?.moves.length ?? 0;
+  const ply = state.replay ? state.replayPly : count;
   return (
     <section
       className="mt-4 min-w-0 rounded-control border border-control-border bg-surface p-4"

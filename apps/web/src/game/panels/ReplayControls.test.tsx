@@ -20,6 +20,17 @@ function props(replayPly: number) {
 }
 
 describe("replay navigation focus", () => {
+  it.each(["loading", "error"] as const)(
+    "shows the accepted final ply while replay is %s",
+    (replayPhase) => {
+      const initial = props(0);
+      renderLocalized(
+        <ReplayControls {...initial} state={{ ...initial.state, replay: null, replayPhase }} />,
+      );
+      expect(screen.getByText("Ply 4 of 4")).toBeInTheDocument();
+    },
+  );
+
   it.each([
     { name: "Next", from: 3, target: 4, alsoUnavailable: "Last", available: "Previous" },
     { name: "Previous", from: 1, target: 0, alsoUnavailable: "First", available: "Next" },
@@ -30,6 +41,7 @@ describe("replay navigation focus", () => {
     async ({ name, from, target, alsoUnavailable, available }) => {
       const initial = props(from);
       const { rerender } = renderLocalized(<ReplayControls {...initial} />);
+      expect(screen.getByText(`Ply ${from} of 4`)).toBeInTheDocument();
       const user = userEvent.setup();
       const control = screen.getByRole("button", { name });
       act(() => control.focus());
@@ -37,6 +49,7 @@ describe("replay navigation focus", () => {
       expect(initial.selectPly).toHaveBeenCalledExactlyOnceWith(target);
 
       rerender(<ReplayControls {...initial} state={{ ...initial.state, replayPly: target }} />);
+      expect(screen.getByText(`Ply ${target} of 4`)).toBeInTheDocument();
       expect(control).toHaveAttribute("aria-disabled", "true");
       expect(control).not.toBeDisabled();
       expect(control).toHaveFocus();
