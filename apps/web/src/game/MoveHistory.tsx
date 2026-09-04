@@ -2,7 +2,7 @@ import type { MoveRecord } from "@neurochess/contracts";
 import { useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cx } from "./cx";
+import { cx } from "../ui/cx";
 
 interface MoveHistoryProps {
   readonly moves: readonly MoveRecord[];

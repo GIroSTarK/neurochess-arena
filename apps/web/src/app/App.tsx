@@ -8,6 +8,7 @@ import { PieceIcon } from "../board/PieceIcon";
 import { replayView } from "../chess/replay";
 import { interactionEpoch, isTerminal, type SandboxState } from "../game/controller";
 import { GameStatus } from "../game/GameStatus";
+import { MoveHistory } from "../game/MoveHistory";
 import { PgnActions } from "../game/PgnActions";
 import { PlayerSummary } from "../game/PlayerSummary";
 import { ReplayControls } from "../game/ReplayControls";
@@ -17,7 +18,6 @@ import { announcementMessage } from "../i18n/messages";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
-import { MoveHistory } from "../ui/MoveHistory";
 
 import { DocumentMetadata } from "./DocumentMetadata";
 
