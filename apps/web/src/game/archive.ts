@@ -66,13 +66,17 @@ export class ArchiveController {
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
         const retained = store.get();
-        store.setReplay({
-          ...(retained.replay
-            ? { replay: retained.replay, replayPly: retained.replayPly }
-            : emptyReplay),
-          replayPhase: "error",
-          replayNotice: failureNotice(failure),
-        });
+        const notice = failureNotice(failure);
+        store.setReplay(
+          {
+            ...(retained.replay
+              ? { replay: retained.replay, replayPly: retained.replayPly }
+              : emptyReplay),
+            replayPhase: "error",
+            replayNotice: notice,
+          },
+          { announcement: { kind: "notice", notice } },
+        );
       }
     } finally {
       release();
@@ -141,11 +145,11 @@ export class ArchiveController {
       if (!current()) return;
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
-        store.setExport({
-          exportPhase: "error",
-          exportText: null,
-          exportNotice: failureNotice(failure),
-        });
+        const notice = failureNotice(failure);
+        store.setExport(
+          { exportPhase: "error", exportText: null, exportNotice: notice },
+          { announcement: { kind: "notice", notice } },
+        );
       }
     } finally {
       release();

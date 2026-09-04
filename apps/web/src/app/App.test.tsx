@@ -371,6 +371,33 @@ describe("localized sandbox application", () => {
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
   });
 
+  it.each(["replay", "Copy PGN", "Download PGN"])(
+    "announces safe %s failures without moving focus",
+    async (operation) => {
+      const pending = Promise.withResolvers<Response>();
+      mockApi((path) => {
+        if (path === "/sandbox/games") return jsonResponse(snapshot(FOOLS_MATE), 201);
+        if (path.endsWith(operation === "replay" ? "/replay" : "/pgn")) return pending.promise;
+        return undefined;
+      });
+      renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+      await start();
+      const control = screen.getByRole("button", {
+        name: operation === "replay" ? "Flip board" : operation,
+      });
+      act(() => control.focus());
+      if (operation !== "replay") await userEvent.keyboard("{Enter}");
+
+      await act(async () => pending.reject(new Error("private-exception-canary")));
+
+      const message = "The service could not be reached. Check your connection and try again.";
+      expect(screen.getByText(message, { selector: "p" })).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(message);
+      expect(control).toHaveFocus();
+      expect(document.body).not.toHaveTextContent("private-exception-canary");
+    },
+  );
+
   it("localizes square names and live announcements through typed resources with English fallback", async () => {
     const localization = createWebI18n();
     localization.addResourceBundle("fr", "translation", {
