@@ -2,15 +2,22 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { FOOLS_MATE, GAME_ID, mockController, readyState, snapshot } from "../../test/fixtures";
+import {
+  FOOLS_MATE,
+  GAME_ID,
+  mockController,
+  readyState,
+  sandboxState,
+  snapshot,
+} from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 import { StableText } from "../../ui/StableText";
 import type { SandboxState } from "../state";
 
 import { GameStatus } from "./GameStatus";
 
-function props(overrides: Partial<SandboxState> = {}) {
-  return { state: readyState(overrides), controller: mockController() };
+function props(state: SandboxState = readyState()) {
+  return { state, controller: mockController() };
 }
 
 const paused = () => snapshot([], { state: "paused", legalMoves: [], version: 1 });
@@ -32,11 +39,11 @@ describe("stable game status feedback", () => {
 
     const pending = {
       action: "resume" as const,
-      gameId: initial.state.snapshot!.gameId,
+      gameId: GAME_ID,
       expectedVersion: 1,
       commandId: crypto.randomUUID(),
     };
-    rerender(<GameStatus {...initial} state={{ ...initial.state, snapshot: paused() }} />);
+    rerender(<GameStatus {...initial} state={readyState({ snapshot: paused() })} />);
     expect(paragraphs()).toEqual([
       "Your full move history is preserved. Choose Resume to continue playing.",
     ]);
@@ -46,12 +53,11 @@ describe("stable game status feedback", () => {
     rerender(
       <GameStatus
         {...initial}
-        state={{
-          ...initial.state,
+        state={sandboxState({
           snapshot: paused(),
           phase: "submitting",
           pendingCommand: pending,
-        }}
+        })}
       />,
     );
     expect(paragraphs()).toEqual([
@@ -74,7 +80,7 @@ describe("stable game status feedback", () => {
     ["recovered", "Your game has been recovered and paused. Choose Resume when you are ready."],
     ["synchronized", "The accepted position is up to date."],
   ] as const)("exposes only the %s notice in place of the paused hint", (notice, message) => {
-    const initial = props({ snapshot: paused(), notice });
+    const initial = props(readyState({ snapshot: paused(), notice }));
     const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
@@ -85,7 +91,15 @@ describe("stable game status feedback", () => {
     expect(screen.getAllByRole("button")).toHaveLength(4);
     expect(screen.queryByRole("status")).toBeNull();
 
-    rerender(<GameStatus {...initial} state={{ ...initial.state, phase: "recovering" }} />);
+    rerender(
+      <GameStatus
+        {...initial}
+        state={sandboxState(
+          { phase: "recovering", snapshot: paused(), pendingCommand: null },
+          { notice },
+        )}
+      />,
+    );
     expect(
       within(feedback)
         .getAllByRole("paragraph")
@@ -97,7 +111,12 @@ describe("stable game status feedback", () => {
   });
 
   it("keeps error explanations and their synchronization feedback accessible", () => {
-    const initial = props({ phase: "synchronizing", notice: "ILLEGAL_MOVE" });
+    const initial = props(
+      sandboxState(
+        { phase: "synchronizing", snapshot: snapshot(), pendingCommand: null },
+        { notice: "ILLEGAL_MOVE" },
+      ),
+    );
     const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
@@ -109,7 +128,7 @@ describe("stable game status feedback", () => {
       "You can still inspect the board while the move is confirmed.",
     ]);
     expect(screen.getByText("That move is no longer legal.")).toBeInTheDocument();
-    rerender(<GameStatus {...initial} state={{ ...initial.state, phase: "ready" }} />);
+    rerender(<GameStatus {...initial} state={readyState({ notice: "ILLEGAL_MOVE" })} />);
     expect(
       screen
         .getAllByRole("paragraph")
@@ -118,18 +137,27 @@ describe("stable game status feedback", () => {
   });
 
   it("retains actionable recovery and the terminal result without hidden interactive copies", () => {
-    const initial = props({ snapshot: paused(), phase: "uncertain", notice: "uncertain" });
+    const initial = props(
+      sandboxState(
+        {
+          snapshot: paused(),
+          phase: "uncertain",
+          pendingCommand: {
+            gameId: GAME_ID,
+            expectedVersion: 1,
+            commandId: crypto.randomUUID(),
+            action: "resume",
+          },
+        },
+        { notice: "uncertain" },
+      ),
+    );
     const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     expect(screen.getByRole("button", { name: "Check game status" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute("aria-disabled", "true");
     expect(container.querySelectorAll('[aria-hidden="true"] button')).toHaveLength(0);
 
-    rerender(
-      <GameStatus
-        {...initial}
-        state={{ ...initial.state, snapshot: snapshot(FOOLS_MATE), phase: "ready", notice: null }}
-      />,
-    );
+    rerender(<GameStatus {...initial} state={readyState({ snapshot: snapshot(FOOLS_MATE) })} />);
     expect(screen.getByRole("heading", { name: "Black wins" })).toBeInTheDocument();
     expect(screen.getByText("Checkmate")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
@@ -151,31 +179,44 @@ describe("stable game status feedback", () => {
     {
       name: "Retry same move",
       method: "retryCommand",
-      overrides: {
-        phase: "uncertain",
-        notice: "uncertain",
-        pendingCommand: {
-          gameId: GAME_ID,
-          expectedVersion: 0,
-          commandId: "5b6a4d1c-2f6e-4c1a-9d3b-8e7f6a5b4c3d",
-          move: "e2e4",
+      state: sandboxState(
+        {
+          phase: "uncertain",
+          snapshot: snapshot(),
+          pendingCommand: {
+            gameId: GAME_ID,
+            expectedVersion: 0,
+            commandId: "5b6a4d1c-2f6e-4c1a-9d3b-8e7f6a5b4c3d",
+            move: "e2e4",
+          },
         },
-      },
+        { notice: "uncertain" },
+      ),
     },
     {
       name: "Check game status",
       method: "synchronize",
-      overrides: { phase: "sync-required", notice: "sync-required" },
+      state: sandboxState(
+        { phase: "sync-required", snapshot: snapshot(), pendingCommand: null },
+        { notice: "sync-required" },
+      ),
     },
     {
       name: "Retry recovery",
       method: "recover",
-      overrides: { phase: "recovery-required", notice: "recovery-required" },
+      state: sandboxState(
+        { phase: "recovery-required", snapshot: paused(), pendingCommand: null },
+        { notice: "recovery-required" },
+      ),
     },
-    { name: "New game", method: "start", overrides: { snapshot: snapshot(FOOLS_MATE) } },
-    { name: "Retry connection", method: "checkReadiness", overrides: { readiness: "unavailable" } },
-  ] as const)("routes $name to the controller", async ({ name, method, overrides }) => {
-    const initial = props(overrides);
+    { name: "New game", method: "start", state: readyState({ snapshot: snapshot(FOOLS_MATE) }) },
+    {
+      name: "Retry connection",
+      method: "checkReadiness",
+      state: readyState({ readiness: "unavailable" }),
+    },
+  ] as const)("routes $name to the controller", async ({ name, method, state }) => {
+    const initial = props(state);
     renderLocalized(<GameStatus {...initial} />);
     await userEvent.click(screen.getByRole("button", { name }));
     expect(initial.controller[method]).toHaveBeenCalledTimes(1);

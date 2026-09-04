@@ -4,13 +4,13 @@ import { ApiFailure, type SandboxApi } from "../api/client";
 
 import { failureNotice, safeFailure } from "./failures";
 import type { PgnDelivery } from "./pgn";
-import { isTerminal, sameSnapshot, type SandboxState } from "./state";
-import type { Store } from "./store";
+import { emptyExport, emptyReplay, isTerminal, sameSnapshot } from "./state";
+import type { SandboxStore } from "./store";
 
 export interface ArchiveContext {
   readonly api: Pick<SandboxApi, "replay" | "pgn">;
   readonly delivery: PgnDelivery;
-  readonly store: Store<SandboxState>;
+  readonly store: SandboxStore;
   readonly isConnected: () => boolean;
   /** Clears the loaded game on an access failure and reports whether it was one. */
   readonly loseAccess: (failure: ApiFailure) => boolean;
@@ -43,17 +43,36 @@ export class ArchiveController {
     if (!request) return;
     const { snapshot, signal, current, release } = request;
     const { api, store } = this.context;
-    store.patch({ replayPhase: "loading", replayNotice: null });
+    const previous = store.get();
+    store.setReplay({
+      ...(previous.replay
+        ? { replay: previous.replay, replayPly: previous.replayPly }
+        : emptyReplay),
+      replayPhase: "loading",
+      replayNotice: null,
+    });
     try {
       const replay = await api.replay(snapshot.gameId, signal);
       if (!current()) return;
       if (!sameSnapshot(replay.snapshot, snapshot)) throw new ApiFailure("malformed");
-      store.patch({ replay, replayPly: snapshot.moves.length, replayPhase: "idle" });
+      store.setReplay({
+        replay,
+        replayPly: snapshot.moves.length,
+        replayPhase: "idle",
+        replayNotice: null,
+      });
     } catch (error: unknown) {
       if (!current()) return;
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
-        store.patch({ replayPhase: "error", replayNotice: failureNotice(failure) });
+        const retained = store.get();
+        store.setReplay({
+          ...(retained.replay
+            ? { replay: retained.replay, replayPly: retained.replayPly }
+            : emptyReplay),
+          replayPhase: "error",
+          replayNotice: failureNotice(failure),
+        });
       }
     } finally {
       release();
@@ -63,13 +82,20 @@ export class ArchiveController {
   /** Moves the replay cursor; the accepted snapshot is never modified. */
   selectPly(ply: number): void {
     const { store } = this.context;
-    const { replay, interactionRevision } = store.get();
+    const state = store.get();
+    const { replay } = state;
     if (!replay || !Number.isInteger(ply) || ply < 0 || ply > replay.snapshot.moves.length) return;
-    store.patch({
-      replayPly: ply,
-      interactionRevision: interactionRevision + 1,
-      announcement: { kind: "replay", ply, san: replay.snapshot.moves[ply - 1]?.san ?? null },
-    });
+    const status =
+      state.replayPhase === "error"
+        ? { replayPhase: state.replayPhase, replayNotice: state.replayNotice }
+        : { replayPhase: state.replayPhase, replayNotice: null };
+    store.setReplay(
+      { replay, replayPly: ply, ...status },
+      {
+        invalidateInteraction: true,
+        announcement: { kind: "replay", ply, san: replay.snapshot.moves[ply - 1]?.san ?? null },
+      },
+    );
   }
 
   async exportPgn(action: "copy" | "download"): Promise<void> {
@@ -77,7 +103,7 @@ export class ArchiveController {
     if (!request) return;
     const { snapshot, signal, current, release } = request;
     const { api, delivery, store } = this.context;
-    store.patch({ exportPhase: "loading", exportText: null, exportNotice: null });
+    store.setExport({ exportPhase: "loading", exportText: null, exportNotice: null });
     try {
       const response = await api.pgn(snapshot.gameId, signal);
       if (!current()) return;
@@ -95,24 +121,31 @@ export class ArchiveController {
         outcome = "downloaded";
       }
       if (!current()) return;
-      store.patch({
-        exportPhase: outcome,
-        exportText: outcome === "manual" ? response.pgn : null,
-        announcement: {
-          kind: "notice",
-          notice:
-            outcome === "copied"
-              ? "pgn-copied"
-              : outcome === "manual"
-                ? "pgn-manual"
-                : "pgn-downloaded",
+      store.setExport(
+        outcome === "manual"
+          ? { exportPhase: "manual", exportText: response.pgn, exportNotice: null }
+          : { exportPhase: outcome, exportText: null, exportNotice: null },
+        {
+          announcement: {
+            kind: "notice",
+            notice:
+              outcome === "copied"
+                ? "pgn-copied"
+                : outcome === "manual"
+                  ? "pgn-manual"
+                  : "pgn-downloaded",
+          },
         },
-      });
+      );
     } catch (error: unknown) {
       if (!current()) return;
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
-        store.patch({ exportPhase: "error", exportNotice: failureNotice(failure) });
+        store.setExport({
+          exportPhase: "error",
+          exportText: null,
+          exportNotice: failureNotice(failure),
+        });
       }
     } finally {
       release();
@@ -126,22 +159,8 @@ export class ArchiveController {
       this.requests[slot] = null;
     }
     if (this.context.store.get().exportPhase === "loading") {
-      this.context.store.patch({ exportPhase: "idle" });
+      this.context.store.setExport(emptyExport);
     }
-  }
-
-  /** Aborts and forgets the archive of the previously loaded game. */
-  clear(): void {
-    this.cancel();
-    this.context.store.patch({
-      replay: null,
-      replayPhase: "idle",
-      replayNotice: null,
-      replayPly: 0,
-      exportPhase: "idle",
-      exportText: null,
-      exportNotice: null,
-    });
   }
 
   /** One request per slot, bound to the terminal snapshot loaded right now. */

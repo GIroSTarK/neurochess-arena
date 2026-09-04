@@ -7,6 +7,7 @@ import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { SandboxController } from "./controller";
 import type { SandboxNavigation } from "./navigation";
 import type { PgnDelivery } from "./pgn";
+import type { SandboxState } from "./state";
 
 function harness(initial = snapshot(), navigation?: SandboxNavigation, delivery?: PgnDelivery) {
   const api = {
@@ -125,6 +126,8 @@ describe("sandbox controller", () => {
     "synchronizes a %s rejection before permitting another move",
     async (code) => {
       const { api, controller, initial } = await started();
+      const observed: SandboxState[] = [];
+      const unsubscribe = controller.subscribe(() => observed.push(controller.getSnapshot()));
       const read = Promise.withResolvers<ReturnType<typeof snapshot>>();
       api.move.mockRejectedValue(new ApiFailure("api", code));
       api.snapshot.mockReturnValue(read.promise);
@@ -144,6 +147,15 @@ describe("sandbox controller", () => {
         notice: code,
         announcement: { kind: "rejected", reason: code },
       });
+      // Subscribers must never see ready + pending or submitting + no command between updates.
+      expect(observed.map(({ phase, pendingCommand }) => [phase, pendingCommand !== null])).toEqual(
+        [
+          ["submitting", true],
+          ["synchronizing", false],
+          ["ready", false],
+        ],
+      );
+      unsubscribe();
     },
   );
 
@@ -362,6 +374,8 @@ describe("automatic paused recovery and lifecycle commands", () => {
     const initial = snapshot(["e2e4"]);
     const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
     const { api, controller } = harness(initial);
+    const observed: Pick<SandboxState, "phase" | "snapshot" | "pendingCommand">[] = [];
+    const unsubscribe = controller.subscribe(() => observed.push(controller.getSnapshot()));
     const obsolete = Promise.withResolvers<ReturnType<typeof snapshot>>();
     api.unfinished.mockResolvedValue(initial);
     api.lifecycle.mockReturnValueOnce(obsolete.promise);
@@ -387,6 +401,16 @@ describe("automatic paused recovery and lifecycle commands", () => {
       phase: "ready",
     });
     expect(api.bootstrap).not.toHaveBeenCalled();
+    const playable = observed.filter(({ phase }) => phase === "ready");
+    expect(playable).not.toHaveLength(0);
+    for (const state of playable) {
+      expect(state).toMatchObject({ snapshot: paused, pendingCommand: null });
+    }
+    for (const state of observed.filter(({ pendingCommand }) => pendingCommand !== null)) {
+      expect(state.snapshot).toBe(initial);
+      expect(["recovering", "uncertain", "submitting"]).toContain(state.phase);
+    }
+    unsubscribe();
     disconnect();
   });
 
@@ -676,6 +700,30 @@ describe("private terminal replay and export", () => {
       exportText: null,
       exportNotice: null,
     });
+  });
+  it("never publishes private replay or manual export text without the accepted game", async () => {
+    const { api, controller, delivery, initial } = await terminal();
+    delivery.copy.mockResolvedValueOnce(false);
+    await controller.exportPgn("copy");
+    expect(controller.getSnapshot().exportText).toBe(initial.pgn);
+    const observed: SandboxState[] = [];
+    const unsubscribe = controller.subscribe(() => observed.push(controller.getSnapshot()));
+    api.replay.mockRejectedValueOnce(new ApiFailure("api", "UNAUTHORIZED"));
+
+    await controller.loadReplay();
+
+    const cleared = observed.filter(({ snapshot }) => snapshot === null);
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatchObject({
+      phase: "access-error",
+      pendingCommand: null,
+      replay: null,
+      replayPly: 0,
+      exportPhase: "idle",
+      exportText: null,
+      announcement: { kind: "notice", notice: "UNAUTHORIZED" },
+    });
+    unsubscribe();
   });
   it.each(["replay", "export"] as const)(
     "preserves the other archive error while retrying %s",

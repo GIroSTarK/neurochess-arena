@@ -19,14 +19,17 @@ function props() {
 
 describe("PGN export", () => {
   it("keeps replay and export errors in their own panels", () => {
-    const { controller, state } = props();
-    const failed = {
-      ...state,
-      replayPhase: "error",
-      replayNotice: "network",
-      exportPhase: "error",
-      exportNotice: "timeout",
-    } as const;
+    const { controller } = props();
+    const failed = readyState({
+      snapshot: snapshot(FOOLS_MATE),
+      replayState: {
+        replay: null,
+        replayPly: 0,
+        replayPhase: "error",
+        replayNotice: "network",
+      },
+      exportState: { exportPhase: "error", exportText: null, exportNotice: "timeout" },
+    });
     renderLocalized(
       <>
         <ReplayControls state={failed} controller={controller} />
@@ -61,7 +64,15 @@ describe("PGN export", () => {
       await user.keyboard("{Enter}");
       expect(initial.exportPgn).toHaveBeenCalledExactlyOnceWith(action);
 
-      rerender(<PgnActions {...initial} state={{ ...initial.state, exportPhase: "loading" }} />);
+      rerender(
+        <PgnActions
+          {...initial}
+          state={readyState({
+            snapshot: snapshot(FOOLS_MATE),
+            exportState: { exportPhase: "loading", exportText: null, exportNotice: null },
+          })}
+        />,
+      );
       for (const label of ["Copy PGN", "Download PGN"]) {
         const button = screen.getByRole("button", { name: label });
         expect(button).toHaveAttribute("aria-disabled", "true");
@@ -73,7 +84,15 @@ describe("PGN export", () => {
       await user.click(control);
       expect(initial.exportPgn).toHaveBeenCalledTimes(1);
 
-      rerender(<PgnActions {...initial} state={{ ...initial.state, exportPhase: outcome }} />);
+      rerender(
+        <PgnActions
+          {...initial}
+          state={readyState({
+            snapshot: snapshot(FOOLS_MATE),
+            exportState: { exportPhase: outcome, exportText: null, exportNotice: null },
+          })}
+        />,
+      );
       expect(control).toHaveAttribute("aria-disabled", "false");
       expect(control).toHaveFocus();
       expect(screen.getByText(message)).toBeInTheDocument();

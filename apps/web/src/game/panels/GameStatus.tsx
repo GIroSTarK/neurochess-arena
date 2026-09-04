@@ -29,9 +29,7 @@ function activityKey({ phase, pendingCommand }: SandboxState): ActivityKey | und
     case "starting":
       return "actions.starting";
     case "submitting":
-      return pendingCommand && "action" in pendingCommand
-        ? "lifecycle.submitting"
-        : "game.submitting";
+      return "action" in pendingCommand ? "lifecycle.submitting" : "game.submitting";
     case "synchronizing":
       return "game.synchronizing";
     case "recovering":
@@ -197,11 +195,7 @@ export function GameStatus({
                 void controller.retryCommand();
               }}
             >
-              {t(
-                state.pendingCommand && "action" in state.pendingCommand
-                  ? "actions.retryCommand"
-                  : "actions.retryMove",
-              )}
+              {t("action" in state.pendingCommand ? "actions.retryCommand" : "actions.retryMove")}
             </Button>
           ) : null}
           <Button

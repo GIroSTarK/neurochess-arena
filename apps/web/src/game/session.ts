@@ -12,16 +12,15 @@ import {
   type LifecycleAction,
   type PendingCommand,
   type SandboxNotice,
-  type SandboxState,
 } from "./state";
-import type { Store } from "./store";
+import type { SandboxStore } from "./store";
 
 export interface SessionContext {
   readonly api: Pick<SandboxApi, "move" | "lifecycle" | "snapshot">;
-  readonly store: Store<SandboxState>;
+  readonly store: SandboxStore;
   readonly gate: OperationGate;
   readonly commandId: () => string;
-  readonly archive: Pick<ArchiveController, "clear" | "loadReplay">;
+  readonly archive: Pick<ArchiveController, "cancel" | "loadReplay">;
 }
 
 /**
@@ -46,7 +45,7 @@ export class GameSession {
 
   async submit(move: string): Promise<void> {
     const { phase, snapshot } = this.context.store.get();
-    if (phase !== "ready" || snapshot?.state !== "active" || !snapshot.legalMoves.includes(move)) {
+    if (phase !== "ready" || snapshot.state !== "active" || !snapshot.legalMoves.includes(move)) {
       return;
     }
     // Acquired synchronously, before generating a command or notifying React.
@@ -58,13 +57,12 @@ export class GameSession {
       commandId: this.context.commandId(),
       move,
     };
-    this.context.store.patch({ pendingCommand: command });
     await this.sendCommand(operation, command);
   }
 
   async lifecycle(action: LifecycleAction): Promise<void> {
     const { phase, snapshot } = this.context.store.get();
-    if (phase !== "ready" || !snapshot || isTerminal(snapshot)) return;
+    if (phase !== "ready" || isTerminal(snapshot)) return;
     const operation = this.context.gate.begin();
     if (!operation) return;
     const command: LifecycleCommand = {
@@ -73,21 +71,20 @@ export class GameSession {
       expectedVersion: snapshot.version,
       commandId: this.context.commandId(),
     };
-    this.context.store.patch({ pendingCommand: command });
     await this.sendCommand(operation, command);
   }
 
   /** Resends the retained uncertain command unchanged. */
   async retryCommand(): Promise<void> {
     const { phase, pendingCommand } = this.context.store.get();
-    if (phase !== "uncertain" || !pendingCommand) return;
+    if (phase !== "uncertain") return;
     const operation = this.context.gate.begin();
     if (operation) await this.sendCommand(operation, pendingCommand);
   }
 
   async synchronize(): Promise<void> {
-    const { phase, snapshot } = this.context.store.get();
-    if ((phase !== "uncertain" && phase !== "sync-required") || !snapshot) return;
+    const { phase } = this.context.store.get();
+    if (phase !== "uncertain" && phase !== "sync-required") return;
     const operation = this.context.gate.begin();
     if (!operation) return;
     try {
@@ -109,15 +106,15 @@ export class GameSession {
   loseAccess(failure: ApiFailure): boolean {
     if (!isAccessCode(failure.code)) return false;
     const { store, archive } = this.context;
-    store.patch({
-      snapshot: null,
-      pendingCommand: null,
-      phase: "access-error",
-      notice: failure.code,
-      announcement: { kind: "notice", notice: failure.code },
-      interactionRevision: store.get().interactionRevision + 1,
-    });
-    archive.clear();
+    archive.cancel();
+    store.transition(
+      { snapshot: null, pendingCommand: null, phase: "access-error" },
+      {
+        notice: failure.code,
+        announcement: { kind: "notice", notice: failure.code },
+        invalidateInteraction: true,
+      },
+    );
     this.recovering = false;
     return true;
   }
@@ -131,14 +128,14 @@ export class GameSession {
     const { store, archive } = this.context;
     const needsPause = this.recovering && snapshot.state === "active";
     if (!needsPause) this.recovering = false;
-    store.patch({
-      snapshot,
-      pendingCommand: null,
-      phase: needsPause ? "recovery-required" : "ready",
-      notice: needsPause ? "recovery-required" : notice,
-      announcement: announcement ?? { kind, snapshot },
-      interactionRevision: store.get().interactionRevision + 1,
-    });
+    store.transition(
+      { snapshot, pendingCommand: null, phase: needsPause ? "recovery-required" : "ready" },
+      {
+        notice: needsPause ? "recovery-required" : notice,
+        announcement: announcement ?? { kind, snapshot },
+        invalidateInteraction: true,
+      },
+    );
     if (isTerminal(snapshot) && !store.get().replay) void archive.loadReplay();
   }
 
@@ -147,7 +144,14 @@ export class GameSession {
     const { api, store, gate } = this.context;
     const accepted = store.get().snapshot;
     if (!accepted || !gate.isCurrent(operation)) return;
-    store.patch({ phase: "synchronizing", notice: rejection ?? null });
+    store.transition(
+      {
+        phase: "synchronizing",
+        snapshot: accepted,
+        pendingCommand: rejection ? null : store.get().pendingCommand,
+      },
+      { notice: rejection ?? null },
+    );
     try {
       const snapshot = await api.snapshot(accepted.gameId, operation.abort.signal);
       if (!gate.isCurrent(operation)) return;
@@ -155,13 +159,14 @@ export class GameSession {
       const pending = store.get().pendingCommand;
       if (snapshot.version === pending?.expectedVersion) {
         // An unchanged GET cannot prove a timed-out POST will not commit later.
-        store.patch({
-          snapshot,
-          phase: "uncertain",
-          notice: "uncertain",
-          announcement: { kind: "notice", notice: "uncertain" },
-          interactionRevision: store.get().interactionRevision + 1,
-        });
+        store.transition(
+          { snapshot, phase: "uncertain", pendingCommand: pending },
+          {
+            notice: "uncertain",
+            announcement: { kind: "notice", notice: "uncertain" },
+            invalidateInteraction: true,
+          },
+        );
       } else {
         // A newer aggregate revision also prevents the old command committing.
         this.accept(
@@ -174,20 +179,26 @@ export class GameSession {
     } catch (error: unknown) {
       if (!gate.isCurrent(operation)) return;
       if (this.loseAccess(safeFailure(error))) return;
-      const pending = store.get().pendingCommand !== null;
+      const pending = store.get().pendingCommand;
       const notice = pending ? "uncertain" : "sync-required";
-      store.patch({
-        phase: pending ? "uncertain" : "sync-required",
-        notice,
-        announcement: { kind: "notice", notice },
-      });
+      store.transition(
+        pending
+          ? { phase: "uncertain", snapshot: accepted, pendingCommand: pending }
+          : { phase: "sync-required", snapshot: accepted, pendingCommand: null },
+        { notice, announcement: { kind: "notice", notice } },
+      );
     }
   }
 
   private async sendCommand(operation: Operation, command: PendingCommand): Promise<void> {
     const { api, store, gate } = this.context;
-    store.patch({ phase: "submitting", notice: null });
     try {
+      const snapshotBeforeCommand = store.get().snapshot;
+      if (!snapshotBeforeCommand) return;
+      store.transition(
+        { phase: "submitting", snapshot: snapshotBeforeCommand, pendingCommand: command },
+        { notice: null },
+      );
       const snapshot = await ("move" in command
         ? api.move(command, operation.abort.signal)
         : api.lifecycle(command, operation.abort.signal));
@@ -213,7 +224,6 @@ export class GameSession {
         return;
       }
       const rejection = rejectionOf(failure);
-      if (rejection) store.patch({ pendingCommand: null });
       // A failed response can follow a committed write. Never resend implicitly.
       await this.readBack(operation, rejection);
     } finally {

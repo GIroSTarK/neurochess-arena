@@ -3,7 +3,14 @@ import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import { vi } from "vitest";
 
 import type { SandboxController } from "../game/controller";
-import { initialSandboxState, type SandboxState } from "../game/state";
+import {
+  emptyExport,
+  emptyReplay,
+  type ExportState,
+  type ReplayState,
+  type SandboxFlow,
+  type SandboxState,
+} from "../game/state";
 
 export const GAME_ID = "30c898bd-d430-4c9e-bd9e-1f44bd7a8fab";
 export const OTHER_GAME_ID = "b766c6d2-8129-4309-9d8f-fc9607849901";
@@ -31,15 +38,44 @@ export function snapshot(
   });
 }
 
-/** A ready sandbox showing the standard position, for presentation tests. */
-export function readyState(overrides: Partial<SandboxState> = {}): SandboxState {
+interface SandboxFixtureOptions {
+  readonly readiness?: SandboxState["readiness"];
+  readonly notice?: SandboxState["notice"];
+  readonly announcement?: SandboxState["announcement"];
+  readonly interactionRevision?: number;
+  readonly replayState?: ReplayState;
+  readonly exportState?: ExportState;
+}
+
+/** A fixture must supply each correlated flow and archive slice together. */
+export function sandboxState(
+  flow: SandboxFlow,
+  {
+    readiness = "ready",
+    notice = null,
+    announcement = null,
+    interactionRevision = 0,
+    replayState = emptyReplay,
+    exportState = emptyExport,
+  }: SandboxFixtureOptions = {},
+): SandboxState {
   return {
-    ...initialSandboxState,
-    readiness: "ready",
-    phase: "ready",
-    snapshot: snapshot(),
-    ...overrides,
+    ...flow,
+    ...replayState,
+    ...exportState,
+    readiness,
+    notice,
+    announcement,
+    interactionRevision,
   };
+}
+
+/** A ready sandbox showing the standard position unless another snapshot is supplied. */
+export function readyState({
+  snapshot: position = snapshot(),
+  ...options
+}: SandboxFixtureOptions & { readonly snapshot?: GameSnapshot } = {}): SandboxState {
+  return sandboxState({ phase: "ready", snapshot: position, pendingCommand: null }, options);
 }
 
 /** Every controller command as an inert, typed mock; a component receives the slice it calls. */

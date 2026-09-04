@@ -7,14 +7,8 @@ import { OperationGate } from "./operations";
 import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
-import {
-  initialSandboxState,
-  isTerminal,
-  isUnfinished,
-  type LifecycleAction,
-  type SandboxState,
-} from "./state";
-import { Store } from "./store";
+import { isTerminal, isUnfinished, type LifecycleAction, type SandboxState } from "./state";
+import { SandboxStore } from "./store";
 
 /**
  * Facade over the sandbox client. It composes the store, the serial operation gate, the game
@@ -22,7 +16,7 @@ import { Store } from "./store";
  * sandbox entry flow: service readiness, guest bootstrap and creation, and URL history.
  */
 export class SandboxController {
-  private readonly store = new Store<SandboxState>(initialSandboxState);
+  private readonly store = new SandboxStore();
   private readonly gate = new OperationGate();
   private readonly archive: ArchiveController;
   private readonly session: GameSession;
@@ -66,13 +60,16 @@ export class SandboxController {
       this.navigation?.subscribe(() => {
         // History navigation cancels obsolete requests and clears private view state.
         this.gate.invalidate();
-        this.archive.clear();
-        this.store.patch({ snapshot: null, pendingCommand: null, phase: "entry", notice: null });
+        this.archive.cancel();
+        this.store.transition(
+          { snapshot: null, pendingCommand: null, phase: "entry" },
+          { notice: null },
+        );
         void this.recovery.recover();
       }) ?? null;
-    const { snapshot, pendingCommand, replay } = this.store.get();
-    if (!snapshot && !pendingCommand) void this.recovery.recover();
-    else if (snapshot && isTerminal(snapshot) && !replay) void this.archive.loadReplay();
+    const { snapshot, replay } = this.store.get();
+    if (!snapshot) void this.recovery.recover();
+    else if (isTerminal(snapshot) && !replay) void this.archive.loadReplay();
     return () => this.disconnect();
   }
 
@@ -85,13 +82,27 @@ export class SandboxController {
     this.archive.cancel();
     const { phase, snapshot, pendingCommand } = this.store.get();
     if (pendingCommand) {
-      this.store.patch({ phase: "uncertain", notice: "uncertain" });
+      this.store.transition(
+        { phase: "uncertain", snapshot, pendingCommand },
+        { notice: "uncertain" },
+      );
     } else if (phase === "synchronizing") {
-      this.store.patch({ phase: "sync-required", notice: "sync-required" });
+      this.store.transition(
+        { phase: "sync-required", snapshot, pendingCommand: null },
+        { notice: "sync-required" },
+      );
     } else if (phase === "starting") {
-      this.store.patch({ phase: snapshot ? "ready" : "entry" });
+      this.store.transition(
+        snapshot
+          ? { phase: "ready", snapshot, pendingCommand: null }
+          : { phase: "entry", snapshot: null, pendingCommand: null },
+        { notice: this.store.get().notice },
+      );
     } else if (phase === "recovering") {
-      this.store.patch({ phase: "recovery-required", notice: "recovery-required" });
+      this.store.transition(
+        { phase: "recovery-required", snapshot, pendingCommand: null },
+        { notice: "recovery-required" },
+      );
     }
   }
 
@@ -100,7 +111,7 @@ export class SandboxController {
     const abort = new AbortController();
     this.readinessAbort = abort;
     const isRetry = this.store.get().readiness === "unavailable";
-    this.store.patch({ readiness: "checking" });
+    this.store.setReadiness("checking");
     let readiness: "ready" | "unavailable" = "unavailable";
     try {
       readiness = (await this.api.ready(abort.signal)) ? "ready" : "unavailable";
@@ -109,12 +120,7 @@ export class SandboxController {
     }
     if (!this.gate.isConnected() || abort.signal.aborted) return;
     this.readinessAbort = null;
-    this.store.patch({
-      readiness,
-      ...(isRetry || readiness === "unavailable"
-        ? { announcement: { kind: "connection", readiness } as const }
-        : {}),
-    });
+    this.store.setReadiness(readiness, isRetry || readiness === "unavailable");
   }
 
   /** Bootstraps the guest cookie, then creates a sandbox game. Only this explicit action bootstraps. */
@@ -131,35 +137,31 @@ export class SandboxController {
     }
     const operation = this.gate.begin();
     if (!operation) return;
-    this.store.patch({ phase: "starting", notice: null });
+    this.store.transition({ phase: "starting", snapshot, pendingCommand: null }, { notice: null });
     try {
       // The cookie must exist before creation. No mount effect bootstraps guests.
       await this.api.bootstrap(operation.abort.signal);
       if (!this.gate.isCurrent(operation)) return;
       const created = await this.api.create(operation.abort.signal);
       if (this.gate.isCurrent(operation)) {
-        this.archive.clear();
+        this.archive.cancel();
         this.navigation?.open(created.gameId);
         this.session.accept(created, "started", null);
       }
     } catch (error: unknown) {
       if (!this.gate.isCurrent(operation)) return;
       const failure = safeFailure(error);
-      this.archive.clear();
+      this.archive.cancel();
       if (failure.code === "GAME_CONFLICT" && failure.currentSnapshot) {
         // The occupied slot is the authorized game; reopen it paused.
         await this.recovery.pauseRecovered(operation, failure.currentSnapshot);
       } else {
         const unavailable = failure.code === "NOT_FOUND";
         const notice = unavailable ? "sandbox-unavailable" : failureNotice(failure);
-        this.store.patch({
-          snapshot: null,
-          pendingCommand: null,
-          phase: unavailable ? "unavailable" : "entry",
-          notice,
-          announcement: { kind: "notice", notice },
-          interactionRevision: this.store.get().interactionRevision + 1,
-        });
+        this.store.transition(
+          { snapshot: null, pendingCommand: null, phase: unavailable ? "unavailable" : "entry" },
+          { notice, announcement: { kind: "notice", notice }, invalidateInteraction: true },
+        );
       }
     } finally {
       this.gate.finish(operation);

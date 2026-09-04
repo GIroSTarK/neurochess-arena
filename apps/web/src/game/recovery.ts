@@ -6,12 +6,12 @@ import { failureNotice, rejectionOf, safeFailure } from "./failures";
 import type { SandboxNavigation } from "./navigation";
 import type { Operation, OperationGate } from "./operations";
 import type { GameSession } from "./session";
-import { isTerminal, type SandboxState } from "./state";
-import type { Store } from "./store";
+import { isTerminal } from "./state";
+import type { SandboxStore } from "./store";
 
 export interface RecoveryContext {
   readonly api: Pick<SandboxApi, "snapshot" | "unfinished" | "lifecycle">;
-  readonly store: Store<SandboxState>;
+  readonly store: SandboxStore;
   readonly gate: OperationGate;
   readonly commandId: () => string;
   readonly navigation: SandboxNavigation | undefined;
@@ -47,7 +47,10 @@ export class RecoveryController {
     // Anonymous discovery may find nothing; a linked game must exist and be accessible.
     const discovery = target.kind === "none" && gameId === null;
     session.beginRecovery();
-    store.patch({ phase: "recovering", notice: null });
+    store.transition(
+      { phase: "recovering", snapshot: store.get().snapshot, pendingCommand: null },
+      { notice: null },
+    );
     try {
       if (target.kind === "invalid") throw new ApiFailure("api", "NOT_FOUND");
       const snapshot = gameId
@@ -59,19 +62,31 @@ export class RecoveryController {
         await this.pauseRecovered(operation, snapshot);
       } else {
         session.endRecovery();
-        store.patch({ phase: "entry", snapshot: null });
+        store.transition(
+          { phase: "entry", snapshot: null, pendingCommand: null },
+          { notice: null },
+        );
       }
     } catch (error: unknown) {
       if (!gate.isCurrent(operation)) return;
       const failure = safeFailure(error);
       if (discovery && failure.code === "UNAUTHORIZED") {
         session.endRecovery();
-        store.patch({ phase: "entry", snapshot: null, notice: null });
+        store.transition(
+          { phase: "entry", snapshot: null, pendingCommand: null },
+          { notice: null },
+        );
       } else if (discovery && failure.code === "NOT_FOUND") {
         session.endRecovery();
-        store.patch({ phase: "unavailable", notice: "sandbox-unavailable" });
+        store.transition(
+          { phase: "unavailable", snapshot: null, pendingCommand: null },
+          { notice: "sandbox-unavailable" },
+        );
       } else if (!session.loseAccess(failure)) {
-        store.patch({ phase: "recovery-required", notice: failureNotice(failure) });
+        store.transition(
+          { phase: "recovery-required", snapshot: store.get().snapshot, pendingCommand: null },
+          { notice: failureNotice(failure) },
+        );
       }
     } finally {
       gate.finish(operation);
@@ -86,12 +101,10 @@ export class RecoveryController {
     let snapshot = initial;
     for (let attempt = 0; attempt < PAUSE_ATTEMPTS; attempt += 1) {
       if (!gate.isCurrent(operation)) return;
-      store.patch({
-        snapshot,
-        pendingCommand: null,
-        phase: "recovering",
-        interactionRevision: store.get().interactionRevision + 1,
-      });
+      store.transition(
+        { snapshot, pendingCommand: null, phase: "recovering" },
+        { notice: store.get().notice, invalidateInteraction: true },
+      );
       if (snapshot.state !== "active") {
         if (snapshot.state !== "paused" && !isTerminal(snapshot)) throw new ApiFailure("malformed");
         session.accept(snapshot, "existing", "existing");
@@ -103,7 +116,10 @@ export class RecoveryController {
         expectedVersion: snapshot.version,
         commandId: this.context.commandId(),
       };
-      store.patch({ pendingCommand: command });
+      store.transition(
+        { phase: "recovering", snapshot, pendingCommand: command },
+        { notice: store.get().notice },
+      );
       try {
         const paused = await api.lifecycle(command, operation.abort.signal);
         if (!gate.isCurrent(operation)) return;
@@ -126,7 +142,10 @@ export class RecoveryController {
           session.validRevision(failure.currentSnapshot, snapshot.gameId)
         ) {
           snapshot = failure.currentSnapshot;
-          store.patch({ snapshot, pendingCommand: null });
+          store.transition(
+            { phase: "recovering", snapshot, pendingCommand: null },
+            { notice: store.get().notice },
+          );
           if (snapshot.state !== "active") {
             session.accept(snapshot, "existing", "recovered");
             return;
@@ -134,16 +153,13 @@ export class RecoveryController {
           continue;
         }
         const rejection = rejectionOf(failure);
-        if (rejection) store.patch({ pendingCommand: null });
         await session.readBack(operation, rejection);
         return;
       }
     }
-    store.patch({
-      snapshot,
-      pendingCommand: null,
-      phase: "recovery-required",
-      notice: "recovery-required",
-    });
+    store.transition(
+      { snapshot, pendingCommand: null, phase: "recovery-required" },
+      { notice: "recovery-required" },
+    );
   }
 }

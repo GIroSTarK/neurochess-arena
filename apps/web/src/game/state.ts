@@ -28,18 +28,30 @@ export type SandboxNotice =
   | "pgn-downloaded"
   | "pgn-manual";
 
-export type SandboxPhase =
-  | "entry"
-  | "starting"
-  | "ready"
-  | "submitting"
-  | "synchronizing"
-  | "uncertain"
-  | "sync-required"
-  | "unavailable"
-  | "access-error"
-  | "recovering"
-  | "recovery-required";
+/** Replace the whole flow together: a phase cannot outlive its required snapshot or command. */
+export type SandboxFlow =
+  | {
+      readonly phase: "entry" | "unavailable" | "access-error";
+      readonly snapshot: null;
+      readonly pendingCommand: null;
+    }
+  | {
+      readonly phase: "starting" | "recovering" | "recovery-required";
+      readonly snapshot: GameSnapshot | null;
+      readonly pendingCommand: null;
+    }
+  | {
+      readonly phase: "ready" | "synchronizing" | "sync-required";
+      readonly snapshot: GameSnapshot;
+      readonly pendingCommand: null;
+    }
+  | {
+      readonly phase: "submitting" | "uncertain" | "recovering" | "synchronizing";
+      readonly snapshot: GameSnapshot;
+      readonly pendingCommand: PendingCommand;
+    };
+
+export type SandboxPhase = SandboxFlow["phase"];
 
 export type Readiness = "checking" | "ready" | "unavailable";
 
@@ -53,36 +65,63 @@ export type Announcement =
   | { readonly kind: "connection"; readonly readiness: "ready" | "unavailable" }
   | { readonly kind: "replay"; readonly ply: number; readonly san: string | null };
 
-export interface SandboxState {
+/** Retrying a replay request can retain an already verified position and cursor. */
+export type ReplayState = (
+  | { readonly replay: null; readonly replayPly: 0 }
+  | { readonly replay: GameReplayResponse; readonly replayPly: number }
+) &
+  (
+    | { readonly replayPhase: "idle" | "loading"; readonly replayNotice: null }
+    | { readonly replayPhase: "error"; readonly replayNotice: SandboxNotice }
+  );
+
+export type ExportState =
+  | {
+      readonly exportPhase: "idle" | "loading" | "copied" | "downloaded";
+      readonly exportText: null;
+      readonly exportNotice: null;
+    }
+  | {
+      readonly exportPhase: "manual";
+      readonly exportText: string;
+      readonly exportNotice: null;
+    }
+  | {
+      readonly exportPhase: "error";
+      readonly exportText: null;
+      readonly exportNotice: SandboxNotice;
+    };
+
+interface SandboxFeedback {
   readonly readiness: Readiness;
-  readonly phase: SandboxPhase;
-  readonly snapshot: GameSnapshot | null;
-  readonly pendingCommand: PendingCommand | null;
-  readonly replay: GameReplayResponse | null;
-  readonly replayPly: number;
-  readonly replayPhase: "idle" | "loading" | "error";
-  readonly replayNotice: SandboxNotice | null;
-  readonly exportPhase: "idle" | "loading" | "copied" | "downloaded" | "manual" | "error";
-  readonly exportText: string | null;
-  readonly exportNotice: SandboxNotice | null;
   readonly notice: SandboxNotice | null;
   readonly announcement: Announcement | null;
   /** Invalidates selection/promotion without remounting or focusing the board. */
   readonly interactionRevision: number;
 }
 
+export type SandboxState = SandboxFeedback & SandboxFlow & ReplayState & ExportState;
+
+export const emptyReplay: ReplayState = {
+  replay: null,
+  replayPly: 0,
+  replayPhase: "idle",
+  replayNotice: null,
+};
+
+export const emptyExport: ExportState = {
+  exportPhase: "idle",
+  exportText: null,
+  exportNotice: null,
+};
+
 export const initialSandboxState: SandboxState = {
   readiness: "checking",
   phase: "entry",
   snapshot: null,
   pendingCommand: null,
-  replay: null,
-  replayPly: 0,
-  replayPhase: "idle",
-  replayNotice: null,
-  exportPhase: "idle",
-  exportText: null,
-  exportNotice: null,
+  ...emptyReplay,
+  ...emptyExport,
   notice: null,
   announcement: null,
   interactionRevision: 0,

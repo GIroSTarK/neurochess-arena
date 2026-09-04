@@ -14,22 +14,28 @@ function props(replayPly: number) {
   const replay = gameReplayResponseSchema.parse({ snapshot: terminal, initialFen: snapshot().fen });
   return {
     controller,
-    state: readyState({ snapshot: terminal, replay, replayPly }),
+    state: readyState({
+      snapshot: terminal,
+      replayState: { replay, replayPly, replayPhase: "idle", replayNotice: null },
+    }),
     selectPly: controller.selectPly,
   };
 }
 
 describe("replay navigation focus", () => {
-  it.each(["loading", "error"] as const)(
-    "shows the accepted final ply while replay is %s",
-    (replayPhase) => {
-      const initial = props(0);
-      renderLocalized(
-        <ReplayControls {...initial} state={{ ...initial.state, replay: null, replayPhase }} />,
-      );
-      expect(screen.getByText("Ply 4 of 4")).toBeInTheDocument();
-    },
-  );
+  it.each([
+    { replay: null, replayPly: 0, replayPhase: "loading", replayNotice: null },
+    { replay: null, replayPly: 0, replayPhase: "error", replayNotice: "network" },
+  ] as const)("shows the accepted final ply while replay is $replayPhase", (replayState) => {
+    const initial = props(0);
+    renderLocalized(
+      <ReplayControls
+        {...initial}
+        state={readyState({ snapshot: snapshot(FOOLS_MATE), replayState })}
+      />,
+    );
+    expect(screen.getByText("Ply 4 of 4")).toBeInTheDocument();
+  });
 
   it.each([
     { name: "Next", from: 3, target: 4, alsoUnavailable: "Last", available: "Previous" },
@@ -48,7 +54,7 @@ describe("replay navigation focus", () => {
       await user.keyboard("{Enter}");
       expect(initial.selectPly).toHaveBeenCalledExactlyOnceWith(target);
 
-      rerender(<ReplayControls {...initial} state={{ ...initial.state, replayPly: target }} />);
+      rerender(<ReplayControls {...initial} state={props(target).state} />);
       expect(screen.getByText(`Ply ${target} of 4`)).toBeInTheDocument();
       expect(control).toHaveAttribute("aria-disabled", "true");
       expect(control).not.toBeDisabled();
@@ -73,7 +79,15 @@ describe("replay navigation focus", () => {
     renderLocalized(
       <ReplayControls
         {...initial}
-        state={{ ...initial.state, replay: null, replayPhase: "loading" }}
+        state={readyState({
+          snapshot: snapshot(FOOLS_MATE),
+          replayState: {
+            replay: null,
+            replayPly: 0,
+            replayPhase: "loading",
+            replayNotice: null,
+          },
+        })}
       />,
     );
     const user = userEvent.setup();

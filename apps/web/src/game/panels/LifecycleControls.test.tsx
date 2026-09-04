@@ -36,10 +36,7 @@ describe("lifecycle confirmations", () => {
       const staleConfirm = within(dialog).getByRole("button", { name: confirm });
 
       rerender(
-        <LifecycleControls
-          {...initial}
-          state={{ ...initial.state, snapshot: snapshot(["e2e4"]) }}
-        />,
+        <LifecycleControls {...initial} state={readyState({ snapshot: snapshot(["e2e4"]) })} />,
       );
 
       expect(screen.getByRole("button", { name })).toBe(trigger);
@@ -63,7 +60,7 @@ describe("lifecycle confirmations", () => {
     rerender(
       <LifecycleControls
         {...initial}
-        state={{ ...initial.state, interactionRevision: initial.state.interactionRevision + 1 }}
+        state={readyState({ interactionRevision: initial.state.interactionRevision + 1 })}
       />,
     );
 
@@ -80,7 +77,7 @@ describe("lifecycle confirmations", () => {
     rerender(
       <LifecycleControls
         {...initial}
-        state={{ ...initial.state, snapshot: snapshot([], { gameId: OTHER_GAME_ID }) }}
+        state={readyState({ snapshot: snapshot([], { gameId: OTHER_GAME_ID }) })}
       />,
     );
 
