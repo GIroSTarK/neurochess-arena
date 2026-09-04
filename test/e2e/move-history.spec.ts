@@ -1,3 +1,5 @@
+import type * as webI18n from "../../apps/web/src/i18n";
+
 import { API_ORIGIN } from "./environment";
 import { acceptedMove, activate, expect, square, startSandbox, test } from "./fixtures";
 
@@ -12,7 +14,7 @@ for (const enlarged of [false, true]) {
       // Exercise wrapping without adding a product locale or a fixed-height fixture.
       await page.evaluate(async () => {
         const modulePath = "/src/i18n/index.ts";
-        const { i18n } = await import(/* @vite-ignore */ modulePath);
+        const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
         i18n.addResourceBundle("en-XA", "translation", {
           game: {
             submitting: "Submitting your move… Waiting for confirmation from the chess server.",

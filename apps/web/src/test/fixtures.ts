@@ -1,5 +1,5 @@
 import { createGame } from "@neurochess/chess";
-import { gameSnapshotSchema, type GameSnapshot } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 
 import { initialSandboxState, type SandboxState } from "../game/state";
 
@@ -38,6 +38,16 @@ export function readyState(overrides: Partial<SandboxState> = {}): SandboxState 
     snapshot: snapshot(),
     ...overrides,
   };
+}
+
+/** The path of a request the client made; it always hands fetch a URL instance. */
+export function requestPath(input: RequestInfo | URL): string {
+  return new URL(typeof input === "string" || input instanceof URL ? input : input.url).pathname;
+}
+
+/** The JSON body a request carried, or an empty string. */
+export function requestBody(init: RequestInit | undefined): string {
+  return typeof init?.body === "string" ? init.body : "";
 }
 
 export function jsonResponse(payload: unknown, status = 200): Response {

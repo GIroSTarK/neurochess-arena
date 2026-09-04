@@ -15,6 +15,8 @@
     "vitest.config.ts",
     "vitest.integration.config.ts",
     "playwright.config.ts",
+    "apps/web/vite.config.ts",
+    "packages/database/drizzle.config.ts",
     "apps/web/src/i18n/*.d.ts",
     "apps/web/src/test/**/*.ts",
     "apps/web/src/test/**/*.tsx",

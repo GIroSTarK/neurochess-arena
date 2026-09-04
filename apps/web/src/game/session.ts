@@ -6,9 +6,9 @@ import type { ArchiveController } from "./archive";
 import { isAccessCode, rejectionOf, safeFailure } from "./failures";
 import type { Operation, OperationGate } from "./operations";
 import {
-  isTerminal,
   type AcceptedKind,
   type Announcement,
+  isTerminal,
   type LifecycleAction,
   type PendingCommand,
   type SandboxNotice,
@@ -46,12 +46,7 @@ export class GameSession {
 
   async submit(move: string): Promise<void> {
     const { phase, snapshot } = this.context.store.get();
-    if (
-      phase !== "ready" ||
-      !snapshot ||
-      snapshot.state !== "active" ||
-      !snapshot.legalMoves.includes(move)
-    )
+    if (phase !== "ready" || snapshot?.state !== "active" || !snapshot.legalMoves.includes(move))
       return;
     // Acquired synchronously, before generating a command or notifying React.
     const operation = this.context.gate.begin();
@@ -157,7 +152,7 @@ export class GameSession {
       if (!gate.isCurrent(operation)) return;
       if (!this.validRevision(snapshot, accepted.gameId)) throw new ApiFailure("malformed");
       const pending = store.get().pendingCommand;
-      if (pending && snapshot.version === pending.expectedVersion) {
+      if (snapshot.version === pending?.expectedVersion) {
         // An unchanged GET cannot prove a timed-out POST will not commit later.
         store.patch({
           snapshot,

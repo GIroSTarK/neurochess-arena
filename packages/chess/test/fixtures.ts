@@ -1,5 +1,5 @@
 import { createGameWithRules } from "../src/game.js";
-import { createGame, type ChessGame, type DomainResult, type GameLifecycle } from "../src/index.js";
+import { type ChessGame, createGame, type DomainResult, type GameLifecycle } from "../src/index.js";
 import { ChessRules } from "../src/rules.js";
 
 export const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

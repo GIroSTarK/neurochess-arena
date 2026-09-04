@@ -1,8 +1,8 @@
 import {
   isGameLifecycle,
   isRecord,
-  transitionLifecycle,
   type LifecycleEvent,
+  transitionLifecycle,
 } from "./lifecycle.js";
 import { failure, success } from "./result.js";
 import { ChessRules } from "./rules.js";
@@ -64,6 +64,7 @@ function createAggregate(rules: ChessRules) {
     losingColor: ChessColor,
     terminationReason: "human_resignation" | "model_technical_loss",
   ): DomainResult<GameLifecycle> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Untyped callers may pass any string; the failure code is part of the domain contract.
     if (losingColor !== "white" && losingColor !== "black") {
       return failure("INVALID_COLOR");
     }
@@ -125,8 +126,9 @@ export function restoreGame(input: RestoreGameInput): DomainResult<ChessGame> {
   }
 
   aggregate.transition({ type: "start" });
-  for (const [index, uci] of input.moves.entries()) {
-    if (!aggregate.playMove(uci).ok) {
+  const moves: readonly unknown[] = input.moves;
+  for (const [index, uci] of moves.entries()) {
+    if (typeof uci !== "string" || !aggregate.playMove(uci).ok) {
       return failure("INVALID_HISTORY", index + 1);
     }
   }

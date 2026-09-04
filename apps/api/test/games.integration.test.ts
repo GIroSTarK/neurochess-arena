@@ -1,11 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { gameErrorResponseSchema, gameSnapshotSchema } from "@neurochess/contracts";
 import { gameCommands, gameParticipants, games, guestSessions, moves } from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createLoggerOptions } from "../src/logger.js";
 import { GUEST_COOKIE_NAME } from "../src/guests/service.js";
+import { createLoggerOptions } from "../src/logger.js";
 
 import {
   ApiHarness,
@@ -16,8 +17,8 @@ import {
   play,
   snapshot,
   submit,
-  WEB_ORIGIN,
   type TestApi,
+  WEB_ORIGIN,
 } from "./helpers.js";
 
 let harness: ApiHarness;
@@ -45,7 +46,7 @@ describe("guest HTTP boundary", () => {
     const cookie = bootstrapped.headers.getSetCookie()[0]?.split(";")[0];
     expect(cookie).toBeDefined();
     // Register the already-created identity for narrowly scoped fixture cleanup.
-    const guest = await harness.guest(api, cookie!);
+    const guest = await harness.guest(api, cookie);
     const created = await fetch(`${address}/sandbox/games`, {
       method: "POST",
       headers: { ...headers, cookie: guest.cookie },
@@ -127,7 +128,7 @@ describe("guest HTTP boundary", () => {
     for (const token of [
       "invalid",
       "A".repeat(43),
-      `${guest.token[0] === "A" ? "B" : "A"}${guest.token.slice(1)}`,
+      `${guest.token.startsWith("A") ? "B" : "A"}${guest.token.slice(1)}`,
     ]) {
       const response = await api.app.inject({
         method: "GET",

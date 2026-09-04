@@ -1,6 +1,7 @@
+import { readFile } from "node:fs/promises";
+
 import AxeBuilder from "@axe-core/playwright";
 import { gameSnapshotSchema } from "@neurochess/contracts";
-import { readFile } from "node:fs/promises";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import {
@@ -134,7 +135,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(download.suggestedFilename()).toBe("neurochess-" + current.gameId + ".pgn");
   const path = await download.path();
   expect(path).not.toBeNull();
-  expect(await readFile(path!, "utf8")).toBe(restored.pgn);
+  expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(
     (response) => response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 201,

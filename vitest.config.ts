@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
-import react from "@vitejs/plugin-react";
 import { baseTestConfig } from "@neurochess/config/vitest";
+import react from "@vitejs/plugin-react";
 import { configDefaults, defineConfig } from "vitest/config";
 
 function workspacePath(relativePath: string): string {

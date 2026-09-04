@@ -1,6 +1,7 @@
-import { createDatabase } from "@neurochess/database";
 import { loadEnvFile } from "node:process";
 import { fileURLToPath } from "node:url";
+
+import { createDatabase } from "@neurochess/database";
 
 export function testDatabaseUrl(): string {
   try {

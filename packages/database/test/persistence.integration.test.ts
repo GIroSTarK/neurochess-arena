@@ -1,20 +1,21 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
 import {
   createGameRepository,
+  type DatabaseConnection,
+  gameCommands,
   gameParticipants,
   games,
   guestSessions,
   moves,
-  gameCommands,
-  runMigrations,
-  type DatabaseConnection,
   type NewGame,
   type NewMove,
+  runMigrations,
 } from "../src/index.js";
 
 let database: DatabaseConnection;

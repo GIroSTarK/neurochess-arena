@@ -51,7 +51,7 @@ export class SandboxController {
       api,
       delivery,
       store,
-      isConnected: () => gate.isConnected,
+      isConnected: () => gate.isConnected(),
       loseAccess: (failure) => this.session.loseAccess(failure),
     });
     this.session = new GameSession({ api, store, gate, commandId, archive: this.archive });
@@ -106,7 +106,7 @@ export class SandboxController {
   }
 
   async checkReadiness(): Promise<void> {
-    if (!this.gate.isConnected || this.readinessAbort) return;
+    if (!this.gate.isConnected() || this.readinessAbort) return;
     const abort = new AbortController();
     this.readinessAbort = abort;
     const isRetry = this.store.get().readiness === "unavailable";
@@ -117,7 +117,7 @@ export class SandboxController {
     } catch {
       // Readiness does not decide sandbox availability or replace a guest.
     }
-    if (!this.gate.isConnected || abort.signal.aborted || this.readinessAbort !== abort) return;
+    if (!this.gate.isConnected() || abort.signal.aborted) return;
     this.readinessAbort = null;
     this.store.patch({
       readiness,

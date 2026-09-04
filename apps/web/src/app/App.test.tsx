@@ -4,11 +4,20 @@ import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "./App";
 import { createWebI18n } from "../i18n";
-import { errorResponse, FOOLS_MATE, GAME_ID, jsonResponse, snapshot } from "../test/fixtures";
+import {
+  errorResponse,
+  FOOLS_MATE,
+  GAME_ID,
+  jsonResponse,
+  requestBody,
+  requestPath,
+  snapshot,
+} from "../test/fixtures";
 import { square } from "../test/queries";
 import { renderLocalized } from "../test/render";
+
+import { App } from "./App";
 
 type Route = (
   path: string,
@@ -17,7 +26,7 @@ type Route = (
 
 function mockApi(route: Route = () => undefined) {
   const fetch = vi.fn<typeof globalThis.fetch>((input, options) => {
-    const path = new URL(String(input)).pathname;
+    const path = requestPath(input);
     const response = route(path, options);
     if (response) return Promise.resolve(response);
     if (path === "/ready") return Promise.resolve(jsonResponse({ status: "ready" }));
@@ -58,22 +67,22 @@ describe("localized sandbox application", () => {
     await waitFor(() => expect(button).toBeEnabled());
     expect(
       fetch.mock.calls.every(([url]) =>
-        ["/ready", "/sandbox/games/unfinished"].some((path) => String(url).endsWith(path)),
+        ["/ready", "/sandbox/games/unfinished"].some((path) => requestPath(url).endsWith(path)),
       ),
     ).toBe(true);
     fireEvent.click(button);
     fireEvent.click(button);
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/guest-session"))).toHaveLength(
-      1,
-    );
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/sandbox/games"))).toHaveLength(
-      0,
-    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
+    ).toHaveLength(1);
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
+    ).toHaveLength(0);
     await act(async () => bootstrap.resolve(jsonResponse({ status: "ready" })));
     await screen.findByRole("grid");
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/sandbox/games"))).toHaveLength(
-      1,
-    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
+    ).toHaveLength(1);
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
@@ -84,7 +93,7 @@ describe("localized sandbox application", () => {
     await start();
     const live = screen.getByRole("status");
     const announcements: string[] = [];
-    const observer = new MutationObserver(() => announcements.push(live.textContent ?? ""));
+    const observer = new MutationObserver(() => announcements.push(live.textContent));
     observer.observe(live, { childList: true, characterData: true, subtree: true });
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -153,7 +162,9 @@ describe("localized sandbox application", () => {
       await user.keyboard("{Enter} ");
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     }
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/lifecycle"))).toHaveLength(1);
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/lifecycle")),
+    ).toHaveLength(1);
     await act(async () =>
       pending.resolve(jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 }))),
     );
@@ -201,7 +212,7 @@ describe("localized sandbox application", () => {
     expect(square("e2")).not.toHaveAttribute("data-selected");
     expect(screen.getByRole("status")).toHaveTextContent("Position synchronized. Black to move");
     expect(document.body.textContent).not.toContain("server-message-canary");
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/moves"))).toHaveLength(1);
+    expect(fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/moves"))).toHaveLength(1);
   });
 
   it("keeps a rejected move locked until its authorized snapshot arrives", async () => {
@@ -237,7 +248,7 @@ describe("localized sandbox application", () => {
     const commands: string[] = [];
     mockApi((path, options) => {
       if (!path.endsWith("/moves")) return undefined;
-      commands.push(String(options?.body));
+      commands.push(requestBody(options));
       attempts += 1;
       return attempts === 1
         ? jsonResponse({ state: "broken", message: "exception-canary" })
@@ -270,14 +281,14 @@ describe("localized sandbox application", () => {
     await userEvent.click(square("e4"));
     const restart = await screen.findByRole("button", { name: "Start sandbox again" });
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/guest-session"))).toHaveLength(
-      1,
-    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
+    ).toHaveLength(1);
     await userEvent.click(restart);
     await screen.findByRole("grid");
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/guest-session"))).toHaveLength(
-      2,
-    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
+    ).toHaveLength(2);
   });
 
   it("shows a sandbox-specific unavailable state when readiness succeeds but creation returns 404", async () => {
@@ -293,13 +304,13 @@ describe("localized sandbox application", () => {
     expect(
       screen.getByText(/The development sandbox is unavailable/, { selector: "p" }),
     ).toBeInTheDocument();
-    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/sandbox/games"))).toHaveLength(
-      1,
-    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
+    ).toHaveLength(1);
     await userEvent.click(retry);
     await waitFor(() =>
       expect(
-        fetch.mock.calls.filter(([url]) => String(url).endsWith("/sandbox/games")),
+        fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
       ).toHaveLength(2),
     );
   });
@@ -319,7 +330,7 @@ describe("localized sandbox application", () => {
     );
     expect(
       fetch.mock.calls.every(([url]) =>
-        ["/ready", "/sandbox/games/unfinished"].some((path) => String(url).endsWith(path)),
+        ["/ready", "/sandbox/games/unfinished"].some((path) => requestPath(url).endsWith(path)),
       ),
     ).toBe(true);
   });
@@ -328,7 +339,7 @@ describe("localized sandbox application", () => {
     const played: string[] = [];
     mockApi((path, options) => {
       if (!path.endsWith("/moves")) return undefined;
-      played.push(moveCommandSchema.parse(JSON.parse(String(options?.body))).move);
+      played.push(moveCommandSchema.parse(JSON.parse(requestBody(options))).move);
       return jsonResponse(snapshot(played));
     });
     renderLocalized(<App apiBaseUrl="http://localhost:3001" />);

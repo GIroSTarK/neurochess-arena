@@ -1,14 +1,15 @@
+import "@fontsource-variable/orbitron";
+import "@fontsource-variable/inter/wght.css";
+import "./styles.css";
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
-import "@fontsource-variable/orbitron";
-import "@fontsource-variable/inter/wght.css";
 
 import { App } from "./app/App";
 import { ConfigurationError } from "./app/ConfigurationError";
 import { parseWebEnvironment } from "./app/env";
 import { i18n } from "./i18n";
-import "./styles.css";
 
 const rootElement = document.querySelector<HTMLDivElement>("#root");
 

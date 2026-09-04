@@ -1,13 +1,13 @@
 import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   FILES,
   parsePosition,
-  visualRows,
   type PromotionKind,
   type Square,
+  visualRows,
 } from "../chess/position";
 import type { BoardView } from "../chess/replay";
 import { cx } from "../ui/cx";
@@ -303,11 +303,9 @@ export function Chessboard({
             const move = promotion.moves.find((candidate) => candidate[4] === kind);
             return move ? [{ kind, move }] : [];
           })}
-          onCancel={() => {
-            if (selected) setSelection({ ...selected, promotion: null });
-          }}
+          onCancel={() => setSelection({ ...selected, promotion: null })}
           onChoose={(move) => {
-            if (selected) setSelection({ ...selected, promotion: null });
+            setSelection({ ...selected, promotion: null });
             onMove(move);
           }}
         />

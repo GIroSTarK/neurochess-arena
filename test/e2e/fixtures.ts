@@ -1,6 +1,6 @@
-import { gameSnapshotSchema, moveCommandSchema, type GameSnapshot } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema, moveCommandSchema } from "@neurochess/contracts";
 import { games, guestSessions } from "@neurochess/database";
-import { test as base, expect, type Locator, type Page, type Response } from "@playwright/test";
+import { expect, type Locator, type Page, type Response, test as base } from "@playwright/test";
 import { inArray } from "drizzle-orm";
 
 import { integrationDatabase } from "../database";
@@ -132,8 +132,10 @@ export async function playMove(
   await activate(square(page, move.slice(2, 4)), touch);
   if (move.length === 5) {
     const names: Record<string, string> = { q: "Queen", r: "Rook", b: "Bishop", n: "Knight" };
+    const piece = names[move[4] ?? ""];
+    if (!piece) throw new Error("Unknown promotion piece in " + move);
     await activate(
-      page.getByRole("dialog").getByRole("button", { name: "Promote to " + names[move[4] ?? ""] }),
+      page.getByRole("dialog").getByRole("button", { name: "Promote to " + piece }),
       touch,
     );
   }

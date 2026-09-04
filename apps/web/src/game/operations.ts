@@ -13,7 +13,7 @@ export class OperationGate {
   private operation: Operation | null = null;
   private connected = true;
 
-  get isConnected(): boolean {
+  isConnected(): boolean {
     return this.connected;
   }
 

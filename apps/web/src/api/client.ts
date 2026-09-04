@@ -1,22 +1,22 @@
 import {
   createGameRequestSchema,
+  type GameErrorCode,
   gameErrorResponseSchema,
   gameParamsSchema,
+  type GamePgnResponse,
+  gamePgnResponseSchema,
+  type GameReplayResponse,
+  gameReplayResponseSchema,
+  type GameSnapshot,
   gameSnapshotSchema,
   guestSessionRequestSchema,
   guestSessionResponseSchema,
-  moveCommandSchema,
-  lifecycleCommandSchema,
-  unfinishedGameResponseSchema,
-  gameReplayResponseSchema,
-  gamePgnResponseSchema,
-  readinessResponseSchema,
-  type GameErrorCode,
-  type GameSnapshot,
-  type MoveCommand,
   type LifecycleCommand,
-  type GameReplayResponse,
-  type GamePgnResponse,
+  lifecycleCommandSchema,
+  type MoveCommand,
+  moveCommandSchema,
+  readinessResponseSchema,
+  unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
@@ -52,7 +52,7 @@ export function validateSnapshot(input: unknown): GameSnapshot {
   const parsed = gameSnapshotSchema.safeParse(input);
   if (!parsed.success) throw new ApiFailure("malformed");
   const position = parsePosition(parsed.data.fen);
-  if (!position || position.turn !== parsed.data.turn) throw new ApiFailure("malformed");
+  if (position?.turn !== parsed.data.turn) throw new ApiFailure("malformed");
   return parsed.data;
 }
 
@@ -71,14 +71,10 @@ export function createSandboxApi(
     readiness = false,
   ): Promise<T> {
     const abort = new AbortController();
-    let timedOut = false;
     const cancel = () => abort.abort();
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) abort.abort();
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      abort.abort();
-    }, timeoutMs);
+    const timeout = setTimeout(() => abort.abort(), timeoutMs);
     try {
       const response = await fetcher(new URL(path, apiBaseUrl), {
         method: body === undefined ? "GET" : "POST",
@@ -114,7 +110,8 @@ export function createSandboxApi(
       return result.data;
     } catch (error: unknown) {
       if (signal.aborted) throw new ApiFailure("cancelled");
-      if (timedOut) throw new ApiFailure("timeout");
+      // The caller did not cancel, so only the timeout can have aborted the request.
+      if (abort.signal.aborted) throw new ApiFailure("timeout");
       if (error instanceof ApiFailure) throw error;
       // Never retain, log, or render an exception or a server's message field.
       throw new ApiFailure("network");

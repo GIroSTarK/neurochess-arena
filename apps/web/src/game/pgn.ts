@@ -6,8 +6,10 @@ export interface PgnDelivery {
 export const browserPgnDelivery: PgnDelivery = {
   async copy(text) {
     try {
-      if (!navigator.clipboard?.writeText) return false;
-      await navigator.clipboard.writeText(text);
+      // The DOM types promise a clipboard, but insecure contexts have none.
+      const clipboard = navigator.clipboard as Clipboard | undefined;
+      if (!clipboard) return false;
+      await clipboard.writeText(text);
       return true;
     } catch {
       return false;

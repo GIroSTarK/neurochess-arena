@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createGame,
-  restoreGame,
   type GameLifecycle,
+  restoreGame,
   type RestoreGameInput,
 } from "../src/index.js";
 import { ChessRules } from "../src/rules.js";

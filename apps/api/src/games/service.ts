@@ -1,12 +1,14 @@
-import { createGame, restoreGame, type ChessGame, type ChessSnapshot } from "@neurochess/chess";
+import { randomUUID } from "node:crypto";
+
+import { type ChessGame, type ChessSnapshot, createGame, restoreGame } from "@neurochess/chess";
 import {
   gameLifecycleSchema,
-  gameSnapshotSchema,
-  type GameSnapshot,
-  type MoveCommand,
-  type LifecycleCommand,
-  type GameReplayResponse,
   type GamePgnResponse,
+  type GameReplayResponse,
+  type GameSnapshot,
+  gameSnapshotSchema,
+  type LifecycleCommand,
+  type MoveCommand,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import type {
@@ -16,11 +18,10 @@ import type {
   StoredMove,
   StoredParticipant,
 } from "@neurochess/database";
-import { randomUUID } from "node:crypto";
 
 import type { GuestPrincipal } from "../guests/service.js";
 
-import { authorizeGameRead, authorizeHumanSeat, authorizeGameControl } from "./authorization.js";
+import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./authorization.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 
 export interface GameService {
@@ -79,8 +80,7 @@ export function createGameService(
     for (const [index, move] of moves.entries()) {
       const replayed = domain.moves[index];
       if (
-        !replayed ||
-        replayed.ply !== move.ply ||
+        replayed?.ply !== move.ply ||
         replayed.san !== move.san ||
         replayed.fen !== move.fen ||
         !Number.isSafeInteger(move.version) ||

@@ -1,4 +1,4 @@
-import { gameReplayResponseSchema, type GameErrorCode } from "@neurochess/contracts";
+import { type GameErrorCode, gameReplayResponseSchema } from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure, type SandboxApi } from "../api/client";
@@ -508,14 +508,14 @@ describe("automatic paused recovery and lifecycle commands", () => {
   });
 
   it("opens private URLs and ignores a late response after history navigation", async () => {
-    let listener = () => {};
+    let listener: () => void = () => undefined;
     let target = OTHER_GAME_ID;
     const navigation: SandboxNavigation = {
       read: () => ({ kind: "game" as const, gameId: target }),
       open: vi.fn(),
       subscribe: (next) => {
         listener = next;
-        return () => {};
+        return () => undefined;
       },
     };
     const { api, controller } = harness(snapshot(), navigation);
@@ -538,7 +538,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
     const navigation: SandboxNavigation = {
       read: () => ({ kind: "invalid" }),
       open: vi.fn(),
-      subscribe: () => () => {},
+      subscribe: () => () => undefined,
     };
     const { api, controller } = harness(snapshot(), navigation);
     await controller.recover();

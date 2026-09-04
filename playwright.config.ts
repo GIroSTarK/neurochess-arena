@@ -1,6 +1,7 @@
-import { defineConfig, devices } from "@playwright/test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { defineConfig, devices } from "@playwright/test";
 
 import { WEB_ORIGIN } from "./test/e2e/environment";
 

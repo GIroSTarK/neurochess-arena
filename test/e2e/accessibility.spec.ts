@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
+import type * as webI18n from "../../apps/web/src/i18n";
+
 import { activate, expect, square, startSandbox, test } from "./fixtures";
 
 async function checkBounds(page: Page) {
@@ -89,7 +91,10 @@ test("keeps keyboard-focused squares in view on short viewports in both orientat
     await expect(page.getByRole("grid")).toHaveAttribute("data-orientation", orientation);
     const leftFile = orientation === "white" ? "a" : "h";
     const rightFile = orientation === "white" ? "h" : "a";
-    const ranks = orientation === "white" ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
+    const ranks =
+      orientation === "white"
+        ? ([1, 2, 3, 4, 5, 6, 7, 8] as const)
+        : ([8, 7, 6, 5, 4, 3, 2, 1] as const);
     const first = leftFile + ranks[7];
     const last = rightFile + ranks[0];
 
@@ -172,7 +177,7 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   // detection or fixture code is bundled into the application.
   await page.evaluate(async () => {
     const modulePath = "/src/i18n/index.ts";
-    const { i18n } = await import(/* @vite-ignore */ modulePath);
+    const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
     function expand(value: unknown): unknown {
       if (typeof value === "string") return value + " extra".repeat(Math.ceil(value.length / 12));
       if (value && typeof value === "object")

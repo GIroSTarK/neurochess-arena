@@ -3,8 +3,8 @@ import cors from "@fastify/cors";
 import {
   healthResponseSchema,
   readinessResponseSchema,
-  safeErrorResponseSchema,
   type SafeErrorResponse,
+  safeErrorResponseSchema,
 } from "@neurochess/contracts";
 import Fastify, { type FastifyServerOptions } from "fastify";
 import {
@@ -13,7 +13,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
-import { registerGameRoutes, type GameApiOptions } from "./games/routes.js";
+import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 
 export interface ReadinessProbe {
   check(): Promise<void>;
