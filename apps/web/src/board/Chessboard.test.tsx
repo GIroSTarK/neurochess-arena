@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import type { ChessColor } from "@neurochess/contracts";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,14 +10,9 @@ import {
   PROMOTION_APPROACH,
   snapshot,
 } from "../test/fixtures";
+import { square } from "../test/queries";
 
 import { Chessboard } from "./Chessboard";
-
-function square(coordinate: string) {
-  return within(screen.getByRole("grid")).getByRole("button", {
-    name: new RegExp("^" + coordinate + ":"),
-  });
-}
 
 function props(position = snapshot(), orientation: ChessColor = "white") {
   return {

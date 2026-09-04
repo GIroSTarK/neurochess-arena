@@ -1,15 +1,15 @@
 import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
+import "../i18n";
+
 // jsdom has no top layer; real modal inertness is checked in Playwright.
-if (typeof HTMLDialogElement !== "undefined") {
-  const { cleanup } = await import("@testing-library/react");
-  await import("../i18n");
-  afterEach(() => cleanup());
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
-}
+HTMLDialogElement.prototype.showModal = function () {
+  this.open = true;
+};
+HTMLDialogElement.prototype.close = function () {
+  this.open = false;
+};
+
+afterEach(() => cleanup());

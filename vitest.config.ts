@@ -19,9 +19,26 @@ export default defineConfig({
   },
   test: {
     ...baseTestConfig,
-    environment: "node",
-    include: ["apps/**/*.test.{ts,tsx}", "packages/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
-    setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
+    projects: [
+      {
+        // The web app runs in a browser-like environment with its own setup file.
+        extends: true,
+        test: {
+          name: "web",
+          environment: "jsdom",
+          include: ["apps/web/**/*.test.{ts,tsx}"],
+          setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["apps/api/**/*.test.ts", "packages/**/*.test.ts"],
+        },
+      },
+    ],
   },
 });

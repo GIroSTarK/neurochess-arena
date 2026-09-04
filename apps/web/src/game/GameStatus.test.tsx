@@ -1,25 +1,17 @@
-// @vitest-environment jsdom
-
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { createSandboxApi } from "../api/client";
-import { FOOLS_MATE, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, readyState, snapshot } from "../test/fixtures";
 import { StableText } from "../ui/StableText";
 
 import { SandboxController, type SandboxState } from "./controller";
 import { GameStatus } from "./GameStatus";
 
 function props(overrides: Partial<SandboxState> = {}) {
+  // Inert until connected; only the props contract needs a controller.
   const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
-  const state: SandboxState = {
-    ...controller.getSnapshot(),
-    phase: "ready",
-    readiness: "ready",
-    snapshot: snapshot(),
-    ...overrides,
-  };
-  return { state, controller };
+  return { state: readyState(overrides), controller };
 }
 
 const paused = () => snapshot([], { state: "paused", legalMoves: [], version: 1 });

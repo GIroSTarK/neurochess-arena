@@ -1,7 +1,5 @@
-// @vitest-environment jsdom
-
 import { moveCommandSchema } from "@neurochess/contracts";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { I18nextProvider } from "react-i18next";
@@ -10,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { createWebI18n } from "../i18n";
 import { errorResponse, FOOLS_MATE, GAME_ID, jsonResponse, snapshot } from "../test/fixtures";
+import { square } from "../test/queries";
 
 type Route = (
   path: string,
@@ -35,12 +34,6 @@ function mockApi(route: Route = () => undefined) {
   });
   vi.stubGlobal("fetch", fetch);
   return fetch;
-}
-
-function square(coordinate: string) {
-  return within(screen.getByRole("grid")).getByRole("button", {
-    name: new RegExp("^" + coordinate + ":"),
-  });
 }
 
 async function start() {

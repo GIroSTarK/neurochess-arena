@@ -1,6 +1,8 @@
 import { createGame } from "@neurochess/chess";
 import { gameSnapshotSchema, type GameSnapshot } from "@neurochess/contracts";
 
+import { initialSandboxState, type SandboxState } from "../game/state";
+
 export const GAME_ID = "30c898bd-d430-4c9e-bd9e-1f44bd7a8fab";
 export const OTHER_GAME_ID = "b766c6d2-8129-4309-9d8f-fc9607849901";
 export const FOOLS_MATE = ["f2f3", "e7e5", "g2g4", "d8h4"];
@@ -25,6 +27,17 @@ export function snapshot(
     version: moves.length,
     ...overrides,
   });
+}
+
+/** A ready sandbox showing the standard position, for presentation tests. */
+export function readyState(overrides: Partial<SandboxState> = {}): SandboxState {
+  return {
+    ...initialSandboxState,
+    readiness: "ready",
+    phase: "ready",
+    snapshot: snapshot(),
+    ...overrides,
+  };
 }
 
 export function jsonResponse(payload: unknown, status = 200): Response {
