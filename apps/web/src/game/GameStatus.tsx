@@ -6,7 +6,7 @@ import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { StableText } from "../ui/StableText";
 
-import type { SandboxController, SandboxState } from "./controller";
+import { isTerminal, isUnfinished, type SandboxController, type SandboxState } from "./controller";
 import { isRejectionCode } from "./failures";
 import { LifecycleControls } from "./LifecycleControls";
 
@@ -45,7 +45,7 @@ export function GameStatus({
 }) {
   const { t } = useTranslation();
   const { snapshot } = state;
-  const unfinished = snapshot?.state === "active" || snapshot?.state === "paused";
+  const unfinished = snapshot !== null && isUnfinished(snapshot);
   const activityKey =
     state.phase === "submitting"
       ? state.pendingCommand && "action" in state.pendingCommand
@@ -202,7 +202,7 @@ export function GameStatus({
       {unfinished ? (
         <LifecycleControls key={snapshot.gameId} state={state} controller={controller} />
       ) : null}
-      {snapshot && ["completed", "aborted"].includes(snapshot.state) ? (
+      {snapshot && isTerminal(snapshot) ? (
         <Button
           variant="primary"
           className="mt-6"

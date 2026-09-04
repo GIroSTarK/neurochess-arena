@@ -26,7 +26,7 @@ function props(position = snapshot(), orientation: ChessColor = "white") {
     snapshot: position,
     orientation,
     canMove: true,
-    interactionRevision: 0,
+    interactionEpoch: "0",
     onMove: vi.fn(),
   };
 }
@@ -138,7 +138,7 @@ describe("accessible chessboard", () => {
     await user.click(square("d2"));
     await user.click(square("d4"));
     expect(initial.onMove).toHaveBeenCalledTimes(1);
-    rerender(<Chessboard {...initial} snapshot={snapshot(["e2e4"])} interactionRevision={1} />);
+    rerender(<Chessboard {...initial} snapshot={snapshot(["e2e4"])} interactionEpoch="1" />);
     expect(square("d4")).toHaveFocus();
     expect(square("e4")).toHaveAccessibleName(/White pawn.*Last move/);
     expect(square("e2")).not.toHaveAttribute("data-selected");
@@ -148,7 +148,7 @@ describe("accessible chessboard", () => {
     const initial = props();
     const { rerender } = render(<Chessboard {...initial} />);
     await userEvent.click(square("e2"));
-    rerender(<Chessboard {...initial} interactionRevision={1} />);
+    rerender(<Chessboard {...initial} interactionEpoch="1" />);
     expect(square("e2")).not.toHaveAttribute("data-selected");
     expect(square("e2")).toHaveFocus();
   });

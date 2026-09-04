@@ -19,7 +19,8 @@ interface ChessboardProps {
   readonly snapshot: GameSnapshot;
   readonly orientation: ChessColor;
   readonly canMove: boolean;
-  readonly interactionRevision: number;
+  /** Selection and promotion are discarded when this changes. */
+  readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
   readonly toolbar?: ReactNode;
   readonly view?: BoardView | undefined;
@@ -59,7 +60,7 @@ export function Chessboard({
   snapshot,
   orientation,
   canMove,
-  interactionRevision,
+  interactionEpoch,
   onMove,
   toolbar,
   view,
@@ -72,8 +73,7 @@ export function Chessboard({
   const buttons = useRef(new Map<Square, HTMLButtonElement>());
   const [focusedSquare, setFocusedSquare] = useState<Square>("e2");
   const [selection, setSelection] = useState<Selection | null>(null);
-  const epoch = snapshot.gameId + ":" + snapshot.version + ":" + interactionRevision;
-  const selected = selection?.epoch === epoch ? selection : null;
+  const selected = selection?.epoch === interactionEpoch ? selection : null;
   const enabled = !view && canMove && snapshot.state === "active" && position !== null;
   const sources = new Set(snapshot.legalMoves.map((move) => move.slice(0, 2)));
   const selectedMoves = selected
@@ -99,7 +99,11 @@ export function Chessboard({
         onMove(moves[0]);
       }
     } else if (sources.has(square)) {
-      setSelection(selected?.source === square ? null : { epoch, source: square, promotion: null });
+      setSelection(
+        selected?.source === square
+          ? null
+          : { epoch: interactionEpoch, source: square, promotion: null },
+      );
     } else {
       setSelection(null);
     }

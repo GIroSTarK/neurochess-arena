@@ -87,3 +87,19 @@ export const initialSandboxState: SandboxState = {
 export function isTerminal(snapshot: GameSnapshot): boolean {
   return snapshot.state === "completed" || snapshot.state === "aborted";
 }
+
+export function isUnfinished(snapshot: GameSnapshot): boolean {
+  return snapshot.state === "active" || snapshot.state === "paused";
+}
+
+/**
+ * Identifies the accepted position together with the client-side invalidation counter.
+ * Presentation state such as a board selection or an open confirmation is discarded when it
+ * changes.
+ */
+export function interactionEpoch({
+  snapshot,
+  interactionRevision,
+}: Pick<SandboxState, "snapshot" | "interactionRevision">): string {
+  return (snapshot ? snapshot.gameId + ":" + snapshot.version : "none") + ":" + interactionRevision;
+}

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Chessboard } from "../board/Chessboard";
 import { PieceIcon } from "../board/PieceIcon";
 import { replayView } from "../chess/replay";
-import type { SandboxState } from "../game/controller";
+import { interactionEpoch, isTerminal, type SandboxState } from "../game/controller";
 import { GameStatus } from "../game/GameStatus";
 import { PgnActions } from "../game/PgnActions";
 import { PlayerSummary } from "../game/PlayerSummary";
@@ -96,7 +96,7 @@ export function App({ apiBaseUrl }: AppProps) {
                   snapshot={snapshot}
                   orientation={orientation}
                   canMove={state.phase === "ready"}
-                  interactionRevision={state.interactionRevision}
+                  interactionEpoch={interactionEpoch(state)}
                   onMove={(move) => {
                     void controller.submit(move);
                   }}
@@ -118,7 +118,7 @@ export function App({ apiBaseUrl }: AppProps) {
                           {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
                         </span>
                       </div>
-                      {snapshot.state === "completed" || snapshot.state === "aborted" ? (
+                      {isTerminal(snapshot) ? (
                         <ReplayControls state={state} controller={controller} />
                       ) : null}
                     </>
@@ -150,7 +150,7 @@ export function App({ apiBaseUrl }: AppProps) {
               selectedPly={state.replay ? state.replayPly : undefined}
               onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
             />
-            {snapshot?.state === "completed" || snapshot?.state === "aborted" ? (
+            {snapshot && isTerminal(snapshot) ? (
               <PgnActions state={state} controller={controller} />
             ) : null}
             <div className="text-label text-text-muted">

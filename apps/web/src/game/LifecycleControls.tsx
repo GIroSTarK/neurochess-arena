@@ -5,7 +5,12 @@ import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { StableText } from "../ui/StableText";
 
-import type { LifecycleAction, SandboxController, SandboxState } from "./controller";
+import {
+  interactionEpoch,
+  type LifecycleAction,
+  type SandboxController,
+  type SandboxState,
+} from "./controller";
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: "white" | "black" };
 
@@ -25,8 +30,7 @@ export function LifecycleControls({
   const [pendingConfirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const disabled = state.phase !== "ready";
   const paused = state.snapshot?.state === "paused";
-  const epoch =
-    state.snapshot?.gameId + ":" + state.snapshot?.version + ":" + state.interactionRevision;
+  const epoch = interactionEpoch(state);
   // Invalidate the dialog without replacing the controls or moving their focus.
   const confirmation =
     !disabled && pendingConfirmation?.epoch === epoch ? pendingConfirmation.action : null;

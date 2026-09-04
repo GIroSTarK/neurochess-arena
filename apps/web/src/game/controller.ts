@@ -7,10 +7,16 @@ import { OperationGate } from "./operations";
 import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
-import { initialSandboxState, isTerminal, type LifecycleAction, type SandboxState } from "./state";
+import {
+  initialSandboxState,
+  isTerminal,
+  isUnfinished,
+  type LifecycleAction,
+  type SandboxState,
+} from "./state";
 import { Store } from "./store";
 
-export { isTerminal } from "./state";
+export { interactionEpoch, isTerminal, isUnfinished } from "./state";
 export type {
   Announcement,
   LifecycleAction,
@@ -126,8 +132,7 @@ export class SandboxController {
     const { readiness, snapshot, pendingCommand, phase } = this.store.get();
     if (
       readiness !== "ready" ||
-      snapshot?.state === "active" ||
-      snapshot?.state === "paused" ||
+      (snapshot !== null && isUnfinished(snapshot)) ||
       pendingCommand ||
       phase === "recovering" ||
       phase === "recovery-required"
