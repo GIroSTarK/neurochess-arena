@@ -1,7 +1,8 @@
 import type { ChessColor } from "@neurochess/contracts";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Chessboard } from "../board/Chessboard";
 import { PieceIcon } from "../board/PieceIcon";
 import { replayView } from "../chess/replay";
@@ -32,6 +33,7 @@ const connectionMarks: Record<SandboxState["readiness"], string> = {
 
 export function App({ apiBaseUrl }: AppProps) {
   const { t } = useTranslation();
+  const helpId = useId();
   const { state, controller } = useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const { snapshot } = state;
@@ -101,29 +103,27 @@ export function App({ apiBaseUrl }: AppProps) {
                     void controller.submit(move);
                   }}
                   view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
-                  toolbar={
-                    <>
-                      <div className="order-3 mt-4 flex flex-wrap items-center justify-between gap-3">
-                        <Button
-                          variant="secondary"
-                          className="flex-auto"
-                          onClick={() =>
-                            setOrientation((previous) => (previous === "white" ? "black" : "white"))
-                          }
-                        >
-                          <Icon path="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
-                          {t("actions.flip")}
-                        </Button>
-                        <span className="text-right text-label text-text-secondary">
-                          {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-                        </span>
-                      </div>
-                      {isTerminal(snapshot) ? (
-                        <ReplayControls state={state} controller={controller} />
-                      ) : null}
-                    </>
-                  }
+                  describedBy={helpId}
                 />
+                {isTerminal(snapshot) ? (
+                  <ReplayControls state={state} controller={controller} />
+                ) : null}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <Button
+                    variant="secondary"
+                    className="flex-auto"
+                    onClick={() =>
+                      setOrientation((previous) => (previous === "white" ? "black" : "white"))
+                    }
+                  >
+                    <Icon path="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
+                    {t("actions.flip")}
+                  </Button>
+                  <span className="text-right text-label text-text-secondary">
+                    {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
+                  </span>
+                </div>
+                <BoardKeyboardHelp id={helpId} />
               </>
             ) : (
               <div className="grid aspect-square min-h-[380px] place-items-center border border-divider p-8 checkered-backdrop max-sm:aspect-auto max-sm:min-h-[340px] max-sm:px-4 max-sm:py-6">

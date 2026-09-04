@@ -61,7 +61,7 @@ describe("accessible chessboard", () => {
       await user.keyboard("{Control>}{End}{/Control}");
       expect(square(orientation === "white" ? "h1" : "a8")).toHaveFocus();
       await user.tab();
-      expect(screen.getByText("Keyboard controls")).toHaveFocus();
+      expect(document.body).toHaveFocus();
     },
   );
 

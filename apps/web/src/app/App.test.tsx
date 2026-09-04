@@ -84,6 +84,7 @@ describe("localized sandbox application", () => {
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
     ).toHaveLength(1);
     expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("grid")).toHaveAccessibleDescription(/arrow keys/);
   });
 
   it("keeps the accepted board, turn and history while submitting and announces confirmation once", async () => {
