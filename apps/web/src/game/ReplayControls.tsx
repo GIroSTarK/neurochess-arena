@@ -38,7 +38,7 @@ export function ReplayControls({
           <Button
             key={control.key}
             variant="secondary"
-            disabled={!state.replay || control.disabled}
+            aria-disabled={!state.replay || control.disabled}
             onClick={() => controller.selectPly(control.target)}
           >
             {t(`replay.${control.key}`)}

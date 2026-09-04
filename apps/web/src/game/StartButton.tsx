@@ -18,7 +18,7 @@ export function StartButton({
     <Button
       variant="primary"
       className="mt-8"
-      disabled={
+      aria-disabled={
         state.readiness !== "ready" ||
         !["entry", "access-error", "unavailable"].includes(state.phase)
       }

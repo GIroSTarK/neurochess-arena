@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-04
 
 ## Purpose and authority
 
@@ -110,15 +110,15 @@ The names below identify component families for future implementation in the web
 
 Apply this shared state contract to each control family where relevant:
 
-| State           | Presentation and behavior                                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Default         | Persistent label, semantic border, and a clear enabled action. A placeholder is supplemental.                                  |
-| Hover / pressed | Add the neutral surface or contrasting inset keyline without changing layout. Touch users retain the same actions.             |
-| Focus           | Show the full 2px ring and offset; selection, focus, and validation are separate cues.                                         |
-| Disabled        | Keep text readable and explain the unmet prerequisite nearby. Do not make a disabled action the only path to its explanation.  |
-| Loading         | Keep the label and reserved space; add a short activity message and prevent duplicate submissions. Announce completion once.   |
-| Empty           | State what is absent and give a useful next action. Empty discovery, empty history, and missing commentary use different copy. |
-| Error           | Pair a safe cause with recovery, retain non-secret entered values, and associate field errors with the affected control.       |
+| State           | Presentation and behavior                                                                                                                                                                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default         | Persistent label, semantic border, and a clear enabled action. A placeholder is supplemental.                                                                                                                                                                   |
+| Hover / pressed | Add the neutral surface or contrasting inset keyline without changing layout. Touch users retain the same actions.                                                                                                                                              |
+| Focus           | Show the full 2px ring and offset; selection, focus, and validation are separate cues.                                                                                                                                                                          |
+| Disabled        | Keep text readable and explain the unmet prerequisite nearby. Do not make a disabled action the only path to its explanation. Mark an unavailable action with `aria-disabled` so it stays focusable and rejects activation instead of blurring a keyboard user. |
+| Loading         | Keep the label and reserved space; add a short activity message and prevent duplicate submissions. Announce completion once.                                                                                                                                    |
+| Empty           | State what is absent and give a useful next action. Empty discovery, empty history, and missing commentary use different copy.                                                                                                                                  |
+| Error           | Pair a safe cause with recovery, retain non-secret entered values, and associate field errors with the affected control.                                                                                                                                        |
 
 On narrow screens, fields and menus fit the available width, primary actions may fill a row, and button labels wrap with height growing beyond the 44px minimum. Combobox results wrap long model identifiers and keep the selected value available in full. Tabs may grow to two lines; do not squeeze their labels into unreadable text. Tables retain headers, using a labeled local scroll area only when the content cannot reflow. Dialogs become scrollable sheets with actions reachable above the mobile keyboard.
 
@@ -165,7 +165,7 @@ Announce accepted moves, turn changes, check, and results through a concise poli
 
 Routine move/lifecycle feedback preserves the status panel's geometry and the positions of controls and move history. Reserve localized variants without fixed heights or duplicated interactive controls. Error details may expand for readability; the terminal result/replay view is a separate layout transition.
 
-Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable lifecycle actions remain focusable and visibly disabled, but reject activation. Returning responses must not steal focus if the user has moved elsewhere; updated game state invalidates destructive confirmations independently of control focus.
+Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable actions, including lifecycle, replay navigation, PGN export, Start, and New game, remain focusable and visibly disabled through `aria-disabled`, but reject activation and a held activation key. Returning responses must not steal focus if the user has moved elsewhere. When an accepted Start or New game removes the activated control, focus lands on the board's current square; recovery on page load never moves focus. Updated game state invalidates destructive confirmations independently of control focus.
 
 ## Game state and recovery
 

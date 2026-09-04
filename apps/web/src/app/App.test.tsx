@@ -10,6 +10,7 @@ import {
   FOOLS_MATE,
   GAME_ID,
   jsonResponse,
+  OTHER_GAME_ID,
   requestBody,
   requestPath,
   snapshot,
@@ -47,7 +48,7 @@ function mockApi(route: Route = () => undefined) {
 
 async function start() {
   const button = screen.getByRole("button", { name: "Start sandbox" });
-  await waitFor(() => expect(button).toBeEnabled());
+  await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
   await userEvent.click(button);
   await screen.findByRole("grid", { name: "Chessboard" });
 }
@@ -64,7 +65,7 @@ describe("localized sandbox application", () => {
     );
     expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Start sandbox" });
-    await waitFor(() => expect(button).toBeEnabled());
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     expect(
       fetch.mock.calls.every(([url]) =>
         ["/ready", "/sandbox/games/unfinished"].some((path) => requestPath(url).endsWith(path)),
@@ -298,7 +299,7 @@ describe("localized sandbox application", () => {
     );
     renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     const button = screen.getByRole("button", { name: "Start sandbox" });
-    await waitFor(() => expect(button).toBeEnabled());
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     await userEvent.click(button);
     const retry = await screen.findByRole("button", { name: "Retry sandbox" });
     expect(screen.getByText("Service ready")).toBeInTheDocument();
@@ -324,10 +325,16 @@ describe("localized sandbox application", () => {
     });
     renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     const retry = await screen.findByRole("button", { name: "Retry connection" });
-    expect(screen.getByRole("button", { name: "Start sandbox" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start sandbox" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await userEvent.click(retry);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Start sandbox" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Start sandbox" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
     );
     expect(
       fetch.mock.calls.every(([url]) =>
@@ -381,5 +388,86 @@ describe("localized sandbox application", () => {
       expect(screen.getByRole("status")).toHaveTextContent("Blanc joue e4. Au tour de Noir"),
     );
     expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
+  });
+
+  it("keeps focus on Start while creation is pending, then lands on the board", async () => {
+    const creation = Promise.withResolvers<Response>();
+    const fetch = mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    const user = userEvent.setup();
+    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
+    act(() => startButton.focus());
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("button", { name: "Starting sandbox…" })).toBe(startButton);
+    expect(startButton).toHaveAttribute("aria-disabled", "true");
+    expect(startButton).not.toBeDisabled();
+    expect(startButton).toHaveFocus();
+    await user.keyboard("{Enter} ");
+    await user.click(startButton);
+    await waitFor(() =>
+      expect(
+        fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
+      ).toHaveLength(1),
+    );
+    expect(
+      fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
+    ).toHaveLength(1);
+    await act(async () => creation.resolve(jsonResponse(snapshot(), 201)));
+    await screen.findByRole("grid");
+    expect(square("e2")).toHaveFocus();
+  });
+
+  it("leaves focus on a control the user moved to while creation was pending", async () => {
+    const creation = Promise.withResolvers<Response>();
+    mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    const user = userEvent.setup();
+    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
+    act(() => startButton.focus());
+    await user.keyboard("{Enter}");
+    const history = screen.getByRole("region", { name: "Move history" });
+    act(() => history.focus());
+    await act(async () => creation.resolve(jsonResponse(snapshot(), 201)));
+    await screen.findByRole("grid");
+    expect(history).toHaveFocus();
+  });
+
+  it("lands on the board after New game replaces a finished game", async () => {
+    const creation = Promise.withResolvers<Response>();
+    let creations = 0;
+    mockApi((path) => {
+      if (path !== "/sandbox/games") return undefined;
+      creations += 1;
+      return creations === 1 ? jsonResponse(snapshot(FOOLS_MATE), 201) : creation.promise;
+    });
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    await start();
+    const user = userEvent.setup();
+    const newGame = screen.getByRole("button", { name: "New game" });
+    act(() => newGame.focus());
+    await user.keyboard("{Enter}");
+    expect(newGame).toHaveAttribute("aria-disabled", "true");
+    expect(newGame).toHaveFocus();
+    await act(async () =>
+      creation.resolve(jsonResponse(snapshot([], { gameId: OTHER_GAME_ID }), 201)),
+    );
+    await screen.findByRole("heading", { name: "White to move" });
+    expect(screen.queryByRole("button", { name: "New game" })).not.toBeInTheDocument();
+    expect(square("e2")).toHaveFocus();
+  });
+
+  it("does not move focus when an unfinished game is recovered on load", async () => {
+    mockApi((path) =>
+      path === "/sandbox/games/unfinished"
+        ? jsonResponse({ snapshot: snapshot(["e2e4"]) })
+        : path.endsWith("/lifecycle")
+          ? jsonResponse(snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 }))
+          : undefined,
+    );
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    await screen.findByRole("heading", { name: "Game paused" });
+    expect(screen.getByRole("grid").contains(document.activeElement)).toBe(false);
   });
 });

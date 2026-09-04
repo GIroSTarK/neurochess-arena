@@ -1,9 +1,9 @@
 import type { ChessColor } from "@neurochess/contracts";
-import { useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
-import { Chessboard } from "../board/Chessboard";
+import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { PieceIcon } from "../board/PieceIcon";
 import { replayView } from "../chess/replay";
 import { interactionEpoch, isTerminal, type SandboxState } from "../game/controller";
@@ -36,7 +36,19 @@ export function App({ apiBaseUrl }: AppProps) {
   const helpId = useId();
   const { state, controller } = useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
+  const board = useRef<ChessboardHandle>(null);
   const { snapshot } = state;
+  const startedGameId =
+    state.announcement?.kind === "started" ? state.announcement.snapshot.gameId : null;
+
+  useLayoutEffect(() => {
+    if (startedGameId === null) return;
+    // An accepted Start or New game removes the control that was activated. Land on the board
+    // unless the user has moved elsewhere. Recovery never announces "started", so opening a page
+    // cannot take focus.
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) board.current?.focus();
+  }, [startedGameId]);
 
   return (
     <div className="mx-auto w-[min(1280px,calc(100%_-_2rem))] pb-[max(1.5rem,env(safe-area-inset-bottom))] md:w-[min(1280px,calc(100%_-_3rem))] lg:w-[min(1280px,calc(100%_-_4rem))]">
@@ -95,6 +107,7 @@ export function App({ apiBaseUrl }: AppProps) {
             {snapshot ? (
               <>
                 <Chessboard
+                  ref={board}
                   snapshot={snapshot}
                   orientation={orientation}
                   canMove={state.phase === "ready"}

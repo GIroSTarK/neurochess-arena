@@ -42,14 +42,7 @@ export function LifecycleControls({
     if (!disabled) setConfirmation({ epoch, action });
   }
   return (
-    <div
-      className="mt-4 grid grid-cols-2 gap-3"
-      aria-label={t("lifecycle.controls")}
-      role="group"
-      onKeyDown={(event) => {
-        if ((event.key === "Enter" || event.key === " ") && event.repeat) event.preventDefault();
-      }}
-    >
+    <div className="mt-4 grid grid-cols-2 gap-3" aria-label={t("lifecycle.controls")} role="group">
       {/* aria-disabled blocks activation through the guards without blurring focus. */}
       <Button
         variant="primary"

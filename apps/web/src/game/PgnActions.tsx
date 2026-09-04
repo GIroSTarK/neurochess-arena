@@ -25,7 +25,7 @@ export function PgnActions({
         <Button
           variant="secondary"
           className="flex-[1_1_8rem]"
-          disabled={state.exportPhase === "loading"}
+          aria-disabled={state.exportPhase === "loading"}
           onClick={() => {
             void controller.exportPgn("copy");
           }}
@@ -35,7 +35,7 @@ export function PgnActions({
         <Button
           variant="secondary"
           className="flex-[1_1_8rem]"
-          disabled={state.exportPhase === "loading"}
+          aria-disabled={state.exportPhase === "loading"}
           onClick={() => {
             void controller.exportPgn("download");
           }}

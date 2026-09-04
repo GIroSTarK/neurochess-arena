@@ -1,10 +1,18 @@
 import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
-import { type KeyboardEvent, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type Ref,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { parsePosition, type PromotionKind, type Square, visualRows } from "../chess/position";
 import type { BoardView } from "../chess/replay";
 import { type BoardMarks, squareState } from "../chess/squares";
+import { cancelHeldActivation } from "../ui/keyboard";
 
 import { BoardSquare } from "./BoardSquare";
 import { squareLabel } from "./labels";
@@ -22,6 +30,12 @@ interface ChessboardProps {
   readonly describedBy?: string | undefined;
   /** A position to present instead of the accepted snapshot; it disables moves. */
   readonly view?: BoardView | undefined;
+  readonly ref?: Ref<ChessboardHandle> | undefined;
+}
+
+export interface ChessboardHandle {
+  /** Moves focus to the square holding the board's tab stop, scrolling it into view. */
+  focus(): void;
 }
 
 const promotionOrder: readonly PromotionKind[] = ["q", "r", "b", "n"];
@@ -38,6 +52,7 @@ export function Chessboard({
   onMove,
   describedBy,
   view,
+  ref,
 }: ChessboardProps) {
   const { t } = useTranslation();
   const fen = view?.fen ?? snapshot.fen;
@@ -53,16 +68,17 @@ export function Chessboard({
     onMove,
   });
 
+  useImperativeHandle(ref, () => ({ focus: () => buttons.current.get(focusedSquare)?.focus() }), [
+    focusedSquare,
+  ]);
+
   function focus(square: Square) {
     setFocusedSquare(square);
     buttons.current.get(square)?.focus();
   }
 
   function navigate(event: KeyboardEvent<HTMLButtonElement>, row: number, column: number) {
-    if ((event.key === "Enter" || event.key === " ") && event.repeat) {
-      event.preventDefault();
-      return;
-    }
+    if (cancelHeldActivation(event)) return;
     let nextRow = row;
     let nextColumn = column;
     switch (event.key) {

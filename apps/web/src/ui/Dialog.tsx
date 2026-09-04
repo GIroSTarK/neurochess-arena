@@ -2,6 +2,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "re
 import { createPortal } from "react-dom";
 
 import { cx } from "./cx";
+import { cancelHeldActivation } from "./keyboard";
 
 export interface DialogProps {
   readonly title: ReactNode;
@@ -57,10 +58,8 @@ export function Dialog({ title, description, onCancel, children }: DialogProps) 
   }, []);
 
   function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
-    if ((event.key === "Enter" || event.key === " ") && event.repeat) {
-      // A held activation key must not fire repeatedly.
-      event.preventDefault();
-    } else if (event.key === "Escape") {
+    if (cancelHeldActivation(event)) return;
+    if (event.key === "Escape") {
       event.preventDefault();
       onCancel();
     } else if (event.key === "Tab") {
