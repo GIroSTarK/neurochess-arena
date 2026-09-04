@@ -1,6 +1,5 @@
 export const en = {
   app: {
-    name: "Neurochess Arena",
     brand: "Neurochess",
     arena: "Arena",
     title: "Development sandbox · Neurochess Arena",
@@ -13,6 +12,8 @@ export const en = {
     description: "You control both colors. Select a piece, then a highlighted square.",
     entryTitle: "A board for your next idea.",
     entryDescription: "Start a standard chess game and play White and Black from this browser.",
+    playArea: "Play area",
+    gameDetails: "Game details",
     privacy: "Private guest game",
     memoryHint:
       "Unfinished games reopen paused. Keep this private game URL to return while your guest session remains available.",
@@ -66,7 +67,6 @@ export const en = {
     whiteWins: "White wins",
     blackWins: "Black wins",
     draw: "Draw",
-    result: "{{result}} · {{reason}}",
     resultWithScore: "{{result}}. {{reason}}. Result: {{score}}.",
     submitting: "Submitting your move…",
     synchronizing: "Checking the accepted position…",
@@ -220,5 +220,11 @@ export const en = {
     description: "The application could not start. Check the public API configuration and reload.",
     variables: "Check the following configuration variables: {{variables}}.",
     rootMissing: "The application could not find its page container.",
+  },
+  failure: {
+    title: "Something went wrong",
+    description:
+      "The page stopped after an unexpected problem. Reload to continue; an unfinished game reopens paused.",
+    reload: "Reload page",
   },
 } as const;

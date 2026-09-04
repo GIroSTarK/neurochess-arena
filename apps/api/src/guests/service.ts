@@ -1,5 +1,6 @@
-import type { GameRepository } from "@neurochess/database";
 import { createHash, randomBytes } from "node:crypto";
+
+import type { GameRepository } from "@neurochess/database";
 
 import { GameRequestError } from "../games/errors.js";
 

@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "predev": "npm run build:packages",
-    "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --watch-preserve-output --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web --host localhost --port 5173\"",
+    "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --watch-preserve-output --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web\"",
     "build:packages": "tsc -b packages/contracts packages/chess packages/database",
     "build": "npm run build:packages && npm run build --workspace @neurochess/api && npm run build --workspace @neurochess/web",
     "start": "concurrently --kill-others-on-fail --names api,web \"npm run start --workspace @neurochess/api\" \"npm run preview --workspace @neurochess/web\"",
@@ -61,6 +61,7 @@
     "eslint": "10.9.1",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.5",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "globals": "17.12.0",
     "jsdom": "30.0.1",
     "prettier": "3.9.6",

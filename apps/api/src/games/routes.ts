@@ -1,17 +1,17 @@
 import {
   createGameRequestSchema,
   emptyQuerySchema,
+  type GameErrorCode,
   gameErrorResponseSchema,
   gameParamsSchema,
+  gamePgnResponseSchema,
+  gameReplayResponseSchema,
   gameSnapshotSchema,
   guestSessionRequestSchema,
   guestSessionResponseSchema,
-  moveCommandSchema,
   lifecycleCommandSchema,
+  moveCommandSchema,
   unfinishedGameResponseSchema,
-  gameReplayResponseSchema,
-  gamePgnResponseSchema,
-  type GameErrorCode,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -154,8 +154,9 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase())
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
         throw new GameRequestError("INVALID_REQUEST");
+      }
       return options.games.lifecycle(await principalFor(request, reply), request.body);
     },
   );
@@ -212,8 +213,9 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase())
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
         throw new GameRequestError("INVALID_REQUEST");
+      }
       const principal = await principalFor(request, reply);
       return options.games.move(principal, request.body);
     },

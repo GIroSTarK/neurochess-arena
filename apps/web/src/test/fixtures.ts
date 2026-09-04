@@ -1,5 +1,16 @@
 import { createGame } from "@neurochess/chess";
-import { gameSnapshotSchema, type GameSnapshot } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import { vi } from "vitest";
+
+import type { SandboxController } from "../game/controller";
+import {
+  emptyExport,
+  emptyReplay,
+  type ExportState,
+  type ReplayState,
+  type SandboxFlow,
+  type SandboxState,
+} from "../game/state";
 
 export const GAME_ID = "30c898bd-d430-4c9e-bd9e-1f44bd7a8fab";
 export const OTHER_GAME_ID = "b766c6d2-8129-4309-9d8f-fc9607849901";
@@ -25,6 +36,72 @@ export function snapshot(
     version: moves.length,
     ...overrides,
   });
+}
+
+interface SandboxFixtureOptions {
+  readonly readiness?: SandboxState["readiness"];
+  readonly notice?: SandboxState["notice"];
+  readonly announcement?: SandboxState["announcement"];
+  readonly interactionRevision?: number;
+  readonly replayState?: ReplayState;
+  readonly exportState?: ExportState;
+}
+
+/** A fixture must supply each correlated flow and archive slice together. */
+export function sandboxState(
+  flow: SandboxFlow,
+  {
+    readiness = "ready",
+    notice = null,
+    announcement = null,
+    interactionRevision = 0,
+    replayState = emptyReplay,
+    exportState = emptyExport,
+  }: SandboxFixtureOptions = {},
+): SandboxState {
+  return {
+    ...flow,
+    ...replayState,
+    ...exportState,
+    readiness,
+    notice,
+    announcement,
+    interactionRevision,
+  };
+}
+
+/** A ready sandbox showing the standard position unless another snapshot is supplied. */
+export function readyState({
+  snapshot: position = snapshot(),
+  ...options
+}: SandboxFixtureOptions & { readonly snapshot?: GameSnapshot } = {}): SandboxState {
+  return sandboxState({ phase: "ready", snapshot: position, pendingCommand: null }, options);
+}
+
+/** Every controller command as an inert, typed mock; a component receives the slice it calls. */
+export function mockController() {
+  return {
+    checkReadiness: vi.fn<SandboxController["checkReadiness"]>().mockResolvedValue(),
+    start: vi.fn<SandboxController["start"]>().mockResolvedValue(),
+    submit: vi.fn<SandboxController["submit"]>().mockResolvedValue(),
+    lifecycle: vi.fn<SandboxController["lifecycle"]>().mockResolvedValue(),
+    retryCommand: vi.fn<SandboxController["retryCommand"]>().mockResolvedValue(),
+    synchronize: vi.fn<SandboxController["synchronize"]>().mockResolvedValue(),
+    recover: vi.fn<SandboxController["recover"]>().mockResolvedValue(),
+    loadReplay: vi.fn<SandboxController["loadReplay"]>().mockResolvedValue(),
+    selectPly: vi.fn<SandboxController["selectPly"]>(),
+    exportPgn: vi.fn<SandboxController["exportPgn"]>().mockResolvedValue(),
+  };
+}
+
+/** The path of a request the client made; it always hands fetch a URL instance. */
+export function requestPath(input: RequestInfo | URL): string {
+  return new URL(typeof input === "string" || input instanceof URL ? input : input.url).pathname;
+}
+
+/** The JSON body a request carried, or an empty string. */
+export function requestBody(init: RequestInit | undefined): string {
+  return typeof init?.body === "string" ? init.body : "";
 }
 
 export function jsonResponse(payload: unknown, status = 200): Response {

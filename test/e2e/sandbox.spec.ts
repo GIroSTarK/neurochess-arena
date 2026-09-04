@@ -1,6 +1,7 @@
+import { readFile } from "node:fs/promises";
+
 import AxeBuilder from "@axe-core/playwright";
 import { gameSnapshotSchema } from "@neurochess/contracts";
-import { readFile } from "node:fs/promises";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import {
@@ -134,7 +135,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(download.suggestedFilename()).toBe("neurochess-" + current.gameId + ".pgn");
   const path = await download.path();
   expect(path).not.toBeNull();
-  expect(await readFile(path!, "utf8")).toBe(restored.pgn);
+  expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(
     (response) => response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 201,
@@ -300,12 +301,13 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     await stranger.goto(page.url());
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveCount(0);
-    for (const suffix of ["replay", "pgn"])
+    for (const suffix of ["replay", "pgn"]) {
       expect(
         (
           await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
         ).status(),
       ).toBe(401);
+    }
     expect(
       (
         await isolated.request.post(API_ORIGIN + "/guest-session", {
@@ -317,12 +319,13 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     await stranger.reload();
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveCount(0);
-    for (const suffix of ["replay", "pgn"])
+    for (const suffix of ["replay", "pgn"]) {
       expect(
         (
           await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
         ).status(),
       ).toBe(404);
+    }
   } finally {
     await isolated.close();
   }

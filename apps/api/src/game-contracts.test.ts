@@ -1,6 +1,6 @@
 import * as domain from "@neurochess/chess";
 import * as contracts from "@neurochess/contracts";
-import { games, gameParticipants, type StoredGame } from "@neurochess/database";
+import { gameParticipants, games, type StoredGame } from "@neurochess/database";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 // Compatibility belongs at a consumer, never in either independent leaf package.

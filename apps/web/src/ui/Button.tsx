@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 
 import { cx } from "./cx";
+import { cancelHeldActivation } from "./keyboard";
 
 export type ButtonVariant = "primary" | "secondary" | "danger";
 
@@ -23,7 +24,21 @@ export interface ButtonProps extends ComponentProps<"button"> {
   readonly variant: ButtonVariant;
 }
 
-export function Button({ variant, className, type = "button", ...props }: ButtonProps) {
+/**
+ * Shared control. Mark an unavailable action with `aria-disabled` rather than `disabled`: it
+ * keeps its place in the tab order and its focus, and rejects activation instead of blurring a
+ * keyboard user. A held Enter or Space activates once.
+ */
+export function Button({
+  variant,
+  className,
+  type = "button",
+  "aria-disabled": ariaDisabled,
+  onClick,
+  onKeyDown,
+  ...props
+}: ButtonProps) {
+  const unavailable = ariaDisabled === true || ariaDisabled === "true";
   return (
     <button
       type={type}
@@ -35,6 +50,15 @@ export function Button({ variant, className, type = "button", ...props }: Button
         variants[variant],
         className,
       )}
+      aria-disabled={ariaDisabled}
+      onClick={(event) => {
+        if (unavailable) event.preventDefault();
+        else onClick?.(event);
+      }}
+      onKeyDown={(event) => {
+        if (cancelHeldActivation(event)) return;
+        onKeyDown?.(event);
+      }}
       {...props}
     />
   );

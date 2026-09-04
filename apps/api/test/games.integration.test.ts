@@ -1,11 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { gameErrorResponseSchema, gameSnapshotSchema } from "@neurochess/contracts";
 import { gameCommands, gameParticipants, games, guestSessions, moves } from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createLoggerOptions } from "../src/logger.js";
 import { GUEST_COOKIE_NAME } from "../src/guests/service.js";
+import { createLoggerOptions } from "../src/logger.js";
 
 import {
   ApiHarness,
@@ -16,8 +17,8 @@ import {
   play,
   snapshot,
   submit,
-  WEB_ORIGIN,
   type TestApi,
+  WEB_ORIGIN,
 } from "./helpers.js";
 
 let harness: ApiHarness;
@@ -45,7 +46,7 @@ describe("guest HTTP boundary", () => {
     const cookie = bootstrapped.headers.getSetCookie()[0]?.split(";")[0];
     expect(cookie).toBeDefined();
     // Register the already-created identity for narrowly scoped fixture cleanup.
-    const guest = await harness.guest(api, cookie!);
+    const guest = await harness.guest(api, cookie);
     const created = await fetch(`${address}/sandbox/games`, {
       method: "POST",
       headers: { ...headers, cookie: guest.cookie },
@@ -92,8 +93,9 @@ describe("guest HTTP boundary", () => {
     expect(response.statusCode).toBe(201);
     expect(response.headers["cache-control"]).toBe("no-store");
     const cookie = String(response.headers["set-cookie"]);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/", "Max-Age=86400"])
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/", "Max-Age=86400"]) {
       expect(cookie).toContain(attribute);
+    }
     expect(cookie).not.toContain("Domain=");
     expect(response.body).not.toContain(guest.token);
     expect(response.body).not.toContain(guest.id);
@@ -127,7 +129,7 @@ describe("guest HTTP boundary", () => {
     for (const token of [
       "invalid",
       "A".repeat(43),
-      `${guest.token[0] === "A" ? "B" : "A"}${guest.token.slice(1)}`,
+      `${guest.token.startsWith("A") ? "B" : "A"}${guest.token.slice(1)}`,
     ]) {
       const response = await api.app.inject({
         method: "GET",
@@ -439,8 +441,9 @@ describe("atomic commands and concurrency", () => {
     const created = gameSnapshotSchema.parse(
       responses.find((response) => response.statusCode === 201)!.json(),
     );
-    for (const conflict of responses.filter((response) => response.statusCode === 409))
+    for (const conflict of responses.filter((response) => response.statusCode === 409)) {
       expect(conflict.json()).toHaveProperty("currentSnapshot", created);
+    }
     expect(await api.database.db.$count(games, eq(games.ownerGuestSessionId, guest.id))).toBe(1);
     expect(
       await api.database.db.$count(gameParticipants, eq(gameParticipants.gameId, created.gameId)),

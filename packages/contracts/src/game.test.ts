@@ -7,15 +7,15 @@ import {
   gameErrorCodeSchema,
   gameErrorResponseSchema,
   gameLifecycleSchema,
+  gamePgnResponseSchema,
+  gameReplayResponseSchema,
   gameSnapshotSchema,
   gameVersionSchema,
-  moveCommandSchema,
   lifecycleCommandSchema,
-  gameReplayResponseSchema,
-  unfinishedGameResponseSchema,
-  gamePgnResponseSchema,
+  moveCommandSchema,
   safeErrorResponseSchema,
   uciMoveSchema,
+  unfinishedGameResponseSchema,
   winReasonSchema,
 } from "./index.js";
 
@@ -52,10 +52,11 @@ describe("lifecycle and private read contracts", () => {
         lifecycleCommandSchema.safeParse({ ...base, action, losingColor: "white" }).success,
       ).toBe(false);
     }
-    for (const losingColor of ["white", "black"])
+    for (const losingColor of ["white", "black"]) {
       expect(
         lifecycleCommandSchema.safeParse({ ...base, action: "resign", losingColor }).success,
       ).toBe(true);
+    }
     for (const invalid of [
       { action: "resign" },
       { action: "resign", losingColor: "ai" },
@@ -63,8 +64,9 @@ describe("lifecycle and private read contracts", () => {
       { action: "technical_loss" },
       { action: "pause", expectedVersion: -1 },
       { action: "pause", commandId: "invalid" },
-    ])
+    ]) {
       expect(lifecycleCommandSchema.safeParse({ ...base, ...invalid }).success).toBe(false);
+    }
   });
   it("separates unfinished discovery from terminal replay and bounds export shapes", () => {
     const terminal = {

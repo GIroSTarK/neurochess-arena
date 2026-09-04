@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
+import type { Piece, PieceKind } from "../position/position";
 import { cx } from "../ui/cx";
-
-import type { Piece, PieceKind } from "./position";
 
 // Original, reusable Staunton silhouettes. The contrasting outline is part of
 // each piece, so neither color disappears into a light or dark square. Fill and

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createGame, type ChessColor, type GameLifecycle, type GameState } from "../src/index.js";
-import { transitionLifecycle, type LifecycleEvent } from "../src/lifecycle.js";
+import { type ChessColor, createGame, type GameLifecycle, type GameState } from "../src/index.js";
+import { type LifecycleEvent, transitionLifecycle } from "../src/lifecycle.js";
 
 import { activeGame, unwrap } from "./fixtures.js";
 

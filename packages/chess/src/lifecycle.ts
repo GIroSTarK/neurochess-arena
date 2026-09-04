@@ -1,10 +1,10 @@
 import { failure, success } from "./result.js";
 import {
-  DRAW_REASONS,
-  WIN_REASONS,
   type CompletedOutcome,
   type DomainResult,
+  DRAW_REASONS,
   type GameLifecycle,
+  WIN_REASONS,
 } from "./types.js";
 
 export type LifecycleEvent =
