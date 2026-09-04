@@ -6,6 +6,7 @@ import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 
 import type { SandboxController, SandboxState } from "./controller";
+import { isRejectionCode } from "./failures";
 import { LifecycleControls } from "./LifecycleControls";
 import { StableText } from "./StableText";
 
@@ -158,11 +159,7 @@ export function GameStatus({
       {state.notice && !routineNotice ? (
         <p className={cx("my-4", noticeClassName)}>{noticeMessage(state.notice, t)}</p>
       ) : null}
-      {state.phase === "ready" &&
-      state.notice &&
-      ["INVALID_REQUEST", "INVALID_UCI", "ILLEGAL_MOVE", "INVALID_GAME_STATE"].includes(
-        state.notice,
-      ) ? (
+      {state.phase === "ready" && isRejectionCode(state.notice) ? (
         <p className="mt-3 text-text-secondary">{t("notices.synchronized")}</p>
       ) : null}
       {state.phase === "uncertain" || state.phase === "sync-required" ? (
@@ -172,7 +169,7 @@ export function GameStatus({
             <Button
               variant="primary"
               onClick={() => {
-                void controller.retryMove();
+                void controller.retryCommand();
               }}
             >
               {t(

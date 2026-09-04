@@ -156,7 +156,7 @@ describe("sandbox controller", () => {
       phase: "sync-required",
       pendingCommand: null,
     });
-    await controller.retryMove();
+    await controller.retryCommand();
     expect(api.move).toHaveBeenCalledTimes(1);
     await controller.synchronize();
     expect(controller.getSnapshot().phase).toBe("ready");
@@ -177,7 +177,7 @@ describe("sandbox controller", () => {
       expect(api.move).toHaveBeenCalledTimes(1);
       const current = snapshot(["e2e4"], { version: 20 });
       api.move.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", current));
-      await controller.retryMove();
+      await controller.retryCommand();
       expect(api.move.mock.calls[1]?.[0]).toBe(original);
       expect(controller.getSnapshot()).toMatchObject({
         phase: "ready",
@@ -214,8 +214,8 @@ describe("sandbox controller", () => {
     });
     const retry = Promise.withResolvers<ReturnType<typeof snapshot>>();
     api.move.mockReturnValue(retry.promise);
-    const first = controller.retryMove();
-    await controller.retryMove();
+    const first = controller.retryCommand();
+    await controller.retryCommand();
     expect(api.move).toHaveBeenCalledTimes(2);
     retry.resolve(snapshot(["e2e4"]));
     await first;
@@ -307,7 +307,7 @@ describe("sandbox controller", () => {
     const disconnect = controller.connect();
     const newer = snapshot(["e2e4", "e7e5"]);
     api.move.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", newer));
-    await controller.retryMove();
+    await controller.retryCommand();
     first.resolve(snapshot(["e2e4"]));
     await oldRequest;
     expect(api.move.mock.calls[1]?.[0]).toBe(original);
@@ -379,7 +379,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
     });
     expect(api.lifecycle).toHaveBeenCalledTimes(1);
     api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", paused));
-    await controller.retryMove();
+    await controller.retryCommand();
     expect(api.lifecycle.mock.calls[1]?.[0]).toBe(command);
     expect(controller.getSnapshot()).toMatchObject({
       snapshot: paused,
@@ -472,7 +472,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
     api.lifecycle.mockResolvedValue(
       snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 }),
     );
-    await controller.retryMove();
+    await controller.retryCommand();
     expect(api.lifecycle.mock.calls[1]?.[0]).toBe(original);
     expect(controller.getSnapshot()).toMatchObject({
       phase: "ready",
@@ -502,7 +502,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
       pgn: '[Result "1-0"]\n\n1-0',
     });
     api.lifecycle.mockResolvedValue(terminal);
-    await controller.retryMove();
+    await controller.retryCommand();
     expect(api.lifecycle.mock.calls[1]?.[0]).toBe(original);
     expect(controller.getSnapshot()).toMatchObject({ phase: "ready", snapshot: terminal });
   });
@@ -511,7 +511,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
     let listener = () => {};
     let target = OTHER_GAME_ID;
     const navigation: SandboxNavigation = {
-      read: () => target,
+      read: () => ({ kind: "game" as const, gameId: target }),
       open: vi.fn(),
       subscribe: (next) => {
         listener = next;
@@ -532,6 +532,24 @@ describe("automatic paused recovery and lifecycle commands", () => {
     expect(controller.getSnapshot().snapshot).toEqual(paused);
     expect(api.bootstrap).not.toHaveBeenCalled();
     disconnect();
+  });
+
+  it("treats an invalid game link as lost access without contacting the service", async () => {
+    const navigation: SandboxNavigation = {
+      read: () => ({ kind: "invalid" }),
+      open: vi.fn(),
+      subscribe: () => () => {},
+    };
+    const { api, controller } = harness(snapshot(), navigation);
+    await controller.recover();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "access-error",
+      snapshot: null,
+      notice: "NOT_FOUND",
+    });
+    expect(api.snapshot).not.toHaveBeenCalled();
+    expect(api.unfinished).not.toHaveBeenCalled();
+    expect(api.bootstrap).not.toHaveBeenCalled();
   });
 });
 

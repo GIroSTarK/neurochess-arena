@@ -1,7 +1,13 @@
 import { gameIdSchema } from "@neurochess/contracts";
 
+/** The game named by the current URL, if any. */
+export type NavigationTarget =
+  | { readonly kind: "none" }
+  | { readonly kind: "invalid" }
+  | { readonly kind: "game"; readonly gameId: string };
+
 export interface SandboxNavigation {
-  read(): string | null;
+  read(): NavigationTarget;
   open(gameId: string, replace?: boolean): void;
   subscribe(listener: () => void): () => void;
 }
@@ -10,10 +16,12 @@ export function browserNavigation(): SandboxNavigation {
   return {
     read() {
       const ids = new URL(window.location.href).searchParams.getAll("game");
-      if (ids.length === 0) return null;
+      if (ids.length === 0) return { kind: "none" };
       const parsed = gameIdSchema.safeParse(ids[0]);
       // Invalid links fail locally; no unvalidated value enters a request path.
-      return ids.length === 1 && parsed.success ? parsed.data.toLowerCase() : "invalid";
+      return ids.length === 1 && parsed.success
+        ? { kind: "game", gameId: parsed.data.toLowerCase() }
+        : { kind: "invalid" };
     },
     open(gameId, replace = false) {
       const url = "/?game=" + encodeURIComponent(gameId);
