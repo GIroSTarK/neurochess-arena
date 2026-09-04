@@ -1,4 +1,4 @@
-import { cx } from "../ui/cx";
+import { cx } from "./cx";
 
 /** Reserve the largest localized variant without fixing a control's dimensions. */
 export function StableText({

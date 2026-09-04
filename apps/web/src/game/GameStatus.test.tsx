@@ -3,12 +3,12 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { createSandboxApi } from "../api";
+import { createSandboxApi } from "../api/client";
 import { FOOLS_MATE, snapshot } from "../test/fixtures";
+import { StableText } from "../ui/StableText";
 
 import { SandboxController, type SandboxState } from "./controller";
 import { GameStatus } from "./GameStatus";
-import { StableText } from "./StableText";
 
 function props(overrides: Partial<SandboxState> = {}) {
   const controller = new SandboxController(createSandboxApi("http://localhost:3001"));

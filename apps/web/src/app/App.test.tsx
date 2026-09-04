@@ -8,8 +8,8 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import { createWebI18n } from "./i18n";
-import { errorResponse, FOOLS_MATE, GAME_ID, jsonResponse, snapshot } from "./test/fixtures";
+import { createWebI18n } from "../i18n";
+import { errorResponse, FOOLS_MATE, GAME_ID, jsonResponse, snapshot } from "../test/fixtures";
 
 type Route = (
   path: string,

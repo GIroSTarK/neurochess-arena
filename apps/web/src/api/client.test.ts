@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiFailure, createSandboxApi } from "./api";
-import { errorResponse, GAME_ID, jsonResponse, OTHER_GAME_ID, snapshot } from "./test/fixtures";
+import { ApiFailure, createSandboxApi } from "./client";
+import { errorResponse, GAME_ID, jsonResponse, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
 describe("sandbox transport boundary", () => {
   it("checks readiness rather than liveness, with bounded, credentialed, no-store requests", async () => {

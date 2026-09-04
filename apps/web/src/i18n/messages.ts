@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
-import type { Announcement, SandboxNotice } from "../sandbox/controller";
+import type { Announcement, SandboxNotice } from "../game/controller";
 
 const noticeKeys = {
   existing: "notices.existing",

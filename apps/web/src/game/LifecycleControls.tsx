@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
+import { StableText } from "../ui/StableText";
 
 import type { LifecycleAction, SandboxController, SandboxState } from "./controller";
-import { StableText } from "./StableText";
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: "white" | "black" };
 

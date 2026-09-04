@@ -20,7 +20,7 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
-import { parsePosition } from "./board/position";
+import { parsePosition } from "../chess/position";
 
 export type ApiFailureKind = "api" | "network" | "timeout" | "malformed" | "cancelled";
 

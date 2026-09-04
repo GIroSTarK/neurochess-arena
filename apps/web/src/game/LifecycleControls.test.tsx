@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { createSandboxApi } from "../api";
+import { createSandboxApi } from "../api/client";
 import { OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
 import { SandboxController, type SandboxState } from "./controller";

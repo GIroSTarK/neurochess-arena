@@ -1,4 +1,4 @@
-import type { SandboxApi } from "../api";
+import type { SandboxApi } from "../api/client";
 
 import { ArchiveController } from "./archive";
 import { failureNotice, safeFailure } from "./failures";

@@ -2,18 +2,18 @@ import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  FILES,
+  parsePosition,
+  visualRows,
+  type PromotionKind,
+  type Square,
+} from "../chess/position";
+import type { BoardView } from "../chess/replay";
 import { cx } from "../ui/cx";
 
 import { PieceIcon } from "./PieceIcon";
 import { PromotionDialog } from "./PromotionDialog";
-import { FILES, parsePosition, visualRows, type PromotionKind, type Square } from "./position";
-
-export interface BoardView {
-  readonly fen: string;
-  readonly turn: ChessColor;
-  readonly inCheck: boolean;
-  readonly lastMove: string | undefined;
-}
 
 interface ChessboardProps {
   readonly snapshot: GameSnapshot;

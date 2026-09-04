@@ -4,11 +4,11 @@ import { useTranslation } from "react-i18next";
 import { gameStatus, noticeMessage, resultTitle } from "../i18n/messages";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
+import { StableText } from "../ui/StableText";
 
 import type { SandboxController, SandboxState } from "./controller";
 import { isRejectionCode } from "./failures";
 import { LifecycleControls } from "./LifecycleControls";
-import { StableText } from "./StableText";
 
 const activityMessages = [
   { phase: "starting", key: "actions.starting" },

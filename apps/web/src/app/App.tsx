@@ -1,21 +1,24 @@
-import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
+import type { ChessColor } from "@neurochess/contracts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Chessboard } from "./board/Chessboard";
-import { PieceIcon } from "./board/PieceIcon";
+import { Chessboard } from "../board/Chessboard";
+import { PieceIcon } from "../board/PieceIcon";
+import { replayView } from "../chess/replay";
+import type { SandboxState } from "../game/controller";
+import { GameStatus } from "../game/GameStatus";
+import { PgnActions } from "../game/PgnActions";
+import { PlayerSummary } from "../game/PlayerSummary";
+import { ReplayControls } from "../game/ReplayControls";
+import { StartButton } from "../game/StartButton";
+import { useSandbox } from "../game/use-sandbox";
+import { announcementMessage } from "../i18n/messages";
+import { Button } from "../ui/Button";
+import { cx } from "../ui/cx";
+import { Icon } from "../ui/Icon";
+import { MoveHistory } from "../ui/MoveHistory";
+
 import { DocumentMetadata } from "./DocumentMetadata";
-import { announcementMessage } from "./i18n/messages";
-import { GameStatus } from "./sandbox/GameStatus";
-import { MoveHistory } from "./sandbox/MoveHistory";
-import type { SandboxController, SandboxState } from "./sandbox/controller";
-import { useSandbox } from "./sandbox/use-sandbox";
-import { StableText } from "./sandbox/StableText";
-import { PgnActions, ReplayControls } from "./sandbox/ReplayControls";
-import { replayView } from "./sandbox/replay";
-import { Button } from "./ui/Button";
-import { cx } from "./ui/cx";
-import { Icon } from "./ui/Icon";
 
 export interface AppProps {
   readonly apiBaseUrl: string;
@@ -167,82 +170,5 @@ export function App({ apiBaseUrl }: AppProps) {
         {announcementMessage(state.announcement, t)}
       </div>
     </div>
-  );
-}
-
-function PlayerSummary({
-  color,
-  snapshot,
-}: {
-  readonly color: ChessColor;
-  readonly snapshot: GameSnapshot | null;
-}) {
-  const { t } = useTranslation();
-  const isTurn = snapshot?.state === "active" && snapshot.turn === color;
-  return (
-    <div
-      className="relative flex min-w-0 items-center gap-3 p-4 not-first:border-l not-first:border-divider max-sm:gap-[min(0.5rem,8px)] max-sm:px-[min(0.5rem,8px)] max-sm:py-[min(0.75rem,12px)]"
-      data-seat={color}
-      aria-label={t("players.label", { color: t(`players.${color}`) })}
-    >
-      <PieceIcon color={color} kind="k" className="size-8 max-sm:size-[min(1.5rem,24px)]" />
-      <div className="flex min-w-0 flex-col wrap-anywhere">
-        <span className="text-label text-text-secondary">{t(`players.${color}`)}</span>
-        <strong className="font-semibold max-sm:text-label">{t("players.guest")}</strong>
-        <span className={cx("text-caption", isTurn ? "text-accent" : "text-text-muted")}>
-          <StableText
-            value={t(
-              !snapshot
-                ? "players.ready"
-                : snapshot.state !== "active"
-                  ? "players.inspecting"
-                  : isTurn
-                    ? "players.toMove"
-                    : "players.waiting",
-            )}
-            variants={(["ready", "inspecting", "toMove", "waiting"] as const).map((key) =>
-              t(`players.${key}`),
-            )}
-          />
-        </span>
-      </div>
-      {isTurn ? (
-        <span className="absolute inset-x-4 -bottom-px h-0.5 bg-accent" aria-hidden="true" />
-      ) : null}
-    </div>
-  );
-}
-
-function StartButton({
-  state,
-  controller,
-}: {
-  readonly state: SandboxState;
-  readonly controller: SandboxController;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Button
-      variant="primary"
-      className="mt-8"
-      disabled={
-        state.readiness !== "ready" ||
-        !["entry", "access-error", "unavailable"].includes(state.phase)
-      }
-      onClick={() => {
-        void controller.start();
-      }}
-    >
-      {t(
-        state.phase === "starting"
-          ? "actions.starting"
-          : state.phase === "unavailable"
-            ? "actions.retryStart"
-            : state.phase === "access-error"
-              ? "actions.restartSession"
-              : "actions.start",
-      )}
-      <Icon path="M5 12h14m-6-6 6 6-6 6" />
-    </Button>
   );
 }
