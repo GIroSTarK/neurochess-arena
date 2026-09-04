@@ -1,8 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { createSandboxApi } from "../api/client";
 import { FOOLS_MATE, readyState, snapshot } from "../test/fixtures";
+import { renderLocalized } from "../test/render";
 import { StableText } from "../ui/StableText";
 
 import { SandboxController, type SandboxState } from "./controller";
@@ -19,7 +20,7 @@ const paused = () => snapshot([], { state: "paused", legalMoves: [], version: 1 
 describe("stable game status feedback", () => {
   it("retains the same feedback slot and controls through active, pending, and paused states", () => {
     const initial = props();
-    const { container, rerender } = render(<GameStatus {...initial} />);
+    const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     const activity = feedback.querySelector("[data-testid=activity-feedback]");
     const control = screen.getByRole("button", { name: "Pause" });
@@ -76,7 +77,7 @@ describe("stable game status feedback", () => {
     ["synchronized", "The accepted position is up to date."],
   ] as const)("exposes only the %s notice in place of the paused hint", (notice, message) => {
     const initial = props({ snapshot: paused(), notice });
-    const { container, rerender } = render(<GameStatus {...initial} />);
+    const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
       within(feedback)
@@ -99,7 +100,7 @@ describe("stable game status feedback", () => {
 
   it("keeps error explanations and their synchronization feedback accessible", () => {
     const initial = props({ phase: "synchronizing", notice: "ILLEGAL_MOVE" });
-    const { container, rerender } = render(<GameStatus {...initial} />);
+    const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
     expect(
       within(feedback)
@@ -120,7 +121,7 @@ describe("stable game status feedback", () => {
 
   it("retains actionable recovery and the terminal result without hidden interactive copies", () => {
     const initial = props({ snapshot: paused(), phase: "uncertain", notice: "uncertain" });
-    const { container, rerender } = render(<GameStatus {...initial} />);
+    const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     expect(screen.getByRole("button", { name: "Check game status" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute("aria-disabled", "true");
     expect(container.querySelectorAll('[aria-hidden="true"] button')).toHaveLength(0);
@@ -139,7 +140,7 @@ describe("stable game status feedback", () => {
   });
 
   it("does not duplicate an accessible label when translations are identical", () => {
-    render(
+    renderLocalized(
       <button type="button">
         <StableText value="Continue" variants={["Continue", "Continue"]} />
       </button>,

@@ -1,14 +1,14 @@
 import { moveCommandSchema } from "@neurochess/contracts";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
-import { I18nextProvider } from "react-i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { createWebI18n } from "../i18n";
 import { errorResponse, FOOLS_MATE, GAME_ID, jsonResponse, snapshot } from "../test/fixtures";
 import { square } from "../test/queries";
+import { renderLocalized } from "../test/render";
 
 type Route = (
   path: string,
@@ -48,7 +48,7 @@ describe("localized sandbox application", () => {
   it("boots only on action under Strict Mode and orders cookie bootstrap before creation", async () => {
     const bootstrap = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path === "/guest-session" ? bootstrap.promise : undefined));
-    render(
+    renderLocalized(
       <StrictMode>
         <App apiBaseUrl="http://localhost:3001" />
       </StrictMode>,
@@ -80,7 +80,7 @@ describe("localized sandbox application", () => {
   it("keeps the accepted board, turn and history while submitting and announces confirmation once", async () => {
     const pending = Promise.withResolvers<Response>();
     mockApi((path) => (path.endsWith("/moves") ? pending.promise : undefined));
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     const live = screen.getByRole("status");
     const announcements: string[] = [];
@@ -110,7 +110,7 @@ describe("localized sandbox application", () => {
     mockApi((path) =>
       path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     const user = userEvent.setup();
     const control = screen.getByRole("button", { name: "Pause" });
@@ -141,7 +141,7 @@ describe("localized sandbox application", () => {
   it("blocks repeat lifecycle activation and destructive dialogs while a command is pending", async () => {
     const pending = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path.endsWith("/lifecycle") ? pending.promise : undefined));
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Pause" }));
@@ -168,7 +168,7 @@ describe("localized sandbox application", () => {
     mockApi((path) =>
       path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
 
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
@@ -193,7 +193,7 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path.endsWith("/moves") ? errorResponse("GAME_CONFLICT", 409, current) : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -213,7 +213,7 @@ describe("localized sandbox application", () => {
           ? read.promise
           : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -243,7 +243,7 @@ describe("localized sandbox application", () => {
         ? jsonResponse({ state: "broken", message: "exception-canary" })
         : errorResponse("GAME_CONFLICT", 409, snapshot(["e2e4"]));
     });
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -264,7 +264,7 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path.endsWith("/moves") ? errorResponse("UNAUTHORIZED", 401) : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -284,7 +284,7 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path === "/sandbox/games" ? errorResponse("NOT_FOUND", 404) : undefined,
     );
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     const button = screen.getByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toBeEnabled());
     await userEvent.click(button);
@@ -310,7 +310,7 @@ describe("localized sandbox application", () => {
       if (path !== "/ready") return undefined;
       return jsonResponse({ status: ++checks === 1 ? "bad" : "ready" });
     });
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     const retry = await screen.findByRole("button", { name: "Retry connection" });
     expect(screen.getByRole("button", { name: "Start sandbox" })).toBeDisabled();
     await userEvent.click(retry);
@@ -331,7 +331,7 @@ describe("localized sandbox application", () => {
       played.push(moveCommandSchema.parse(JSON.parse(String(options?.body))).move);
       return jsonResponse(snapshot(played));
     });
-    render(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
     await start();
     for (const move of FOOLS_MATE) {
       await userEvent.click(square(move.slice(0, 2)));
@@ -360,11 +360,7 @@ describe("localized sandbox application", () => {
     });
     await localization.changeLanguage("fr");
     mockApi();
-    render(
-      <I18nextProvider i18n={localization}>
-        <App apiBaseUrl="http://localhost:3001" />
-      </I18nextProvider>,
-    );
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" />, { i18n: localization });
     await start();
     expect(square("e2")).toHaveAccessibleName("e2: pion blanc.");
     await userEvent.click(square("e2"));

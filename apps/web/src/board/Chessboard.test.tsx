@@ -1,5 +1,5 @@
 import type { ChessColor } from "@neurochess/contracts";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,7 @@ import {
   snapshot,
 } from "../test/fixtures";
 import { square } from "../test/queries";
+import { renderLocalized } from "../test/render";
 
 import { Chessboard } from "./Chessboard";
 
@@ -26,7 +27,7 @@ function props(position = snapshot(), orientation: ChessColor = "white") {
 
 describe("accessible chessboard", () => {
   it("provides eight rows, eight cells each, and one roving tab stop", () => {
-    render(<Chessboard {...props()} />);
+    renderLocalized(<Chessboard {...props()} />);
     const grid = screen.getByRole("grid", { name: "Chessboard" });
     const rows = within(grid).getAllByRole("row");
     expect(rows).toHaveLength(8);
@@ -42,7 +43,7 @@ describe("accessible chessboard", () => {
   it.each(["white", "black"] as const)(
     "follows visible directions, row ends and corners with %s at the bottom",
     async (orientation) => {
-      render(<Chessboard {...props(snapshot(), orientation)} />);
+      renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);
       const user = userEvent.setup();
       act(() => square("e4").focus());
       await user.keyboard("{ArrowRight}");
@@ -66,7 +67,7 @@ describe("accessible chessboard", () => {
 
   it("preserves the logical roving square and selection when flipped", async () => {
     const initial = props();
-    const { rerender } = render(<Chessboard {...initial} />);
+    const { rerender } = renderLocalized(<Chessboard {...initial} />);
     await userEvent.click(square("e2"));
     rerender(<Chessboard {...initial} orientation="black" />);
     expect(square("e2")).toHaveAttribute("tabindex", "0");
@@ -76,7 +77,7 @@ describe("accessible chessboard", () => {
 
   it("uses the same source-destination path for native keyboard and pointer activation", async () => {
     const initial = props();
-    render(<Chessboard {...initial} />);
+    renderLocalized(<Chessboard {...initial} />);
     const user = userEvent.setup();
     act(() => square("e2").focus());
     await user.keyboard("{Enter}");
@@ -87,7 +88,7 @@ describe("accessible chessboard", () => {
 
   it("cancels selection with Escape and ignores held activation keys", async () => {
     const initial = props();
-    render(<Chessboard {...initial} />);
+    renderLocalized(<Chessboard {...initial} />);
     const user = userEvent.setup();
     await user.click(square("e2"));
     const repeated = new KeyboardEvent("keydown", {
@@ -106,7 +107,7 @@ describe("accessible chessboard", () => {
 
   it("derives selections and targets only from the supplied legal move list", async () => {
     const initial = props(snapshot([], { legalMoves: ["e2e3"] }));
-    render(<Chessboard {...initial} />);
+    renderLocalized(<Chessboard {...initial} />);
     await userEvent.click(square("d2"));
     expect(square("d2")).not.toHaveAttribute("data-selected");
     await userEvent.click(square("e2"));
@@ -118,7 +119,7 @@ describe("accessible chessboard", () => {
 
   it("keeps accepted pieces and focus while pending, then clears stale selection without moving focus", async () => {
     const initial = props();
-    const { rerender } = render(<Chessboard {...initial} />);
+    const { rerender } = renderLocalized(<Chessboard {...initial} />);
     const user = userEvent.setup();
     await user.click(square("e2"));
     await user.click(square("e4"));
@@ -139,7 +140,7 @@ describe("accessible chessboard", () => {
 
   it("clears selection on a same-version synchronization", async () => {
     const initial = props();
-    const { rerender } = render(<Chessboard {...initial} />);
+    const { rerender } = renderLocalized(<Chessboard {...initial} />);
     await userEvent.click(square("e2"));
     rerender(<Chessboard {...initial} interactionEpoch="1" />);
     expect(square("e2")).not.toHaveAttribute("data-selected");
@@ -148,7 +149,7 @@ describe("accessible chessboard", () => {
 
   it("submits castling as the supplied king move and renders both accepted piece changes", async () => {
     const initial = props(snapshot(CASTLING_APPROACH));
-    const { rerender } = render(<Chessboard {...initial} />);
+    const { rerender } = renderLocalized(<Chessboard {...initial} />);
     await userEvent.click(square("e1"));
     expect(square("g1")).toHaveAttribute("data-target", "move");
     await userEvent.click(square("g1"));
@@ -161,7 +162,7 @@ describe("accessible chessboard", () => {
 
   it("marks an empty en passant destination as a capture and renders the accepted removal", async () => {
     const initial = props(snapshot(EN_PASSANT_APPROACH));
-    const { rerender } = render(<Chessboard {...initial} />);
+    const { rerender } = renderLocalized(<Chessboard {...initial} />);
     await userEvent.click(square("e5"));
     expect(square("d6")).toHaveAttribute("data-target", "capture");
     expect(square("d6")).toHaveAccessibleName(/Legal en passant capture/);
@@ -188,7 +189,7 @@ describe("accessible chessboard", () => {
       const source = color === "white" ? "b7" : "g2";
       const target = color === "white" ? "a8" : "h1";
       const initial = props(snapshot(moves));
-      render(<Chessboard {...initial} />);
+      renderLocalized(<Chessboard {...initial} />);
       await userEvent.click(square(source));
       await userEvent.click(square(target));
       const dialog = screen.getByRole("dialog");
@@ -207,7 +208,7 @@ describe("accessible chessboard", () => {
     "contains promotion focus and returns it on %s cancellation",
     async (cancelWith) => {
       const initial = props(snapshot(PROMOTION_APPROACH));
-      render(<Chessboard {...initial} />);
+      renderLocalized(<Chessboard {...initial} />);
       const user = userEvent.setup();
       await user.click(square("b7"));
       await user.click(square("a8"));
@@ -234,7 +235,7 @@ describe("accessible chessboard", () => {
             ? snapshot([], { state, result: "*", terminationReason: "aborted", legalMoves: [] })
             : snapshot([], { state, legalMoves: [] });
       const initial = props(position);
-      render(<Chessboard {...initial} />);
+      renderLocalized(<Chessboard {...initial} />);
       const user = userEvent.setup();
       expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
       await user.click(square("e2"));
@@ -246,7 +247,7 @@ describe("accessible chessboard", () => {
   );
 
   it("renders a safe presentation error for invalid FEN", () => {
-    render(<Chessboard {...props({ ...snapshot(), fen: "<script>secret</script>" })} />);
+    renderLocalized(<Chessboard {...props({ ...snapshot(), fen: "<script>secret</script>" })} />);
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
     expect(screen.getByText(/This position cannot be displayed/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("secret");

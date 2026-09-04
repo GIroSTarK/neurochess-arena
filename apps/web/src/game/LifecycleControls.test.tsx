@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { createSandboxApi } from "../api/client";
 import { OTHER_GAME_ID, readyState, snapshot } from "../test/fixtures";
+import { renderLocalized } from "../test/render";
 
 import { SandboxController } from "./controller";
 import { LifecycleControls } from "./LifecycleControls";
@@ -32,7 +33,7 @@ describe("lifecycle confirmations", () => {
     "invalidates an open $name confirmation after an accepted revision changes",
     async ({ name, confirm, action }) => {
       const initial = props();
-      const { rerender } = render(<LifecycleControls {...initial} />);
+      const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
       const trigger = screen.getByRole("button", { name });
       await userEvent.click(trigger);
       const dialog = screen.getByRole("dialog");
@@ -59,7 +60,7 @@ describe("lifecycle confirmations", () => {
 
   it("invalidates a confirmation when the interaction epoch changes without a new snapshot", async () => {
     const initial = props();
-    const { rerender } = render(<LifecycleControls {...initial} />);
+    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -76,7 +77,7 @@ describe("lifecycle confirmations", () => {
 
   it("does not carry a confirmation to another game at the same revision", async () => {
     const initial = props();
-    const { rerender } = render(<LifecycleControls {...initial} />);
+    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -93,7 +94,7 @@ describe("lifecycle confirmations", () => {
 
   it("keeps a current confirmation and its focus during unrelated renders", async () => {
     const initial = props();
-    const { rerender } = render(<LifecycleControls {...initial} />);
+    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
     const dialog = screen.getByRole("dialog");
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });

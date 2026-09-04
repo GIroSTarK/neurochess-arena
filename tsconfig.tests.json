@@ -17,6 +17,7 @@
     "playwright.config.ts",
     "apps/web/src/i18n/*.d.ts",
     "apps/web/src/test/**/*.ts",
+    "apps/web/src/test/**/*.tsx",
     "test/**/*.ts"
   ]
 }
