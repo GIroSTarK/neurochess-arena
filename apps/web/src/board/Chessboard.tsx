@@ -1,17 +1,10 @@
 import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
-import {
-  type KeyboardEvent,
-  type Ref,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, type Ref, useImperativeHandle, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { parsePosition, type PromotionKind, type Square, visualRows } from "../chess/position";
-import type { BoardView } from "../chess/replay";
-import { type BoardMarks, squareState } from "../chess/squares";
+import { parsePosition, type PromotionKind, type Square, visualRows } from "../position/position";
+import type { BoardView } from "../position/replay";
+import { type BoardMarks, squareState } from "../position/squares";
 import { cancelHeldActivation } from "../ui/keyboard";
 
 import { BoardSquare } from "./BoardSquare";
@@ -58,7 +51,7 @@ export function Chessboard({
   const fen = view?.fen ?? snapshot.fen;
   const position = useMemo(() => parsePosition(fen), [fen]);
   const rows = useMemo(() => visualRows(orientation), [orientation]);
-  const buttons = useRef(new Map<Square, HTMLButtonElement>());
+  const [buttons] = useState(() => new Map<Square, HTMLButtonElement>());
   const [focusedSquare, setFocusedSquare] = useState<Square>("e2");
   const enabled = !view && canMove && snapshot.state === "active" && position !== null;
   const selection = useBoardSelection({
@@ -68,13 +61,14 @@ export function Chessboard({
     onMove,
   });
 
-  useImperativeHandle(ref, () => ({ focus: () => buttons.current.get(focusedSquare)?.focus() }), [
+  useImperativeHandle(ref, () => ({ focus: () => buttons.get(focusedSquare)?.focus() }), [
+    buttons,
     focusedSquare,
   ]);
 
   function focus(square: Square) {
     setFocusedSquare(square);
-    buttons.current.get(square)?.focus();
+    buttons.get(square)?.focus();
   }
 
   function navigate(event: KeyboardEvent<HTMLButtonElement>, row: number, column: number) {
@@ -158,8 +152,8 @@ export function Chessboard({
                   showRank={columnIndex === 0}
                   showFile={rowIndex === 7}
                   ref={(element) => {
-                    if (element) buttons.current.set(square, element);
-                    else buttons.current.delete(square);
+                    if (element) buttons.set(square, element);
+                    else buttons.delete(square);
                   }}
                   onFocus={() => setFocusedSquare(square)}
                   onActivate={() => {

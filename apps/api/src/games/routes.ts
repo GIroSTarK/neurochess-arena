@@ -154,8 +154,9 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase())
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
         throw new GameRequestError("INVALID_REQUEST");
+      }
       return options.games.lifecycle(await principalFor(request, reply), request.body);
     },
   );
@@ -212,8 +213,9 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase())
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
         throw new GameRequestError("INVALID_REQUEST");
+      }
       const principal = await principalFor(request, reply);
       return options.games.move(principal, request.body);
     },

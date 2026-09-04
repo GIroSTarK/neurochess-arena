@@ -3,8 +3,8 @@ import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { FOOLS_MATE, mockController, readyState, snapshot } from "../test/fixtures";
-import { renderLocalized } from "../test/render";
+import { FOOLS_MATE, mockController, readyState, snapshot } from "../../test/fixtures";
+import { renderLocalized } from "../../test/render";
 
 import { ReplayControls } from "./ReplayControls";
 

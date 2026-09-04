@@ -93,8 +93,9 @@ describe("guest HTTP boundary", () => {
     expect(response.statusCode).toBe(201);
     expect(response.headers["cache-control"]).toBe("no-store");
     const cookie = String(response.headers["set-cookie"]);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/", "Max-Age=86400"])
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/", "Max-Age=86400"]) {
       expect(cookie).toContain(attribute);
+    }
     expect(cookie).not.toContain("Domain=");
     expect(response.body).not.toContain(guest.token);
     expect(response.body).not.toContain(guest.id);
@@ -440,8 +441,9 @@ describe("atomic commands and concurrency", () => {
     const created = gameSnapshotSchema.parse(
       responses.find((response) => response.statusCode === 201)!.json(),
     );
-    for (const conflict of responses.filter((response) => response.statusCode === 409))
+    for (const conflict of responses.filter((response) => response.statusCode === 409)) {
       expect(conflict.json()).toHaveProperty("currentSnapshot", created);
+    }
     expect(await api.database.db.$count(games, eq(games.ownerGuestSessionId, guest.id))).toBe(1);
     expect(
       await api.database.db.$count(gameParticipants, eq(gameParticipants.gameId, created.gameId)),

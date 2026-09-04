@@ -1,22 +1,45 @@
 import type { GameState } from "@neurochess/contracts";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { gameStatus, noticeMessage, resultTitle } from "../i18n/messages";
-import { Button } from "../ui/Button";
-import { cx } from "../ui/cx";
-import { StableText } from "../ui/StableText";
+import { Button } from "../../ui/Button";
+import { cx } from "../../ui/cx";
+import { StableText } from "../../ui/StableText";
+import type { SandboxController } from "../controller";
+import { isRejectionCode } from "../failures";
+import { gameStatus, noticeMessage, resultTitle } from "../messages";
+import { isTerminal, isUnfinished, type SandboxState } from "../state";
 
-import { isTerminal, isUnfinished, type SandboxController, type SandboxState } from "./controller";
-import { isRejectionCode } from "./failures";
 import { LifecycleControls } from "./LifecycleControls";
 
-const activityMessages = [
-  { phase: "starting", key: "actions.starting" },
-  { phase: "submitting", key: "game.submitting" },
-  { phase: "submitting", key: "lifecycle.submitting" },
-  { phase: "synchronizing", key: "game.synchronizing" },
-  { phase: "recovering", key: "game.recovering" },
+/** Every activity message renders, hidden, so the feedback slot reserves the tallest one. */
+const activityKeys = [
+  "actions.starting",
+  "game.submitting",
+  "lifecycle.submitting",
+  "game.synchronizing",
+  "game.recovering",
 ] as const;
+
+type ActivityKey = (typeof activityKeys)[number];
+
+/** The message for a busy phase; a lifecycle command reports its own submission. */
+function activityKey({ phase, pendingCommand }: SandboxState): ActivityKey | undefined {
+  switch (phase) {
+    case "starting":
+      return "actions.starting";
+    case "submitting":
+      return pendingCommand && "action" in pendingCommand
+        ? "lifecycle.submitting"
+        : "game.submitting";
+    case "synchronizing":
+      return "game.synchronizing";
+    case "recovering":
+      return "game.recovering";
+    default:
+      return undefined;
+  }
+}
 
 // Routine notices replace the paused hint in the same reserved feedback slot.
 // Errors and their recovery actions can grow naturally; never clip their details.
@@ -50,15 +73,11 @@ export function GameStatus({
   readonly controller: StatusController;
 }) {
   const { t } = useTranslation();
+  const headingId = useId();
   const { snapshot } = state;
   const unfinished = snapshot !== null && isUnfinished(snapshot);
-  const activityKey =
-    state.phase === "submitting"
-      ? state.pendingCommand && "action" in state.pendingCommand
-        ? "lifecycle.submitting"
-        : "game.submitting"
-      : activityMessages.find(({ phase }) => phase === state.phase)?.key;
-  const busy = activityKey !== undefined;
+  const activity = activityKey(state);
+  const busy = activity !== undefined;
   const routineNotice = unfinished && routineNotices.some((notice) => notice === state.notice);
   const title = snapshot
     ? snapshot.terminationReason
@@ -76,7 +95,7 @@ export function GameStatus({
     : [];
 
   return (
-    <section className="rounded-panel bg-surface p-6 max-sm:p-4" aria-labelledby="status-heading">
+    <section className="rounded-panel bg-surface p-6 max-sm:p-4" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-label text-text-secondary">{t("game.status")}</p>
         {snapshot ? (
@@ -93,7 +112,7 @@ export function GameStatus({
           </span>
         ) : null}
       </div>
-      <h2 id="status-heading" className="mt-4 text-title font-semibold max-sm:text-[1.5rem]/8">
+      <h2 id={headingId} className="mt-4 text-title font-semibold max-sm:text-[1.5rem]/8">
         <StableText value={title} variants={titleVariants} />
       </h2>
       {snapshot?.terminationReason ? (
@@ -127,11 +146,11 @@ export function GameStatus({
             />
             <div className="grid">
               {/* Reserve the tallest localized message without fixing the card's height. */}
-              {activityMessages.map(({ key }) => (
+              {activityKeys.map((key) => (
                 <p
                   key={key}
                   className="[grid-area:1/1] aria-hidden:invisible"
-                  aria-hidden={activityKey !== key}
+                  aria-hidden={activity !== key}
                 >
                   {t(key)}
                 </p>

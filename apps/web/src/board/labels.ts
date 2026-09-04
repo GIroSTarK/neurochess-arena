@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { SquareState } from "../chess/squares";
+import type { SquareState } from "../position/squares";
 
 /** The accessible name of a square: coordinate, occupant, and every applicable mark. */
 export function squareLabel(state: SquareState, t: TFunction): string {

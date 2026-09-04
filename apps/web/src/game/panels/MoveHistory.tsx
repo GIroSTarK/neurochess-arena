@@ -1,8 +1,8 @@
 import type { MoveRecord } from "@neurochess/contracts";
-import { useLayoutEffect, useRef } from "react";
+import { useId, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cx } from "../ui/cx";
+import { cx } from "../../ui/cx";
 
 interface MoveHistoryProps {
   readonly moves: readonly MoveRecord[];
@@ -17,6 +17,9 @@ const currentMoveClassName =
 
 export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) {
   const { t, i18n } = useTranslation();
+  const headingId = useId();
+  const language = i18n.resolvedLanguage ?? "en";
+  const moveNumber = useMemo(() => new Intl.NumberFormat(language), [language]);
   const scroller = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
   const rows = [];
@@ -29,13 +32,14 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   }, [moves.length]);
 
   function notation(move: MoveRecord | undefined) {
-    if (!move)
+    if (!move) {
       return (
         <span className="block px-2 py-3 text-text-muted" aria-label={t("moves.pending")}>
           —
         </span>
       );
-    if (onSelect)
+    }
+    if (onSelect) {
       return (
         <button
           type="button"
@@ -50,6 +54,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
           {move.san}
         </button>
       );
+    }
     return (
       <span
         className={cx("block px-2 py-3", currentMoveClassName)}
@@ -62,9 +67,9 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   }
 
   return (
-    <section className="min-w-0" aria-labelledby="moves-heading">
+    <section className="min-w-0" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-accent pb-3">
-        <h2 id="moves-heading" className="text-section font-semibold">
+        <h2 id={headingId} className="text-section font-semibold">
           {t("moves.title")}
         </h2>
         <span className="text-right text-label text-text-muted">
@@ -134,7 +139,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
                       "px-2 py-3 font-mono text-label font-normal text-text-muted",
                     )}
                   >
-                    {new Intl.NumberFormat(i18n.resolvedLanguage ?? "en").format(row.number)}.
+                    {moveNumber.format(row.number)}.
                   </th>
                   <td className={cx(cellClassName, "p-0 font-mono")}>{notation(row.white)}</td>
                   <td className={cx(cellClassName, "p-0 font-mono")}>{notation(row.black)}</td>

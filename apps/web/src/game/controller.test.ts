@@ -433,10 +433,11 @@ describe("automatic paused recovery and lifecycle commands", () => {
   it("bounds recovery conflict retries and never enables an active recovered board", async () => {
     const { api, controller } = harness();
     api.unfinished.mockResolvedValue(snapshot());
-    for (const version of [1, 2, 3])
+    for (const version of [1, 2, 3]) {
       api.lifecycle.mockRejectedValueOnce(
         new ApiFailure("api", "GAME_CONFLICT", snapshot(["e2e4"], { version })),
       );
+    }
     await controller.recover();
     expect(controller.getSnapshot()).toMatchObject({
       phase: "recovery-required",

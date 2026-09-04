@@ -111,8 +111,9 @@ export class RecoveryController {
           !session.validRevision(paused, snapshot.gameId) ||
           paused.version <= snapshot.version ||
           paused.state !== "paused"
-        )
+        ) {
           throw new ApiFailure("malformed");
+        }
         session.accept(paused, "existing", "recovered");
         return;
       } catch (error: unknown) {

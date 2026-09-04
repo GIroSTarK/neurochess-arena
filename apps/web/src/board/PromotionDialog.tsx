@@ -1,7 +1,7 @@
 import type { ChessColor } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
-import type { PromotionKind, Square } from "../chess/position";
+import type { PromotionKind, Square } from "../position/position";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 

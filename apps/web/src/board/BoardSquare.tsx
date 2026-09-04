@@ -1,6 +1,6 @@
 import type { KeyboardEvent, Ref } from "react";
 
-import type { SquareState } from "../chess/squares";
+import type { SquareState } from "../position/squares";
 import { cx } from "../ui/cx";
 
 import { PieceIcon } from "./PieceIcon";

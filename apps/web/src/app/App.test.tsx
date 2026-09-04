@@ -31,12 +31,14 @@ function mockApi(route: Route = () => undefined) {
     const response = route(path, options);
     if (response) return Promise.resolve(response);
     if (path === "/ready") return Promise.resolve(jsonResponse({ status: "ready" }));
-    if (path === "/sandbox/games/unfinished")
+    if (path === "/sandbox/games/unfinished") {
       return Promise.resolve(jsonResponse({ snapshot: null }));
-    if (path.endsWith("/replay"))
+    }
+    if (path.endsWith("/replay")) {
       return Promise.resolve(
         jsonResponse({ snapshot: snapshot(FOOLS_MATE), initialFen: snapshot().fen }),
       );
+    }
     if (path === "/guest-session") return Promise.resolve(jsonResponse({ status: "ready" }));
     if (path === "/sandbox/games") return Promise.resolve(jsonResponse(snapshot(), 201));
     if (path.endsWith("/moves")) return Promise.resolve(jsonResponse(snapshot(["e2e4"])));

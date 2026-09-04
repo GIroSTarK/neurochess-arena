@@ -24,8 +24,9 @@ export function parseTestDatabaseUrl(value: unknown): string {
       !["postgres:", "postgresql:"].includes(url.protocol) ||
       !/^\/[a-z0-9_]+_test$/.test(url.pathname) ||
       url.searchParams.has("options")
-    )
+    ) {
       throw new Error();
+    }
     return value;
   } catch {
     throw new Error(

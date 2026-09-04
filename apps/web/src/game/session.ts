@@ -46,8 +46,9 @@ export class GameSession {
 
   async submit(move: string): Promise<void> {
     const { phase, snapshot } = this.context.store.get();
-    if (phase !== "ready" || snapshot?.state !== "active" || !snapshot.legalMoves.includes(move))
+    if (phase !== "ready" || snapshot?.state !== "active" || !snapshot.legalMoves.includes(move)) {
       return;
+    }
     // Acquired synchronously, before generating a command or notifying React.
     const operation = this.context.gate.begin();
     if (!operation) return;
@@ -223,11 +224,12 @@ export class GameSession {
 
 function matchesCommand(snapshot: GameSnapshot, command: PendingCommand): boolean {
   if ("move" in command) return true;
-  if (command.action === "resign")
+  if (command.action === "resign") {
     return (
       snapshot.state === "completed" &&
       snapshot.terminationReason === "human_resignation" &&
       snapshot.result === (command.losingColor === "white" ? "0-1" : "1-0")
     );
+  }
   return snapshot.state === { pause: "paused", resume: "active", abort: "aborted" }[command.action];
 }

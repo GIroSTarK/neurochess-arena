@@ -192,11 +192,12 @@ describe("persisted lifecycle controls", () => {
         { action: "resume" },
         { action: "abort" },
         { action: "resign", losingColor: "white" },
-      ] as const)
+      ] as const) {
         expect((await send(api, guest, control(aborted, action))).json()).toHaveProperty(
           "code",
           "INVALID_GAME_STATE",
         );
+      }
       await createSandbox(api, guest);
       expect(
         gameReplayResponseSchema.parse(
@@ -310,10 +311,11 @@ describe("private discovery, replay and PGN", () => {
     });
     expect((await get(api, other, "/sandbox/games/unfinished")).json()).toEqual({ snapshot: null });
     expect(await snapshot(api, owner, current.gameId)).toEqual(current);
-    for (const endpoint of ["replay", "pgn"])
+    for (const endpoint of ["replay", "pgn"]) {
       expect(
         (await get(api, owner, "/games/" + current.gameId + "/" + endpoint)).json(),
       ).toHaveProperty("code", "INVALID_GAME_STATE");
+    }
     await apply(api, owner, current, { action: "abort" });
     expect((await get(api, owner, "/sandbox/games/unfinished")).json()).toEqual({ snapshot: null });
   });
@@ -344,10 +346,11 @@ describe("private discovery, replay and PGN", () => {
         expiresAt: sql`clock_timestamp() - interval '1 hour'`,
       })
       .where(eq(guestSessions.id, owner.id));
-    for (const suffix of ["replay", "pgn"])
+    for (const suffix of ["replay", "pgn"]) {
       expect((await get(api, owner, "/games/" + current.gameId + "/" + suffix)).statusCode).toBe(
         401,
       );
+    }
     expect((await get(api, owner, "/sandbox/games/unfinished")).statusCode).toBe(401);
     expect((await send(api, owner, control(current, { action: "abort" }))).statusCode).toBe(401);
   });
@@ -365,8 +368,9 @@ describe("private discovery, replay and PGN", () => {
       .update(gameParticipants)
       .set({ guestSessionId: opponent.id })
       .where(and(eq(gameParticipants.gameId, initial.gameId), eq(gameParticipants.color, "black")));
-    for (const action of ["pause", "resume", "abort"] as const)
+    for (const action of ["pause", "resume", "abort"] as const) {
       expect((await send(api, opponent, control(initial, { action }))).statusCode).toBe(403);
+    }
     expect(
       (await send(api, owner, control(initial, { action: "resign", losingColor: "black" })))
         .statusCode,
@@ -399,8 +403,9 @@ describe("private discovery, replay and PGN", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     let current = await play(api, owner, await createSandbox(api, owner), history);
-    if (current.state === "active")
+    if (current.state === "active") {
       current = await apply(api, owner, current, { action: "resign", losingColor: "black" });
+    }
     const before = await api.database.db.select().from(games).where(eq(games.id, current.gameId));
     const storedMoves = await api.database.db
       .select()
@@ -473,8 +478,9 @@ describe("private discovery, replay and PGN", () => {
       "/sandbox/games/unfinished",
       "/games/" + current.gameId + "/replay",
       "/games/" + current.gameId + "/pgn",
-    ])
+    ]) {
       expect((await get(api, guest, path + "?owner=untrusted")).statusCode).toBe(400);
+    }
     expect(await snapshot(api, guest, current.gameId)).toEqual(current);
   });
 });

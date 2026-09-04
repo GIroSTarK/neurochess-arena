@@ -38,6 +38,7 @@ export function authorizeHumanSeat(
 }
 
 export function authorizeGameControl(principal: GuestPrincipal, game: StoredGame): void {
-  if (game.ownerGuestSessionId !== principal.guestSessionId)
+  if (game.ownerGuestSessionId !== principal.guestSessionId) {
     throw new GameRequestError("FORBIDDEN");
+  }
 }

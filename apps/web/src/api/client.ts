@@ -20,7 +20,7 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
-import { parsePosition } from "../chess/position";
+import { parsePosition } from "../position/position";
 
 export type ApiFailureKind = "api" | "network" | "timeout" | "malformed" | "cancelled";
 
@@ -158,14 +158,13 @@ export function createSandboxApi(
     },
     create: (signal) =>
       gameRequest("/sandbox/games", signal, undefined, createGameRequestSchema.parse({})),
-    snapshot(gameId, signal) {
-      const result = gameParamsSchema.safeParse({ gameId });
-      if (!result.success) return Promise.reject(new ApiFailure("malformed"));
+    async snapshot(gameId, signal) {
+      if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
       return gameRequest("/games/" + gameId, signal, gameId);
     },
-    move(command, signal) {
+    async move(command, signal) {
       const result = moveCommandSchema.safeParse(command);
-      if (!result.success) return Promise.reject(new ApiFailure("malformed"));
+      if (!result.success) throw new ApiFailure("malformed");
       return gameRequest(
         "/games/" + command.gameId + "/moves",
         signal,
@@ -173,9 +172,9 @@ export function createSandboxApi(
         result.data,
       );
     },
-    lifecycle(command, signal) {
+    async lifecycle(command, signal) {
       const result = lifecycleCommandSchema.safeParse(command);
-      if (!result.success) return Promise.reject(new ApiFailure("malformed"));
+      if (!result.success) throw new ApiFailure("malformed");
       return gameRequest(
         "/games/" + command.gameId + "/lifecycle",
         signal,
@@ -200,8 +199,9 @@ export function createSandboxApi(
       );
       const snapshot = forGame(validateSnapshot(response.snapshot), gameId);
       if (!parsePosition(response.initialFen)) throw new ApiFailure("malformed");
-      for (const move of snapshot.moves)
+      for (const move of snapshot.moves) {
         if (!parsePosition(move.fen)) throw new ApiFailure("malformed");
+      }
       return response;
     },
     async pgn(gameId, signal) {

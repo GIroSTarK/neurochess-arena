@@ -43,8 +43,9 @@ export function parsePosition(fen: string): Position | null {
     !fullmove ||
     !/^[1-9]\d*$/.test(fullmove) ||
     !Number.isSafeInteger(Number(fullmove))
-  )
+  ) {
     return null;
+  }
 
   const ranks = placement.split("/");
   if (ranks.length !== 8) return null;

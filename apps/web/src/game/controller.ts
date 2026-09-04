@@ -16,16 +16,6 @@ import {
 } from "./state";
 import { Store } from "./store";
 
-export { interactionEpoch, isTerminal, isUnfinished } from "./state";
-export type {
-  Announcement,
-  LifecycleAction,
-  PendingCommand,
-  SandboxNotice,
-  SandboxPhase,
-  SandboxState,
-} from "./state";
-
 /**
  * Facade over the sandbox client. It composes the store, the serial operation gate, the game
  * session, paused recovery, and the terminal-game archive, and owns what is specific to the
@@ -136,8 +126,9 @@ export class SandboxController {
       pendingCommand ||
       phase === "recovering" ||
       phase === "recovery-required"
-    )
+    ) {
       return;
+    }
     const operation = this.gate.begin();
     if (!operation) return;
     this.store.patch({ phase: "starting", notice: null });

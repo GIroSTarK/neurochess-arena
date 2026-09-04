@@ -5,16 +5,16 @@ import { useTranslation } from "react-i18next";
 import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { PieceIcon } from "../board/PieceIcon";
-import { replayView } from "../chess/replay";
-import { interactionEpoch, isTerminal, type SandboxState } from "../game/controller";
-import { GameStatus } from "../game/GameStatus";
-import { MoveHistory } from "../game/MoveHistory";
-import { PgnActions } from "../game/PgnActions";
-import { PlayerSummary } from "../game/PlayerSummary";
-import { ReplayControls } from "../game/ReplayControls";
-import { StartButton } from "../game/StartButton";
-import { useSandbox } from "../game/use-sandbox";
-import { announcementMessage } from "../i18n/messages";
+import { announcementMessage } from "../game/messages";
+import { GameStatus } from "../game/panels/GameStatus";
+import { MoveHistory } from "../game/panels/MoveHistory";
+import { PgnActions } from "../game/panels/PgnActions";
+import { PlayerSummary } from "../game/panels/PlayerSummary";
+import { ReplayControls } from "../game/panels/ReplayControls";
+import { StartButton } from "../game/panels/StartButton";
+import { interactionEpoch, isTerminal, type SandboxState } from "../game/state";
+import { useSandbox } from "../game/useSandbox";
+import { replayView } from "../position/replay";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
@@ -98,7 +98,7 @@ export function App({ apiBaseUrl }: AppProps) {
         >
           <section
             className="mx-auto flex w-full max-w-[640px] min-w-0 flex-col self-start"
-            aria-label={t("board.label")}
+            aria-label={t("sandbox.playArea")}
           >
             <div className="mb-4 grid grid-cols-2 rounded-panel border border-divider bg-surface">
               <PlayerSummary color="white" snapshot={snapshot} />
@@ -155,7 +155,7 @@ export function App({ apiBaseUrl }: AppProps) {
           </section>
           <aside
             className="flex min-w-0 flex-col gap-8 max-lg:mx-auto max-lg:w-full max-lg:max-w-[640px]"
-            aria-label={t("game.status")}
+            aria-label={t("sandbox.gameDetails")}
           >
             <GameStatus state={state} controller={controller} />
             <MoveHistory

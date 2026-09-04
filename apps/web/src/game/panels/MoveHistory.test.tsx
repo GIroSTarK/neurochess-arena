@@ -1,8 +1,8 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { snapshot } from "../test/fixtures";
-import { renderLocalized } from "../test/render";
+import { snapshot } from "../../test/fixtures";
+import { renderLocalized } from "../../test/render";
 
 import { MoveHistory } from "./MoveHistory";
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { isSquare, type Square } from "../chess/position";
+import { isSquare, type Square } from "../position/position";
 
 export interface Promotion {
   readonly destination: Square;

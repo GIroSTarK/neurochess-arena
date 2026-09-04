@@ -97,8 +97,9 @@ export function createGameService(
 
   function readSnapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot> {
     return repository.read(async (reader) => {
-      if (!(await reader.getGuest(principal.guestSessionId)))
+      if (!(await reader.getGuest(principal.guestSessionId))) {
         throw new GameRequestError("UNAUTHORIZED");
+      }
       const stored = await reader.getGame(gameId);
       if (!stored) throw new GameRequestError("NOT_FOUND");
       return (await restoreAuthorized(reader, principal, stored)).snapshot;
@@ -107,22 +108,28 @@ export function createGameService(
 
   async function terminalSnapshot(principal: GuestPrincipal, gameId: string) {
     const snapshot = await readSnapshot(principal, gameId);
-    if (snapshot.state !== "completed" && snapshot.state !== "aborted")
+    if (snapshot.state !== "completed" && snapshot.state !== "aborted") {
       throw new GameRequestError("INVALID_GAME_STATE");
+    }
     return snapshot;
   }
 
   function mutate(principal: GuestPrincipal, command: MoveCommand | LifecycleCommand) {
     return repository.write(async (tx) => {
-      if (!(await tx.lockGuest(principal.guestSessionId)))
+      if (!(await tx.lockGuest(principal.guestSessionId))) {
         throw new GameRequestError("UNAUTHORIZED");
+      }
       const stored = await tx.lockGame(command.gameId);
       if (!stored) throw new GameRequestError("NOT_FOUND");
       const restored = await restoreAuthorized(tx, principal, stored);
       const commandId = command.commandId.toLowerCase();
       // Accepted IDs span every command kind, including retries after completion.
-      if (command.expectedVersion !== stored.version || (await tx.hasCommand(stored.id, commandId)))
+      if (
+        command.expectedVersion !== stored.version ||
+        (await tx.hasCommand(stored.id, commandId))
+      ) {
         throw new GameConflictError(restored.snapshot);
+      }
       const isMove = "move" in command;
       if (isMove) {
         if (stored.state !== "active") throw new GameRequestError("INVALID_GAME_STATE");
@@ -150,10 +157,11 @@ export function createGameService(
           ? restored.game.resignHuman(command.losingColor)
           : restored.game[command.action]();
       if (!accepted.ok) {
-        if (["ILLEGAL_MOVE", "INVALID_UCI", "INVALID_GAME_STATE"].includes(accepted.error.code))
+        if (["ILLEGAL_MOVE", "INVALID_UCI", "INVALID_GAME_STATE"].includes(accepted.error.code)) {
           throw new GameRequestError(
             accepted.error.code as "ILLEGAL_MOVE" | "INVALID_UCI" | "INVALID_GAME_STATE",
           );
+        }
         throw new GameIntegrityError();
       }
       const snapshot = transportSnapshot(stored.id, stored.version + 1, accepted.value);
@@ -168,8 +176,9 @@ export function createGameService(
         if (!move) throw new GameIntegrityError();
         await tx.appendMove({ ...move, gameId: stored.id, commandId, version: snapshot.version });
       }
-      if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot))))
+      if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot)))) {
         throw new GameIntegrityError();
+      }
       return snapshot;
     });
   }
@@ -179,8 +188,9 @@ export function createGameService(
     createSandbox: (principal) =>
       repository.write(async (tx) => {
         if (!sandboxEnabled) throw new GameRequestError("NOT_FOUND");
-        if (!(await tx.lockGuest(principal.guestSessionId)))
+        if (!(await tx.lockGuest(principal.guestSessionId))) {
           throw new GameRequestError("UNAUTHORIZED");
+        }
         const occupied = await tx.findUnfinishedGame(principal.guestSessionId);
         if (occupied) {
           const locked = await tx.lockGame(occupied.id);
@@ -225,8 +235,9 @@ export function createGameService(
     unfinished: (principal) =>
       repository.read(async (reader) => {
         if (!sandboxEnabled) throw new GameRequestError("NOT_FOUND");
-        if (!(await reader.getGuest(principal.guestSessionId)))
+        if (!(await reader.getGuest(principal.guestSessionId))) {
           throw new GameRequestError("UNAUTHORIZED");
+        }
         const stored = await reader.findUnfinishedGame(principal.guestSessionId, true);
         return {
           snapshot: stored ? (await restoreAuthorized(reader, principal, stored)).snapshot : null,

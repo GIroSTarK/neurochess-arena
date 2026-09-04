@@ -33,8 +33,9 @@ export const test = base.extend({
         const anonymousDiscovery =
           message.location().url === API_ORIGIN + "/sandbox/games/unfinished" &&
           message.text().includes("401 (Unauthorized)");
-        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery)
+        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery) {
           errors.push("Application console " + message.type());
+        }
       }
     });
     try {

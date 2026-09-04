@@ -2,11 +2,11 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { FOOLS_MATE, GAME_ID, mockController, readyState, snapshot } from "../test/fixtures";
-import { renderLocalized } from "../test/render";
-import { StableText } from "../ui/StableText";
+import { FOOLS_MATE, GAME_ID, mockController, readyState, snapshot } from "../../test/fixtures";
+import { renderLocalized } from "../../test/render";
+import { StableText } from "../../ui/StableText";
+import type { SandboxState } from "../state";
 
-import type { SandboxState } from "./controller";
 import { GameStatus } from "./GameStatus";
 
 function props(overrides: Partial<SandboxState> = {}) {

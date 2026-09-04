@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { Piece, PieceKind } from "../chess/position";
+import type { Piece, PieceKind } from "../position/position";
 import { cx } from "../ui/cx";
 
 // Original, reusable Staunton silhouettes. The contrasting outline is part of

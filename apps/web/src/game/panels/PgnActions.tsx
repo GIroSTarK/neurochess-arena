@@ -1,9 +1,10 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { noticeMessage } from "../i18n/messages";
-import { Button } from "../ui/Button";
-
-import type { SandboxController, SandboxState } from "./controller";
+import { Button } from "../../ui/Button";
+import type { SandboxController } from "../controller";
+import { noticeMessage } from "../messages";
+import type { SandboxState } from "../state";
 
 export function PgnActions({
   state,
@@ -13,12 +14,13 @@ export function PgnActions({
   readonly controller: Pick<SandboxController, "exportPgn">;
 }) {
   const { t } = useTranslation();
+  const headingId = useId();
   return (
     <section
       className="min-w-0 rounded-control border border-control-border bg-surface p-4"
-      aria-labelledby="pgn-heading"
+      aria-labelledby={headingId}
     >
-      <h2 id="pgn-heading" className="text-label font-semibold">
+      <h2 id={headingId} className="text-label font-semibold">
         {t("export.title")}
       </h2>
       <div className="my-4 flex flex-wrap gap-3">

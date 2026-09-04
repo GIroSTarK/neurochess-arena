@@ -1,4 +1,5 @@
 import type {
+  ChessColor,
   GameErrorCode,
   GameReplayResponse,
   GameSnapshot,
@@ -9,7 +10,7 @@ import type {
 
 export type PendingCommand = MoveCommand | LifecycleCommand;
 export type LifecycleAction =
-  { action: "pause" | "resume" | "abort" } | { action: "resign"; losingColor: "white" | "black" };
+  { action: "pause" | "resume" | "abort" } | { action: "resign"; losingColor: ChessColor };
 
 export type SandboxNotice =
   | GameErrorCode

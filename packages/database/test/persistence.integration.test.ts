@@ -95,8 +95,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       await tx.execute(sql`set local search_path to ${sql.identifier(schemaName)}`);
       for (const statement of oldSql
         .split("--> statement-breakpoint")
-        .filter((statement) => statement.trim()))
+        .filter((statement) => statement.trim())) {
         await tx.execute(sql.raw(statement.replaceAll('"public"', '"' + schemaName + '"')));
+      }
       await tx.execute(
         sql`insert into guest_sessions(id, token_hash, expires_at) values (${ownerId}, ${"1".repeat(64)}, clock_timestamp() + interval '1 hour')`,
       );
@@ -108,8 +109,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       );
       for (const statement of nextSql
         .split("--> statement-breakpoint")
-        .filter((statement) => statement.trim()))
+        .filter((statement) => statement.trim())) {
         await tx.execute(sql.raw(statement.replaceAll('"public"', '"' + schemaName + '"')));
+      }
       const receipts = await tx.execute(
         sql`select game_id, command_id, kind, version from game_commands`,
       );
@@ -133,8 +135,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     for (const duplicate of [
       { ...receipt, version: 2, kind: "abort" as const },
       { ...receipt, commandId: randomUUID() },
-    ])
+    ]) {
       await expect(database.db.insert(gameCommands).values(duplicate)).rejects.toThrow();
+    }
     await expect(
       database.db.insert(gameCommands).values({ ...receipt, version: 0, commandId: randomUUID() }),
     ).rejects.toThrow();
@@ -251,8 +254,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       { ...accepted, commandId: randomUUID(), version: 2 },
       { ...accepted, ply: 2, version: 2 },
       { ...accepted, commandId: randomUUID(), ply: 2 },
-    ])
+    ]) {
       await expect(database.db.insert(moves).values(duplicate)).rejects.toThrow();
+    }
     const other = await game();
     // Deduplication IDs are scoped to the aggregate, not to all games.
     await expect(

@@ -52,8 +52,9 @@ export class ArchiveController {
     } catch (error: unknown) {
       if (!current()) return;
       const failure = safeFailure(error);
-      if (!this.context.loseAccess(failure))
+      if (!this.context.loseAccess(failure)) {
         store.patch({ replayPhase: "error", archiveNotice: failureNotice(failure) });
+      }
     } finally {
       release();
     }
@@ -84,8 +85,9 @@ export class ArchiveController {
         response.gameId !== snapshot.gameId ||
         response.version !== snapshot.version ||
         response.pgn !== snapshot.pgn
-      )
+      ) {
         throw new ApiFailure("malformed");
+      }
       let outcome: "copied" | "downloaded" | "manual";
       if (action === "copy") outcome = (await delivery.copy(response.pgn)) ? "copied" : "manual";
       else {
@@ -109,8 +111,9 @@ export class ArchiveController {
     } catch (error: unknown) {
       if (!current()) return;
       const failure = safeFailure(error);
-      if (!this.context.loseAccess(failure))
+      if (!this.context.loseAccess(failure)) {
         store.patch({ exportPhase: "error", archiveNotice: failureNotice(failure) });
+      }
     } finally {
       release();
     }

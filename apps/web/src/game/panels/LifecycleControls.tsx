@@ -1,18 +1,14 @@
+import type { ChessColor } from "@neurochess/contracts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../ui/Button";
-import { Dialog } from "../ui/Dialog";
-import { StableText } from "../ui/StableText";
+import { Button } from "../../ui/Button";
+import { Dialog } from "../../ui/Dialog";
+import { StableText } from "../../ui/StableText";
+import type { SandboxController } from "../controller";
+import { interactionEpoch, type LifecycleAction, type SandboxState } from "../state";
 
-import {
-  interactionEpoch,
-  type LifecycleAction,
-  type SandboxController,
-  type SandboxState,
-} from "./controller";
-
-type Confirmation = { action: "abort" } | { action: "resign"; losingColor: "white" | "black" };
+type Confirmation = { action: "abort" } | { action: "resign"; losingColor: ChessColor };
 
 interface PendingConfirmation {
   readonly epoch: string;

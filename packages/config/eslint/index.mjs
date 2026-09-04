@@ -26,6 +26,8 @@ export function createEslintConfig({ rootDirectory }) {
       // Side effects, Node built-ins, packages, then parent and sibling imports as their own groups.
       plugins: { "simple-import-sort": simpleImportSort },
       rules: {
+        // A brace-less body may only stay on the line of its condition.
+        curly: ["error", "multi-line"],
         "simple-import-sort/imports": [
           "error",
           { groups: [["^\\u0000"], ["^node:"], ["^@?\\w"], ["^\\.\\."], ["^\\./"]] },

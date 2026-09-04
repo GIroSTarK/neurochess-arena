@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../ui/Button";
-
-import type { SandboxController, SandboxState } from "./controller";
+import { Button } from "../../ui/Button";
+import type { SandboxController } from "../controller";
+import type { SandboxState } from "../state";
 
 export function ReplayControls({
   state,

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { jsonResponse, requestPath } from "../test/fixtures";
 
-import { useSandbox } from "./use-sandbox";
+import { useSandbox } from "./useSandbox";
 
 describe("useSandbox", () => {
   it("keeps one connected controller across renders", async () => {

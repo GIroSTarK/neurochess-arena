@@ -180,10 +180,11 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
     const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
     function expand(value: unknown): unknown {
       if (typeof value === "string") return value + " extra".repeat(Math.ceil(value.length / 12));
-      if (value && typeof value === "object")
+      if (value && typeof value === "object") {
         return Object.fromEntries(
           Object.entries(value).map(([key, entry]) => [key, expand(entry)]),
         );
+      }
       return value;
     }
     i18n.addResourceBundle(

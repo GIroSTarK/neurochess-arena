@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
-import type { Announcement, SandboxNotice } from "../game/controller";
+import type { Announcement, SandboxNotice } from "./state";
 
 const noticeKeys = {
   existing: "notices.existing",
@@ -58,10 +58,11 @@ export function announcementMessage(event: Announcement | null, t: TFunction): s
   if (!event) return "";
   if (event.kind === "notice") return noticeMessage(event.notice, t);
   if (event.kind === "connection") return t(`connection.${event.readiness}`);
-  if (event.kind === "replay")
+  if (event.kind === "replay") {
     return event.ply === 0
       ? t("replay.initial")
       : t("replay.selected", { ply: event.ply, move: event.san ?? "" });
+  }
   const status = gameStatus(event.snapshot, t);
   if (event.kind === "move") {
     const lastMove = event.snapshot.moves.at(-1);

@@ -15,16 +15,7 @@ try {
 
   services.push(startService("api", [resolve("apps/api/dist/server.js")]));
   services.push(
-    startService("web", [
-      resolve("node_modules/vite/bin/vite.js"),
-      "preview",
-      "apps/web",
-      "--host",
-      "localhost",
-      "--port",
-      "5173",
-      "--strictPort",
-    ]),
+    startService("web", [resolve("node_modules/vite/bin/vite.js"), "preview", "apps/web"]),
   );
 
   await Promise.all([

@@ -301,12 +301,13 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     await stranger.goto(page.url());
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveCount(0);
-    for (const suffix of ["replay", "pgn"])
+    for (const suffix of ["replay", "pgn"]) {
       expect(
         (
           await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
         ).status(),
       ).toBe(401);
+    }
     expect(
       (
         await isolated.request.post(API_ORIGIN + "/guest-session", {
@@ -318,12 +319,13 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     await stranger.reload();
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveCount(0);
-    for (const suffix of ["replay", "pgn"])
+    for (const suffix of ["replay", "pgn"]) {
       expect(
         (
           await isolated.request.get(API_ORIGIN + "/games/" + initial.gameId + "/" + suffix)
         ).status(),
       ).toBe(404);
+    }
   } finally {
     await isolated.close();
   }

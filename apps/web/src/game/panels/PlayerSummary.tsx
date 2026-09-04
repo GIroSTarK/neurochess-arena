@@ -1,9 +1,18 @@
 import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
-import { PieceIcon } from "../board/PieceIcon";
-import { cx } from "../ui/cx";
-import { StableText } from "../ui/StableText";
+import { PieceIcon } from "../../board/PieceIcon";
+import { cx } from "../../ui/cx";
+import { StableText } from "../../ui/StableText";
+
+const activityKeys = ["ready", "inspecting", "toMove", "waiting"] as const;
+
+/** What the seat is doing; only an active game distinguishes the side to move. */
+function activity(snapshot: GameSnapshot | null, color: ChessColor): (typeof activityKeys)[number] {
+  if (!snapshot) return "ready";
+  if (snapshot.state !== "active") return "inspecting";
+  return snapshot.turn === color ? "toMove" : "waiting";
+}
 
 /** One seat of the equal-width pair above the board: color, identity, and activity. */
 export function PlayerSummary({
@@ -27,18 +36,8 @@ export function PlayerSummary({
         <strong className="font-semibold max-sm:text-label">{t("players.guest")}</strong>
         <span className={cx("text-caption", isTurn ? "text-accent" : "text-text-muted")}>
           <StableText
-            value={t(
-              !snapshot
-                ? "players.ready"
-                : snapshot.state !== "active"
-                  ? "players.inspecting"
-                  : isTurn
-                    ? "players.toMove"
-                    : "players.waiting",
-            )}
-            variants={(["ready", "inspecting", "toMove", "waiting"] as const).map((key) =>
-              t(`players.${key}`),
-            )}
+            value={t(`players.${activity(snapshot, color)}`)}
+            variants={activityKeys.map((key) => t(`players.${key}`))}
           />
         </span>
       </div>
