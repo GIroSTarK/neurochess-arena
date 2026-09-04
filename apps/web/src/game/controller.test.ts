@@ -607,7 +607,7 @@ describe("private terminal replay and export", () => {
     });
     await controller.exportPgn("copy");
     expect(delivery.copy).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().archiveNotice).toBe("malformed");
+    expect(controller.getSnapshot().exportNotice).toBe("malformed");
     api.pgn.mockRejectedValueOnce(new ApiFailure("api", "UNAUTHORIZED"));
     await controller.exportPgn("download");
     expect(delivery.download).not.toHaveBeenCalled();
@@ -615,9 +615,42 @@ describe("private terminal replay and export", () => {
       phase: "access-error",
       snapshot: null,
       replay: null,
+      replayNotice: null,
       exportText: null,
+      exportNotice: null,
     });
   });
+  it.each(["replay", "export"] as const)(
+    "preserves the other archive error while retrying %s",
+    async (operation) => {
+      const { api, controller } = await terminal();
+      api.replay.mockRejectedValueOnce(new ApiFailure("network"));
+      api.pgn.mockRejectedValueOnce(new ApiFailure("timeout"));
+      await controller.loadReplay();
+      await controller.exportPgn("copy");
+      expect(controller.getSnapshot()).toMatchObject({
+        replayPhase: "error",
+        replayNotice: "network",
+        exportPhase: "error",
+        exportNotice: "timeout",
+      });
+
+      const retry = operation === "replay" ? controller.loadReplay() : controller.exportPgn("copy");
+      const preserved =
+        operation === "replay"
+          ? { replayNotice: null, exportPhase: "error", exportNotice: "timeout" }
+          : { exportNotice: null, replayPhase: "error", replayNotice: "network" };
+      expect(controller.getSnapshot()).toMatchObject({
+        ...preserved,
+        [`${operation}Phase`]: "loading",
+      });
+      await retry;
+      expect(controller.getSnapshot()).toMatchObject({
+        ...preserved,
+        [`${operation}Phase`]: operation === "replay" ? "idle" : "copied",
+      });
+    },
+  );
   it("ignores a late replay after export reports lost access", async () => {
     const initial = snapshot(FOOLS_MATE);
     const { api, controller } = harness(initial);
@@ -653,7 +686,7 @@ describe("private terminal replay and export", () => {
     expect(controller.getSnapshot()).toMatchObject({
       snapshot: initial,
       replay: null,
-      archiveNotice: "malformed",
+      replayNotice: "malformed",
     });
     api.replay.mockResolvedValue(
       gameReplayResponseSchema.parse({ snapshot: initial, initialFen: snapshot().fen }),

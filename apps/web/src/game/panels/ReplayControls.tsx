@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
 import type { SandboxController } from "../controller";
+import { noticeMessage } from "../messages";
 import type { SandboxState } from "../state";
 
 export function ReplayControls({
@@ -26,6 +27,7 @@ export function ReplayControls({
         </span>
       </div>
       {state.replayPhase === "loading" ? <p className="mt-3">{t("replay.loading")}</p> : null}
+      {state.replayNotice ? <p className="mt-3">{noticeMessage(state.replayNotice, t)}</p> : null}
       <div className="mt-4 grid grid-cols-2 gap-3">
         {(
           [

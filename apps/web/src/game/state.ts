@@ -61,9 +61,10 @@ export interface SandboxState {
   readonly replay: GameReplayResponse | null;
   readonly replayPly: number;
   readonly replayPhase: "idle" | "loading" | "error";
+  readonly replayNotice: SandboxNotice | null;
   readonly exportPhase: "idle" | "loading" | "copied" | "downloaded" | "manual" | "error";
   readonly exportText: string | null;
-  readonly archiveNotice: SandboxNotice | null;
+  readonly exportNotice: SandboxNotice | null;
   readonly notice: SandboxNotice | null;
   readonly announcement: Announcement | null;
   /** Invalidates selection/promotion without remounting or focusing the board. */
@@ -78,9 +79,10 @@ export const initialSandboxState: SandboxState = {
   replay: null,
   replayPly: 0,
   replayPhase: "idle",
+  replayNotice: null,
   exportPhase: "idle",
   exportText: null,
-  archiveNotice: null,
+  exportNotice: null,
   notice: null,
   announcement: null,
   interactionRevision: 0,

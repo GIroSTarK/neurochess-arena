@@ -48,7 +48,7 @@ export function PgnActions({
       {state.exportPhase !== "idle" && state.exportPhase !== "error" ? (
         <p className="mt-3">{t(`export.${state.exportPhase}`)}</p>
       ) : null}
-      {state.archiveNotice ? <p className="mt-3">{noticeMessage(state.archiveNotice, t)}</p> : null}
+      {state.exportNotice ? <p className="mt-3">{noticeMessage(state.exportNotice, t)}</p> : null}
       {state.exportText ? (
         <label className="mt-3 grid gap-2">
           {t("export.text")}

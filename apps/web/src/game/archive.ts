@@ -43,7 +43,7 @@ export class ArchiveController {
     if (!request) return;
     const { snapshot, signal, current, release } = request;
     const { api, store } = this.context;
-    store.patch({ replayPhase: "loading", archiveNotice: null });
+    store.patch({ replayPhase: "loading", replayNotice: null });
     try {
       const replay = await api.replay(snapshot.gameId, signal);
       if (!current()) return;
@@ -53,7 +53,7 @@ export class ArchiveController {
       if (!current()) return;
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
-        store.patch({ replayPhase: "error", archiveNotice: failureNotice(failure) });
+        store.patch({ replayPhase: "error", replayNotice: failureNotice(failure) });
       }
     } finally {
       release();
@@ -77,7 +77,7 @@ export class ArchiveController {
     if (!request) return;
     const { snapshot, signal, current, release } = request;
     const { api, delivery, store } = this.context;
-    store.patch({ exportPhase: "loading", exportText: null, archiveNotice: null });
+    store.patch({ exportPhase: "loading", exportText: null, exportNotice: null });
     try {
       const response = await api.pgn(snapshot.gameId, signal);
       if (!current()) return;
@@ -112,7 +112,7 @@ export class ArchiveController {
       if (!current()) return;
       const failure = safeFailure(error);
       if (!this.context.loseAccess(failure)) {
-        store.patch({ exportPhase: "error", archiveNotice: failureNotice(failure) });
+        store.patch({ exportPhase: "error", exportNotice: failureNotice(failure) });
       }
     } finally {
       release();
@@ -133,10 +133,11 @@ export class ArchiveController {
     this.context.store.patch({
       replay: null,
       replayPhase: "idle",
+      replayNotice: null,
       replayPly: 0,
       exportPhase: "idle",
       exportText: null,
-      archiveNotice: null,
+      exportNotice: null,
     });
   }
 

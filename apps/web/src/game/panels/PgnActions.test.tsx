@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -6,6 +6,7 @@ import { FOOLS_MATE, mockController, readyState, snapshot } from "../../test/fix
 import { renderLocalized } from "../../test/render";
 
 import { PgnActions } from "./PgnActions";
+import { ReplayControls } from "./ReplayControls";
 
 function props() {
   const controller = mockController();
@@ -16,7 +17,31 @@ function props() {
   };
 }
 
-describe("PGN export focus", () => {
+describe("PGN export", () => {
+  it("keeps replay and export errors in their own panels", () => {
+    const { controller, state } = props();
+    const failed = {
+      ...state,
+      replayPhase: "error",
+      replayNotice: "network",
+      exportPhase: "error",
+      exportNotice: "timeout",
+    } as const;
+    renderLocalized(
+      <>
+        <ReplayControls state={failed} controller={controller} />
+        <PgnActions state={failed} controller={controller} />
+      </>,
+    );
+    const replay = within(screen.getByRole("region", { name: "Replay" }));
+    const pgn = within(screen.getByRole("region", { name: "Private PGN" }));
+    const replayError = "The service could not be reached. Check your connection and try again.";
+    const exportError = "The request took too long. Please try again.";
+    expect(replay.getByText(replayError)).toBeInTheDocument();
+    expect(replay.queryByText(exportError)).not.toBeInTheDocument();
+    expect(pgn.getByText(exportError)).toBeInTheDocument();
+    expect(pgn.queryByText(replayError)).not.toBeInTheDocument();
+  });
   it.each([
     { name: "Copy PGN", action: "copy", outcome: "copied", message: "PGN copied." },
     {
