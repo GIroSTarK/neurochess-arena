@@ -119,11 +119,14 @@ export class ArchiveController {
     }
   }
 
-  /** Aborts in-flight archive requests without touching the presented state. */
+  /** Aborts in-flight archive requests and makes interrupted exports retryable. */
   cancel(): void {
     for (const slot of ["replay", "export"] as const) {
       this.requests[slot]?.abort();
       this.requests[slot] = null;
+    }
+    if (this.context.store.get().exportPhase === "loading") {
+      this.context.store.patch({ exportPhase: "idle" });
     }
   }
 

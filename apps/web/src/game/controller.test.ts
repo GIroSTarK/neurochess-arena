@@ -598,6 +598,63 @@ describe("private terminal replay and export", () => {
     expect(delivery.download).toHaveBeenCalledWith(initial.pgn, initial.gameId);
     expect(controller.getSnapshot().exportText).toBeNull();
   });
+  it.each(["copy", "download"] as const)(
+    "makes interrupted %s export retryable after reconnect and keeps the retry current",
+    async (action) => {
+      const { api, controller, delivery, initial } = await terminal();
+      const cancelled = Promise.withResolvers<Awaited<ReturnType<SandboxApi["pgn"]>>>();
+      const retry = Promise.withResolvers<Awaited<ReturnType<SandboxApi["pgn"]>>>();
+      api.pgn.mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(retry.promise);
+      const interrupted = controller.exportPgn(action);
+      expect(controller.getSnapshot().exportPhase).toBe("loading");
+
+      controller.disconnect();
+      expect(api.pgn.mock.calls[0]?.[1].aborted).toBe(true);
+      const disconnect = controller.connect();
+      expect(controller.getSnapshot().exportPhase).toBe("idle");
+      expect(api.pgn).toHaveBeenCalledTimes(1);
+
+      const next = controller.exportPgn(action);
+      cancelled.reject(new ApiFailure("cancelled"));
+      await interrupted;
+      expect(controller.getSnapshot().exportPhase).toBe("loading");
+      await controller.exportPgn(action);
+      expect(api.pgn).toHaveBeenCalledTimes(2);
+
+      retry.resolve({ gameId: initial.gameId, version: initial.version, pgn: initial.pgn });
+      await next;
+      expect(controller.getSnapshot().exportPhase).toBe(
+        action === "copy" ? "copied" : "downloaded",
+      );
+      expect(delivery[action]).toHaveBeenCalledTimes(1);
+      disconnect();
+    },
+  );
+  it.each(["manual", "error"] as const)(
+    "preserves settled %s export state and replay selection across reconnect",
+    async (phase) => {
+      const { api, controller, delivery } = await terminal();
+      if (phase === "manual") delivery.copy.mockResolvedValueOnce(false);
+      else api.pgn.mockRejectedValueOnce(new ApiFailure("network"));
+      await controller.exportPgn("copy");
+      controller.selectPly(1);
+      const { exportPhase, exportText, exportNotice, replay, replayPly } = controller.getSnapshot();
+      expect(exportPhase).toBe(phase);
+
+      controller.disconnect();
+      const disconnect = controller.connect();
+      expect(controller.getSnapshot()).toMatchObject({
+        exportPhase,
+        exportText,
+        exportNotice,
+        replay,
+        replayPly,
+      });
+      expect(api.pgn).toHaveBeenCalledTimes(1);
+      expect(api.replay).toHaveBeenCalledTimes(1);
+      disconnect();
+    },
+  );
   it("rejects mismatched exports and clears all private data on access loss", async () => {
     const { api, controller, delivery, initial } = await terminal();
     api.pgn.mockResolvedValueOnce({
