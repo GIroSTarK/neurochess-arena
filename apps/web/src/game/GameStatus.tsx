@@ -36,12 +36,18 @@ const feedbackSlotClassName = "min-w-0 self-start [grid-area:1/1] aria-hidden:in
 
 const noticeClassName = "border-l-2 border-warning pl-3 text-text";
 
+/** The commands this panel and its lifecycle controls issue. */
+type StatusController = Pick<
+  SandboxController,
+  "checkReadiness" | "lifecycle" | "recover" | "retryCommand" | "start" | "synchronize"
+>;
+
 export function GameStatus({
   state,
   controller,
 }: {
   readonly state: SandboxState;
-  readonly controller: SandboxController;
+  readonly controller: StatusController;
 }) {
   const { t } = useTranslation();
   const { snapshot } = state;

@@ -1,22 +1,22 @@
 import { gameReplayResponseSchema } from "@neurochess/contracts";
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { createSandboxApi } from "../api/client";
-import { FOOLS_MATE, readyState, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, mockController, readyState, snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 
-import { SandboxController } from "./controller";
 import { ReplayControls } from "./ReplayControls";
 
 function props(replayPly: number) {
-  // Inert until connected; the spy intercepts the only call the component makes.
-  const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
-  const selectPly = vi.spyOn(controller, "selectPly").mockImplementation(() => undefined);
+  const controller = mockController();
   const terminal = snapshot(FOOLS_MATE);
   const replay = gameReplayResponseSchema.parse({ snapshot: terminal, initialFen: snapshot().fen });
-  return { controller, state: readyState({ snapshot: terminal, replay, replayPly }), selectPly };
+  return {
+    controller,
+    state: readyState({ snapshot: terminal, replay, replayPly }),
+    selectPly: controller.selectPly,
+  };
 }
 
 describe("replay navigation focus", () => {

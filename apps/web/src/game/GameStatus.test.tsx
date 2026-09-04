@@ -1,18 +1,16 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { createSandboxApi } from "../api/client";
-import { FOOLS_MATE, readyState, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, GAME_ID, mockController, readyState, snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 import { StableText } from "../ui/StableText";
 
-import { SandboxController, type SandboxState } from "./controller";
+import type { SandboxState } from "./controller";
 import { GameStatus } from "./GameStatus";
 
 function props(overrides: Partial<SandboxState> = {}) {
-  // Inert until connected; only the props contract needs a controller.
-  const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
-  return { state: readyState(overrides), controller };
+  return { state: readyState(overrides), controller: mockController() };
 }
 
 const paused = () => snapshot([], { state: "paused", legalMoves: [], version: 1 });
@@ -147,5 +145,39 @@ describe("stable game status feedback", () => {
     );
     expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
     expect(screen.getAllByText("Continue")).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      name: "Retry same move",
+      method: "retryCommand",
+      overrides: {
+        phase: "uncertain",
+        notice: "uncertain",
+        pendingCommand: {
+          gameId: GAME_ID,
+          expectedVersion: 0,
+          commandId: "5b6a4d1c-2f6e-4c1a-9d3b-8e7f6a5b4c3d",
+          move: "e2e4",
+        },
+      },
+    },
+    {
+      name: "Check game status",
+      method: "synchronize",
+      overrides: { phase: "sync-required", notice: "sync-required" },
+    },
+    {
+      name: "Retry recovery",
+      method: "recover",
+      overrides: { phase: "recovery-required", notice: "recovery-required" },
+    },
+    { name: "New game", method: "start", overrides: { snapshot: snapshot(FOOLS_MATE) } },
+    { name: "Retry connection", method: "checkReadiness", overrides: { readiness: "unavailable" } },
+  ] as const)("routes $name to the controller", async ({ name, method, overrides }) => {
+    const initial = props(overrides);
+    renderLocalized(<GameStatus {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name }));
+    expect(initial.controller[method]).toHaveBeenCalledTimes(1);
   });
 });

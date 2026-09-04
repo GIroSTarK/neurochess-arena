@@ -1,19 +1,15 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { createSandboxApi } from "../api/client";
-import { OTHER_GAME_ID, readyState, snapshot } from "../test/fixtures";
+import { mockController, OTHER_GAME_ID, readyState, snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 
-import { SandboxController } from "./controller";
 import { LifecycleControls } from "./LifecycleControls";
 
 function props() {
-  // Inert until connected; the spy intercepts the only call the component makes.
-  const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
-  const lifecycle = vi.spyOn(controller, "lifecycle").mockResolvedValue();
-  return { controller, state: readyState(), lifecycle };
+  const controller = mockController();
+  return { controller, state: readyState(), lifecycle: controller.lifecycle };
 }
 
 describe("lifecycle confirmations", () => {

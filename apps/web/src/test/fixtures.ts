@@ -1,6 +1,8 @@
 import { createGame } from "@neurochess/chess";
 import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import { vi } from "vitest";
 
+import type { SandboxController } from "../game/controller";
 import { initialSandboxState, type SandboxState } from "../game/state";
 
 export const GAME_ID = "30c898bd-d430-4c9e-bd9e-1f44bd7a8fab";
@@ -37,6 +39,22 @@ export function readyState(overrides: Partial<SandboxState> = {}): SandboxState 
     phase: "ready",
     snapshot: snapshot(),
     ...overrides,
+  };
+}
+
+/** Every controller command as an inert, typed mock; a component receives the slice it calls. */
+export function mockController() {
+  return {
+    checkReadiness: vi.fn<SandboxController["checkReadiness"]>().mockResolvedValue(),
+    start: vi.fn<SandboxController["start"]>().mockResolvedValue(),
+    submit: vi.fn<SandboxController["submit"]>().mockResolvedValue(),
+    lifecycle: vi.fn<SandboxController["lifecycle"]>().mockResolvedValue(),
+    retryCommand: vi.fn<SandboxController["retryCommand"]>().mockResolvedValue(),
+    synchronize: vi.fn<SandboxController["synchronize"]>().mockResolvedValue(),
+    recover: vi.fn<SandboxController["recover"]>().mockResolvedValue(),
+    loadReplay: vi.fn<SandboxController["loadReplay"]>().mockResolvedValue(),
+    selectPly: vi.fn<SandboxController["selectPly"]>(),
+    exportPgn: vi.fn<SandboxController["exportPgn"]>().mockResolvedValue(),
   };
 }
 

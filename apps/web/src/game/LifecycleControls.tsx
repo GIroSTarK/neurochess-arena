@@ -24,7 +24,7 @@ export function LifecycleControls({
   controller,
 }: {
   readonly state: SandboxState;
-  readonly controller: SandboxController;
+  readonly controller: Pick<SandboxController, "lifecycle">;
 }) {
   const { t } = useTranslation();
   const [pendingConfirmation, setConfirmation] = useState<PendingConfirmation | null>(null);

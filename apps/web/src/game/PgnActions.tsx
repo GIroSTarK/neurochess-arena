@@ -10,7 +10,7 @@ export function PgnActions({
   controller,
 }: {
   readonly state: SandboxState;
-  readonly controller: SandboxController;
+  readonly controller: Pick<SandboxController, "exportPgn">;
 }) {
   const { t } = useTranslation();
   return (

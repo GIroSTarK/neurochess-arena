@@ -1,19 +1,19 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { createSandboxApi } from "../api/client";
-import { FOOLS_MATE, readyState, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, mockController, readyState, snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 
-import { SandboxController } from "./controller";
 import { PgnActions } from "./PgnActions";
 
 function props() {
-  // Inert until connected; the spy intercepts the only call the component makes.
-  const controller = new SandboxController(createSandboxApi("http://localhost:3001"));
-  const exportPgn = vi.spyOn(controller, "exportPgn").mockResolvedValue();
-  return { controller, state: readyState({ snapshot: snapshot(FOOLS_MATE) }), exportPgn };
+  const controller = mockController();
+  return {
+    controller,
+    state: readyState({ snapshot: snapshot(FOOLS_MATE) }),
+    exportPgn: controller.exportPgn,
+  };
 }
 
 describe("PGN export focus", () => {

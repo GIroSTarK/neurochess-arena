@@ -11,7 +11,7 @@ export function StartButton({
   controller,
 }: {
   readonly state: SandboxState;
-  readonly controller: SandboxController;
+  readonly controller: Pick<SandboxController, "start">;
 }) {
   const { t } = useTranslation();
   return (

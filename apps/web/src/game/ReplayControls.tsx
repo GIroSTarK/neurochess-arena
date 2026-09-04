@@ -9,7 +9,7 @@ export function ReplayControls({
   controller,
 }: {
   readonly state: SandboxState;
-  readonly controller: SandboxController;
+  readonly controller: Pick<SandboxController, "loadReplay" | "selectPly">;
 }) {
   const { t } = useTranslation();
   const count = state.replay?.snapshot.moves.length ?? 0;
