@@ -4,7 +4,7 @@ import { ApiFailure, type SandboxApi } from "../api/client";
 
 import { failureNotice, safeFailure } from "./failures";
 import type { PgnDelivery } from "./pgn";
-import { isTerminal, type SandboxState } from "./state";
+import { isTerminal, sameSnapshot, type SandboxState } from "./state";
 import type { Store } from "./store";
 
 export interface ArchiveContext {
@@ -47,8 +47,7 @@ export class ArchiveController {
     try {
       const replay = await api.replay(snapshot.gameId, signal);
       if (!current()) return;
-      if (JSON.stringify(replay.snapshot) !== JSON.stringify(snapshot))
-        throw new ApiFailure("malformed");
+      if (!sameSnapshot(replay.snapshot, snapshot)) throw new ApiFailure("malformed");
       store.patch({ replay, replayPly: snapshot.moves.length, replayPhase: "idle" });
     } catch (error: unknown) {
       if (!current()) return;

@@ -634,4 +634,30 @@ describe("private terminal replay and export", () => {
       phase: "access-error",
     });
   });
+  it.each([
+    { label: "a later revision", replay: snapshot(FOOLS_MATE, { version: 5 }) },
+    {
+      label: "a different terminal history",
+      replay: snapshot(["e2e4", "f7f6", "d2d4", "g7g5", "d1h5"]),
+    },
+  ])("rejects a replay of $label and keeps the accepted game", async ({ replay }) => {
+    const initial = snapshot(FOOLS_MATE);
+    const { api, controller } = harness(initial);
+    api.replay.mockResolvedValueOnce(
+      gameReplayResponseSchema.parse({ snapshot: replay, initialFen: snapshot().fen }),
+    );
+    await controller.checkReadiness();
+    await controller.start();
+    await vi.waitFor(() => expect(controller.getSnapshot().replayPhase).toBe("error"));
+    expect(controller.getSnapshot()).toMatchObject({
+      snapshot: initial,
+      replay: null,
+      archiveNotice: "malformed",
+    });
+    api.replay.mockResolvedValue(
+      gameReplayResponseSchema.parse({ snapshot: initial, initialFen: snapshot().fen }),
+    );
+    await controller.loadReplay();
+    expect(controller.getSnapshot()).toMatchObject({ replayPhase: "idle", replayPly: 4 });
+  });
 });
