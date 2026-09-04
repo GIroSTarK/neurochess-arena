@@ -221,4 +221,10 @@ export const en = {
     variables: "Check the following configuration variables: {{variables}}.",
     rootMissing: "The application could not find its page container.",
   },
+  failure: {
+    title: "Something went wrong",
+    description:
+      "The page stopped after an unexpected problem. Reload to continue; an unfinished game reopens paused.",
+    reload: "Reload page",
+  },
 } as const;
