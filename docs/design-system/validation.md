@@ -6,7 +6,7 @@
 
 - Actual screen-reader speech with NVDA, JAWS, VoiceOver, or Narrator remains unverified. DOM semantics, focus tests, and automated accessibility checks do not establish full accessibility conformance.
 - Firefox, WebKit, physical touch devices, browser/operating-system zoom, and on-screen keyboards remain unverified. Chromium touch emulation and root-text enlargement are not substitutes for those checks.
-- The production build reports a non-failing large JavaScript chunk warning. Bundle optimization and field-performance validation remain open; no performance budget or field baseline has been established.
+- The production build splits vendor code into separate chunks, but no bundle size budget or field-performance baseline has been established.
 
 The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Existing sandbox checks do not certify the AI, account, room, or analysis flows; apply the acceptance checklist as each flow is implemented.
 
