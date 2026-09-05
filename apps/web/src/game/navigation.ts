@@ -1,6 +1,5 @@
 import { gameIdSchema } from "@neurochess/contracts";
 
-/** The game named by the current URL, if any. */
 export type NavigationTarget =
   | { readonly kind: "none" }
   | { readonly kind: "invalid" }

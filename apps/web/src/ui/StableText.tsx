@@ -12,7 +12,6 @@ export function StableText({
 }) {
   return (
     <span className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
-      {/* Every variant contributes its natural size, but only one is exposed. */}
       {[...new Set([...variants, value])].map((text) => (
         <span
           key={text}

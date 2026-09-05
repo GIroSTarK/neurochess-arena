@@ -136,9 +136,8 @@ export function isUnfinished(snapshot: GameSnapshot): boolean {
 }
 
 /**
- * Identifies the accepted position together with the client-side invalidation counter.
- * Presentation state such as a board selection or an open confirmation is discarded when it
- * changes.
+ * Combines the accepted position with client-side invalidation. Changes discard board
+ * selection and open confirmations.
  */
 export function interactionEpoch({
   snapshot,
@@ -149,7 +148,7 @@ export function interactionEpoch({
 
 type Equality<T> = (a: T, b: T) => boolean;
 
-/** Element-wise equality; the lists compared here never hold undefined. */
+/** These lists never contain undefined. */
 function sameList<T>(a: readonly T[], b: readonly T[], same: Equality<T>): boolean {
   return (
     a.length === b.length &&

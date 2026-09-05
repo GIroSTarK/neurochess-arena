@@ -39,7 +39,7 @@ export function LifecycleControls({
   }
   return (
     <div className="mt-4 grid grid-cols-2 gap-3" aria-label={t("lifecycle.controls")} role="group">
-      {/* aria-disabled blocks activation through the guards without blurring focus. */}
+      {/* aria-disabled preserves focus; the activation guards reject unavailable actions. */}
       <Button
         variant="primary"
         aria-disabled={disabled}

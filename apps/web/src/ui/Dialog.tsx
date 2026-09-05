@@ -7,13 +7,11 @@ import { cancelHeldActivation } from "./keyboard";
 export interface DialogProps {
   readonly title: ReactNode;
   readonly description: ReactNode;
-  /** Escape and the native cancel request. The owner then stops rendering the dialog. */
   readonly onCancel: () => void;
   readonly children: ReactNode;
 }
 
-// Centered on desktop, a scrollable sheet on narrow screens. Preflight zeroes every margin, so
-// m-auto restores the native modal centering.
+// Preflight removes native dialog margins; m-auto restores centering.
 const dialogClassName = cx(
   "m-auto max-h-[calc(100dvh_-_32px)] w-[min(36rem,calc(100%_-_32px))] overflow-auto rounded-panel border border-control-border bg-surface-raised p-6 text-text",
   "shadow-[0_1rem_4rem_var(--color-canvas)] backdrop:bg-canvas/85 max-sm:p-4",
@@ -33,9 +31,8 @@ function focusable(dialog: HTMLDialogElement): HTMLElement[] {
 }
 
 /**
- * Modal dialog. It moves focus to its first control on open, contains Tab, reports Escape
- * through `onCancel`, and restores focus to the trigger when it unmounts. The owner decides
- * whether it is open by rendering it, so a stale dialog disappears with the state that opened it.
+ * Mounting focuses the first control and contains Tab; unmounting restores trigger focus.
+ * Escape requests cancellation through `onCancel`; the owner must unmount the dialog.
  */
 export function Dialog({ title, description, onCancel, children }: DialogProps) {
   const titleId = useId();

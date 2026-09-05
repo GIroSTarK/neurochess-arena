@@ -25,8 +25,7 @@ function canvasColor(): string {
 // The development and preview servers share the origin the API allows by default.
 const localServer = { host: "localhost", port: 5173, strictPort: true };
 
-// Vendor libraries change on their own schedule. Each ships as its own cacheable chunk, so a
-// release of the application code does not invalidate them, and no chunk nears the size warning.
+// Cache vendor libraries separately so application releases do not invalidate them.
 const vendorChunks = [
   {
     name: "react",

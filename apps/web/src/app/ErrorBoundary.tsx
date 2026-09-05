@@ -14,9 +14,8 @@ interface ErrorBoundaryState {
 }
 
 /**
- * Replaces a subtree that threw while rendering with the localized failure screen instead of a
- * blank page. The exception is never rendered; React reports it through the root's caught-error
- * handler. Reloading recovers, and an unfinished game reopens paused.
+ * The failure screen never renders the exception; React reports it through the root's
+ * caught-error handler. Reloading recovers, and an unfinished game reopens paused.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { failed: false };

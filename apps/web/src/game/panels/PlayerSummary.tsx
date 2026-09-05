@@ -7,14 +7,12 @@ import { StableText } from "../../ui/StableText";
 
 const activityKeys = ["ready", "inspecting", "toMove", "waiting"] as const;
 
-/** What the seat is doing; only an active game distinguishes the side to move. */
 function activity(snapshot: GameSnapshot | null, color: ChessColor): (typeof activityKeys)[number] {
   if (!snapshot) return "ready";
   if (snapshot.state !== "active") return "inspecting";
   return snapshot.turn === color ? "toMove" : "waiting";
 }
 
-/** One seat of the equal-width pair above the board: color, identity, and activity. */
 export function PlayerSummary({
   color,
   snapshot,

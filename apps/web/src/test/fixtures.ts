@@ -70,7 +70,6 @@ export function sandboxState(
   };
 }
 
-/** A ready sandbox showing the standard position unless another snapshot is supplied. */
 export function readyState({
   snapshot: position = snapshot(),
   ...options
@@ -78,7 +77,6 @@ export function readyState({
   return sandboxState({ phase: "ready", snapshot: position, pendingCommand: null }, options);
 }
 
-/** Every controller command as an inert, typed mock; a component receives the slice it calls. */
 export function mockController() {
   return {
     checkReadiness: vi.fn<SandboxController["checkReadiness"]>().mockResolvedValue(),
@@ -94,12 +92,10 @@ export function mockController() {
   };
 }
 
-/** The path of a request the client made; it always hands fetch a URL instance. */
 export function requestPath(input: RequestInfo | URL): string {
   return new URL(typeof input === "string" || input instanceof URL ? input : input.url).pathname;
 }
 
-/** The JSON body a request carried, or an empty string. */
 export function requestBody(init: RequestInit | undefined): string {
   return typeof init?.body === "string" ? init.body : "";
 }

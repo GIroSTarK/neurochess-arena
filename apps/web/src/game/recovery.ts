@@ -93,7 +93,6 @@ export class RecoveryController {
     }
   }
 
-  /** Adopts a recovered snapshot and pauses it if it is still active. */
   async pauseRecovered(operation: Operation, initial: GameSnapshot): Promise<void> {
     const { api, store, gate, navigation, session } = this.context;
     session.beginRecovery();

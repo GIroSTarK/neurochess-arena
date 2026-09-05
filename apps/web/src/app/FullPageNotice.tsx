@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import { DocumentMetadata } from "./DocumentMetadata";
 
-/** A centered page-level notice for the states in which the arena itself cannot render. */
 export function FullPageNotice({
   title,
   description,

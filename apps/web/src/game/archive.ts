@@ -83,7 +83,6 @@ export class ArchiveController {
     }
   }
 
-  /** Moves the replay cursor; the accepted snapshot is never modified. */
   selectPly(ply: number): void {
     const { store } = this.context;
     const state = store.get();

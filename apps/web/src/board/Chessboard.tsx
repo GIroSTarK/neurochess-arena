@@ -19,7 +19,6 @@ interface ChessboardProps {
   /** Selection and promotion are discarded when this changes. */
   readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
-  /** Id of the element holding the keyboard instructions. */
   readonly describedBy?: string | undefined;
   /** A position to present instead of the accepted snapshot; it disables moves. */
   readonly view?: BoardView | undefined;

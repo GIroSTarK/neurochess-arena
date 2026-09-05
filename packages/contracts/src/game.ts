@@ -57,7 +57,7 @@ export const gameLifecycleSchema = z.union([
   abortedLifecycleSchema,
 ]);
 
-/** Phase 1 core: the server supplies context; clients cannot choose a position or privileges. */
+/** The server supplies context; clients cannot choose a position or privileges. */
 export const createGameRequestSchema = z.strictObject({});
 export const guestSessionRequestSchema = z.strictObject({});
 export const guestSessionResponseSchema = z.strictObject({ status: z.literal("ready") });

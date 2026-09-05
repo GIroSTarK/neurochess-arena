@@ -139,7 +139,6 @@ export class SandboxController {
     if (!operation) return;
     this.store.transition({ phase: "starting", snapshot, pendingCommand: null }, { notice: null });
     try {
-      // The cookie must exist before creation. No mount effect bootstraps guests.
       await this.api.bootstrap(operation.abort.signal);
       if (!this.gate.isCurrent(operation)) return;
       const created = await this.api.create(operation.abort.signal);

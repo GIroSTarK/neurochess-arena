@@ -8,14 +8,12 @@ import type { SandboxPhase, SandboxState } from "../state";
 type StartLabel =
   "actions.start" | "actions.starting" | "actions.retryStart" | "actions.restartSession";
 
-/** Phases whose label explains a retry or a fresh session; every other phase offers Start. */
 const phaseLabels: Partial<Record<SandboxPhase, StartLabel>> = {
   starting: "actions.starting",
   unavailable: "actions.retryStart",
   "access-error": "actions.restartSession",
 };
 
-/** The only action that bootstraps a guest. */
 export function StartButton({
   state,
   controller,

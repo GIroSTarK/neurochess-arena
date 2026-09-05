@@ -92,14 +92,14 @@
   span {
     overflow-wrap: anywhere;
   }
-  /* The 2px focus ring with a 3px offset. Board squares replace it with a dual keyline. */
+  /* Board squares replace this ring with a dual keyline for contrast on both colors. */
   :where(a, button, summary, input, select, textarea, [tabindex="0"]):focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 3px;
   }
 }
 
-/* Signature chamfered arena frame. Only the decorative layer is clipped; controls and focus rings stay outside it. */
+/* Clip decoration only; controls and focus rings must stay visible. */
 @utility chamfer-frame {
   position: relative;
   &::before {
@@ -128,7 +128,6 @@
   }
 }
 
-/* Faded checkerboard behind the sandbox entry card. */
 @utility checkered-backdrop {
   background:
     linear-gradient(135deg, var(--color-canvas), transparent),

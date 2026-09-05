@@ -12,7 +12,6 @@ import { isTerminal, isUnfinished, type SandboxState } from "../state";
 
 import { LifecycleControls } from "./LifecycleControls";
 
-/** Every activity message renders, hidden, so the feedback slot reserves the tallest one. */
 const activityKeys = [
   "actions.starting",
   "game.submitting",
@@ -23,7 +22,6 @@ const activityKeys = [
 
 type ActivityKey = (typeof activityKeys)[number];
 
-/** The message for a busy phase; a lifecycle command reports its own submission. */
 function activityKey({ phase, pendingCommand }: SandboxState): ActivityKey | undefined {
   switch (phase) {
     case "starting":
@@ -39,11 +37,10 @@ function activityKey({ phase, pendingCommand }: SandboxState): ActivityKey | und
   }
 }
 
-// Routine notices replace the paused hint in the same reserved feedback slot.
-// Errors and their recovery actions can grow naturally; never clip their details.
+// Routine notices share reserved space; errors may expand for readability.
 const routineNotices = ["existing", "recovered", "synchronized"] as const;
 
-// Lifecycle always pairs the label with a shape: a dot, or a square while paused.
+// Labels and shapes keep lifecycle distinguishable without color.
 const lifecycleMarks: Record<GameState, string> = {
   configuring: "before:rounded-full before:bg-current",
   active: "before:rounded-full before:bg-accent",
@@ -52,12 +49,11 @@ const lifecycleMarks: Record<GameState, string> = {
   aborted: "before:rounded-full before:bg-current",
 };
 
-// Every feedback variant shares one grid cell so only the exposed one affects layout.
+// Hidden variants stay in the shared grid cell to reserve the tallest localized content.
 const feedbackSlotClassName = "min-w-0 self-start [grid-area:1/1] aria-hidden:invisible";
 
 const noticeClassName = "border-l-2 border-warning pl-3 text-text";
 
-/** The commands this panel and its lifecycle controls issue. */
 type StatusController = Pick<
   SandboxController,
   "checkReadiness" | "lifecycle" | "recover" | "retryCommand" | "start" | "synchronize"

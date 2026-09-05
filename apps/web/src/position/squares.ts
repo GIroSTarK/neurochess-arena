@@ -4,13 +4,11 @@ import type { Piece, Position, Square } from "./position";
 
 export type SquareTarget = "move" | "capture" | "en-passant";
 
-/** Everything a board cell presents, derived without the DOM. */
 export interface SquareState {
   readonly square: Square;
   readonly piece: Piece | undefined;
   readonly dark: boolean;
   readonly selected: boolean;
-  /** How the square would complete the selected piece's move, if it can. */
   readonly target: SquareTarget | null;
   readonly lastMove: boolean;
   /** The king on this square is in check. */

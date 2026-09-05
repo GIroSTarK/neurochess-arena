@@ -60,7 +60,6 @@ const inks = {
 } as const;
 
 export interface PieceIconProps extends Piece {
-  /** Sizing utilities; defaults to 76% of the containing square. */
   readonly className?: string;
 }
 

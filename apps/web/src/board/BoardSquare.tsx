@@ -42,7 +42,6 @@ const targetClassName = {
     "pointer-events-none absolute inset-[9%] rounded-full border-[3px] border-board-ink-dark shadow-[0_0_0_2px_var(--color-board-ink-light)]",
 } as const;
 
-/** One grid cell: the square button with its coordinate labels and marks. */
 export function BoardSquare({
   state,
   label,

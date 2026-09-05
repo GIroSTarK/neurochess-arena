@@ -22,7 +22,6 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
     projects: [
       {
-        // The web app runs in a browser-like environment with its own setup file.
         extends: true,
         test: {
           name: "web",

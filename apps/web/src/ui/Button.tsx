@@ -5,8 +5,6 @@ import { cancelHeldActivation } from "./keyboard";
 
 export type ButtonVariant = "primary" | "secondary" | "danger";
 
-// Hover and pressed states add an inset keyline or the neutral surface without
-// changing layout. Disabled controls keep a readable label and drop emphasis.
 const variants: Record<ButtonVariant, string> = {
   primary: cx(
     "border-accent bg-accent text-on-accent",
@@ -25,9 +23,8 @@ export interface ButtonProps extends ComponentProps<"button"> {
 }
 
 /**
- * Shared control. Mark an unavailable action with `aria-disabled` rather than `disabled`: it
- * keeps its place in the tab order and its focus, and rejects activation instead of blurring a
- * keyboard user. A held Enter or Space activates once.
+ * Use `aria-disabled` to preserve focus and tab order; this control guards activation.
+ * A held Enter or Space activates once per press.
  */
 export function Button({
   variant,

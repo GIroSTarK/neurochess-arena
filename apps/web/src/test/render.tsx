@@ -10,7 +10,6 @@ export interface LocalizedRenderOptions extends Omit<RenderOptions, "wrapper"> {
   readonly i18n?: I18nInstance;
 }
 
-/** Renders under the localization provider, the way main.tsx mounts the app. */
 export function renderLocalized(
   ui: ReactElement,
   { i18n = createWebI18n(), ...options }: LocalizedRenderOptions = {},

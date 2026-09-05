@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 
-/** The board's keyboard instructions, referenced by the grid through the given id. */
 export function BoardKeyboardHelp({ id }: { readonly id: string }) {
   const { t } = useTranslation();
   return (
