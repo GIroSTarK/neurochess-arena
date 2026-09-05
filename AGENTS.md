@@ -28,6 +28,18 @@ When code and documentation disagree, determine the intended behavior before edi
 - Use runtime validation at every HTTP, WebSocket, provider, and environment boundary.
 - Keep shared transport contracts in `packages/contracts`; do not import API implementation code into the web app.
 
+## Code comments
+
+Write comments only when they add information that is not obvious from the code itself. Comments should primarily explain:
+
+- **Why** a particular decision or approach was chosen.
+- Important constraints, assumptions, trade-offs, or edge cases.
+- Non-obvious contracts, invariants, or behavior that callers/maintainers must understand.
+
+Do not comment code that is already self-explanatory. Prefer clear naming and code structure over explanatory comments.
+
+Do not add JSDoc to every function, method, hook, or component by default. Add JSDoc only when it provides meaningful information that cannot be expressed clearly through types, naming, or the implementation itself.
+
 ## Non-negotiable domain rules
 
 - A deterministic chess rules engine is the sole authority for position state, legal moves, and game results.
