@@ -139,7 +139,6 @@ export function GameStatus({
               aria-hidden="true"
             />
             <div className="grid">
-              {/* Reserve the tallest localized message without fixing the card's height. */}
               {activityKeys.map((key) => (
                 <p
                   key={key}

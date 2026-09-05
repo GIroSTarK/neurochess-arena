@@ -11,20 +11,16 @@ export interface SquareState {
   readonly selected: boolean;
   readonly target: SquareTarget | null;
   readonly lastMove: boolean;
-  /** The king on this square is in check. */
-  readonly check: boolean;
+  readonly kingInCheck: boolean;
 }
 
 export interface BoardMarks {
   readonly position: Position;
-  /** The square of the selected piece, if any. */
   readonly source: Square | null;
-  /** Destinations of the selected piece's legal moves. */
   readonly targets: ReadonlySet<Square>;
   /** The last accepted move in UCI, if any. */
   readonly lastMove: string | undefined;
-  /** The color whose king is in check, if any. */
-  readonly checked: ChessColor | null;
+  readonly checkedColor: ChessColor | null;
 }
 
 export function isDarkSquare(square: Square): boolean {
@@ -32,7 +28,7 @@ export function isDarkSquare(square: Square): boolean {
 }
 
 export function squareState(marks: BoardMarks, square: Square): SquareState {
-  const { position, source, targets, lastMove, checked } = marks;
+  const { position, source, targets, lastMove, checkedColor } = marks;
   const piece = position.pieces.get(square);
   const sourcePiece = source === null ? undefined : position.pieces.get(source);
   const isTarget = targets.has(square);
@@ -52,6 +48,6 @@ export function squareState(marks: BoardMarks, square: Square): SquareState {
     target: !isTarget ? null : enPassant ? "en-passant" : piece ? "capture" : "move",
     lastMove:
       lastMove !== undefined && (lastMove.startsWith(square) || lastMove.slice(2, 4) === square),
-    check: piece?.kind === "k" && piece.color === checked,
+    kingInCheck: piece?.kind === "k" && piece.color === checkedColor,
   };
 }

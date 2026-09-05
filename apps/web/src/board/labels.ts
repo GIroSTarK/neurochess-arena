@@ -18,7 +18,7 @@ export function squareLabel(state: SquareState, t: TFunction): string {
           ? t("board.legalTarget")
           : "",
     state.lastMove ? t("board.lastMove") : "",
-    state.check ? t("board.inCheck") : "",
+    state.kingInCheck ? t("board.inCheck") : "",
   ]
     .filter(Boolean)
     .join(" ");

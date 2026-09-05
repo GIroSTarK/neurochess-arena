@@ -148,7 +148,7 @@ export function interactionEpoch({
 
 type Equality<T> = (a: T, b: T) => boolean;
 
-/** These lists never contain undefined. */
+// The undefined guard only narrows the index access; neither list ever holds undefined.
 function sameList<T>(a: readonly T[], b: readonly T[], same: Equality<T>): boolean {
   return (
     a.length === b.length &&

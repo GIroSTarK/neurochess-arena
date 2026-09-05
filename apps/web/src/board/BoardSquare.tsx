@@ -68,7 +68,7 @@ export function BoardSquare({
         ref={ref}
         data-square={square}
         data-selected={state.selected || undefined}
-        data-check={state.check || undefined}
+        data-check={state.kingInCheck || undefined}
         data-last-move={state.lastMove || undefined}
         data-target={target === null ? undefined : target === "move" ? "move" : "capture"}
         aria-label={label}
@@ -100,7 +100,7 @@ export function BoardSquare({
             aria-hidden="true"
           />
         ) : null}
-        {state.check ? (
+        {state.kingInCheck ? (
           <span
             className="absolute top-[4%] right-[4%] grid aspect-square w-[27%] place-items-center rounded-full border border-board-ink-dark bg-danger font-ui text-[clamp(0.625rem,1.4vw,1.125rem)] leading-none font-bold text-board-ink-dark shadow-[0_0_0_1px_var(--color-board-ink-light)]"
             aria-hidden="true"

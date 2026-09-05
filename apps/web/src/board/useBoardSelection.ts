@@ -24,8 +24,7 @@ export interface BoardSelection {
   readonly activate: (square: Square) => void;
   readonly clear: () => void;
   readonly cancelPromotion: () => void;
-  /** Submits the chosen promotion move. */
-  readonly choose: (move: string) => void;
+  readonly choosePromotion: (move: string) => void;
 }
 
 export interface BoardSelectionOptions {
@@ -73,7 +72,7 @@ export function useBoardSelection({
     cancelPromotion() {
       if (selected) setSelection({ ...selected, promotion: null });
     },
-    choose(move) {
+    choosePromotion(move) {
       if (selected) setSelection({ ...selected, promotion: null });
       onMove(move);
     },

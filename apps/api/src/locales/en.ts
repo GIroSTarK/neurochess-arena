@@ -1,6 +1,5 @@
 import type { GameErrorCode } from "@neurochess/contracts";
 
-// English is the initial API locale. Keep display text out of contracts and domain code.
 export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   INVALID_REQUEST: "The request could not be accepted.",
   INVALID_UCI: "The move notation is invalid.",

@@ -15,7 +15,7 @@ function marks(game: GameSnapshot, source: Square | null = null): BoardMarks {
     source,
     targets: new Set(moves.map((move) => move.slice(2, 4)).filter(isSquare)),
     lastMove: game.moves.at(-1)?.uci,
-    checked: game.inCheck ? game.turn : null,
+    checkedColor: game.inCheck ? game.turn : null,
   };
 }
 
@@ -46,8 +46,8 @@ describe("square state", () => {
     const board = marks(snapshot(FOOLS_MATE));
     expect(squareState(board, "d8").lastMove).toBe(true);
     expect(squareState(board, "h4").lastMove).toBe(true);
-    expect(squareState(board, "e1")).toMatchObject({ lastMove: false, check: true });
-    expect(squareState(board, "e8").check).toBe(false);
+    expect(squareState(board, "e1")).toMatchObject({ lastMove: false, kingInCheck: true });
+    expect(squareState(board, "e8").kingInCheck).toBe(false);
   });
 
   it("marks nothing on a fresh board without a selection", () => {
@@ -57,7 +57,7 @@ describe("square state", () => {
         selected: false,
         target: null,
         lastMove: false,
-        check: false,
+        kingInCheck: false,
       });
     }
   });

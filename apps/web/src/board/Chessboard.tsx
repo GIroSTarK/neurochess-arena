@@ -16,7 +16,6 @@ interface ChessboardProps {
   readonly snapshot: GameSnapshot;
   readonly orientation: ChessColor;
   readonly canMove: boolean;
-  /** Selection and promotion are discarded when this changes. */
   readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
   readonly describedBy?: string | undefined;
@@ -115,7 +114,7 @@ export function Chessboard({
     source: selection.source,
     targets: selection.targets,
     lastMove: view ? view.lastMove : snapshot.moves.at(-1)?.uci,
-    checked: inCheck ? (view?.turn ?? snapshot.turn) : null,
+    checkedColor: inCheck ? (view?.turn ?? snapshot.turn) : null,
   };
   const { promotion } = selection;
 
@@ -175,7 +174,7 @@ export function Chessboard({
             return move ? [{ kind, move }] : [];
           })}
           onCancel={selection.cancelPromotion}
-          onChoose={selection.choose}
+          onChoose={selection.choosePromotion}
         />
       ) : null}
     </>

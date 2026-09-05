@@ -48,7 +48,6 @@ export class GameSession {
     if (phase !== "ready" || snapshot.state !== "active" || !snapshot.legalMoves.includes(move)) {
       return;
     }
-    // Acquired synchronously, before generating a command or notifying React.
     const operation = this.context.gate.begin();
     if (!operation) return;
     const command: MoveCommand = {
@@ -74,7 +73,6 @@ export class GameSession {
     await this.sendCommand(operation, command);
   }
 
-  /** Resends the retained uncertain command unchanged. */
   async retryCommand(): Promise<void> {
     const { phase, pendingCommand } = this.context.store.get();
     if (phase !== "uncertain") return;
