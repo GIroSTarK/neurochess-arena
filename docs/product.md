@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-05
 
 ## Vision
 
@@ -127,6 +127,7 @@ Each model receives the same relevant chess context:
 - current FEN;
 - complete PGN up to the current move;
 - the model's color;
+- the current side to move;
 - the legal move list;
 - the standard Neurochess Arena response instruction.
 

@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0 and 1 completed
+**Status:** Phases 0 and 1 completed; Phase 2 in progress
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-05
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -49,16 +49,16 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 
 Deliverables:
 
-- mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
-- common provider adapter and runtime-validated move contract;
-- OpenAI, Anthropic, Google, and OpenRouter adapters;
-- live model discovery and capability-aware parameters;
-- session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
-- independent White and Black configuration;
-- AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
-- AI-versus-human mode with color choice;
-- invalid-output retries, technical loss, provider-error pause, and manual retry;
-- latency and token telemetry.
+- [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
+- [ ] mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
+- [ ] OpenAI, Anthropic, Google, and OpenRouter adapters;
+- [ ] live model discovery and capability-aware parameter controls;
+- [ ] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
+- [ ] independent White and Black configuration;
+- [ ] AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
+- [ ] AI-versus-human mode with color choice;
+- [ ] invalid-output retries, technical loss, provider-error pause, and manual retry;
+- [ ] latency and token telemetry collection and display.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
 

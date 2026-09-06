@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-05
 
 ## Architectural drivers
 
@@ -208,26 +208,27 @@ Apply the [guest identity and ownership rules](#authentication-and-guest-session
 
 ## AI provider boundary
 
-Each provider adapter implements equivalent operations conceptually:
+The [shared AI schemas](../packages/contracts/src/ai.ts) define strict runtime contracts independently of server implementation. Each [server-side adapter](../apps/api/src/providers/adapter.ts) implements:
 
 ```ts
 interface AiProviderAdapter {
-  listModels(input: ListModelsInput): Promise<ModelDescriptor[]>;
+  readonly descriptor: ProviderDescriptor;
+  listModels(input: ListModelsInput): Promise<ModelDiscoveryResult>;
   requestMove(input: MoveRequest): Promise<NormalizedMoveResponse>;
 }
 ```
 
-`ModelDescriptor` includes capability metadata used to build a capability-aware configuration UI. The server filters unsupported parameters rather than sending speculative fields to a provider.
+`ProviderDescriptor` identifies one of the four MVP providers. `ModelDescriptor` carries the provider, dynamic model ID, display name, and `supportedParameters`. An absent parameter capability means unsupported. Temperature and maximum output tokens declare inclusive minimum/maximum values; reasoning effort declares a bounded set of supported values. These describe discovered capabilities, not a hardcoded model matrix.
 
-The normalized move response contains:
+`AiConfiguration` contains only provider, model ID, and parameters; credentials are separate request-scoped server inputs. `resolveAiConfiguration` filters unsupported known parameters, preserves explicit zero, and rejects mismatched model identities or supported values outside the declared limits. Callers must reject invalid configuration before invoking a provider.
 
-- required UCI move;
-- optional viewer commentary;
-- provider request identifier when safe to retain;
-- latency;
-- normalized token usage when available;
-- raw provider usage fields in bounded, non-secret metadata;
-- retry and error classification.
+`buildModelContext` accepts the authoritative chess aggregate after caller authorization, for an active game whose turn matches the model's color. It explicitly projects FEN, complete identity/commentary-free PGN, color, side to move, and the engine's entire legal UCI list. Restored games use the existing full-history restoration path. The builder never accepts provider identities, opponent commentary, analysis, or a client-selected position. Every adapter uses the same `MODEL_RESPONSE_INSTRUCTION`; custom prompts are not configurable.
+
+Discovery and move operations return an `ok`-discriminated success or failure. A successful move value contains canonical UCI and optional viewer commentary (at most 2,000 characters, with empty or missing commentary accepted). `normalizeMoveResponse` validates extracted JSON or structured output and exact membership in the supplied legal set. Syntax validation is not chess authority: the command service must still recheck authorization, version, lifecycle, turn, and legality before applying a returned move.
+
+Both successful and failed move attempts carry latency in milliseconds and normalized token usage. Usage is `null` when unavailable; input, output, and total counts are individually nullable when partially reported. Reported counts are nonnegative safe integers; missing counts are never inferred or replaced with zero. A provider response identifier may be included only when the adapter verifies it is safe to retain. Raw provider usage needs explicit non-secret normalization before entering shared telemetry; no arbitrary raw payload or metadata field is accepted.
+
+Errors expose only the [classification below](#error-taxonomy), with `malformed_output` or `illegal_move` reasons for `model_invalid`. They cannot carry messages, exceptions, request objects, credentials, or raw model output. Localization and retry policy belong to consumers. An adapter executes one attempt and never mutates a game or retries internally. The [scripted mock](development.md#provider-contract-tests) follows this same boundary for automated tests.
 
 Model lists come from the selected provider through the API and may be cached briefly. A model being listed does not guarantee it supports the required chess response contract; adapters must surface capability or runtime errors clearly.
 
