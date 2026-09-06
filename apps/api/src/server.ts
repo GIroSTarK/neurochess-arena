@@ -6,6 +6,7 @@ import { createGameService } from "./games/service.js";
 import { createGuestService } from "./guests/service.js";
 import { loadRootEnvironment } from "./load-root-environment.js";
 import { createLoggerOptions } from "./logger.js";
+import { createOpenAiProvider } from "./providers/openai.js";
 
 async function main(): Promise<void> {
   loadRootEnvironment();
@@ -20,6 +21,7 @@ async function main(): Promise<void> {
       games: createGameService(repository, {
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
+        ai: { providers: [{ adapter: createOpenAiProvider() }] },
       }),
       guests: createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS),
     },

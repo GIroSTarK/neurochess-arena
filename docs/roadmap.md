@@ -54,7 +54,8 @@ Deliverables:
 - [x] guest AI creation/discovery and one authoritative AI turn through the existing command service, with mocked PostgreSQL integration tests for both modes, duplicate execution prevention, lifecycle invalidation, and atomic commit;
 - [x] AI retry accounting across manual retries and interruptions, technical losses, provider-error pause, and API pause/resume/stop/paused stepping with mocked completion-race tests;
 - [x] guest-protected backend model discovery through the provider registry, bounded credential-free capability catalogs, server-side parameter filtering, and request-only AI-turn keys with mocked isolation, redaction, cancellation, and persistence tests;
-- [ ] OpenAI, Anthropic, Google, and OpenRouter adapters;
+- [x] OpenAI live model discovery and Responses move adapter with conservative capability metadata, normalized output/errors/telemetry, mocked shared contract and API integration tests;
+- [ ] Anthropic, Google, and OpenRouter adapters;
 - [ ] live model discovery and capability-aware parameter controls;
 - [ ] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
 - [ ] independent White and Black configuration;

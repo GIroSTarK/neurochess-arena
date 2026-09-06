@@ -10,6 +10,7 @@ import {
 } from "@neurochess/contracts";
 import { describe, expect, it } from "vitest";
 
+import { providerContractTests } from "../../test/provider-contract.js";
 import { GameRequestError } from "../games/errors.js";
 
 import type { AiProviderAdapter } from "./adapter.js";
@@ -56,6 +57,18 @@ function mock(moves: readonly MockMoveStep[], provider: ProviderId = "openai") {
     descriptor: { id: provider, name: "Fixture provider" },
     models: [{ ...model, provider }],
     moves,
+  });
+}
+
+for (const provider of providerIdSchema.options) {
+  providerContractTests({
+    name: `Scripted ${provider}`,
+    provider,
+    modelId: model.id,
+    create(steps) {
+      const adapter = mock(steps, provider);
+      return { adapter, attempts: () => adapter.requests.length };
+    },
   });
 }
 
