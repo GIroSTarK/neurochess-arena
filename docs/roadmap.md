@@ -51,7 +51,7 @@ Deliverables:
 
 - [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
 - [x] AI game modes, independent seat configuration, normalized invocation attempts, and durable leased turn reservations with PostgreSQL migration, rollback, constraint, and concurrency tests;
-- [ ] mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
+- [x] guest AI creation/discovery and one authoritative AI turn through the existing command service, with mocked PostgreSQL integration tests for both modes, duplicate execution prevention, lifecycle invalidation, and atomic commit;
 - [ ] OpenAI, Anthropic, Google, and OpenRouter adapters;
 - [ ] live model discovery and capability-aware parameter controls;
 - [ ] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;

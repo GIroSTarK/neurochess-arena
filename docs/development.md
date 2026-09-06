@@ -103,7 +103,7 @@ npm exec vitest -- run packages/contracts/src/ai.test.ts apps/api/src/providers
 
 Use `createScriptedMockProvider` from `apps/api/src/providers/mock.ts` in server tests. Supply a provider descriptor, fixture model descriptors, and ordered move steps containing either `output` (structured data or JSON text, including malformed fixtures) or a classified provider `error`. Optional telemetry supplies deterministic latency and reported usage; omitted telemetry means simulated zero latency and unavailable usage. `discoveryError` scripts a model-list failure. The mock consumes one step per valid request and throws `MOCK_SCRIPT_EXHAUSTED` when the script runs out, so unintended extra attempts fail tests.
 
-Request captures contain defensive copies of effective configuration, canonical context, and the common response instruction; they omit API keys and abort signals. Use placeholder credentials only. The mock does not perform retries or game commands and is not registered with any HTTP route or production provider registry. See the [provider boundary](architecture.md#ai-provider-boundary) for validation, failure classification, and caller responsibilities.
+Request captures contain defensive copies of effective configuration, canonical context, and the common response instruction; they omit API keys and abort signals. Use placeholder credentials only. The mock does not perform retries or game commands. Integration tests inject it into the real [guest AI service](#guest-ai-game-api); the normal server registers no mock or real provider. See the [provider boundary](architecture.md#ai-provider-boundary) for validation, failure classification, and caller responsibilities.
 
 ## Sandbox UI
 
@@ -162,6 +162,48 @@ Use a new command UUID for each move or lifecycle action and reuse the identical
 
 Requests cannot select FEN, history, owner, seat, public mode, or sandbox authority; unknown body/query fields are rejected. Missing or expired sessions receive `401`; inaccessible games receive `404` without snapshots. Replay and export reject unfinished games with `409 INVALID_GAME_STATE`. Completed and aborted records remain private and readable until guest access expires. Pausing occurs only through an authorized POST, never as a side effect of a read.
 
+## Guest AI game API
+
+These routes reuse [guest bootstrap, cookies, Origin checks, private reads, and command semantics](#sandbox-api), without requiring sandbox enablement:
+
+| Endpoint                      | Request                                  | Success                                                |
+| ----------------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| `POST /ai/games`              | AI configuration described below         | `201` standard-position active snapshot, version 0     |
+| `GET /ai/games/unfinished`    | No query fields                          | `200 { snapshot }`, owned unfinished AI game or `null` |
+| `POST /games/:gameId/ai-turn` | `{ gameId, expectedVersion, commandId }` | `200` authoritative snapshot after one AI turn         |
+
+Creation accepts exactly one of:
+
+```json
+{
+  "mode": "ai_vs_ai",
+  "white": { "provider": "openai", "modelId": "fixture-model", "parameters": { "temperature": 0 } },
+  "black": { "provider": "openai", "modelId": "fixture-model", "parameters": { "temperature": 1 } }
+}
+```
+
+```json
+{
+  "mode": "ai_vs_human",
+  "humanColor": "black",
+  "ai": { "provider": "openai", "modelId": "fixture-model", "parameters": {} }
+}
+```
+
+`fixture-model` is a test fixture, not a production model. `createGameService` accepts an optional `ai` composition containing adapters and trusted model descriptors. Tests supply `createScriptedMockProvider` and fixture descriptors; creation resolves supported parameters before persistence. The normal server supplies no adapters, so creation or a fresh AI turn requiring an unavailable adapter returns `404 NOT_FOUND`. Production adapters, live discovery, request-scoped key transport, and AI browser flows are separate roadmap work. These requests reject credentials, capabilities, FEN, prompts, seat/owner identities, execution IDs, and lease settings supplied by clients.
+
+Both AI modes and the sandbox share the single active/paused slot. AI-versus-human assigns only the chosen human seat to the guest; ownership cannot move or resign an AI seat. Existing snapshot, lifecycle, terminal replay, and PGN routes retain their private authorization. AI discovery excludes sandbox/human-room games and never changes lifecycle, allocates a guest, or calls an adapter. Recovery requires the ordinary authorized pause command, then explicit resume.
+
+The server derives the current AI seat and full chess context from verified history. It reserves the command and records a pending invocation in a short transaction before calling the adapter outside that transaction. A live request renews its server-controlled lease. Finalization rechecks access, position, execution ownership, and lease; it validates the move through the deterministic aggregate and atomically records the outcome, move, shared receipt, and new revision. One request executes one turn, including at most two model-invalid retries; it never starts the next side's turn. A third invalid response commits a technical loss. A classified provider failure commits a pause without an automatic retry. Invocation telemetry remains internal; the response uses the existing snapshot schema.
+
+Duplicate IDs, competing requests, stale revisions, expired reservations, and late results return `409 GAME_CONFLICT` with an authorized current snapshot. A same-version conflict does not prove the original request finished. No duplicate may repeat the adapter call. Pause, abort, or human resignation can invalidate a pending turn without waiting for the adapter. An HTTP disconnect stops lease renewal and signals cancellation; an uncertain reservation requires explicit pause/resume and a new command, never automatic takeover. Unexpected adapter failures return a fixed safe `500` and require the same recovery; no raw provider object is logged or returned.
+
+Focused verification uses the actual service and disposable PostgreSQL database with mocks only:
+
+```text
+npm exec vitest -- run --config vitest.integration.config.ts apps/api/test/ai-games.integration.test.ts
+```
+
 ## PostgreSQL integration tests
 
 Add `TEST_DATABASE_URL` from `.env.example` if updating an existing `.env`, then run:
@@ -207,7 +249,7 @@ Migration `0002_game_command_receipts.sql` creates the shared accepted-command r
 
 Migration `0003_ai_turn_persistence.sql` adds game modes, independent AI seat configuration, normalized invocation attempts, and leased turn reservations. Existing human sandbox records retain their identity, authority, history, receipts, and unfinished-game slot; their mode defaults to `human_vs_human`. Unconfigured legacy AI placeholder seats are rejected, not assigned a fabricated provider/model. The reviewed SQL creates composite unique indexes before their referencing foreign keys. Stop old writers while migrating and restart with the reservation-aware repository. Run `npm run db:check` and `npm run test:integration` to verify metadata, populated-schema upgrades, migration/write rollback, constraints, and concurrent ownership/recovery across independent pools.
 
-The internal AI persistence operations and caller responsibilities are defined in [ADR-0009](decisions/0009-ai-turn-persistence.md). They run inside the existing game transaction interface; provider calls must run outside it. They add no HTTP routes or browser flow. Use only normalized mock outcomes in automated persistence tests, and never pass credentials or raw provider objects into repository calls.
+The internal AI persistence operations and caller responsibilities are defined in [ADR-0009](decisions/0009-ai-turn-persistence.md). They run inside the existing game transaction interface; provider calls must run outside it. The [guest AI service](#guest-ai-game-api) composes these operations without another schema migration. Use only normalized mock outcomes in automated persistence tests, and never pass credentials or raw provider objects into repository calls.
 
 ## Logging and errors
 

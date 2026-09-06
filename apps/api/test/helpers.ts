@@ -13,6 +13,7 @@ import { expect } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
+import type { AiGameOptions } from "../src/games/ai-service.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 
@@ -43,6 +44,7 @@ export class ApiHarness {
       ttlSeconds?: number;
       repository?: (repository: GameRepository) => GameRepository;
       logger?: BuildAppOptions["logger"];
+      ai?: AiGameOptions;
     } = {},
   ): Promise<TestApi> {
     const database = integrationDatabase();
@@ -56,6 +58,7 @@ export class ApiHarness {
         games: createGameService(repository, {
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,
+          ...(options.ai === undefined ? {} : { ai: options.ai }),
         }),
         guests: createGuestService(repository, options.ttlSeconds ?? 86_400),
       },

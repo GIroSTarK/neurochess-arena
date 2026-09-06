@@ -1,4 +1,10 @@
 export {
+  createAiGameRequestSchema,
+  aiTurnCommandSchema,
+  type CreateAiGameRequest,
+  type AiTurnCommand,
+} from "./ai-game.js";
+export {
   providerIdSchema,
   providerDescriptorSchema,
   modelIdSchema,

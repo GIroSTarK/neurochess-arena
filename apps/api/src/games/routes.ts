@@ -1,4 +1,6 @@
 import {
+  aiTurnCommandSchema,
+  createAiGameRequestSchema,
   createGameRequestSchema,
   emptyQuerySchema,
   type GameErrorCode,
@@ -107,6 +109,71 @@ export async function registerGameRoutes(
       const identity = await options.guests.bootstrap(request.cookies[GUEST_COOKIE_NAME]);
       setGuestCookie(reply, identity);
       return { status: "ready" as const };
+    },
+  );
+
+  routes.post(
+    "/ai/games",
+    {
+      schema: {
+        body: createAiGameRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 201: gameSnapshotSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const snapshot = await options.games.createAi(
+        await principalFor(request, reply),
+        request.body,
+      );
+      return reply.code(201).send(snapshot);
+    },
+  );
+
+  routes.get(
+    "/ai/games/unfinished",
+    {
+      schema: {
+        querystring: emptyQuerySchema,
+        response: { 200: unfinishedGameResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => options.games.unfinishedAi(await principalFor(request, reply)),
+  );
+
+  routes.post(
+    "/games/:gameId/ai-turn",
+    {
+      schema: {
+        params: gameParamsSchema,
+        body: aiTurnCommandSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameSnapshotSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      const controller = new AbortController();
+      const disconnect = () => {
+        controller.abort();
+      };
+      request.raw.once("aborted", disconnect);
+      reply.raw.once("close", disconnect);
+      try {
+        if ((!request.raw.complete && request.raw.destroyed) || reply.raw.destroyed) {
+          controller.abort();
+        }
+        return await options.games.aiTurn(
+          await principalFor(request, reply),
+          request.body,
+          controller.signal,
+        );
+      } finally {
+        request.raw.off("aborted", disconnect);
+        reply.raw.off("close", disconnect);
+      }
     },
   );
 
