@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
 
 ## Architectural drivers
 
@@ -103,6 +103,7 @@ Core tables are expected to include:
 | `moves`                | canonical move, position, commentary, timing, evaluation           |
 | `game_commands`        | accepted command identity, kind, and aggregate revision            |
 | `model_invocations`    | attempts, provider/model, parameters, usage, cost estimate, errors |
+| `turn_reservations`    | durable command/execution ownership, revision, lease, and outcome  |
 | `rooms`                | private invitation code, owner, membership, lifecycle              |
 | `guest_sessions`       | expiring identity and active-game recovery metadata                |
 
@@ -189,6 +190,10 @@ The browser requests one AI turn at a time. The API:
 8. returns the new state and normalized telemetry.
 
 The reservation must be idempotent so multiple clicks, retries, or network duplicates cannot cause multiple moves. If the controlling tab disconnects, automatic turn requests stop and the game becomes paused.
+
+The persistence contract is [ADR-0009](decisions/0009-ai-turn-persistence.md). Games store their mode; AI participants store independent effective configurations; each invocation copies its configuration and normalized telemetry without credentials. `GameRepository.write` provides reserve, renew, begin/record invocation, and atomic turn completion operations. Only a newly granted reservation may execute a provider call. The application must restore and validate the authoritative side and position before using these primitives; they do not perform chess adjudication or provider I/O.
+
+Reservations bind an owning guest, command UUID, server execution UUID, revision, and renewable lease. Accepted receipts and reserved IDs cannot be reused across command kinds. A lifecycle change invalidates in-flight reservations in its existing transaction. Expired ownership cannot be renewed or transferred: an explicit pause/resume recovery precedes a fresh command, and late results are rejected. Invocation records preserve attempted work even when its move was never accepted. Reads remain private, read-only, and separate from recovery.
 
 ### Human turns
 

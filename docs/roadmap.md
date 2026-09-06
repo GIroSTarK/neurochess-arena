@@ -2,7 +2,7 @@
 
 **Status:** Phases 0 and 1 completed; Phase 2 in progress
 
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -50,6 +50,7 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 Deliverables:
 
 - [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
+- [x] AI game modes, independent seat configuration, normalized invocation attempts, and durable leased turn reservations with PostgreSQL migration, rollback, constraint, and concurrency tests;
 - [ ] mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
 - [ ] OpenAI, Anthropic, Google, and OpenRouter adapters;
 - [ ] live model discovery and capability-aware parameter controls;

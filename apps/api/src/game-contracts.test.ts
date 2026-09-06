@@ -1,6 +1,12 @@
 import * as domain from "@neurochess/chess";
 import * as contracts from "@neurochess/contracts";
-import { gameParticipants, games, type StoredGame } from "@neurochess/database";
+import {
+  gameParticipants,
+  games,
+  modelInvocations,
+  type StoredGame,
+  type StoredInvocationResult,
+} from "@neurochess/database";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 // Compatibility belongs at a consumer, never in either independent leaf package.
@@ -21,6 +27,15 @@ function unwrap<T>(result: domain.DomainResult<T>): T {
 }
 
 describe("chess/transport compatibility", () => {
+  it("keeps the credential-free AI persistence result compatible with the normalized provider boundary", () => {
+    expectTypeOf<StoredInvocationResult>().toEqualTypeOf<contracts.NormalizedMoveResponse>();
+    expect(gameParticipants.provider.enumValues).toEqual(contracts.providerIdSchema.options);
+    expect(modelInvocations.provider.enumValues).toEqual(contracts.providerIdSchema.options);
+    expect(modelInvocations.errorKind.enumValues).toEqual([
+      "model_invalid",
+      ...contracts.providerErrorKindSchema.options,
+    ]);
+  });
   it("keeps independently owned literals and types aligned", () => {
     expect(domain.CHESS_COLORS).toEqual(contracts.chessColorSchema.options);
     expect(domain.GAME_STATES).toEqual(contracts.gameStateSchema.options);

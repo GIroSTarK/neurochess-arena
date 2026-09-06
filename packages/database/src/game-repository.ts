@@ -1,7 +1,22 @@
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
+import {
+  type AiReader,
+  aiReaderFor,
+  type AiTransaction,
+  aiTransactionFor,
+  assertUnreservedCommand,
+  invalidateAiReservations,
+} from "./ai-repository.js";
 import type { DatabaseConnection } from "./client.js";
-import { gameCommands, gameParticipants, games, guestSessions, moves } from "./schema/index.js";
+import {
+  gameCommands,
+  gameParticipants,
+  games,
+  guestSessions,
+  moves,
+  turnReservations,
+} from "./schema/index.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type StoredGame = typeof games.$inferSelect;
@@ -16,7 +31,7 @@ export type GamePositionUpdate = Pick<
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
 >;
 
-export interface GameReader {
+export interface GameReader extends AiReader {
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
@@ -24,7 +39,7 @@ export interface GameReader {
   findUnfinishedGame(guestId: string, sandboxOnly?: boolean): Promise<StoredGame | undefined>;
 }
 
-export interface GameTransaction extends GameReader {
+export interface GameTransaction extends GameReader, AiTransaction {
   lockGuest(id: string): Promise<StoredGuestSession | undefined>;
   lockGame(id: string): Promise<StoredGame | undefined>;
   hasCommand(gameId: string, commandId: string): Promise<boolean>;
@@ -49,6 +64,7 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    ...aiReaderFor(db),
     async getGuest(id) {
       const [guest] = await db
         .select()
@@ -125,6 +141,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            ...aiTransactionFor(tx),
             async lockGuest(id) {
               await tx
                 .select({ id: guestSessions.id })
@@ -143,9 +160,20 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                 .select({ commandId: gameCommands.commandId })
                 .from(gameCommands)
                 .where(and(eq(gameCommands.gameId, gameId), eq(gameCommands.commandId, commandId)));
-              return receipt !== undefined;
+              if (receipt) return true;
+              const [reserved] = await tx
+                .select({ id: turnReservations.id })
+                .from(turnReservations)
+                .where(
+                  and(
+                    eq(turnReservations.gameId, gameId),
+                    eq(turnReservations.commandId, commandId),
+                  ),
+                );
+              return reserved !== undefined;
             },
             async appendCommand(command) {
+              await assertUnreservedCommand(tx, command.gameId, command.commandId);
               await tx.insert(gameCommands).values(command);
             },
             async insertGame(game, participants) {
@@ -161,6 +189,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                 .set({ ...position, updatedAt: sql`clock_timestamp()` })
                 .where(and(eq(games.id, gameId), eq(games.version, expectedVersion)))
                 .returning({ id: games.id });
+              if (updated.length === 1) await invalidateAiReservations(tx, gameId);
               return updated.length === 1;
             },
           });
