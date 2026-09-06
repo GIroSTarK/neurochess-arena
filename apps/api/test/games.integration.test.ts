@@ -394,7 +394,7 @@ describe("private ownership and sandbox authority", () => {
     const initial = await createSandbox(api, guest);
     await api.database.db
       .update(gameParticipants)
-      .set({ seatType: "ai" })
+      .set({ seatType: "ai", provider: "openai", modelId: "test-model" })
       .where(and(eq(gameParticipants.gameId, initial.gameId), eq(gameParticipants.color, "black")));
     const current = await play(api, guest, initial, ["e2e4"]);
     expect((await submit(api, guest, command(current, "e7e5"))).statusCode).toBe(403);
