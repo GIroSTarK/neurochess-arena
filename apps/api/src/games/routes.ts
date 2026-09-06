@@ -1,5 +1,5 @@
 import {
-  aiTurnCommandSchema,
+  aiTurnRequestSchema,
   createAiGameRequestSchema,
   createGameRequestSchema,
   emptyQuerySchema,
@@ -12,7 +12,10 @@ import {
   guestSessionRequestSchema,
   guestSessionResponseSchema,
   lifecycleCommandSchema,
+  modelDiscoveryRequestSchema,
+  modelDiscoveryResultSchema,
   moveCommandSchema,
+  providerListResponseSchema,
   unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -113,6 +116,39 @@ export async function registerGameRoutes(
   );
 
   routes.post(
+    "/ai/models",
+    {
+      schema: {
+        body: modelDiscoveryRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: modelDiscoveryResultSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const { credential } = request.body;
+      try {
+        const principal = await principalFor(request, reply);
+        return await whileConnected(request, reply, (signal) =>
+          options.games.discoverModels(principal, credential, signal),
+        );
+      } finally {
+        credential.apiKey = "";
+      }
+    },
+  );
+
+  routes.get(
+    "/ai/providers",
+    {
+      schema: {
+        querystring: emptyQuerySchema,
+        response: { 200: providerListResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => options.games.listProviders(await principalFor(request, reply)),
+  );
+
+  routes.post(
     "/ai/games",
     {
       schema: {
@@ -146,33 +182,23 @@ export async function registerGameRoutes(
     {
       schema: {
         params: gameParamsSchema,
-        body: aiTurnCommandSchema,
+        body: aiTurnRequestSchema,
         querystring: emptyQuerySchema,
         response: { 200: gameSnapshotSchema, ...errorResponses },
       },
     },
     async (request, reply) => {
-      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
-        throw new GameRequestError("INVALID_REQUEST");
-      }
-      const controller = new AbortController();
-      const disconnect = () => {
-        controller.abort();
-      };
-      request.raw.once("aborted", disconnect);
-      reply.raw.once("close", disconnect);
+      const { credential, ...command } = request.body;
       try {
-        if ((!request.raw.complete && request.raw.destroyed) || reply.raw.destroyed) {
-          controller.abort();
+        if (request.params.gameId.toLowerCase() !== command.gameId.toLowerCase()) {
+          throw new GameRequestError("INVALID_REQUEST");
         }
-        return await options.games.aiTurn(
-          await principalFor(request, reply),
-          request.body,
-          controller.signal,
+        const principal = await principalFor(request, reply);
+        return await whileConnected(request, reply, (signal) =>
+          options.games.aiTurn(principal, command, credential, signal),
         );
       } finally {
-        request.raw.off("aborted", disconnect);
-        reply.raw.off("close", disconnect);
+        credential.apiKey = "";
       }
     },
   );
@@ -287,6 +313,24 @@ export async function registerGameRoutes(
       return options.games.move(principal, request.body);
     },
   );
+}
+
+async function whileConnected<T>(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  execute: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const disconnect = () => controller.abort();
+  request.raw.once("aborted", disconnect);
+  reply.raw.once("close", disconnect);
+  try {
+    if ((!request.raw.complete && request.raw.destroyed) || reply.raw.destroyed) controller.abort();
+    return await execute(controller.signal);
+  } finally {
+    request.raw.off("aborted", disconnect);
+    reply.raw.off("close", disconnect);
+  }
 }
 
 function isClientError(error: unknown): boolean {

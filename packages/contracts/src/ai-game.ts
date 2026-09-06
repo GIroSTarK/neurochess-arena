@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { aiConfigurationSchema } from "./ai.js";
+import { aiConfigurationSchema, sessionCredentialSchema } from "./ai.js";
 import { chessColorSchema, commandIdSchema, gameIdSchema, gameVersionSchema } from "./game.js";
 
 export const createAiGameRequestSchema = z.discriminatedUnion("mode", [
@@ -23,5 +23,10 @@ export const aiTurnCommandSchema = z.strictObject({
   commandId: commandIdSchema,
 });
 
+export const aiTurnRequestSchema = aiTurnCommandSchema.extend({
+  credential: sessionCredentialSchema,
+});
+
 export type CreateAiGameRequest = z.infer<typeof createAiGameRequestSchema>;
 export type AiTurnCommand = z.infer<typeof aiTurnCommandSchema>;
+export type AiTurnRequest = z.infer<typeof aiTurnRequestSchema>;

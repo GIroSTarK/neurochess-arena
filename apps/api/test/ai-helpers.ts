@@ -7,6 +7,7 @@ import {
   type GameSnapshot,
   gameSnapshotSchema,
   type ModelDescriptor,
+  type SessionCredential,
 } from "@neurochess/contracts";
 import { expect } from "vitest";
 
@@ -35,6 +36,7 @@ export const black: AiConfiguration = {
   parameters: { temperature: 1.5, maxOutputTokens: 100 },
 };
 export const creation = { mode: "ai_vs_ai", white, black } satisfies CreateAiGameRequest;
+export const credential: SessionCredential = { provider: "openai", apiKey: "test-only-turn-key" };
 
 export function mock(steps: readonly MockMoveStep[]) {
   return createScriptedMockProvider({
@@ -93,8 +95,13 @@ export function aiCommand(current: GameSnapshot): AiTurnCommand {
   return { gameId: current.gameId, expectedVersion: current.version, commandId: randomUUID() };
 }
 
-export function turn(api: TestApi, guest: TestGuest, request: AiTurnCommand) {
-  return post(api, guest, `/games/${request.gameId}/ai-turn`, request);
+export function turn(
+  api: TestApi,
+  guest: TestGuest,
+  request: AiTurnCommand,
+  key: SessionCredential = credential,
+) {
+  return post(api, guest, `/games/${request.gameId}/ai-turn`, { ...request, credential: key });
 }
 
 export function lifecycle(

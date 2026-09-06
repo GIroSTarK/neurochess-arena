@@ -241,7 +241,9 @@ Both successful and failed move attempts carry latency in milliseconds and norma
 
 Errors expose only the [classification below](#error-taxonomy), with `malformed_output` or `illegal_move` reasons for `model_invalid`. They cannot carry messages, exceptions, request objects, credentials, or raw model output. Localization and retry policy belong to consumers. An adapter executes one attempt and never mutates a game or retries internally. The [scripted mock](development.md#provider-contract-tests) follows this same boundary for automated tests.
 
-Model lists come from the selected provider through the API and may be cached briefly. A model being listed does not guarantee it supports the required chess response contract; adapters must surface capability or runtime errors clearly.
+The provider registry validates registered adapters and routes discovery and move calls. `GET /ai/providers` lists registered descriptors; `POST /ai/models` queries one provider using a separate session credential. Both require an existing guest; discovery also requires the exact Origin. Successful discovery validates the entire bounded model list, provider identity, unique model IDs, and capability ranges. Responses use only shared schemas; classified discovery errors contain only their kind and do not mutate a game. Unexpected exceptions, malformed results, and credential echoes fail with a fixed safe error before caching or persistence.
+
+Discovery calls are never memoized. Only validated model metadata is cached, separately for each internal guest ID and provider, for five minutes with at most 128 catalogs of 2,000 models each. A refresh removes the prior catalog before querying. Creation resolves effective parameters from that guest's catalog; an expired, evicted, or restarted catalog requires discovery again. Tests may inject trusted fixture descriptors. Existing games retain their immutable effective configuration and can execute with a re-entered key after a server restart. A listed model does not guarantee it satisfies the chess response contract; adapters must surface capability or runtime errors clearly.
 
 ## Error taxonomy
 
@@ -277,8 +279,9 @@ After refresh, an AI game is restored as paused and requires explicit resume. Se
 
 1. The browser accepts the key into in-memory state.
 2. It sends the key over HTTPS only to provider-related API operations that require it.
-3. The API uses it within that request and does not persist or log it.
-4. Refreshing or closing the tab removes it; a restored game remains paused until re-entry.
+3. Discovery and AI-turn requests carry exactly one `{ provider, apiKey }` credential. The API separates it from the credential-free command, verifies the turn's persisted provider before reservation, and passes it only to that request's provider attempts. Creation, lifecycle, snapshots, and replay accept no credential. No default, environment, previously submitted, or other-seat key is used.
+4. The API drops its credential references when the request completes or disconnects, including adapter input objects. A disconnected or cancelled operation cannot cache a late discovery result or persist a late move. Adapters must honor cancellation and never retain keys or raw request objects. Provider output is validated and rejected if it echoes the current key, including in otherwise permitted names, commentary, or response identifiers. No credentials enter logs, exceptions, response payloads, catalogs, or database inputs.
+5. Refreshing or closing the tab removes it; a restored game remains paused until re-entry.
 
 ### Saved credential
 

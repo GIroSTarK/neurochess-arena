@@ -98,12 +98,33 @@ Special-position fixtures live in `packages/chess/test`, outside the production 
 Run the shared AI schemas, canonical context, parameter resolution, and scripted provider checks without network access or provider credentials:
 
 ```text
-npm exec vitest -- run packages/contracts/src/ai.test.ts apps/api/src/providers
+npm exec vitest -- run packages/contracts/src/ai.test.ts packages/contracts/src/provider-transport.test.ts apps/api/src/providers
 ```
 
 Use `createScriptedMockProvider` from `apps/api/src/providers/mock.ts` in server tests. Supply a provider descriptor, fixture model descriptors, and ordered move steps containing either `output` (structured data or JSON text, including malformed fixtures) or a classified provider `error`. Optional telemetry supplies deterministic latency and reported usage; omitted telemetry means simulated zero latency and unavailable usage. `discoveryError` scripts a model-list failure. The mock consumes one step per valid request and throws `MOCK_SCRIPT_EXHAUSTED` when the script runs out, so unintended extra attempts fail tests.
 
-Request captures contain defensive copies of effective configuration, canonical context, and the common response instruction; they omit API keys and abort signals. Use placeholder credentials only. The mock does not perform retries or game commands. Integration tests inject it into the real [guest AI service](#guest-ai-game-api); the normal server registers no mock or real provider. See the [provider boundary](architecture.md#ai-provider-boundary) for validation, failure classification, and caller responsibilities.
+Request captures contain defensive copies of effective configuration, canonical context, and the common response instruction; they omit API keys and abort signals. Use placeholder credentials only. The mock does not perform retries or game commands. Integration tests inject it into the real [guest AI service](#guest-ai-game-api); the normal server registers no mock or real provider. The [provider registry](architecture.md#ai-provider-boundary) validates discovery and move results before response serialization, caching, or persistence.
+
+## Provider discovery and session credentials
+
+These endpoints use the same [guest bootstrap and Origin protections](#sandbox-api) as game commands and return `Cache-Control: no-store`:
+
+| Endpoint            | Request                                                                         | Success                                                                              |
+| ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /ai/providers` | No query fields                                                                 | `200 { providers: [{ id, name }] }`, registered providers only                       |
+| `POST /ai/models`   | `{ "credential": { "provider": "openai", "apiKey": "test-only-placeholder" } }` | `200 { ok: true, value: ModelDescriptor[] }` or `200 { ok: false, error: { kind } }` |
+
+The credential object is strict: one registered provider and a nonempty key of at most 4,096 printable ASCII characters, without whitespace. Keys are supplied only in JSON bodies, never URLs, headers, cookies, configuration, or saved references. Use HTTPS outside the documented localhost development setup. Missing/invalid credentials receive `400 INVALID_REQUEST`; missing/expired guests receive `401`; wrong/missing POST Origin receives `403`; an unregistered provider receives `404`. Provider authentication, quota, timeout, and unavailability errors retain their enumerated classification without raw messages. Malformed provider results, key echoes, and unexpected exceptions return fixed `500 INTERNAL_SERVER_ERROR` responses. Discovery never creates a game or invokes a move and is not automatically retried.
+
+Call discovery before creating a game. The [bounded guest-specific metadata cache](architecture.md#ai-provider-boundary) supplies authoritative capabilities for creation; clients cannot submit capability claims. Omitted capabilities mean unsupported. Unsupported known parameters are removed; invalid values of supported parameters and unknown fields are rejected. Rediscover after five minutes, cache eviction, a failed refresh, or API restart if creating another game. Existing games use their stored effective configuration. The normal server has an empty registry until real adapters are registered; tests inject adapters through `ai.providers`, with optional `models` reserved for trusted fixtures.
+
+AI-turn requests require the same separate `credential` field, with the current AI seat's provider. Resend the page-memory key with every new HTTP request, including manual retry or a paused step; re-entry is required after refresh or closing the page. The server uses that single key for automatic retries within the same request, never the other color's key. Missing or mismatched credentials cause no reservation or invocation. Duplicate commands with valid transport still return the authorized conflict without calling the provider. Creation, Pause, Resume, Stop, reads, and replay reject credential fields.
+
+The HTTP handler clears its credential field on completion; the registry clears adapter input fields on completion or cancellation, even when an adapter ignores abort. Keys never enter repository arguments, catalog keys/values, telemetry, logs, errors, or responses. Adapters must not keep their own copies. Automated tests use mocks only:
+
+```text
+npm exec vitest -- run --config vitest.integration.config.ts apps/api/test/provider-discovery.integration.test.ts
+```
 
 ## Sandbox UI
 
@@ -166,11 +187,11 @@ Requests cannot select FEN, history, owner, seat, public mode, or sandbox author
 
 These routes reuse [guest bootstrap, cookies, Origin checks, private reads, and command semantics](#sandbox-api), without requiring sandbox enablement:
 
-| Endpoint                      | Request                                  | Success                                                |
-| ----------------------------- | ---------------------------------------- | ------------------------------------------------------ |
-| `POST /ai/games`              | AI configuration described below         | `201` standard-position active snapshot, version 0     |
-| `GET /ai/games/unfinished`    | No query fields                          | `200 { snapshot }`, owned unfinished AI game or `null` |
-| `POST /games/:gameId/ai-turn` | `{ gameId, expectedVersion, commandId }` | `200` snapshot after one active turn or paused step    |
+| Endpoint                      | Request                                                                    | Success                                                |
+| ----------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `POST /ai/games`              | AI configuration described below                                           | `201` standard-position active snapshot, version 0     |
+| `GET /ai/games/unfinished`    | No query fields                                                            | `200 { snapshot }`, owned unfinished AI game or `null` |
+| `POST /games/:gameId/ai-turn` | `{ gameId, expectedVersion, commandId, credential: { provider, apiKey } }` | `200` snapshot after one active turn or paused step    |
 
 Creation accepts exactly one of:
 
@@ -190,9 +211,9 @@ Creation accepts exactly one of:
 }
 ```
 
-`fixture-model` is a test fixture, not a production model. `createGameService` accepts an optional `ai` composition containing adapters and trusted model descriptors. Tests supply `createScriptedMockProvider` and fixture descriptors; creation resolves supported parameters before persistence. The normal server supplies no adapters, so creation or a fresh AI turn requiring an unavailable adapter returns `404 NOT_FOUND`. Production adapters, live discovery, request-scoped key transport, and AI browser flows are separate roadmap work. These requests reject credentials, capabilities, FEN, prompts, seat/owner identities, execution IDs, and lease settings supplied by clients.
+`fixture-model` is a test fixture, not a production model. `createGameService` accepts an optional `ai` composition containing provider registrations; tests supply `createScriptedMockProvider`. Creation resolves supported parameters from [discovered metadata or trusted test fixtures](#provider-discovery-and-session-credentials) before persistence. The normal server supplies no adapters, so creation or a fresh AI turn requiring an unavailable adapter returns `404 NOT_FOUND`. Creation rejects credentials; all game requests reject client capabilities, FEN, prompts, seat/owner identities, execution IDs, and lease settings. AI-turn transport separates its credential from the unchanged internal command schema.
 
-Both AI modes and the sandbox share the single active/paused slot. AI-versus-human assigns only the chosen human seat to the guest; ownership cannot move or resign an AI seat. Existing snapshot, lifecycle, terminal replay, and PGN routes retain their private authorization. AI discovery excludes sandbox/human-room games and never changes lifecycle, allocates a guest, or calls an adapter. Recovery requires the ordinary authorized pause command, then an explicit step or resume.
+Both AI modes and the sandbox share the single active/paused slot. AI-versus-human assigns only the chosen human seat to the guest; ownership cannot move or resign an AI seat. Existing snapshot, lifecycle, terminal replay, and PGN routes retain their private authorization. Unfinished-game discovery excludes sandbox/human-room games and never changes lifecycle, allocates a guest, or calls an adapter. Recovery requires the ordinary authorized pause command, then an explicit step or resume.
 
 The same AI-turn body requests **Next move** from a paused game. It is allowed only on an AI seat's turn and leaves an unfinished game paused, including while waiting for the provider. A terminal move or technical loss completes the game. **Pause**, **Resume**, and **Stop** use the existing lifecycle route with actions `pause`, `resume`, and `abort`; Stop records `aborted` with result `*`. Resume changes lifecycle without calling a provider. Pause on an already-paused AI game is accepted only when it has an outstanding reservation to cancel or abandon, advancing the revision once; otherwise it returns `INVALID_GAME_STATE`.
 

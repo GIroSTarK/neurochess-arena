@@ -1,8 +1,10 @@
 export {
   createAiGameRequestSchema,
   aiTurnCommandSchema,
+  aiTurnRequestSchema,
   type CreateAiGameRequest,
   type AiTurnCommand,
+  type AiTurnRequest,
 } from "./ai-game.js";
 export {
   providerIdSchema,
@@ -11,6 +13,10 @@ export {
   reasoningEffortSchema,
   supportedParametersSchema,
   modelDescriptorSchema,
+  modelListSchema,
+  sessionCredentialSchema,
+  modelDiscoveryRequestSchema,
+  providerListResponseSchema,
   aiParametersSchema,
   aiConfigurationSchema,
   modelContextSchema,
@@ -41,6 +47,9 @@ export {
   type AiError,
   type NormalizedMoveResponse,
   type ModelDiscoveryResult,
+  type SessionCredential,
+  type ModelDiscoveryRequest,
+  type ProviderListResponse,
 } from "./ai.js";
 export {
   healthResponseSchema,

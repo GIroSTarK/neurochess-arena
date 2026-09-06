@@ -26,6 +26,7 @@ import {
   controlled,
   createAi,
   creation,
+  credential,
   discover,
   lifecycle,
   mock,
@@ -435,7 +436,7 @@ describe("authoritative AI execution ownership", () => {
     const disconnected = fetch(`${address}/games/${initial.gameId}/ai-turn`, {
       method: "POST",
       headers: { origin: WEB_ORIGIN, cookie: guest.cookie, "content-type": "application/json" },
-      body: JSON.stringify(request),
+      body: JSON.stringify({ ...request, credential }),
       signal: controller.signal,
     }).then(
       () => false,

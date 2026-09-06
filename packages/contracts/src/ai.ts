@@ -48,6 +48,30 @@ export const modelDescriptorSchema = z.strictObject({
   supportedParameters: supportedParametersSchema,
 });
 
+export const modelListSchema = z
+  .array(modelDescriptorSchema)
+  .max(2_000)
+  .refine(
+    (models) =>
+      new Set(models.map((model) => `${model.provider}:${model.id}`)).size === models.length,
+  );
+
+export const providerListResponseSchema = z.strictObject({
+  providers: z.array(providerDescriptorSchema).max(4),
+});
+
+/** Only provider operations accept this input; it is never part of stored configuration. */
+export const sessionCredentialSchema = z.strictObject({
+  provider: providerIdSchema,
+  apiKey: z
+    .string()
+    .min(1)
+    .max(4_096)
+    .regex(/^[\x21-\x7e]+(?![\s\S])/),
+});
+
+export const modelDiscoveryRequestSchema = z.strictObject({ credential: sessionCredentialSchema });
+
 export const aiParametersSchema = z.strictObject({
   temperature: z.number().nonnegative().optional(),
   reasoningEffort: reasoningEffortSchema.optional(),
@@ -130,7 +154,7 @@ export const normalizedMoveResponseSchema = z.discriminatedUnion("ok", [
 ]);
 
 export const modelDiscoveryResultSchema = z.discriminatedUnion("ok", [
-  z.strictObject({ ok: z.literal(true), value: z.array(modelDescriptorSchema) }),
+  z.strictObject({ ok: z.literal(true), value: modelListSchema }),
   z.strictObject({ ok: z.literal(false), error: providerErrorSchema }),
 ]);
 
@@ -152,3 +176,6 @@ export type ModelInvalidError = z.infer<typeof modelInvalidErrorSchema>;
 export type AiError = z.infer<typeof aiErrorSchema>;
 export type NormalizedMoveResponse = z.infer<typeof normalizedMoveResponseSchema>;
 export type ModelDiscoveryResult = z.infer<typeof modelDiscoveryResultSchema>;
+export type SessionCredential = z.infer<typeof sessionCredentialSchema>;
+export type ModelDiscoveryRequest = z.infer<typeof modelDiscoveryRequestSchema>;
+export type ProviderListResponse = z.infer<typeof providerListResponseSchema>;

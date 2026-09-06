@@ -7,10 +7,8 @@ import {
   type AiTurnCommand,
   type CreateAiGameRequest,
   type GameSnapshot,
-  type ModelDescriptor,
-  modelDescriptorSchema,
   type NormalizedMoveResponse,
-  normalizedMoveResponseSchema,
+  type SessionCredential,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import {
@@ -23,9 +21,12 @@ import {
 } from "@neurochess/database";
 
 import type { GuestPrincipal } from "../guests/service.js";
-import type { AiProviderAdapter } from "../providers/adapter.js";
 import { buildModelContext } from "../providers/context.js";
-import { resolveAiConfiguration } from "../providers/normalization.js";
+import {
+  createProviderRegistry,
+  type ProviderRegistration,
+  validateCredential,
+} from "../providers/registry.js";
 
 import { assertAiExecutionAttached, withAiLease } from "./ai-lease.js";
 import { authorizeGameControl } from "./authorization.js";
@@ -33,11 +34,7 @@ import { GameConflictError, GameIntegrityError, GameRequestError } from "./error
 import { positionOf, restoreAuthorized, transportSnapshot } from "./state.js";
 
 export interface AiGameOptions {
-  /** Trusted server-side model capabilities; never accepted from a client. */
-  readonly providers?: readonly {
-    readonly adapter: AiProviderAdapter;
-    readonly models: readonly ModelDescriptor[];
-  }[];
+  readonly providers?: readonly ProviderRegistration[];
   readonly leaseMs?: number;
 }
 
@@ -50,36 +47,14 @@ export function createAiGameOperations(
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1 || leaseMs > 300_000) {
     throw new Error("INVALID_AI_LEASE");
   }
-  const providers = (options.providers ?? []).map(({ adapter, models }) => {
-    const parsed = modelDescriptorSchema.array().safeParse(models);
-    if (
-      !parsed.success ||
-      parsed.data.some((model) => model.provider !== adapter.descriptor.id) ||
-      new Set(parsed.data.map((model) => model.id)).size !== parsed.data.length
-    ) {
-      throw new Error("INVALID_AI_CATALOG");
-    }
-    return { adapter, models: parsed.data };
-  });
-  if (new Set(providers.map(({ adapter }) => adapter.descriptor.id)).size !== providers.length) {
-    throw new Error("INVALID_AI_CATALOG");
-  }
+  const providers = createProviderRegistry(options.providers);
 
-  function providerFor(configuration: AiConfiguration) {
-    const provider = providers.find(
-      ({ adapter }) => adapter.descriptor.id === configuration.provider,
-    );
-    if (!provider) throw new GameRequestError("NOT_FOUND");
-    return provider;
-  }
-
-  function effectiveConfiguration(requested: AiConfiguration): AiConfiguration {
-    const model = providerFor(requested).models.find(
-      (candidate) => candidate.id === requested.modelId,
-    );
-    const resolved = model && resolveAiConfiguration(requested, model);
-    if (!resolved) throw new GameRequestError("INVALID_REQUEST");
-    return resolved;
+  async function requireGuest(principal: GuestPrincipal) {
+    await repository.read(async (reader) => {
+      if (!(await reader.getGuest(principal.guestSessionId))) {
+        throw new GameRequestError("UNAUTHORIZED");
+      }
+    });
   }
 
   async function lockAuthorized(tx: GameTransaction, principal: GuestPrincipal, gameId: string) {
@@ -91,7 +66,11 @@ export function createAiGameOperations(
     return { stored, ...restored };
   }
 
-  async function reserve(principal: GuestPrincipal, command: AiTurnCommand) {
+  async function reserve(
+    principal: GuestPrincipal,
+    command: AiTurnCommand,
+    provider: SessionCredential["provider"],
+  ) {
     return repository.write(async (tx) => {
       const restored = await lockAuthorized(tx, principal, command.gameId);
       const { stored, snapshot, game, participants } = restored;
@@ -111,7 +90,8 @@ export function createAiGameOperations(
       const seat = participants.find((participant) => participant.color === snapshot.turn);
       if (seat?.seatType !== "ai") throw new GameRequestError("FORBIDDEN");
       const configuration = configurationOf(seat);
-      const { adapter } = providerFor(configuration);
+      if (provider !== configuration.provider) throw new GameRequestError("INVALID_REQUEST");
+      providers.has(configuration.provider);
       const executorId = randomUUID();
       const result = await tx.reserveAiTurn({
         gameId: stored.id,
@@ -133,32 +113,30 @@ export function createAiGameOperations(
       if (stored.state === "paused" && !game.resume().ok) throw new GameIntegrityError();
       const context = buildModelContext(game, snapshot.turn);
       const invocation = await tx.beginAiInvocation(owner);
-      return { owner, configuration, adapter, context, invocation };
+      return { owner, configuration, context, invocation };
     });
   }
 
   async function aiTurn(
     principal: GuestPrincipal,
     command: AiTurnCommand,
+    credential: SessionCredential,
     attached?: AbortSignal,
   ): Promise<GameSnapshot> {
     try {
+      validateCredential(credential);
       if (attached) assertAiExecutionAttached(attached);
-      const reserved = await reserve(principal, command);
+      const reserved = await reserve(principal, command, credential.provider);
       return await withAiLease(repository, reserved.owner, leaseMs, attached, async (signal) => {
         let invocation = reserved.invocation;
         for (;;) {
           assertAiExecutionAttached(signal);
-          // Mock-only composition needs no credential; HTTP key transport is not enabled.
-          const response = await reserved.adapter.requestMove({
-            apiKey: "",
+          const response = await providers.requestMove(credential, {
             configuration: structuredClone(reserved.configuration),
             context: structuredClone(reserved.context),
             signal,
           });
           assertAiExecutionAttached(signal);
-          const parsed = normalizedMoveResponseSchema.safeParse(response);
-          if (!parsed.success) throw new GameIntegrityError();
           const accepted = await repository.write(async (tx) => {
             const current = await lockAuthorized(tx, principal, command.gameId);
             if (
@@ -170,7 +148,7 @@ export function createAiGameOperations(
             assertAiExecutionAttached(signal);
             const stepping = current.stored.state === "paused";
             if (stepping && !current.game.resume().ok) throw new GameIntegrityError();
-            let outcome: NormalizedMoveResponse = parsed.data;
+            let outcome: NormalizedMoveResponse = response;
             const move = outcome.ok ? current.game.playMove(outcome.value.move) : undefined;
             if (move && !move.ok) {
               if (move.error.code !== "ILLEGAL_MOVE" && move.error.code !== "INVALID_UCI") {
@@ -250,6 +228,20 @@ export function createAiGameOperations(
 
   return {
     aiTurn,
+    listProviders: async (principal: GuestPrincipal) => {
+      await requireGuest(principal);
+      return providers.list();
+    },
+    discoverModels: async (
+      principal: GuestPrincipal,
+      credential: SessionCredential,
+      signal?: AbortSignal,
+    ) => {
+      await requireGuest(principal);
+      const result = await providers.discover(principal.guestSessionId, credential, signal);
+      await requireGuest(principal);
+      return result;
+    },
     createAi: (principal: GuestPrincipal, request: CreateAiGameRequest): Promise<GameSnapshot> =>
       repository.write(async (tx) => {
         if (!(await tx.lockGuest(principal.guestSessionId))) {
@@ -268,7 +260,8 @@ export function createAiGameOperations(
           if (request.mode === "ai_vs_human" && request.humanColor === color) {
             return { ...base, seatType: "human", guestSessionId: principal.guestSessionId };
           }
-          const configuration = effectiveConfiguration(
+          const configuration = providers.resolve(
+            principal.guestSessionId,
             request.mode === "ai_vs_ai" ? request[color] : request.ai,
           );
           return {

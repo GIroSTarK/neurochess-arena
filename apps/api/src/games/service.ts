@@ -8,7 +8,10 @@ import type {
   GameReplayResponse,
   GameSnapshot,
   LifecycleCommand,
+  ModelDiscoveryResult,
   MoveCommand,
+  ProviderListResponse,
+  SessionCredential,
   UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import type { GameRepository } from "@neurochess/database";
@@ -25,9 +28,16 @@ export interface GameService {
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
   createAi(principal: GuestPrincipal, request: CreateAiGameRequest): Promise<GameSnapshot>;
   unfinishedAi(principal: GuestPrincipal): Promise<UnfinishedGameResponse>;
+  listProviders(principal: GuestPrincipal): Promise<ProviderListResponse>;
+  discoverModels(
+    principal: GuestPrincipal,
+    credential: SessionCredential,
+    signal?: AbortSignal,
+  ): Promise<ModelDiscoveryResult>;
   aiTurn(
     principal: GuestPrincipal,
     command: AiTurnCommand,
+    credential: SessionCredential,
     signal?: AbortSignal,
   ): Promise<GameSnapshot>;
   snapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot>;
