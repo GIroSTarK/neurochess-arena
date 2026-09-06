@@ -22,9 +22,11 @@ export function providerContractTests(options: {
   name: string;
   provider: ProviderId;
   modelId: string;
+  telemetry?: AiTelemetry;
   create(steps: readonly MockMoveStep[]): { adapter: AiProviderAdapter; attempts: () => number };
 }) {
   describe(`${options.name} shared provider contract`, () => {
+    const telemetry = options.telemetry ?? contractTelemetry;
     function fixture(steps: readonly MockMoveStep[]) {
       const game = createGame();
       expect(game.start().ok).toBe(true);
@@ -45,7 +47,7 @@ export function providerContractTests(options: {
       const { adapter, attempts, request, game, before } = fixture([
         {
           output: { move: "e2e4", commentary: "Controls the center." },
-          telemetry: contractTelemetry,
+          telemetry,
         },
       ]);
       const discovery = await adapter.listModels({ apiKey: request.apiKey });
@@ -60,7 +62,7 @@ export function providerContractTests(options: {
       const result = await adapter.requestMove(request);
       expect(result).toEqual({
         ok: true,
-        value: { move: "e2e4", commentary: "Controls the center.", ...contractTelemetry },
+        value: { move: "e2e4", commentary: "Controls the center.", ...telemetry },
       });
       expect(normalizedMoveResponseSchema.parse(result)).toEqual(result);
       expect(game.snapshot()).toEqual(before);
@@ -92,14 +94,12 @@ export function providerContractTests(options: {
       { move: "e2e4", commentary: 42 },
       { move: "e2e4", extra: "contract-key-canary" },
     ])("classifies malformed model output in one attempt (%j)", async (output) => {
-      const { adapter, request, attempts, game, before } = fixture([
-        { output, telemetry: contractTelemetry },
-      ]);
+      const { adapter, request, attempts, game, before } = fixture([{ output, telemetry }]);
       const result = await adapter.requestMove(request);
       expect(result).toEqual({
         ok: false,
         error: { kind: "model_invalid", reason: "malformed_output" },
-        ...contractTelemetry,
+        ...telemetry,
       });
       expect(normalizedMoveResponseSchema.parse(result)).toEqual(result);
       expect(JSON.stringify(result)).not.toContain(request.apiKey);

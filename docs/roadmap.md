@@ -55,7 +55,8 @@ Deliverables:
 - [x] AI retry accounting across manual retries and interruptions, technical losses, provider-error pause, and API pause/resume/stop/paused stepping with mocked completion-race tests;
 - [x] guest-protected backend model discovery through the provider registry, bounded credential-free capability catalogs, server-side parameter filtering, and request-only AI-turn keys with mocked isolation, redaction, cancellation, and persistence tests;
 - [x] OpenAI live model discovery and Responses move adapter with conservative capability metadata, normalized output/errors/telemetry, mocked shared contract and API integration tests;
-- [ ] Anthropic, Google, and OpenRouter adapters;
+- [x] Anthropic paginated discovery and Messages adapter with live capability mapping, normalized content/errors/usage, and mocked shared contract and mixed-provider game integration tests;
+- [ ] Google and OpenRouter adapters;
 - [ ] live model discovery and capability-aware parameter controls;
 - [ ] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
 - [ ] independent White and Black configuration;
