@@ -7,6 +7,7 @@ import { createGuestService } from "./guests/service.js";
 import { loadRootEnvironment } from "./load-root-environment.js";
 import { createLoggerOptions } from "./logger.js";
 import { createAnthropicProvider } from "./providers/anthropic.js";
+import { createGoogleProvider } from "./providers/google.js";
 import { createOpenAiProvider } from "./providers/openai.js";
 
 async function main(): Promise<void> {
@@ -23,7 +24,11 @@ async function main(): Promise<void> {
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
         ai: {
-          providers: [{ adapter: createOpenAiProvider() }, { adapter: createAnthropicProvider() }],
+          providers: [
+            { adapter: createOpenAiProvider() },
+            { adapter: createAnthropicProvider() },
+            { adapter: createGoogleProvider() },
+          ],
         },
       }),
       guests: createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS),
