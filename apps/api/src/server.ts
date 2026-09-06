@@ -9,6 +9,7 @@ import { createLoggerOptions } from "./logger.js";
 import { createAnthropicProvider } from "./providers/anthropic.js";
 import { createGoogleProvider } from "./providers/google.js";
 import { createOpenAiProvider } from "./providers/openai.js";
+import { createOpenRouterProvider } from "./providers/openrouter.js";
 
 async function main(): Promise<void> {
   loadRootEnvironment();
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
             { adapter: createOpenAiProvider() },
             { adapter: createAnthropicProvider() },
             { adapter: createGoogleProvider() },
+            { adapter: createOpenRouterProvider() },
           ],
         },
       }),
