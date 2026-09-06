@@ -101,7 +101,11 @@ export function createAiGameOperations(
       ) {
         throw new GameConflictError(snapshot);
       }
-      if (stored.state !== "active" || stored.isSandbox || stored.mode === "human_vs_human") {
+      if (
+        (stored.state !== "active" && stored.state !== "paused") ||
+        stored.isSandbox ||
+        stored.mode === "human_vs_human"
+      ) {
         throw new GameRequestError("INVALID_GAME_STATE");
       }
       const seat = participants.find((participant) => participant.color === snapshot.turn);
@@ -125,6 +129,8 @@ export function createAiGameOperations(
         reservationId: result.reservation.id,
         executorId,
       };
+      // A paused step activates only this private aggregate; persistence stays paused throughout I/O.
+      if (stored.state === "paused" && !game.resume().ok) throw new GameIntegrityError();
       const context = buildModelContext(game, snapshot.turn);
       const invocation = await tx.beginAiInvocation(owner);
       return { owner, configuration, adapter, context, invocation };
@@ -162,6 +168,8 @@ export function createAiGameOperations(
               throw new GameConflictError(current.snapshot);
             }
             assertAiExecutionAttached(signal);
+            const stepping = current.stored.state === "paused";
+            if (stepping && !current.game.resume().ok) throw new GameIntegrityError();
             let outcome: NormalizedMoveResponse = parsed.data;
             const move = outcome.ok ? current.game.playMove(outcome.value.move) : undefined;
             if (move && !move.ok) {
@@ -180,15 +188,23 @@ export function createAiGameOperations(
               };
             }
             await tx.recordAiInvocation(reserved.owner, invocation.id, outcome);
-            if (!outcome.ok && outcome.error.kind === "model_invalid" && invocation.attempt < 3) {
+            if (
+              !outcome.ok &&
+              outcome.error.kind === "model_invalid" &&
+              (await tx.countAiInvalidOutputs(reserved.owner)) < 3
+            ) {
               return null;
             }
-            const result = outcome.ok
+            let result = outcome.ok
               ? move
               : outcome.error.kind === "model_invalid"
                 ? current.game.recordTechnicalLoss(reserved.context.color)
                 : current.game.pause();
             if (!result?.ok) throw new GameIntegrityError();
+            if (stepping && result.value.state === "active") {
+              result = current.game.pause();
+              if (!result.ok) throw new GameIntegrityError();
+            }
             const snapshot = transportSnapshot(
               current.stored.id,
               current.stored.version + 1,

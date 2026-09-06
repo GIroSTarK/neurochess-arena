@@ -628,11 +628,6 @@ describe("durable reservation ownership and recovery", () => {
     expect(
       (await repository.read((reader) => reader.getTurnReservations(request.gameId)))[0],
     ).toMatchObject({ status: "abandoned" });
-    await expect(
-      repository.write((tx) =>
-        tx.reserveAiTurn({ ...request, expectedVersion: 1, commandId: randomUUID() }),
-      ),
-    ).rejects.toMatchObject({ code: "INVALID_AI_STATE" });
     await lifecycle(request, "resume", 1);
     const next = await reserve({
       ...request,
@@ -649,6 +644,92 @@ describe("durable reservation ownership and recovery", () => {
 });
 
 describe("normalized invocation attempts and atomic completion", () => {
+  it.each(["active", "paused"] as const)(
+    "requires an unfinished successful turn to retain its reserved %s lifecycle",
+    async (state) => {
+      const { request } = await fixture();
+      const repository = createGameRepository(database);
+      const version = state === "paused" ? 1 : 0;
+      if (state === "paused") await lifecycle(request, "pause", 0);
+      const owner = await reserve({ ...request, expectedVersion: version });
+      const invocation = await repository.write((tx) => tx.beginAiInvocation(owner));
+      await repository.write((tx) => tx.recordAiInvocation(owner, invocation.id, success));
+      await expect(
+        repository.write((tx) =>
+          tx.commitAiTurn(owner, {
+            ...acceptedMove,
+            position: {
+              ...acceptedMove.position,
+              version: version + 1,
+              state: state === "paused" ? "active" : "paused",
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "INVALID_AI_STATE" });
+      await repository.write((tx) =>
+        tx.commitAiTurn(owner, {
+          ...acceptedMove,
+          position: { ...acceptedMove.position, version: version + 1, state },
+        }),
+      );
+      expect(await repository.read((reader) => reader.getGame(request.gameId))).toMatchObject({
+        state,
+        version: version + 1,
+        fen: acceptedMove.position.fen,
+      });
+      expect(await database.db.$count(moves, eq(moves.gameId, request.gameId))).toBe(1);
+    },
+  );
+
+  it("counts only recorded invalid output across reservations and rejects a new attempt after budget exhaustion", async () => {
+    const { request } = await fixture();
+    const repository = createGameRepository(database);
+    const first = await reserve(request);
+    const invalidAttempt = await repository.write((tx) => tx.beginAiInvocation(first));
+    await repository.write((tx) => tx.recordAiInvocation(first, invalidAttempt.id, invalid));
+    const failedAttempt = await repository.write((tx) => tx.beginAiInvocation(first));
+    await repository.write(async (tx) => {
+      await tx.recordAiInvocation(first, failedAttempt.id, {
+        ok: false,
+        error: { kind: "provider_unavailable" },
+        latencyMs: 0,
+        usage: null,
+      });
+      expect(await tx.countAiInvalidOutputs(first)).toBe(1);
+      await tx.commitAiTurn(first, {
+        position: { ...initialPosition, state: "paused", version: 1 },
+      });
+    });
+    const next = await reserve({
+      ...request,
+      expectedVersion: 1,
+      commandId: randomUUID(),
+      executorId: randomUUID(),
+    });
+    expect(await repository.write((tx) => tx.countAiInvalidOutputs(next))).toBe(1);
+    await expect(
+      repository.write((tx) => tx.countAiInvalidOutputs({ ...next, executorId: randomUUID() })),
+    ).rejects.toMatchObject({ code: "RESERVATION_LOST" });
+    for (const expected of [2, 3]) {
+      const attempt = await repository.write((tx) => tx.beginAiInvocation(next));
+      await repository.write((tx) => tx.recordAiInvocation(next, attempt.id, invalid));
+      expect(await repository.write((tx) => tx.countAiInvalidOutputs(next))).toBe(expected);
+    }
+    await expect(repository.write((tx) => tx.beginAiInvocation(next))).rejects.toMatchObject({
+      code: "INVALID_AI_STATE",
+    });
+    await lifecycle(request, "pause", 1);
+    const cancelled = await reserve({
+      ...request,
+      expectedVersion: 2,
+      commandId: randomUUID(),
+      executorId: randomUUID(),
+    });
+    await expect(repository.write((tx) => tx.beginAiInvocation(cancelled))).rejects.toMatchObject({
+      code: "INVALID_AI_STATE",
+    });
+  });
+
   it("persists effective configuration, normalized errors, zero/partial/unavailable usage, and commits a move once", async () => {
     const { request } = await fixture();
     const owner = await reserve(request);

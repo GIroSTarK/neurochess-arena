@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-06
 
 ## Vision
 
@@ -74,6 +74,8 @@ The user configures White and Black independently:
 - either a session-only provider key or an explicitly saved credential.
 
 The same provider and model may be selected for both colors. The game starts from the standard initial chess position and has no chess clock. The user can pause, resume, request the next move, adjust playback speed, or stop the game.
+
+Next move executes one AI turn from a paused game and leaves an unfinished game paused. A terminal chess result or technical loss still completes the game. Resume permits active play; Stop records `aborted` without awarding a win or loss. Lifecycle changes invalidate any pending AI result.
 
 An AI game does not continue in the background after its controlling browser tab is closed. It is restored in a paused state when the session returns.
 
@@ -155,6 +157,7 @@ The normalized response contract is:
 - A schema-invalid response, unknown move, or illegal move is retried automatically up to two times after the initial attempt.
 - A third invalid result ends the game as a technical loss for that model.
 - A provider, network, authentication, quota, or timeout failure pauses the game and allows the user to retry. It does not count as an invalid chess response or technical loss.
+- The invalid-output budget belongs to the current chess turn. Manual retry, pause/resume, and interrupted requests preserve recorded invalid responses; only an accepted move starts a new budget. An interrupted attempt with no recorded response does not consume it.
 - Retry attempts and terminal reasons are visible in the game event history.
 
 ## Live game experience

@@ -52,13 +52,14 @@ Deliverables:
 - [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
 - [x] AI game modes, independent seat configuration, normalized invocation attempts, and durable leased turn reservations with PostgreSQL migration, rollback, constraint, and concurrency tests;
 - [x] guest AI creation/discovery and one authoritative AI turn through the existing command service, with mocked PostgreSQL integration tests for both modes, duplicate execution prevention, lifecycle invalidation, and atomic commit;
+- [x] AI retry accounting across manual retries and interruptions, technical losses, provider-error pause, and API pause/resume/stop/paused stepping with mocked completion-race tests;
 - [ ] OpenAI, Anthropic, Google, and OpenRouter adapters;
 - [ ] live model discovery and capability-aware parameter controls;
 - [ ] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
 - [ ] independent White and Black configuration;
 - [ ] AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
 - [ ] AI-versus-human mode with color choice;
-- [ ] invalid-output retries, technical loss, provider-error pause, and manual retry;
+- [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;
 - [ ] latency and token telemetry collection and display.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.

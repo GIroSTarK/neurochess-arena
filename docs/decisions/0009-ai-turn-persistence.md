@@ -3,6 +3,8 @@
 **Status:** Accepted  
 **Date:** 2026-09-06
 
+Extended by [ADR-0010](0010-ai-paused-stepping-and-retry-accounting.md) for paused execution and retry accounting across reservations.
+
 ## Context
 
 AI requests outlive a short database transaction and may be duplicated, interrupted, or overtaken by Pause or Abort. Provider calls cannot hold game locks. Persistence must preserve independent seat configuration and attempt telemetry without storing credentials, and a restarted process must not silently repeat a potentially billable request.

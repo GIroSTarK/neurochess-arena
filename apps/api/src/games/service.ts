@@ -104,11 +104,21 @@ export function createGameService(
       } else {
         authorizeGameControl(principal, stored);
       }
-      const accepted = isMove
-        ? restored.game.playMove(command.move)
-        : command.action === "resign"
-          ? restored.game.resignHuman(command.losingColor)
-          : restored.game[command.action]();
+      // Pause also fences an interrupted or in-flight step whose persisted state is already paused.
+      const cancelPausedStep =
+        !isMove &&
+        command.action === "pause" &&
+        stored.state === "paused" &&
+        !stored.isSandbox &&
+        stored.mode !== "human_vs_human" &&
+        (await tx.getTurnReservations(stored.id)).some((row) => row.status === "reserved");
+      const accepted = cancelPausedStep
+        ? ({ ok: true, value: restored.game.snapshot() } as const)
+        : isMove
+          ? restored.game.playMove(command.move)
+          : command.action === "resign"
+            ? restored.game.resignHuman(command.losingColor)
+            : restored.game[command.action]();
       if (!accepted.ok) {
         if (["ILLEGAL_MOVE", "INVALID_UCI", "INVALID_GAME_STATE"].includes(accepted.error.code)) {
           throw new GameRequestError(

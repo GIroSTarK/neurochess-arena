@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { DatabaseConnection } from "./client.js";
@@ -107,6 +107,7 @@ export interface AiTransaction {
   reserveAiTurn(input: ReserveAiTurn): Promise<AiReservationResult>;
   renewAiTurn(owner: AiReservationOwner, leaseMs: number): Promise<void>;
   beginAiInvocation(owner: AiReservationOwner): Promise<StoredModelInvocation>;
+  countAiInvalidOutputs(owner: AiReservationOwner): Promise<number>;
   recordAiInvocation(
     owner: AiReservationOwner,
     invocationId: string,
@@ -226,7 +227,7 @@ export function aiTransactionFor(db: Executor): AiTransaction {
       );
     if (
       !reservation ||
-      game.state !== "active" ||
+      (game.state !== "active" && game.state !== "paused") ||
       game.isSandbox ||
       game.mode === "human_vs_human"
     ) {
@@ -243,6 +244,29 @@ export function aiTransactionFor(db: Executor): AiTransaction {
       .orderBy(desc(modelInvocations.attempt))
       .limit(1);
     return last;
+  }
+
+  async function invalidOutputCount(reservation: StoredTurnReservation) {
+    const [lastMove] = await db
+      .select({ version: moves.version })
+      .from(moves)
+      .where(eq(moves.gameId, reservation.gameId))
+      .orderBy(desc(moves.version))
+      .limit(1);
+    // Lifecycle revisions and new reservations must not reset the current chess turn's budget.
+    const [total] = await db
+      .select({ value: count() })
+      .from(turnReservations)
+      .innerJoin(modelInvocations, eq(modelInvocations.reservationId, turnReservations.id))
+      .where(
+        and(
+          eq(turnReservations.gameId, reservation.gameId),
+          eq(turnReservations.color, reservation.color),
+          gte(turnReservations.expectedVersion, lastMove?.version ?? 0),
+          eq(modelInvocations.status, "model_invalid"),
+        ),
+      );
+    return total?.value ?? 0;
   }
 
   async function assertLive(reservationId: string) {
@@ -279,7 +303,11 @@ export function aiTransactionFor(db: Executor): AiTransaction {
         );
       if (receipt || duplicate) return { status: "duplicate" };
       if (request.expectedVersion !== game.version) return { status: "conflict" };
-      if (game.state !== "active" || game.isSandbox || game.mode === "human_vs_human") {
+      if (
+        (game.state !== "active" && game.state !== "paused") ||
+        game.isSandbox ||
+        game.mode === "human_vs_human"
+      ) {
         throw new AiPersistenceError("INVALID_AI_STATE");
       }
       const [pending] = await db
@@ -334,7 +362,10 @@ export function aiTransactionFor(db: Executor): AiTransaction {
     async beginAiInvocation(owner) {
       const { reservation } = await ownedReservation(owner);
       const last = await lastInvocation(reservation.id);
-      if (last && (last.status !== "model_invalid" || last.attempt >= 3)) {
+      if (
+        (last && (last.status !== "model_invalid" || last.attempt >= 3)) ||
+        (await invalidOutputCount(reservation)) >= 3
+      ) {
         throw new AiPersistenceError("INVALID_AI_STATE");
       }
       const [seat] = await db
@@ -365,6 +396,10 @@ export function aiTransactionFor(db: Executor): AiTransaction {
       if (!invocation) throw new AiPersistenceError("INVALID_AI_STATE");
       await assertLive(reservation.id);
       return invocation;
+    },
+    async countAiInvalidOutputs(owner) {
+      const { reservation } = await ownedReservation(owner);
+      return invalidOutputCount(reservation);
     },
     async recordAiInvocation(owner, invocationId, result) {
       const id = validated(z.uuid(), invocationId);
@@ -417,13 +452,16 @@ export function aiTransactionFor(db: Executor): AiTransaction {
         kind === "move"
           ? move?.uci === last?.move &&
             move?.fen === position.fen &&
-            ["active", "completed"].includes(position.state)
+            (position.state === game.state || position.state === "completed")
           : !move &&
             position.fen === game.fen &&
             (kind === "pause"
-              ? position.state === "paused"
+              ? position.state === "paused" &&
+                position.result === "*" &&
+                position.terminationReason === null &&
+                position.pgn === game.pgn
               : last?.status === "model_invalid" &&
-                last.attempt === 3 &&
+                (await invalidOutputCount(reservation)) === 3 &&
                 position.state === "completed" &&
                 position.terminationReason === "model_technical_loss" &&
                 position.result === (reservation.color === "white" ? "0-1" : "1-0"));
