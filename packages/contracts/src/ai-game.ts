@@ -1,18 +1,22 @@
 import { z } from "zod";
 
-import { aiConfigurationSchema, sessionCredentialSchema } from "./ai.js";
+import { aiConfigurationSchema, modelCatalogIdSchema, sessionCredentialSchema } from "./ai.js";
 import { chessColorSchema, commandIdSchema, gameIdSchema, gameVersionSchema } from "./game.js";
+
+const aiSelectionSchema = aiConfigurationSchema.extend({
+  catalogId: modelCatalogIdSchema.optional(),
+});
 
 export const createAiGameRequestSchema = z.discriminatedUnion("mode", [
   z.strictObject({
     mode: z.literal("ai_vs_ai"),
-    white: aiConfigurationSchema,
-    black: aiConfigurationSchema,
+    white: aiSelectionSchema,
+    black: aiSelectionSchema,
   }),
   z.strictObject({
     mode: z.literal("ai_vs_human"),
     humanColor: chessColorSchema,
-    ai: aiConfigurationSchema,
+    ai: aiSelectionSchema,
   }),
 ]);
 

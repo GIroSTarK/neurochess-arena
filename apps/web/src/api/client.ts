@@ -56,10 +56,10 @@ export function validateSnapshot(input: unknown): GameSnapshot {
   return parsed.data;
 }
 
-export function createSandboxApi(
+export function createGameTransport(
   apiBaseUrl: string,
   options: { fetch?: typeof fetch; timeoutMs?: number } = {},
-): SandboxApi {
+) {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? 10_000, 30_000));
 
@@ -143,6 +143,14 @@ export function createSandboxApi(
     }
   }
 
+  return { request, gameRequest, forGame };
+}
+
+export function createSandboxApi(
+  apiBaseUrl: string,
+  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+): SandboxApi {
+  const { request, gameRequest, forGame } = createGameTransport(apiBaseUrl, options);
   return {
     async ready(signal) {
       const response = await request("/ready", readinessResponseSchema, signal, undefined, true);

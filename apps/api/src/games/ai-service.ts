@@ -236,9 +236,15 @@ export function createAiGameOperations(
       principal: GuestPrincipal,
       credential: SessionCredential,
       signal?: AbortSignal,
+      catalogId?: string,
     ) => {
       await requireGuest(principal);
-      const result = await providers.discover(principal.guestSessionId, credential, signal);
+      const result = await providers.discover(
+        principal.guestSessionId,
+        credential,
+        signal,
+        catalogId,
+      );
       await requireGuest(principal);
       return result;
     },
@@ -260,10 +266,9 @@ export function createAiGameOperations(
           if (request.mode === "ai_vs_human" && request.humanColor === color) {
             return { ...base, seatType: "human", guestSessionId: principal.guestSessionId };
           }
-          const configuration = providers.resolve(
-            principal.guestSessionId,
-            request.mode === "ai_vs_ai" ? request[color] : request.ai,
-          );
+          const { catalogId, ...requested } =
+            request.mode === "ai_vs_ai" ? request[color] : request.ai;
+          const configuration = providers.resolve(principal.guestSessionId, requested, catalogId);
           return {
             ...base,
             seatType: "ai",

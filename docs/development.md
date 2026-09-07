@@ -159,14 +159,16 @@ Advertised `structured_outputs` enables strict [JSON Schema output](https://open
 
 These endpoints use the same [guest bootstrap and Origin protections](#sandbox-api) as game commands and return `Cache-Control: no-store`:
 
-| Endpoint            | Request                                                                         | Success                                                                              |
-| ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET /ai/providers` | No query fields                                                                 | `200 { providers: [{ id, name }] }`, registered providers only                       |
-| `POST /ai/models`   | `{ "credential": { "provider": "openai", "apiKey": "test-only-placeholder" } }` | `200 { ok: true, value: ModelDescriptor[] }` or `200 { ok: false, error: { kind } }` |
+| Endpoint            | Request                                                                                                                | Success                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /ai/providers` | No query fields                                                                                                        | `200 { providers: [{ id, name }] }`, registered providers only                                  |
+| `POST /ai/models`   | `{ "credential": { "provider": "openai", "apiKey": "test-only-placeholder" }, "catalogId"?: "previous-catalog-uuid" }` | `200 { ok: true, value: ModelDescriptor[], catalogId }` or `200 { ok: false, error: { kind } }` |
 
 The credential object is strict: one registered provider and a nonempty key of at most 4,096 printable ASCII characters, without whitespace. Keys are supplied only in JSON bodies, never URLs, headers, cookies, configuration, or saved references. Use HTTPS outside the documented localhost development setup. Missing/invalid credentials receive `400 INVALID_REQUEST`; missing/expired guests receive `401`; wrong/missing POST Origin receives `403`; an unregistered provider receives `404`. Provider authentication, quota, timeout, and unavailability errors retain their enumerated classification without raw messages. Malformed provider results, key echoes, and unexpected exceptions return fixed `500 INTERNAL_SERVER_ERROR` responses. Discovery never creates a game or invokes a move and is not automatically retried.
 
 Call discovery before creating a game. The [bounded guest-specific metadata cache](architecture.md#ai-provider-boundary) supplies authoritative capabilities for creation; clients cannot submit capability claims. Omitted capabilities mean unsupported. Unsupported known parameters are removed; invalid values of supported parameters and unknown fields are rejected. Rediscover after five minutes, cache eviction, a failed refresh, or API restart if creating another game. Existing games use their stored effective configuration. Tests inject adapters through `ai.providers`, with optional `models` reserved for trusted fixtures; normal-server composition uses live discovery.
+
+Keep each success response's `catalogId` with that draft's discovery state and send it inside the corresponding `white`, `black`, or `ai` creation selection. It is a temporary metadata reference, not a credential or a persisted configuration field. Refresh sends the draft's previous reference alongside its credential, invalidating only that catalog even if discovery fails. Expired or evicted references can rediscover; known foreign-guest or wrong-provider references receive `400 INVALID_REQUEST`. Creation rejects unusable references without a fallback. Callers omitting references use the latest-request catalog for the guest/provider; independent seats must supply references. The creation examples below use illustrative UUIDs; replace them with the actual discovery references.
 
 AI-turn requests require the same separate `credential` field, with the current AI seat's provider. Resend the page-memory key with every new HTTP request, including manual retry or a paused step; re-entry is required after refresh or closing the page. The server uses that single key for automatic retries within the same request, never the other color's key. Missing or mismatched credentials cause no reservation or invocation. Duplicate commands with valid transport still return the authorized conflict without calling the provider. Creation, Pause, Resume, Stop, reads, and replay reject credential fields.
 
@@ -176,7 +178,19 @@ The HTTP handler clears its credential field on completion; the registry clears 
 npm exec vitest -- run --config vitest.integration.config.ts apps/api/test/provider-discovery.integration.test.ts
 ```
 
+## AI setup UI
+
+Open `/` to configure a match. Opening setup establishes the existing guest cookie and checks the registered providers and unfinished-game slot. Model discovery runs only when the user enters a seat's key and selects **Load models**; it never requests an AI move.
+
+AI versus AI is selected initially, with independent White and Black provider, key, searchable model, and advanced parameter controls. Identical providers and models are allowed. AI versus human uses the same controls for one opponent and offers either human color. Switching modes preserves their separate drafts in page memory. Changing a provider clears that seat's key and model configuration; editing its key invalidates its catalog and cancels stale discovery. Loading, classified failure, empty results, missing capabilities, and expired catalogs have separate guidance. Only advertised parameters are shown, with their returned bounds and options; blank values use provider defaults.
+
+Raw keys live separately from configuration in page memory. They are masked initially, can be revealed for the current input, and are cleared by a page refresh or close. No setup state is written to browser storage, URLs, or history state. Keys enter only the discovery request body. **Start game** validates every AI seat and sends the credential-free [creation contract](#guest-ai-game-api). The server still owns authorization, capability validation, persistence, and the single-game limit.
+
+The setup handoff displays the accepted board read-only and provides confirmed **Stop game** through the existing versioned lifecycle command. **Return to game** opens the occupied slot using the existing paused-recovery flow. Uncertain lifecycle commands use the shared synchronization and explicit retry behavior. An access failure clears the private board and offers **Return to setup**, which checks or re-establishes the guest session without retrying the rejected game command. The handoff does not issue AI-turn requests; playback and recovered-game key re-entry are tracked in the [roadmap](roadmap.md#phase-2--ai-arena-core).
+
 ## Sandbox UI
+
+Open `/sandbox` for the development sandbox. Existing `/?game=...` sandbox links remain supported; new sandbox links retain the `/sandbox` path.
 
 Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173` and choose **Start sandbox**. The service readiness indicator checks the database through `/ready`; sandbox availability is determined by creation, so a healthy server can still report that its sandbox is disabled. Enable it on the development server and choose **Retry sandbox**.
 
@@ -248,8 +262,18 @@ Creation accepts exactly one of:
 ```json
 {
   "mode": "ai_vs_ai",
-  "white": { "provider": "openai", "modelId": "fixture-model", "parameters": { "temperature": 0 } },
-  "black": { "provider": "openai", "modelId": "fixture-model", "parameters": { "temperature": 1 } }
+  "white": {
+    "provider": "openai",
+    "modelId": "fixture-model",
+    "parameters": { "temperature": 0 },
+    "catalogId": "30000000-0000-4000-8000-000000000001"
+  },
+  "black": {
+    "provider": "openai",
+    "modelId": "fixture-model",
+    "parameters": { "temperature": 1 },
+    "catalogId": "30000000-0000-4000-8000-000000000002"
+  }
 }
 ```
 
@@ -257,7 +281,12 @@ Creation accepts exactly one of:
 {
   "mode": "ai_vs_human",
   "humanColor": "black",
-  "ai": { "provider": "openai", "modelId": "fixture-model", "parameters": {} }
+  "ai": {
+    "provider": "openai",
+    "modelId": "fixture-model",
+    "parameters": {},
+    "catalogId": "30000000-0000-4000-8000-000000000003"
+  }
 }
 ```
 
@@ -303,6 +332,8 @@ npm run test:e2e
 ```
 
 Playwright starts the actual Fastify guest/game services and Vite app at `http://localhost:3101` and `http://localhost:5174`. These ports must be free; the suite refuses to reuse existing servers. The test entrypoint validates `TEST_DATABASE_URL` with the same `_test`/no-options guard as integration tests before opening a connection or applying reviewed migrations. It never falls back to `DATABASE_URL`. No arbitrary-position endpoint or mocked gameplay API is used.
+
+AI setup browser tests inject mock provider adapters into that service; discovery is fixture-only and any AI move request fails the test. They cover independent and identical-model configuration, both human colors, supported parameters, validation, discovery states, real creation/paused recovery/stop, key loss on refresh, and absence of keys or setup writes in browser storage. Run these with `npm run test:e2e -- test/e2e/ai-setup.spec.ts`.
 
 Desktop Chromium and a Chromium mobile-touch context create a game, play part of Fool's Mate, refresh into paused recovery, explicitly resume, complete checkmate, navigate every replay position, copy/download PGN, start another game, and reopen the previous private URL. Downloaded text must exactly equal persisted PGN; clipboard readback normalizes Windows CRLF conversion while the client writes the canonical text unchanged. Further cases cover both resignation colors, neutral abortion, isolated-guest access denial, root-page recovery, and White knight/Black rook underpromotions through legal moves from the standard position.
 

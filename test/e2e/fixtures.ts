@@ -9,13 +9,24 @@ import { API_ORIGIN } from "./environment";
 
 export { expect } from "@playwright/test";
 
+const expectedUnauthorized = new WeakMap<Page, Set<string>>();
+
+export function allowUnauthorizedResponse(page: Page, url: string) {
+  const expected = expectedUnauthorized.get(page) ?? new Set<string>();
+  expected.add(url);
+  expectedUnauthorized.set(page, expected);
+}
+
 export const test = base.extend({
   page: async ({ page }, use) => {
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
     const record = (response: Response) => {
-      if (response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 201) {
+      if (
+        [API_ORIGIN + "/sandbox/games", API_ORIGIN + "/ai/games"].includes(response.url()) &&
+        response.status() === 201
+      ) {
         reads.push(
           response.json().then((value: unknown) => {
             const snapshot = gameSnapshotSchema.safeParse(value);
@@ -33,7 +44,10 @@ export const test = base.extend({
         const anonymousDiscovery =
           message.location().url === API_ORIGIN + "/sandbox/games/unfinished" &&
           message.text().includes("401 (Unauthorized)");
-        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery) {
+        const sessionExpiry =
+          expectedUnauthorized.get(page)?.has(message.location().url) &&
+          message.text().includes("401 (Unauthorized)");
+        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery && !sessionExpiry) {
           errors.push("Application console " + message.type());
         }
       }
@@ -76,7 +90,7 @@ export function square(page: Page, coordinate: string): Locator {
 }
 
 export async function startSandbox(page: Page, touch: boolean): Promise<GameSnapshot> {
-  await page.goto("/");
+  await page.goto("/sandbox");
   await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
   await expect(page.getByRole("heading", { name: "Development sandbox" })).toBeVisible();
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);

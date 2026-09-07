@@ -8,7 +8,7 @@ import type {
   GameReplayResponse,
   GameSnapshot,
   LifecycleCommand,
-  ModelDiscoveryResult,
+  ModelDiscoveryResponse,
   MoveCommand,
   ProviderListResponse,
   SessionCredential,
@@ -33,7 +33,8 @@ export interface GameService {
     principal: GuestPrincipal,
     credential: SessionCredential,
     signal?: AbortSignal,
-  ): Promise<ModelDiscoveryResult>;
+    catalogId?: string,
+  ): Promise<ModelDiscoveryResponse>;
   aiTurn(
     principal: GuestPrincipal,
     command: AiTurnCommand,

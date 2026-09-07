@@ -69,6 +69,8 @@ Responsibilities:
 
 The client is not authoritative for legal moves, game results, authorization, participant identity, or room state.
 
+The [AI setup flow](development.md#ai-setup-ui) keeps each seat's non-secret draft and discovered capabilities separate from its page-memory credential. Provider and key changes cancel obsolete discovery; requests cannot replace a newer seat catalog. Shared schemas validate provider lists, discovery results, and credential-free creation. The accepted game handoff reuses the existing board, versioned command session, operation gate, and paused recovery without enabling human moves or requesting AI turns.
+
 ### Fastify API
 
 Recommended modules:
@@ -243,7 +245,9 @@ Errors expose only the [classification below](#error-taxonomy), with `malformed_
 
 The provider registry validates registered adapters and routes discovery and move calls. `GET /ai/providers` lists registered descriptors; `POST /ai/models` queries one provider using a separate session credential. Both require an existing guest; discovery also requires the exact Origin. Successful discovery validates the entire bounded model list, provider identity, unique model IDs, and capability ranges. Responses use only shared schemas; classified discovery errors contain only their kind and do not mutate a game. Unexpected exceptions, malformed results, and credential echoes fail with a fixed safe error before caching or persistence.
 
-Discovery calls are never memoized. Only validated model metadata is cached, separately for each internal guest ID and provider, for five minutes with at most 128 catalogs of 2,000 models each. A refresh removes the prior catalog before querying. Creation resolves effective parameters from that guest's catalog; an expired, evicted, or restarted catalog requires discovery again. Tests may inject trusted fixture descriptors. Existing games retain their immutable effective configuration and can execute with a re-entered key after a server restart. A listed model does not guarantee it satisfies the chess response contract; adapters must surface capability or runtime errors clearly.
+Discovery calls are never memoized. Each success returns a server-generated `catalogId` referencing validated metadata, bound to the internal guest ID and provider. The cache retains at most 128 catalogs of 2,000 models each for five minutes. Independent drafts retain separate references, including when two keys expose different models or capability limits for the same provider/model ID. Creation resolves each seat against its exact referenced catalog; references never enter persisted configuration or game responses. An invalid, foreign, expired, evicted, or restarted reference cannot fall back to another catalog or trusted fixture.
+
+A discovery request may include its previous `catalogId` to refresh that draft. Only that reference is invalidated before querying, including on failure; other drafts remain usable. Missing references after expiry, eviction, or restart can rediscover, while a reference belonging to another guest or provider is rejected. New responses receive new references and cannot revive an invalidated one. Creation without references retains the latest-request catalog per guest/provider for existing callers, with trusted fixture metadata available only to server tests. Existing games keep their effective configuration and can execute with a re-entered key after a restart. A listed model does not guarantee it satisfies the chess response contract; adapters must surface capability or runtime errors clearly.
 
 ## Error taxonomy
 

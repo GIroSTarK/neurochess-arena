@@ -11,4 +11,7 @@ HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
 
+// jsdom has no layout; scrolling the model picker is exercised in the browser suite.
+Element.prototype.scrollIntoView = () => undefined;
+
 afterEach(() => cleanup());

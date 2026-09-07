@@ -1,5 +1,6 @@
 import {
   gameSnapshotSchema,
+  modelDiscoveryResponseSchema,
   type ModelDiscoveryResult,
   providerErrorKindSchema,
   type SessionCredential,
@@ -31,6 +32,93 @@ afterEach(() => harness.dispose());
 const credential: SessionCredential = { provider: "openai", apiKey: "discovery-http-key-canary" };
 
 describe("secure provider discovery HTTP boundary", () => {
+  it.each(["disjoint", "identical"])(
+    "creates same-provider seats from %s account catalogs without persisting references",
+    async (kind) => {
+      const firstKey = { ...credential, apiKey: "white-account-key-canary" };
+      const secondKey = { ...credential, apiKey: "black-account-key-canary" };
+      const provider = mock([]);
+      const adapter: AiProviderAdapter = {
+        ...provider,
+        async listModels(input) {
+          const isWhite = input.apiKey === firstKey.apiKey;
+          return {
+            ok: true,
+            value: [
+              {
+                ...model,
+                id: kind === "identical" ? "shared-model" : isWhite ? "white-model" : "black-model",
+                supportedParameters: {
+                  temperature: isWhite ? { min: 0, max: 1 } : { min: 3, max: 4 },
+                },
+              },
+            ],
+          };
+        },
+      };
+      const api = await harness.createApi({ ai: { providers: [{ adapter }] } });
+      const guest = await harness.guest(api);
+      const other = await harness.guest(api);
+      const first = modelDiscoveryResponseSchema.parse(
+        (await post(api, guest, "/ai/models", { credential: firstKey })).json(),
+      );
+      const second = modelDiscoveryResponseSchema.parse(
+        (await post(api, guest, "/ai/models", { credential: secondKey })).json(),
+      );
+      if (!first.ok || !second.ok) throw new Error("Fixture discovery failed");
+      expect(first.catalogId).not.toBe(second.catalogId);
+      const request = {
+        mode: "ai_vs_ai" as const,
+        white: {
+          provider: "openai" as const,
+          modelId: first.value[0]!.id,
+          parameters: { temperature: 0 },
+          catalogId: first.catalogId,
+        },
+        black: {
+          provider: "openai" as const,
+          modelId: second.value[0]!.id,
+          parameters: { temperature: 3 },
+          catalogId: second.catalogId,
+        },
+      };
+      expect((await post(api, other, "/ai/games", request)).statusCode).toBe(400);
+      expect(
+        (await post(api, other, "/ai/models", { credential: firstKey, catalogId: first.catalogId }))
+          .statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await post(api, guest, "/ai/games", {
+            ...request,
+            white: { ...request.white, catalogId: second.catalogId },
+          })
+        ).statusCode,
+      ).toBe(400);
+      const current = await createAi(api, guest, request);
+      const stored = await records(api, current.gameId);
+      expect(stored.participants).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            color: "white",
+            modelId: request.white.modelId,
+            temperature: 0,
+          }),
+          expect.objectContaining({
+            color: "black",
+            modelId: request.black.modelId,
+            temperature: 3,
+          }),
+        ]),
+      );
+      const serialized = JSON.stringify({ current, stored });
+      for (const value of [first.catalogId, second.catalogId, firstKey.apiKey, secondKey.apiKey]) {
+        expect(serialized).not.toContain(value);
+      }
+      expect(provider.requests).toHaveLength(0);
+    },
+  );
+
   it("requires an existing guest and exact Origin, validates inputs, and only lists registered providers", async () => {
     let calls = 0;
     const provider = mock([]);
@@ -88,7 +176,11 @@ describe("secure provider discovery HTTP boundary", () => {
     expect(calls).toBe(0);
     const discovered = await post(api, guest, "/ai/models", { credential });
     expect(discovered.statusCode).toBe(200);
-    expect(discovered.json()).toEqual({ ok: true, value: [model] });
+    expect(discovered.json()).toEqual({
+      ok: true,
+      value: [model],
+      catalogId: expect.any(String) as unknown,
+    });
     expect(discovered.headers["cache-control"]).toBe("no-store");
     expect(calls).toBe(1);
     await api.database.db

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aiConfigurationSchema,
   aiTurnCommandSchema,
   aiTurnRequestSchema,
   createAiGameRequestSchema,
   modelDiscoveryRequestSchema,
+  modelDiscoveryResponseSchema,
   modelDiscoveryResultSchema,
   sessionCredentialSchema,
 } from "./index.js";
@@ -17,6 +19,34 @@ const command = {
 };
 
 describe("session-only provider transport", () => {
+  it("accepts catalog references only in discovery transport and game-creation selections", () => {
+    const catalogId = command.commandId;
+    expect(modelDiscoveryRequestSchema.parse({ credential, catalogId })).toEqual({
+      credential,
+      catalogId,
+    });
+    const response = { ok: true, value: [], catalogId };
+    expect(modelDiscoveryResponseSchema.parse(response)).toEqual(response);
+    expect(modelDiscoveryResultSchema.safeParse(response).success).toBe(false);
+    const ai = { provider: "openai", modelId: "fixture", parameters: {}, catalogId };
+    const creation = { mode: "ai_vs_ai", white: ai, black: { ...ai, catalogId: command.gameId } };
+    expect(createAiGameRequestSchema.parse(creation)).toEqual(creation);
+    expect(
+      createAiGameRequestSchema.parse({ mode: "ai_vs_human", humanColor: "black", ai }),
+    ).toEqual({ mode: "ai_vs_human", humanColor: "black", ai });
+    expect(aiConfigurationSchema.safeParse(ai).success).toBe(false);
+    expect(modelDiscoveryResponseSchema.safeParse({ ok: true, value: [] }).success).toBe(false);
+    expect(
+      modelDiscoveryRequestSchema.safeParse({ credential, catalogId: "raw-key-not-a-reference" })
+        .success,
+    ).toBe(false);
+    expect(
+      createAiGameRequestSchema.safeParse({
+        ...creation,
+        white: { ...ai, catalogId: "raw-key-not-a-reference" },
+      }).success,
+    ).toBe(false);
+  });
   it("requires a separate credential only on discovery and AI-turn requests", () => {
     expect(modelDiscoveryRequestSchema.parse({ credential })).toEqual({ credential });
     expect(aiTurnRequestSchema.parse({ ...command, credential })).toEqual({

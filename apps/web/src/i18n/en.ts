@@ -1,4 +1,96 @@
 export const en = {
+  setup: {
+    documentTitle: "Set up a match · Neurochess Arena",
+    skip: "Skip to match setup",
+    eyebrow: "AI chess arena",
+    title: "Choose your contenders.",
+    description:
+      "Compare two models on the same board, or take a seat against an AI. Configure each contender independently.",
+    mode: "Game mode",
+    modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human" },
+    modeHints: {
+      ai_vs_ai: "The main event. Match any two models, including the same model.",
+      ai_vs_human: "Choose your color and configure your AI opponent.",
+    },
+    humanColor: "Your color",
+    seat: "{{color}} configuration",
+    provider: "Provider",
+    chooseProvider: "Choose a provider",
+    key: "API key",
+    showKey: "Show key",
+    hideKey: "Hide key",
+    keyScope: "Use for this tab",
+    keyHint: "Cleared when you refresh or close this tab.",
+    invalidKey:
+      "Choose a provider and enter a key without spaces, up to 4,096 printable ASCII characters.",
+    loadModels: "Load models",
+    loadingModels: "Loading models…",
+    discoveryHint:
+      "Enter this seat’s key, then load its available models. Reload if the catalog expires.",
+    discoveryLoading: "Checking models available to this key…",
+    discoveryReady_one: "{{count}} model available.",
+    discoveryReady_other: "{{count}} models available.",
+    discoveryEmpty:
+      "No models are available for this key. Check its access or try another provider, then load models again.",
+    discoveryErrors: {
+      provider_auth: "The provider rejected this key. Check it and load models again.",
+      provider_quota:
+        "The provider’s quota or rate limit was reached. Check your account, then load models again.",
+      provider_timeout: "Model discovery timed out. Load models again when you’re ready.",
+      provider_unavailable: "The provider is unavailable. Try loading models again later.",
+      service:
+        "Models could not be loaded. Check your connection and guest session, then try again.",
+    },
+    model: "Model",
+    models: "Available models",
+    searchModels: "Search models by name or ID",
+    chooseModel: "Select a model from the discovered list.",
+    noMatches: "No matching models. Try another search.",
+    advanced: "Advanced parameters",
+    defaults:
+      "Leave a field empty to use the provider default. Only supported parameters are sent.",
+    providerDefault: "Provider default",
+    temperature: "Temperature",
+    reasoningEffort: "Reasoning effort",
+    maxOutputTokens: "Maximum output tokens",
+    range: "Allowed range: {{min}} to {{max}}.",
+    unsupported: "Not supported for this model: {{parameters}}.",
+    noCapabilities:
+      "This model has no advertised optional parameters. Provider defaults apply; model availability does not guarantee a valid chess response.",
+    seatReady: "Configuration ready",
+    seatIncomplete:
+      "Choose a provider, enter a key, load and select a model, and check any parameters.",
+    loadingProviders: "Opening your guest session and checking available providers…",
+    noProviders: "No AI providers are available on this server.",
+    privacy:
+      "Your keys are used to contact your selected providers. They are never saved with your game.",
+    startHint:
+      "Complete each AI configuration before starting. One active or paused game is allowed per guest session.",
+    startReady: "Ready to start from the standard chess position. No chess clock.",
+    start: "Start game",
+    starting: "Starting game…",
+    retry: "Check setup again",
+    errors: {
+      service: "Setup could not connect to the service. Check the connection and try again.",
+      create:
+        "The game could not be confirmed. Check setup again to find an existing game, then reload the models before retrying.",
+      access: "Your guest session is unavailable. Check setup again before starting.",
+    },
+    existing:
+      "You already have an active or paused game. Return to it before starting another match.",
+    returnGame: "Return to game",
+    created: "Game created",
+    returned: "Your existing game",
+    previewHint:
+      "Your game position is ready to inspect. AI playback controls are not available yet. You can stop this game to configure another match.",
+    recoveredHint:
+      "Recovered games stay paused. Session-only keys were not restored; AI play requires key re-entry.",
+    accessError: "This game is no longer available to your guest session.",
+    returnSetup: "Return to setup",
+    checkGame: "Checking the accepted game state. Resolve any pending command before continuing.",
+    stop: "Stop game",
+    newMatch: "Configure another match",
+  },
   app: {
     brand: "Neurochess",
     arena: "Arena",

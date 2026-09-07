@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+
 import {
   type AiConfiguration,
   aiConfigurationSchema,
+  modelCatalogIdSchema,
   type ModelDescriptor,
-  type ModelDiscoveryResult,
+  type ModelDiscoveryResponse,
   modelDiscoveryResultSchema,
   modelListSchema,
   normalizedMoveResponseSchema,
@@ -52,12 +55,24 @@ export function createProviderRegistry(
   if (new Set(providers.map(({ descriptor }) => descriptor.id)).size !== providers.length) {
     throw new Error("INVALID_AI_CATALOG");
   }
-  // Only validated metadata is cached, scoped by internal guest ID and provider, never by key.
-  const catalogs = new Map<string, { expiresAt: number; models: ModelDescriptor[] | null }>();
+  // References select exact catalogs without retaining keys or mixing accounts' capabilities.
+  const catalogs = new Map<
+    string,
+    { scope: string; provider: ProviderId; expiresAt: number; models: ModelDescriptor[] | null }
+  >();
+  const latest = new Map<string, string>();
+
+  function discard(id: string) {
+    const catalog = catalogs.get(id);
+    if (!catalog) return;
+    const lookup = `${catalog.scope}:${catalog.provider}`;
+    if (latest.get(lookup) === id) latest.delete(lookup);
+    catalogs.delete(id);
+  }
 
   function prune() {
     for (const [key, catalog] of catalogs) {
-      if (catalog.expiresAt <= now()) catalogs.delete(key);
+      if (catalog.expiresAt <= now()) discard(key);
     }
   }
 
@@ -72,12 +87,23 @@ export function createProviderRegistry(
     has: (id: ProviderId) => {
       providerFor(id);
     },
-    resolve(scope: string, requested: AiConfiguration): AiConfiguration {
+    resolve(scope: string, requested: AiConfiguration, catalogId?: string): AiConfiguration {
       const parsed = aiConfigurationSchema.safeParse(requested);
       if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
       const provider = providerFor(parsed.data.provider);
       prune();
-      const models = catalogs.get(`${scope}:${parsed.data.provider}`)?.models ?? provider.models;
+      const reference = catalogId ?? latest.get(`${scope}:${parsed.data.provider}`);
+      const catalog = reference ? catalogs.get(reference) : undefined;
+      if (
+        catalogId !== undefined &&
+        (!modelCatalogIdSchema.safeParse(catalogId).success ||
+          catalog?.scope !== scope ||
+          catalog.provider !== parsed.data.provider ||
+          !catalog.models)
+      ) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      const models = catalog?.models ?? provider.models;
       const model = models.find((candidate) => candidate.id === parsed.data.modelId);
       const resolved = model && resolveAiConfiguration(parsed.data, model);
       if (!resolved) throw new GameRequestError("INVALID_REQUEST");
@@ -87,20 +113,37 @@ export function createProviderRegistry(
       scope: string,
       credential: SessionCredential,
       signal?: AbortSignal,
-    ): Promise<ModelDiscoveryResult> {
+      previousCatalogId?: string,
+    ): Promise<ModelDiscoveryResponse> {
       validateCredential(credential);
       const { adapter } = providerFor(credential.provider);
       const input = { apiKey: credential.apiKey, ...(signal ? { signal } : {}) };
-      const cacheId = `${scope}:${credential.provider}`;
       prune();
-      // A failed refresh cannot leave an earlier account's catalog usable for new games.
-      catalogs.delete(cacheId);
+      if (previousCatalogId !== undefined) {
+        const previous = catalogs.get(previousCatalogId);
+        if (
+          !modelCatalogIdSchema.safeParse(previousCatalogId).success ||
+          (previous && (previous.scope !== scope || previous.provider !== credential.provider))
+        ) {
+          throw new GameRequestError("INVALID_REQUEST");
+        }
+        // Refresh invalidates only this draft. Expired or evicted references can rediscover.
+        discard(previousCatalogId);
+      }
       if (catalogs.size >= maxCatalogs) {
         const oldest = catalogs.keys().next();
-        if (!oldest.done) catalogs.delete(oldest.value);
+        if (!oldest.done) discard(oldest.value);
       }
-      const catalog = { expiresAt: now() + catalogTtlMs, models: null as ModelDescriptor[] | null };
+      const cacheId = randomUUID();
+      const catalog = {
+        scope,
+        provider: credential.provider,
+        expiresAt: now() + catalogTtlMs,
+        models: null as ModelDescriptor[] | null,
+      };
       catalogs.set(cacheId, catalog);
+      // Callers without a reference retain the latest-request behavior.
+      latest.set(`${scope}:${credential.provider}`, cacheId);
       try {
         return await runProviderRequest(input, async () => {
           const parsed = modelDiscoveryResultSchema.safeParse(await adapter.listModels(input));
@@ -114,14 +157,13 @@ export function createProviderRegistry(
             throw new ProviderBoundaryError();
           }
           if (parsed.data.ok && catalogs.get(cacheId) === catalog) {
-            // An older overlapping discovery must not replace a newer request's catalog.
             catalog.models = structuredClone(parsed.data.value);
             catalog.expiresAt = now() + catalogTtlMs;
           }
-          return parsed.data;
+          return parsed.data.ok ? { ...parsed.data, catalogId: cacheId } : parsed.data;
         });
       } finally {
-        if (catalog.models === null && catalogs.get(cacheId) === catalog) catalogs.delete(cacheId);
+        if (catalog.models === null && catalogs.get(cacheId) === catalog) discard(cacheId);
       }
     },
     async requestMove(credential: SessionCredential, input: Omit<MoveRequest, "apiKey">) {

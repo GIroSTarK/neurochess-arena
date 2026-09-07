@@ -16,6 +16,7 @@ import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { integrationDatabase } from "../database.js";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { setupProviders } from "./providers.js";
 
 async function main() {
   // This guard runs before creating a pool, applying migrations or listening.
@@ -36,7 +37,11 @@ async function main() {
     webOrigin: WEB_ORIGIN,
     gameApi: {
       guests: createGuestService(repository, 86_400),
-      games: createGameService(repository, { nodeEnv: "test", sandboxEnabled: true }),
+      games: createGameService(repository, {
+        nodeEnv: "test",
+        sandboxEnabled: true,
+        ai: { providers: setupProviders },
+      }),
     },
   });
   process.env.VITE_API_BASE_URL = API_ORIGIN;

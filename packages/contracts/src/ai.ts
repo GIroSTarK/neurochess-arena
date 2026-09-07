@@ -70,7 +70,11 @@ export const sessionCredentialSchema = z.strictObject({
     .regex(/^[\x21-\x7e]+(?![\s\S])/),
 });
 
-export const modelDiscoveryRequestSchema = z.strictObject({ credential: sessionCredentialSchema });
+export const modelCatalogIdSchema = z.uuid();
+export const modelDiscoveryRequestSchema = z.strictObject({
+  credential: sessionCredentialSchema,
+  catalogId: modelCatalogIdSchema.optional(),
+});
 
 export const aiParametersSchema = z.strictObject({
   temperature: z.number().nonnegative().optional(),
@@ -158,6 +162,12 @@ export const modelDiscoveryResultSchema = z.discriminatedUnion("ok", [
   z.strictObject({ ok: z.literal(false), error: providerErrorSchema }),
 ]);
 
+/** HTTP discovery adds an ephemeral reference; adapters never supply catalog identities. */
+export const modelDiscoveryResponseSchema = z.discriminatedUnion("ok", [
+  modelDiscoveryResultSchema.options[0].extend({ catalogId: modelCatalogIdSchema }),
+  modelDiscoveryResultSchema.options[1],
+]);
+
 export type ProviderId = z.infer<typeof providerIdSchema>;
 export type ProviderDescriptor = z.infer<typeof providerDescriptorSchema>;
 export type ModelId = z.infer<typeof modelIdSchema>;
@@ -176,6 +186,7 @@ export type ModelInvalidError = z.infer<typeof modelInvalidErrorSchema>;
 export type AiError = z.infer<typeof aiErrorSchema>;
 export type NormalizedMoveResponse = z.infer<typeof normalizedMoveResponseSchema>;
 export type ModelDiscoveryResult = z.infer<typeof modelDiscoveryResultSchema>;
+export type ModelDiscoveryResponse = z.infer<typeof modelDiscoveryResponseSchema>;
 export type SessionCredential = z.infer<typeof sessionCredentialSchema>;
 export type ModelDiscoveryRequest = z.infer<typeof modelDiscoveryRequestSchema>;
 export type ProviderListResponse = z.infer<typeof providerListResponseSchema>;

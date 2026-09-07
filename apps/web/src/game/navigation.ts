@@ -23,7 +23,10 @@ export function browserNavigation(): SandboxNavigation {
         : { kind: "invalid" };
     },
     open(gameId, replace = false) {
-      const url = "/?game=" + encodeURIComponent(gameId);
+      const url =
+        (window.location.pathname === "/sandbox" ? "/sandbox" : "/") +
+        "?game=" +
+        encodeURIComponent(gameId);
       if (window.location.pathname + window.location.search === url) return;
       window.history[replace ? "replaceState" : "pushState"](null, "", url);
     },

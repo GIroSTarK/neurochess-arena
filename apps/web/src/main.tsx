@@ -6,7 +6,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 
-import { App } from "./app/App";
+import { ArenaApp } from "./app/ArenaApp";
 import { ConfigurationError } from "./app/ConfigurationError";
 import { parseWebEnvironment } from "./app/env";
 import { ErrorBoundary } from "./app/ErrorBoundary";
@@ -26,7 +26,7 @@ try {
     <StrictMode>
       <I18nextProvider i18n={i18n}>
         <ErrorBoundary>
-          <App apiBaseUrl={environment.VITE_API_BASE_URL} />
+          <ArenaApp apiBaseUrl={environment.VITE_API_BASE_URL} />
         </ErrorBoundary>
       </I18nextProvider>
     </StrictMode>,

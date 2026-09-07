@@ -34,10 +34,184 @@ function mock() {
 }
 
 describe("provider registry", () => {
+  it("keeps disjoint same-provider catalogs addressable when discovery completes out of order", async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const whiteModel = { ...model, id: "white-only" };
+    const blackModel = { ...model, id: "black-only" };
+    const registry = createProviderRegistry([
+      {
+        adapter: {
+          ...mock(),
+          async listModels(input) {
+            if (input.apiKey === "white-discovery-key") {
+              entered.resolve();
+              await release.promise;
+              return { ok: true, value: [whiteModel] };
+            }
+            return { ok: true, value: [blackModel] };
+          },
+        },
+      },
+    ]);
+    const pendingWhite = registry.discover("guest", {
+      ...credential,
+      apiKey: "white-discovery-key",
+    });
+    await entered.promise;
+    const black = await registry.discover("guest", credential);
+    release.resolve();
+    const white = await pendingWhite;
+    if (!white.ok || !black.ok) throw new Error("Fixture discovery failed");
+    expect(white.catalogId).not.toBe(black.catalogId);
+    const whiteSelection = { ...configuration, modelId: whiteModel.id };
+    const blackSelection = { ...configuration, modelId: blackModel.id };
+    expect(registry.resolve("guest", whiteSelection, white.catalogId).modelId).toBe(whiteModel.id);
+    expect(registry.resolve("guest", blackSelection, black.catalogId).modelId).toBe(blackModel.id);
+    expect(() => registry.resolve("guest", whiteSelection, black.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    expect(registry.resolve("guest", blackSelection).modelId).toBe(blackModel.id);
+  });
+
+  it("uses each catalog's capability limits for identical model IDs", async () => {
+    const registry = createProviderRegistry([
+      {
+        adapter: {
+          ...mock(),
+          async listModels(input) {
+            return {
+              ok: true,
+              value: [
+                {
+                  ...model,
+                  supportedParameters: {
+                    temperature:
+                      input.apiKey === "white-discovery-key"
+                        ? { min: 0, max: 1 }
+                        : { min: 3, max: 4 },
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    ]);
+    const white = await registry.discover("guest", {
+      ...credential,
+      apiKey: "white-discovery-key",
+    });
+    const black = await registry.discover("guest", credential);
+    if (!white.ok || !black.ok) throw new Error("Fixture discovery failed");
+    const selection = (temperature: number) => ({ ...configuration, parameters: { temperature } });
+    expect(registry.resolve("guest", selection(0), white.catalogId).parameters).toEqual({
+      temperature: 0,
+    });
+    expect(registry.resolve("guest", selection(3), black.catalogId).parameters).toEqual({
+      temperature: 3,
+    });
+    expect(() => registry.resolve("guest", selection(0), black.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    expect(() => registry.resolve("guest", selection(3), white.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+  });
+
+  it("invalidates only the refreshed reference on failure, without allowing another guest to invalidate it", async () => {
+    let fail = false;
+    const provider = mock();
+    const registry = createProviderRegistry([
+      {
+        adapter: {
+          ...provider,
+          async listModels(input) {
+            return fail
+              ? { ok: false, error: { kind: "provider_auth" } }
+              : provider.listModels(input);
+          },
+        },
+      },
+    ]);
+    const white = await registry.discover("guest", credential);
+    const black = await registry.discover("guest", credential);
+    if (!white.ok || !black.ok) throw new Error("Fixture discovery failed");
+    await expect(
+      registry.discover("other-guest", credential, undefined, white.catalogId),
+    ).rejects.toThrow("INVALID_REQUEST");
+    expect(() => registry.resolve("other-guest", configuration, white.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    expect(registry.resolve("guest", configuration, white.catalogId).modelId).toBe(model.id);
+    fail = true;
+    expect(await registry.discover("guest", credential, undefined, white.catalogId)).toEqual({
+      ok: false,
+      error: { kind: "provider_auth" },
+    });
+    expect(() => registry.resolve("guest", configuration, white.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    expect(registry.resolve("guest", configuration, black.catalogId).modelId).toBe(model.id);
+    fail = false;
+    const replacement = await registry.discover("guest", credential, undefined, white.catalogId);
+    if (!replacement.ok) throw new Error("Fixture discovery failed");
+    expect(replacement.catalogId).not.toBe(white.catalogId);
+    expect(() => registry.resolve("guest", configuration, white.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+  });
+
+  it("rejects expired, evicted, forged, and wrong-provider references without falling back to fixtures", async () => {
+    let now = 0;
+    const registry = createProviderRegistry(
+      [
+        { adapter: mock(), models: [model] },
+        {
+          adapter: { ...mock(), descriptor: { id: "anthropic", name: "Anthropic" } },
+          models: [{ ...model, provider: "anthropic" }],
+        },
+      ],
+      () => now,
+    );
+    const first = await registry.discover("guest", credential);
+    if (!first.ok) throw new Error("Fixture discovery failed");
+    const wrongProvider = { ...configuration, provider: "anthropic" as const };
+    expect(() => registry.resolve("guest", wrongProvider, first.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    await expect(
+      registry.discover(
+        "guest",
+        { ...credential, provider: "anthropic" },
+        undefined,
+        first.catalogId,
+      ),
+    ).rejects.toThrow("INVALID_REQUEST");
+    expect(() => registry.resolve("guest", configuration, "not-a-reference")).toThrow(
+      "INVALID_REQUEST",
+    );
+    now = 300_000;
+    expect(() => registry.resolve("guest", configuration, first.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    const renewed = await registry.discover("guest", credential, undefined, first.catalogId);
+    if (!renewed.ok) throw new Error("Fixture discovery failed");
+    for (let index = 0; index < 128; index++) await registry.discover("guest", credential);
+    expect(() => registry.resolve("guest", configuration, renewed.catalogId)).toThrow(
+      "INVALID_REQUEST",
+    );
+    expect(registry.resolve("guest", configuration).modelId).toBe(model.id);
+  });
+
   it("uses defensive guest-scoped discovered metadata and filters before configuration leaves the registry", async () => {
     const registry = createProviderRegistry([{ adapter: mock() }]);
     const discovery = await registry.discover("guest-a", credential);
-    expect(discovery).toEqual({ ok: true, value: [model] });
+    expect(discovery).toEqual({
+      ok: true,
+      value: [model],
+      catalogId: expect.any(String) as unknown,
+    });
     if (!discovery.ok) throw new Error("Fixture discovery failed");
     discovery.value[0]!.supportedParameters.temperature!.max = 9;
     expect(registry.resolve("guest-a", configuration)).toEqual({

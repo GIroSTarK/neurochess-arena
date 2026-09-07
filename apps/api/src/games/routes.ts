@@ -13,7 +13,7 @@ import {
   guestSessionResponseSchema,
   lifecycleCommandSchema,
   modelDiscoveryRequestSchema,
-  modelDiscoveryResultSchema,
+  modelDiscoveryResponseSchema,
   moveCommandSchema,
   providerListResponseSchema,
   unfinishedGameResponseSchema,
@@ -121,15 +121,15 @@ export async function registerGameRoutes(
       schema: {
         body: modelDiscoveryRequestSchema,
         querystring: emptyQuerySchema,
-        response: { 200: modelDiscoveryResultSchema, ...errorResponses },
+        response: { 200: modelDiscoveryResponseSchema, ...errorResponses },
       },
     },
     async (request, reply) => {
-      const { credential } = request.body;
+      const { credential, catalogId } = request.body;
       try {
         const principal = await principalFor(request, reply);
         return await whileConnected(request, reply, (signal) =>
-          options.games.discoverModels(principal, credential, signal),
+          options.games.discoverModels(principal, credential, signal, catalogId),
         );
       } finally {
         credential.apiKey = "";
