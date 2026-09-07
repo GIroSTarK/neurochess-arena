@@ -87,6 +87,8 @@ An AI game does not continue in the background after its controlling browser tab
 
 The user selects their color and configures the AI opponent with the same provider, model, parameter, and credential controls used by AI-versus-AI mode. The chess engine validates human and AI moves. The game has no chess clock.
 
+The board faces the human's selected color and accepts moves only for their authorized seat and turn. The AI replies after an accepted human move and plays the opening move immediately when the human chooses Black. Human promotion requires an explicit piece choice. Confirmed human resignation awards the AI a win and remains available off-turn or while paused; an AI seat cannot resign. Pause, Resume, and confirmed Stop use the shared game controls, and uncertain responses stop automatic progression until explicitly resolved.
+
 ### Human versus human
 
 A registered user creates a private room, chooses their color, and shares an invitation link or code. A registered user or guest can join. There is no public room directory or automatic matchmaking.

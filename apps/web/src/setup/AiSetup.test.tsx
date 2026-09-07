@@ -311,6 +311,15 @@ describe("AI setup", () => {
           },
         },
       ]);
+      expect(document.title).toBe("AI vs human · Neurochess Arena");
+      const turns = () =>
+        fetch.mock.calls.filter(([input]) => requestPath(input).endsWith("/ai-turn"));
+      if (color === "Black") {
+        await waitFor(() => expect(turns()).toHaveLength(1));
+        expect(JSON.parse(requestBody(turns()[0]?.[1])) as unknown).toMatchObject({
+          credential: { provider: "anthropic" },
+        });
+      } else expect(turns()).toHaveLength(0);
     },
   );
 

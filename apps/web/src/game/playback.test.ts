@@ -1,4 +1,4 @@
-import type { GameSnapshot, SessionCredential } from "@neurochess/contracts";
+import type { ChessColor, GameSnapshot, SessionCredential } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiTurnApi } from "../api/ai";
@@ -21,7 +21,7 @@ function snapshot(
   });
 }
 
-function harness(initial = snapshot(), recovered = false, keys = true) {
+function harness(initial = snapshot(), recovered = false, keys = true, humanColor?: ChessColor) {
   const api = {
     ready: vi.fn<SandboxApi["ready"]>().mockResolvedValue(true),
     bootstrap: vi.fn<SandboxApi["bootstrap"]>().mockResolvedValue(),
@@ -45,7 +45,9 @@ function harness(initial = snapshot(), recovered = false, keys = true) {
   ai.turn.mockReturnValue(pending.promise);
   const controller = new AiPlaybackController(api, ai, initial, {
     recovered,
-    credential: (color) => (keys ? (color === "white" ? white : black) : null),
+    ...(humanColor ? { humanColor } : {}),
+    credential: (color) =>
+      keys && color !== humanColor ? (color === "white" ? white : black) : null,
   });
   controllers.push(controller);
   controller.connect();
@@ -56,6 +58,163 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   controllers.splice(0).forEach((controller) => controller.disconnect());
   vi.useRealTimers();
+});
+
+describe("AI versus human controller", () => {
+  it("retries the identical uncertain human command before scheduling one AI reply", async () => {
+    const { controller, api, ai } = harness(snapshot(), false, true, "white");
+    api.move.mockRejectedValueOnce(new ApiFailure("network"));
+    await controller.submit("e2e4");
+    expect(controller.getSnapshot().game.phase).toBe("uncertain");
+    api.move.mockResolvedValueOnce(snapshot(["e2e4"]));
+    await Promise.all([controller.retryCommand(), controller.retryCommand()]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.move).toHaveBeenCalledTimes(2);
+    expect(api.move.mock.calls[1]?.[0]).toEqual(api.move.mock.calls[0]?.[0]);
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+    expect(ai.turn.mock.calls[0]?.[0]).toMatchObject({ expectedVersion: 1 });
+  });
+
+  it("pauses and resumes the human turn without requesting an AI move", async () => {
+    const { controller, api, ai } = harness(snapshot(), false, true, "white");
+    await controller.pause();
+    await controller.submit("e2e4");
+    await controller.next();
+    expect(api.move).not.toHaveBeenCalled();
+    expect(controller.canMove()).toBe(false);
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(ai.turn).not.toHaveBeenCalled();
+    expect(controller.canMove()).toBe(true);
+    api.move.mockResolvedValueOnce(snapshot(["e2e4"], { version: 3 }));
+    await controller.submit("e2e4");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.move.mock.calls[0]?.[0]).toMatchObject({ expectedVersion: 2 });
+    expect(ai.turn.mock.calls[0]?.[0]).toMatchObject({ expectedVersion: 3 });
+  });
+
+  it.each(["white", "black"] as const)(
+    "completes a game with human %s using only the opponent credential",
+    async (humanColor) => {
+      const { controller, api, ai } = harness(snapshot(), false, true, humanColor);
+      const response = async (command: { expectedVersion: number }) =>
+        snapshot(FOOLS_MATE.slice(0, command.expectedVersion + 1));
+      api.move.mockImplementation(response);
+      ai.turn.mockImplementation(response);
+      for (let ply = 0; ply < FOOLS_MATE.length; ply++) {
+        const humanTurn = (ply % 2 === 0 ? "white" : "black") === humanColor;
+        expect(controller.canMove()).toBe(humanTurn);
+        if (humanTurn) {
+          await controller.submit(FOOLS_MATE[ply]!);
+        } else {
+          const humanRequests = api.move.mock.calls.length;
+          await controller.submit(FOOLS_MATE[ply]!);
+          expect(api.move).toHaveBeenCalledTimes(humanRequests);
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(controller.getSnapshot().game.snapshot?.moves).toHaveLength(ply + 1);
+      }
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.getSnapshot()).toMatchObject({
+        automatic: false,
+        game: { snapshot: { state: "completed", terminationReason: "checkmate", result: "0-1" } },
+      });
+      expect(controller.canMove()).toBe(false);
+      expect(api.move).toHaveBeenCalledTimes(2);
+      expect(ai.turn).toHaveBeenCalledTimes(2);
+      expect(ai.turn.mock.calls.map(([, credential]) => credential)).toEqual([
+        humanColor === "white" ? black : white,
+        humanColor === "white" ? black : white,
+      ]);
+      await controller.submit("a2a3");
+      await controller.resign(humanColor);
+      expect(api.lifecycle).not.toHaveBeenCalled();
+      expect(JSON.stringify(controller.getSnapshot())).not.toContain("memory-key");
+    },
+  );
+
+  it("waits for the accepted human command and rejects duplicate or out-of-seat moves", async () => {
+    const { controller, api, ai, initial } = harness(snapshot(), false, true, "white");
+    const accepted = Promise.withResolvers<GameSnapshot>();
+    api.move.mockReturnValueOnce(accepted.promise);
+    const pending = controller.submit("e2e4");
+    await controller.submit("d2d4");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.move).toHaveBeenCalledTimes(1);
+    expect(ai.turn).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().game.snapshot).toBe(initial);
+    expect(controller.canMove()).toBe(false);
+    accepted.resolve(snapshot(["e2e4"]));
+    await pending;
+    await controller.submit("e7e5");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.move).toHaveBeenCalledTimes(1);
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+    expect(ai.turn.mock.calls[0]?.[0]).toMatchObject({ expectedVersion: 1 });
+  });
+
+  it.each(["rejected", "uncertain", "conflict"] as const)(
+    "does not start AI after a %s human response",
+    async (outcome) => {
+      const { controller, api, ai } = harness(snapshot(), false, true, "white");
+      api.move.mockRejectedValueOnce(
+        outcome === "rejected"
+          ? new ApiFailure("api", "ILLEGAL_MOVE")
+          : outcome === "uncertain"
+            ? new ApiFailure("network")
+            : new ApiFailure("api", "GAME_CONFLICT", snapshot(["e2e4"])),
+      );
+      await controller.submit("e2e4");
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(ai.turn).not.toHaveBeenCalled();
+      expect(controller.getSnapshot().automatic).toBe(false);
+      expect(controller.canMove()).toBe(false);
+    },
+  );
+
+  it.each(["white", "black"] as const)(
+    "only resigns human %s, including off-turn while AI is pending",
+    async (humanColor) => {
+      const initial = snapshot(humanColor === "white" ? ["e2e4"] : []);
+      const { controller, api, ai, pending } = harness(initial, false, true, humanColor);
+      await vi.advanceTimersByTimeAsync(0);
+      await controller.resign(humanColor === "white" ? "black" : "white");
+      expect(api.lifecycle).not.toHaveBeenCalled();
+      const resigned = snapshot(
+        initial.moves.map(({ uci }) => uci),
+        {
+          state: "completed",
+          terminationReason: "human_resignation",
+          result: humanColor === "white" ? "0-1" : "1-0",
+          version: initial.version + 1,
+        },
+      );
+      api.lifecycle.mockResolvedValueOnce(resigned);
+      await controller.resign(humanColor);
+      expect(api.lifecycle.mock.calls[0]?.[0]).toMatchObject({
+        action: "resign",
+        losingColor: humanColor,
+        expectedVersion: initial.version,
+      });
+      expect(ai.turn.mock.calls[0]?.[2].aborted).toBe(true);
+      pending.resolve(snapshot(["e2e4", "e7e5"]));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.getSnapshot().game.snapshot).toEqual(resigned);
+      expect(ai.turn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("keeps human moves blocked while paused, recovered without keys, or observing AI seats", async () => {
+    for (const setup of [
+      harness(snapshot([], { state: "paused" }), false, true, "white"),
+      harness(snapshot([], { state: "paused" }), true, false, "white"),
+      harness(),
+    ]) {
+      await setup.controller.submit("e2e4");
+      expect(setup.controller.canMove()).toBe(false);
+      expect(setup.api.move).not.toHaveBeenCalled();
+    }
+  });
 });
 
 describe("AI playback controller", () => {

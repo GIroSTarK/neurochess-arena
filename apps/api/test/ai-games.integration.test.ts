@@ -153,38 +153,86 @@ describe("guest AI creation, discovery, and authority", () => {
   });
 
   it.each(["white", "black"] as const)(
-    "assigns only the selected %s human seat and validates both kinds of turn",
+    "completes a game with human %s and rejects move/resignation commands for AI seats",
     async (humanColor) => {
-      const provider = mock([{ output: { move: humanColor === "white" ? "e7e5" : "e2e4" } }]);
+      const provider = mock(
+        FOOLS_MATE.filter((_, ply) => (ply % 2 === 0 ? "white" : "black") !== humanColor).map(
+          (move) => ({ output: { move } }),
+        ),
+      );
       const api = await harness.createApi({ ai: runtime(provider) });
       const guest = await harness.guest(api);
+      const stranger = await harness.guest(api);
       let current = await createAi(api, guest, { mode: "ai_vs_human", humanColor, ai: white });
       const aiColor = humanColor === "white" ? "black" : "white";
       expect(
         (await records(api, current.gameId)).participants.find((seat) => seat.color === humanColor),
       ).toMatchObject({ seatType: "human", guestSessionId: guest.id, provider: null });
-      expect((await lifecycle(api, guest, current, "resign", aiColor)).statusCode).toBe(403);
-      if (humanColor === "white") {
-        expect((await turn(api, guest, aiCommand(current))).statusCode).toBe(403);
-        const response = await submit(api, guest, command(current, "e2e4"));
-        expect(response.statusCode).toBe(200);
+      for (const move of FOOLS_MATE) {
+        expect((await lifecycle(api, guest, current, "resign", aiColor)).statusCode).toBe(403);
+        expect((await submit(api, stranger, command(current, move))).statusCode).toBe(404);
+        expect((await lifecycle(api, stranger, current, "resign", humanColor)).statusCode).toBe(
+          404,
+        );
+        const before = current;
+        if (current.turn === humanColor) {
+          expect((await turn(api, guest, aiCommand(current))).statusCode).toBe(403);
+        } else {
+          expect((await submit(api, guest, command(current, move))).statusCode).toBe(403);
+        }
+        expect(await snapshot(api, guest, current.gameId)).toEqual(before);
+        const response =
+          current.turn === humanColor
+            ? await submit(api, guest, command(current, move))
+            : await turn(api, guest, aiCommand(current));
+        expect(response.statusCode, response.body).toBe(200);
         current = gameSnapshotSchema.parse(response.json());
+        expect(current.version).toBe(before.version + 1);
+        expect(current.moves.at(-1)?.uci).toBe(move);
+        expect(await snapshot(api, guest, current.gameId)).toEqual(current);
       }
-      expect((await submit(api, guest, command(current, current.legalMoves[0]!))).statusCode).toBe(
-        403,
+      expect(current).toMatchObject({
+        state: "completed",
+        result: "0-1",
+        terminationReason: "checkmate",
+      });
+      expect(provider.requests).toHaveLength(2);
+      expect(provider.requests.every(({ context }) => context.color === aiColor)).toBe(true);
+      const stored = await records(api, current.gameId);
+      expect(stored.moves.map(({ uci }) => uci)).toEqual(FOOLS_MATE);
+      expect(stored.invocations).toHaveLength(2);
+      expect(
+        await api.database.db.$count(gameCommands, eq(gameCommands.gameId, current.gameId)),
+      ).toBe(4);
+      expect((await discover(api, guest)).json()).toEqual({ snapshot: null });
+      await createAi(api, guest, { mode: "ai_vs_human", humanColor, ai: white });
+    },
+  );
+
+  it.each(["white", "black"] as const)(
+    "allows only human %s to resign a paused game",
+    async (humanColor) => {
+      const provider = mock([]);
+      const api = await harness.createApi({ ai: runtime(provider) });
+      const guest = await harness.guest(api);
+      const initial = await createAi(api, guest, { mode: "ai_vs_human", humanColor, ai: white });
+      const paused = gameSnapshotSchema.parse(
+        (await lifecycle(api, guest, initial, "pause")).json(),
       );
-      const response = await turn(api, guest, aiCommand(current));
-      expect(response.statusCode, response.body).toBe(200);
-      current = gameSnapshotSchema.parse(response.json());
-      expect(current.turn).toBe(humanColor);
-      expect((await turn(api, guest, aiCommand(current))).statusCode).toBe(403);
-      const human = await submit(
-        api,
-        guest,
-        command(current, humanColor === "white" ? "g1f3" : "e7e5"),
-      );
-      expect(human.statusCode).toBe(200);
-      expect(provider.requests).toHaveLength(1);
+      expect(
+        (await lifecycle(api, guest, paused, "resign", humanColor === "white" ? "black" : "white"))
+          .statusCode,
+      ).toBe(403);
+      const response = await lifecycle(api, guest, paused, "resign", humanColor);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        state: "completed",
+        result: humanColor === "white" ? "0-1" : "1-0",
+        terminationReason: "human_resignation",
+        moves: [],
+        version: 2,
+      });
+      expect(provider.requests).toHaveLength(0);
     },
   );
 

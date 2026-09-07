@@ -4,11 +4,12 @@ import type {
   GameSnapshot,
   SessionCredential,
 } from "@neurochess/contracts";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { AiTurnApi } from "../api/ai";
 import type { SandboxApi } from "../api/client";
+import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { announcementMessage, gameStatus } from "../game/messages";
 import { MoveHistory } from "../game/panels/MoveHistory";
@@ -26,22 +27,27 @@ export function GamePreview({
   match,
   initial,
   recovered,
-  orientation,
   onSetup,
 }: {
   readonly api: SandboxApi;
   readonly turnApi: AiTurnApi;
   readonly credential: (color: ChessColor) => SessionCredential | null;
-  readonly match: Extract<CreateAiGameRequest, { mode: "ai_vs_ai" }> | null;
+  readonly match: CreateAiGameRequest | null;
   readonly initial: GameSnapshot;
   readonly recovered: boolean;
-  readonly orientation: ChessColor;
   readonly onSetup: () => void;
 }) {
   const { t } = useTranslation();
+  const helpId = useId();
+  const humanColor = match?.mode === "ai_vs_human" ? match.humanColor : null;
   const board = useRef<ChessboardHandle>(null);
   const [game] = useState(
-    () => new AiPlaybackController(api, turnApi, initial, { recovered, credential }),
+    () =>
+      new AiPlaybackController(api, turnApi, initial, {
+        recovered,
+        credential,
+        ...(humanColor ? { humanColor } : {}),
+      }),
   );
   const activity = useSyncExternalStore(game.subscribe, game.getSnapshot);
   const state = activity.game;
@@ -67,7 +73,11 @@ export function GamePreview({
   const snapshot = state.snapshot;
   const epoch = interactionEpoch(state);
   const terminal = snapshot && isTerminal(snapshot);
-  const retryingCommand = state.phase === "submitting" && activity.control === null;
+  const retryingCommand =
+    state.phase === "submitting" &&
+    activity.control === null &&
+    state.announcement?.kind === "notice" &&
+    state.announcement.notice === "uncertain";
   const showRecovery = state.phase !== "ready" && (state.phase !== "submitting" || retryingCommand);
   if (state.phase === "access-error") {
     return (
@@ -87,29 +97,49 @@ export function GamePreview({
       <section aria-label={t("sandbox.playArea")}>
         {match ? (
           <div className="mb-4 grid grid-cols-2 rounded-panel border border-divider bg-surface">
-            <PlayerSummary color="white" snapshot={snapshot} ai={match.white} />
-            <PlayerSummary color="black" snapshot={snapshot} ai={match.black} />
+            {(["white", "black"] as const).map((color) => (
+              <PlayerSummary
+                key={color}
+                color={color}
+                snapshot={snapshot}
+                {...(match.mode === "ai_vs_ai"
+                  ? { ai: match[color] }
+                  : color !== humanColor
+                    ? { ai: match.ai }
+                    : {})}
+              />
+            ))}
           </div>
         ) : null}
         {snapshot ? (
           <Chessboard
             ref={board}
             snapshot={snapshot}
-            orientation={orientation}
-            canMove={false}
+            orientation={humanColor ?? "white"}
+            canMove={game.canMove()}
             interactionEpoch={epoch}
-            onMove={() => undefined}
+            onMove={(move) => {
+              void game.submit(move);
+            }}
+            describedBy={humanColor ? helpId : undefined}
           />
         ) : null}
+        {humanColor ? <BoardKeyboardHelp id={helpId} /> : null}
       </section>
       <section aria-label={t("sandbox.gameDetails")} className="min-w-0 space-y-5">
         <h2 className="font-display text-section">
           {t(recovered ? "setup.returned" : "setup.created")}
         </h2>
         <p role="status">{snapshot ? gameStatus(snapshot, t) : t("setup.accessError")}</p>
-        <p className="text-text-secondary">{t(match ? "playback.hint" : "setup.previewHint")}</p>
+        <p className="text-text-secondary">
+          {humanColor
+            ? t("humanPlay.hint", { color: t(`players.${humanColor}`) })
+            : t(match ? "playback.hint" : "setup.previewHint")}
+        </p>
         {recovered ? <p className="text-label text-warning">{t("setup.recoveredHint")}</p> : null}
-        {match && !terminal ? <PlaybackControls state={activity} controller={game} /> : null}
+        {match && !terminal ? (
+          <PlaybackControls state={activity} controller={game} humanColor={humanColor} />
+        ) : null}
         {showRecovery ? (
           <div role="status" className="space-y-3">
             <p>{t("setup.checkGame")}</p>
@@ -141,13 +171,25 @@ export function GamePreview({
             {t("setup.newMatch")}
           </Button>
         ) : snapshot && isUnfinished(snapshot) ? (
-          <StopControl
-            key={snapshot.gameId}
-            disabled={state.phase !== "ready" || activity.control !== null}
-            onStop={() => {
-              void game.stop();
-            }}
-          />
+          <div className="flex flex-wrap gap-3">
+            <EndGameControl
+              key={snapshot.gameId}
+              disabled={state.phase !== "ready" || activity.control !== null}
+              onConfirm={() => {
+                void game.stop();
+              }}
+            />
+            {humanColor ? (
+              <EndGameControl
+                key={`${snapshot.gameId}-resign`}
+                losingColor={humanColor}
+                disabled={state.phase !== "ready" || activity.control !== null}
+                onConfirm={() => {
+                  void game.resign(humanColor);
+                }}
+              />
+            ) : null}
+          </div>
         ) : null}
         <MoveHistory moves={snapshot?.moves ?? []} />
       </section>
@@ -159,24 +201,39 @@ export function GamePreview({
 }
 
 /** Mounted for one unfinished game so accepted moves preserve the dialog and its focus. */
-function StopControl({
+function EndGameControl({
   disabled,
-  onStop,
+  losingColor,
+  onConfirm,
 }: {
   readonly disabled: boolean;
-  readonly onStop: () => void;
+  readonly losingColor?: ChessColor;
+  readonly onConfirm: () => void;
 }) {
   const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
+  const label = losingColor
+    ? t(losingColor === "white" ? "lifecycle.resignWhite" : "lifecycle.resignBlack")
+    : t("setup.stop");
   return (
     <>
       <Button variant="secondary" aria-disabled={disabled} onClick={() => setConfirming(true)}>
-        {t("setup.stop")}
+        {label}
       </Button>
       {confirming ? (
         <Dialog
-          title={t("lifecycle.abortTitle")}
-          description={t("lifecycle.abortDescription")}
+          title={
+            losingColor
+              ? t("lifecycle.resignTitle", { color: t(`players.${losingColor}`) })
+              : t("lifecycle.abortTitle")
+          }
+          description={
+            losingColor
+              ? t("lifecycle.resignDescription", {
+                  winner: t(losingColor === "white" ? "players.black" : "players.white"),
+                })
+              : t("lifecycle.abortDescription")
+          }
           onCancel={() => setConfirming(false)}
         >
           {disabled ? (
@@ -193,10 +250,10 @@ function StopControl({
               aria-disabled={disabled}
               onClick={() => {
                 setConfirming(false);
-                onStop();
+                onConfirm();
               }}
             >
-              {t("setup.stop")}
+              {losingColor ? t("lifecycle.confirmResign") : label}
             </Button>
           </div>
         </Dialog>

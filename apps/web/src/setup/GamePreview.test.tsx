@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiTurnApi } from "../api/ai";
 import { ApiFailure, type SandboxApi } from "../api/client";
-import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, OTHER_GAME_ID, PROMOTION_APPROACH, snapshot } from "../test/fixtures";
+import { square } from "../test/queries";
 import { renderLocalized } from "../test/render";
 
 import { GamePreview } from "./GamePreview";
@@ -15,7 +16,7 @@ const match = {
   black: { provider: "anthropic", modelId: "fixture", parameters: {} },
 } satisfies CreateAiGameRequest;
 
-function mount(initial = snapshot()) {
+function mount(initial = snapshot(), configuration: CreateAiGameRequest | null = match) {
   const api = {
     ready: vi.fn<SandboxApi["ready"]>().mockResolvedValue(true),
     bootstrap: vi.fn<SandboxApi["bootstrap"]>().mockResolvedValue(),
@@ -33,10 +34,12 @@ function mount(initial = snapshot()) {
     api,
     turnApi,
     initial,
-    match,
+    match: configuration,
     recovered: false,
-    orientation: "white" as const,
-    credential: () => ({ provider: "openai" as const, apiKey: "fixture-only" }),
+    credential: (color: "white" | "black") =>
+      configuration?.mode === "ai_vs_human" && color === configuration.humanColor
+        ? null
+        : { provider: "openai" as const, apiKey: "fixture-only" },
     onSetup: vi.fn(),
   };
   const rendered = renderLocalized(<GamePreview key={initial.gameId} {...props} />);
@@ -45,6 +48,170 @@ function mount(initial = snapshot()) {
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
+
+describe("human seat on the live board", () => {
+  it("keeps uncertain human resignation on the shared command-retry flow", async () => {
+    const { api, turnApi } = mount(snapshot(), {
+      mode: "ai_vs_human",
+      humanColor: "white",
+      ai: match.white,
+    });
+    api.lifecycle.mockRejectedValueOnce(new ApiFailure("network"));
+    fireEvent.click(screen.getByRole("button", { name: "Resign White" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm resignation" }));
+    });
+    const response = Promise.withResolvers<GameSnapshot>();
+    api.lifecycle.mockReturnValueOnce(response.promise);
+    fireEvent.click(screen.getByRole("button", { name: "Retry same command" }));
+    expect(screen.getByText("Applying your game control…")).not.toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByText("Confirming your move…")).toHaveAttribute("aria-hidden", "true");
+    expect(api.lifecycle.mock.calls[1]?.[0]).toEqual(api.lifecycle.mock.calls[0]?.[0]);
+    await act(async () => {
+      response.resolve(
+        snapshot([], {
+          state: "completed",
+          legalMoves: [],
+          terminationReason: "human_resignation",
+          result: "0-1",
+          version: 1,
+        }),
+      );
+    });
+    expect(screen.getByRole("button", { name: "Configure another match" })).toBeVisible();
+    expect(turnApi.turn).not.toHaveBeenCalled();
+  });
+
+  it.each(["white", "black"] as const)(
+    "orients toward human %s and submits only that seat's turn",
+    async (humanColor) => {
+      const opening = humanColor === "white" ? [] : ["e2e4"];
+      const initial = snapshot(opening);
+      const { api, turnApi } = mount(initial, { mode: "ai_vs_human", humanColor, ai: match.white });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(screen.getByRole("grid").querySelector("[data-square]")).toHaveAttribute(
+        "data-square",
+        humanColor === "white" ? "a8" : "h1",
+      );
+      expect(screen.queryByRole("combobox", { name: "Playback speed" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Next move" })).not.toBeInTheDocument();
+      const aiMove = humanColor === "white" ? "e7e5" : "d2d4";
+      fireEvent.click(square(aiMove.slice(0, 2)));
+      fireEvent.click(square(aiMove.slice(2, 4)));
+      expect(api.move).not.toHaveBeenCalled();
+      const move = humanColor === "white" ? "e2e4" : "e7e5";
+      const accepted = Promise.withResolvers<GameSnapshot>();
+      api.move.mockReturnValueOnce(accepted.promise);
+      fireEvent.click(square(move.slice(0, 2)));
+      fireEvent.click(square(move.slice(2, 4)));
+      expect(api.move.mock.calls[0]?.[0]).toMatchObject({ move, expectedVersion: initial.version });
+      expect(turnApi.turn).not.toHaveBeenCalled();
+      expect(square(move.slice(0, 2)).getAttribute("aria-label")).toContain("pawn");
+      expect(screen.getByText("Confirming your move…")).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Retry recovery" })).not.toBeInTheDocument();
+      fireEvent.click(square(move.slice(2, 4)));
+      expect(api.move).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        accepted.resolve(snapshot([...opening, move]));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(turnApi.turn).toHaveBeenCalledTimes(1);
+      fireEvent.click(square(aiMove.slice(0, 2)));
+      fireEvent.click(square(aiMove.slice(2, 4)));
+      expect(api.move).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["white", "black"] as const)(
+    "requires an explicit promotion choice for human %s",
+    async (humanColor) => {
+      const opening =
+        humanColor === "white" ? PROMOTION_APPROACH : [...PROMOTION_APPROACH, "b7a8n"];
+      const initial = snapshot(opening);
+      const { api, turnApi } = mount(initial, { mode: "ai_vs_human", humanColor, ai: match.white });
+      const move = humanColor === "white" ? "b7a8n" : "g2h1r";
+      const source = square(move.slice(0, 2));
+      const target = square(move.slice(2, 4));
+      fireEvent.click(source);
+      fireEvent.click(target);
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getAllByRole("button", { name: /^Promote/ })).toHaveLength(4);
+      expect(api.move).not.toHaveBeenCalled();
+      expect(source.getAttribute("aria-label")).toContain("pawn");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(target).toHaveFocus();
+      fireEvent.click(target);
+      api.move.mockResolvedValueOnce(snapshot([...opening, move]));
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: humanColor === "white" ? "Promote to Knight" : "Promote to Rook",
+          }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(api.move.mock.calls[0]?.[0]).toMatchObject({ move });
+      expect(turnApi.turn).toHaveBeenCalledTimes(1);
+      expect(target.getAttribute("aria-label")).toContain(
+        humanColor === "white" ? "White knight" : "Black rook",
+      );
+    },
+  );
+
+  it.each(["white", "black"] as const)(
+    "confirms resignation only for human %s at the latest accepted revision",
+    async (humanColor) => {
+      const opening = humanColor === "white" ? ["e2e4"] : [];
+      const { api, pending } = mount(snapshot(opening), {
+        mode: "ai_vs_human",
+        humanColor,
+        ai: match.white,
+      });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      const name = humanColor === "white" ? "Resign White" : "Resign Black";
+      expect(
+        screen.queryByRole("button", {
+          name: humanColor === "white" ? "Resign Black" : "Resign White",
+        }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(api.lifecycle).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name }));
+      const dialog = screen.getByRole("dialog");
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      const moves = [...opening, humanColor === "white" ? "e7e5" : "e2e4"];
+      await act(async () => {
+        pending.resolve(snapshot(moves));
+      });
+      expect(screen.getByRole("dialog")).toBe(dialog);
+      expect(cancel).toHaveFocus();
+      api.lifecycle.mockResolvedValueOnce(
+        snapshot(moves, {
+          state: "completed",
+          legalMoves: [],
+          terminationReason: "human_resignation",
+          result: humanColor === "white" ? "0-1" : "1-0",
+          version: moves.length + 1,
+        }),
+      );
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Confirm resignation" }));
+      });
+      expect(api.lifecycle.mock.calls[0]?.[0]).toMatchObject({
+        action: "resign",
+        losingColor: humanColor,
+        expectedVersion: moves.length,
+      });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    },
+  );
+});
 
 describe("AI arena lifecycle feedback", () => {
   it.each(["pause", "resume"] as const)(

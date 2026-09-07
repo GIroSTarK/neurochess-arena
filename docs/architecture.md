@@ -69,7 +69,7 @@ Responsibilities:
 
 The client is not authoritative for legal moves, game results, authorization, participant identity, or room state.
 
-The [AI setup flow](development.md#ai-setup-ui) keeps each seat's non-secret draft and discovered capabilities separate from its page-memory credential. Provider and key changes cancel obsolete discovery; requests cannot replace a newer seat catalog. Shared schemas validate provider lists, discovery results, and credential-free creation. The accepted AI-versus-AI handoff starts the [playback controller](development.md#ai-playback-ui) using those separate seat credentials, the existing read-only board, versioned command session, operation gate, and paused recovery.
+The [AI setup flow](development.md#ai-setup-ui) keeps each seat's non-secret draft and discovered capabilities separate from its page-memory credential. Provider and key changes cancel obsolete discovery; requests cannot replace a newer seat catalog. Shared schemas validate provider lists, discovery results, and credential-free creation. The accepted handoff starts the shared [playback controller](development.md#ai-playback-ui) with separate AI-seat credentials, the versioned command session, operation gate, and paused recovery. AI-versus-AI is read-only; [AI-versus-human](development.md#ai-versus-human-ui) enables the configured human seat.
 
 ### Fastify API
 
@@ -208,6 +208,8 @@ The invalid-output budget spans reservations for the current chess turn. Persist
 `games/ai-service.ts` composes this path with the shared authorized history restoration and snapshot projection. Creation validates effective configuration against trusted server-supplied model descriptors. The normal server registers provider adapters with request-scoped credentials; integration tests use scripted adapters or mocked provider HTTP. Each HTTP turn reserves and begins its invocation before provider I/O, then validates the normalized response and applies the move through a freshly restored aggregate under the commit lock. Result recording and completion share one transaction. Duplicate, busy, expired, or overtaken requests use the existing authorized conflict envelope and cannot obtain execution rights. Lease renewal runs only while that request is attached; HTTP disconnection signals cancellation and leaves uncertain ownership for explicit recovery. No automatic sequence of turns or background game is started. See the [API composition and recovery contract](development.md#guest-ai-game-api).
 
 ### Human turns
+
+For a newly created AI-versus-human game, the accepted setup configuration supplies the human color to the board and playback controller. Only AI seats require page-memory credentials. The controller permits human submission only on the active human turn while progression is enabled and no operation is pending; the API independently enforces the persisted seat assignment. Accepted human commands schedule one AI response, while AI responses wait for the human. Resignation is bound to the configured human color and uses the same lifecycle invalidation and conflict handling as Stop. Recovered games without known seat configuration and re-entered keys remain inspection-only.
 
 Human moves use the same authoritative command path without a provider call. For online games, the accepted state is broadcast to both room participants over WebSocket. Reconnecting clients fetch a full snapshot before processing later events.
 

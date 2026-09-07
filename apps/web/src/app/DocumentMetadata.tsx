@@ -3,23 +3,24 @@ import { useTranslation } from "react-i18next";
 
 export function DocumentMetadata({
   arena = false,
-  playback = false,
+  matchMode,
 }: {
   readonly arena?: boolean;
-  readonly playback?: boolean;
+  readonly matchMode?: "ai_vs_ai" | "ai_vs_human" | undefined;
 }) {
   const { t, i18n } = useTranslation();
   useEffect(() => {
+    const liveCopy = matchMode === "ai_vs_human" ? "humanPlay" : "playback";
     document.documentElement.lang = i18n.resolvedLanguage ?? "en";
     document.title = t(
-      playback ? "playback.documentTitle" : arena ? "setup.documentTitle" : "app.title",
+      matchMode ? `${liveCopy}.documentTitle` : arena ? "setup.documentTitle" : "app.title",
     );
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute(
         "content",
-        t(playback ? "playback.description" : arena ? "setup.description" : "app.description"),
+        t(matchMode ? `${liveCopy}.description` : arena ? "setup.description" : "app.description"),
       );
-  }, [t, i18n.resolvedLanguage, arena, playback]);
+  }, [t, i18n.resolvedLanguage, arena, matchMode]);
   return null;
 }

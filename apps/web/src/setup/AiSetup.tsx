@@ -99,7 +99,12 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 white: { provider: configuration.white.provider, apiKey: white.key },
                 black: { provider: configuration.black.provider, apiKey: black.key },
               }
-            : {};
+            : {
+                [configuration.humanColor === "white" ? "black" : "white"]: {
+                  provider: configuration.ai.provider,
+                  apiKey: opponent.key,
+                },
+              };
         setPreview({ snapshot, recovered: false, configuration });
       }
     } catch (failure: unknown) {
@@ -130,10 +135,11 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     for (const seat of [white, black, opponent]) seat.resetDiscovery();
     setReload((value) => value + 1);
   }
-  const match = preview?.configuration?.mode === "ai_vs_ai" ? preview.configuration : null;
+  const match = preview?.configuration ?? null;
+  const liveCopy = match?.mode === "ai_vs_human" ? "humanPlay" : "playback";
   return (
     <div className="mx-auto w-[min(1280px,calc(100%_-_2rem))] pb-[max(2rem,env(safe-area-inset-bottom))] md:w-[min(1280px,calc(100%_-_3rem))] lg:w-[min(1280px,calc(100%_-_4rem))]">
-      <DocumentMetadata arena playback={match !== null} />
+      <DocumentMetadata arena matchMode={match?.mode} />
       <a
         className="sr-only top-3 left-4 z-20 rounded-control bg-accent p-3 text-on-accent focus:not-sr-only focus:fixed"
         href="#setup"
@@ -155,10 +161,10 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         <div className="py-8">
           <p className="mb-3 text-label font-semibold text-accent">{t("setup.eyebrow")}</p>
           <h1 className="font-display text-title font-medium md:text-display">
-            {t(match ? "playback.title" : "setup.title")}
+            {t(match ? `${liveCopy}.title` : "setup.title")}
           </h1>
           <p className="mt-3 max-w-3xl text-text-secondary">
-            {t(match ? "playback.description" : "setup.description")}
+            {t(match ? `${liveCopy}.description` : "setup.description")}
           </p>
         </div>
         {preview ? (
@@ -170,7 +176,6 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
             match={match}
             initial={preview.snapshot}
             recovered={preview.recovered}
-            orientation={mode === "ai_vs_human" ? humanColor : "white"}
             onSetup={() => {
               setPreview(null);
               playbackCredentials.current = {};

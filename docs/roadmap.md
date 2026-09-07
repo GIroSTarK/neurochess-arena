@@ -64,7 +64,7 @@ Deliverables:
 - [x] setup handoff to an authoritative read-only board, existing-game return, paused recovery, and confirmed stop through the shared command session;
 - [ ] key re-entry before resuming a recovered AI game;
 - [x] AI-versus-AI orchestration, pause/resume, single paused stepping, presentation speed, and Stop during thinking, with uncertain-response reconciliation and controller/desktop/mobile mock-provider coverage;
-- [ ] AI-versus-human gameplay using the configured human color;
+- [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
 - [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;
 - [ ] latency and token telemetry collection and display.
 

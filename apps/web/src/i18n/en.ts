@@ -1,4 +1,14 @@
 export const en = {
+  humanPlay: {
+    title: "AI vs human",
+    documentTitle: "AI vs human · Neurochess Arena",
+    description: "Play your selected color against your configured AI opponent.",
+    hint: "You play {{color}}. Select a piece and a legal destination on your turn.",
+    controls: "AI versus human controls",
+    yourTurn: "Your turn. Choose a move on the board.",
+    submitting: "Confirming your move…",
+    idle: "Resume when you are ready to continue.",
+  },
   playback: {
     title: "AI vs AI",
     documentTitle: "AI vs AI · Neurochess Arena",

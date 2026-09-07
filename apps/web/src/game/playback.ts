@@ -12,7 +12,13 @@ import { safeFailure } from "./failures";
 import { type Operation, OperationGate } from "./operations";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
-import { isTerminal, isUnfinished, sameSnapshot, type SandboxState } from "./state";
+import {
+  isTerminal,
+  isUnfinished,
+  type LifecycleAction,
+  sameSnapshot,
+  type SandboxState,
+} from "./state";
 import { SandboxStore } from "./store";
 
 export type PlaybackSpeed = 0.5 | 1 | 2;
@@ -21,11 +27,12 @@ export interface PlaybackState {
   readonly activity: "idle" | "thinking" | "synchronizing" | "uncertain";
   readonly automatic: boolean;
   readonly speed: PlaybackSpeed;
-  readonly control: "pause" | "resume" | "abort" | null;
+  readonly control: LifecycleAction["action"] | null;
 }
 
 interface PlaybackOptions {
   readonly recovered: boolean;
+  readonly humanColor?: ChessColor;
   // This accessor reads page memory. Credentials never enter observable controller state.
   readonly credential: (color: ChessColor) => SessionCredential | null;
 }
@@ -129,7 +136,7 @@ export class AiPlaybackController {
 
   async resume(): Promise<void> {
     if (!this.ready() || this.state.automatic) return;
-    if (this.store.get().snapshot?.state === "paused") await this.lifecycle("resume");
+    if (this.store.get().snapshot?.state === "paused") await this.lifecycle({ action: "resume" });
     else {
       this.publish({ automatic: true });
       this.schedule(0);
@@ -137,16 +144,38 @@ export class AiPlaybackController {
   }
 
   async next(): Promise<void> {
-    if (!this.ready() || this.store.get().snapshot?.state !== "paused") return;
+    if (!this.ready() || !this.isAiTurn() || this.store.get().snapshot?.state !== "paused") return;
     this.halt();
     await this.turn();
   }
 
   pause(): Promise<void> {
-    return this.lifecycle("pause");
+    return this.lifecycle({ action: "pause" });
   }
   stop(): Promise<void> {
-    return this.lifecycle("abort");
+    return this.lifecycle({ action: "abort" });
+  }
+
+  canMove(): boolean {
+    const snapshot = this.store.get().snapshot;
+    return (
+      this.ready() &&
+      this.state.automatic &&
+      snapshot?.state === "active" &&
+      snapshot.turn === this.options.humanColor
+    );
+  }
+
+  async submit(move: string): Promise<void> {
+    if (!this.canMove() || !this.store.get().snapshot?.legalMoves.includes(move)) return;
+    const generation = this.lifecycleGeneration;
+    await this.session.submit(move);
+    if (this.isLifecycleCurrent(generation)) this.afterHumanCommand();
+  }
+
+  resign(losingColor: ChessColor): Promise<void> {
+    if (losingColor !== this.options.humanColor) return Promise.resolve();
+    return this.lifecycle({ action: "resign", losingColor });
   }
 
   async recover(): Promise<void> {
@@ -156,9 +185,13 @@ export class AiPlaybackController {
   }
 
   async retryCommand(): Promise<void> {
+    const generation = this.lifecycleGeneration;
+    const pending = this.store.get().pendingCommand;
     this.halt();
     await this.session.retryCommand();
+    if (!this.isLifecycleCurrent(generation)) return;
     this.resolvePendingTurn();
+    if (pending && "move" in pending) this.afterHumanCommand();
   }
 
   async synchronize(): Promise<void> {
@@ -187,9 +220,21 @@ export class AiPlaybackController {
       this.state.activity === "idle" &&
       phase === "ready" &&
       isUnfinished(snapshot) &&
-      this.options.credential("white") !== null &&
-      this.options.credential("black") !== null
+      (this.options.humanColor === "white" || this.options.credential("white") !== null) &&
+      (this.options.humanColor === "black" || this.options.credential("black") !== null)
     );
+  }
+
+  private isAiTurn(): boolean {
+    return this.store.get().snapshot?.turn !== this.options.humanColor;
+  }
+
+  private afterHumanCommand(): void {
+    const { snapshot, notice } = this.store.get();
+    if (this.ready() && snapshot?.state === "active" && notice === null) {
+      this.publish({ automatic: true });
+      this.schedule(0);
+    } else this.halt();
   }
 
   private cancelTimer(): void {
@@ -205,7 +250,12 @@ export class AiPlaybackController {
 
   private schedule(delay = 1_000 / this.state.speed): void {
     this.cancelTimer();
-    if (!this.state.automatic || !this.ready() || this.store.get().snapshot?.state !== "active") {
+    if (
+      !this.state.automatic ||
+      !this.ready() ||
+      !this.isAiTurn() ||
+      this.store.get().snapshot?.state !== "active"
+    ) {
       return;
     }
     this.timer = setTimeout(() => {
@@ -215,7 +265,7 @@ export class AiPlaybackController {
   }
 
   private async turn(): Promise<void> {
-    if (!this.ready()) return;
+    if (!this.ready() || !this.isAiTurn()) return;
     const before = this.store.get().snapshot;
     if (!before) return;
     const credential = this.options.credential(before.turn);
@@ -305,7 +355,8 @@ export class AiPlaybackController {
     this.publish({ activity: this.pendingTurn ? "uncertain" : "idle" });
   }
 
-  private async lifecycle(action: "pause" | "resume" | "abort"): Promise<void> {
+  private async lifecycle(command: LifecycleAction): Promise<void> {
+    const { action } = command;
     const { phase, snapshot } = this.store.get();
     if (!this.connected || this.state.control || phase !== "ready" || !isUnfinished(snapshot)) {
       return;
@@ -317,7 +368,7 @@ export class AiPlaybackController {
     if (this.pendingTurn) this.gate.invalidate();
     this.publish({ control: action });
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await this.session.lifecycle({ action });
+      await this.session.lifecycle(command);
       if (!this.isLifecycleCurrent(generation)) return;
       this.resolvePendingTurn();
       let current = this.store.get();
@@ -340,7 +391,9 @@ export class AiPlaybackController {
         current = this.store.get();
       }
       if (current.phase !== "ready" || isTerminal(current.snapshot)) break;
-      const target = action === "pause" ? "paused" : action === "resume" ? "active" : "aborted";
+      const target = { pause: "paused", resume: "active", abort: "aborted", resign: "completed" }[
+        action
+      ];
       if (current.snapshot.state === target && !this.pendingTurn) break;
       // If the move won the server lock, finish the user's pause/stop against its revision.
       if (current.notice !== "GAME_CONFLICT" || action === "resume") break;

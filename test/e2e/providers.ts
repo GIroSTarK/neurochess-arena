@@ -34,7 +34,8 @@ export const setupProviders = (
       return { ok: true, value: models(descriptor.id) };
     },
     async requestMove(input) {
-      const delay = input.apiKey === "fixture-playback-slow" ? 11_000 : 1_500;
+      const promotion = input.apiKey === "fixture-human-promotion";
+      const delay = promotion ? 30 : input.apiKey === "fixture-playback-slow" ? 11_000 : 1_500;
       await new Promise<void>((resolve) => {
         const finish = () => {
           clearTimeout(timer);
@@ -43,18 +44,20 @@ export const setupProviders = (
         };
         // Setup-only fixtures hold their first turn so creation/recovery assertions remain
         // independent of playback. Every provider operation here is an in-process mock.
-        const timer = input.apiKey.startsWith("fixture-playback")
-          ? setTimeout(finish, delay)
-          : undefined;
+        const timer =
+          promotion || input.apiKey.startsWith("fixture-playback")
+            ? setTimeout(finish, delay)
+            : undefined;
         input.signal?.addEventListener("abort", finish, { once: true });
         if (input.signal?.aborted) finish();
       });
       if (input.signal?.aborted) {
         return { ok: false, error: { kind: "provider_unavailable" }, latencyMs: 0, usage: null };
       }
-      const move = ["f2f3", "e7e5", "g2g4", "d8h4"].find((move) =>
-        input.context.legalMoves.includes(move),
-      );
+      const script = promotion
+        ? ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2", "b7a8n", "g2h1r", "g1f3"]
+        : ["f2f3", "e7e5", "g2g4", "d8h4"];
+      const move = script.find((move) => input.context.legalMoves.includes(move));
       if (!move) throw new Error("PLAYBACK_FIXTURE_EXHAUSTED");
       return { ok: true, value: { move, latencyMs: delay, usage: null } };
     },
