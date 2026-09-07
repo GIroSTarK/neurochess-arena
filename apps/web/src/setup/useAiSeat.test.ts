@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, fireEvent, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { catalogResponse } from "../../../../test/ai-models";
@@ -13,12 +13,30 @@ function mockApi(): AiSetupApi {
     discover: vi.fn().mockResolvedValue(catalogResponse()),
     create: vi.fn().mockResolvedValue(snapshot()),
     unfinished: vi.fn().mockResolvedValue(null),
+    game: vi.fn(),
   };
 }
 
 afterEach(() => vi.useRealTimers());
 
 describe("seat catalog freshness", () => {
+  it("clears setup keys on page exit and cannot restore them from late discovery", async () => {
+    const response = Promise.withResolvers<Awaited<ReturnType<AiSetupApi["discover"]>>>();
+    const discover = vi.fn<AiSetupApi["discover"]>().mockReturnValueOnce(response.promise);
+    const api = { ...mockApi(), discover };
+    const { result } = renderHook(() => useAiSeat(api));
+    act(() => result.current.changeProvider("openai"));
+    act(() => result.current.changeKey("page-only-fixture-key"));
+    act(() => {
+      void result.current.discover();
+    });
+    fireEvent(window, new PageTransitionEvent("pagehide", { persisted: true }));
+    expect(result.current.key).toBe("");
+    expect(discover.mock.calls[0]?.[1].aborted).toBe(true);
+    await act(async () => response.resolve(catalogResponse()));
+    expect(result.current.discovery.status).toBe("idle");
+    expect(result.current.ready).toBe(false);
+  });
   it.each(["controls", "key", "discovery", "expiry"] as const)(
     "discards native bad-input flags when %s resets the controls, preserving other values",
     async (reset) => {

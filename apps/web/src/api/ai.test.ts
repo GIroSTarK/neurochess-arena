@@ -1,4 +1,8 @@
-import type { CreateAiGameRequest, SessionCredential } from "@neurochess/contracts";
+import {
+  aiRuntimeHeader,
+  type CreateAiGameRequest,
+  type SessionCredential,
+} from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { catalogResponse, models } from "../../../../test/ai-models";
@@ -24,6 +28,35 @@ const signal = () => new AbortController().signal;
 describe("AI turn transport", () => {
   const command = { gameId: GAME_ID, commandId: OTHER_GAME_ID, expectedVersion: 0 };
 
+  it("binds subsequent turns to the API runtime and signals a restart without resending work", async () => {
+    const accepted = jsonResponse(snapshot(["e2e4"]));
+    accepted.headers.set(aiRuntimeHeader, GAME_ID);
+    const restarted = errorResponse("GAME_CONFLICT", 409, snapshot(["e2e4"]));
+    restarted.headers.set(aiRuntimeHeader, OTHER_GAME_ID);
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(accepted)
+      .mockResolvedValueOnce(restarted);
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    await api.turn(command, credential, signal());
+    await expect(
+      api.turn({ ...command, expectedVersion: 1 }, credential, signal()),
+    ).rejects.toMatchObject({ kind: "restart" });
+    expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).get(aiRuntimeHeader)).toBe(GAME_ID);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("acknowledges a restarted API after an explicit lifecycle response so continuation needs no second recovery", async () => {
+    const accepted = jsonResponse(snapshot(["e2e4"]));
+    accepted.headers.set(aiRuntimeHeader, OTHER_GAME_ID);
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(accepted);
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    api.acknowledgeRuntime?.(GAME_ID);
+    api.acknowledgeRuntime?.(OTHER_GAME_ID);
+    await expect(api.turn(command, credential, signal())).resolves.toEqual(snapshot(["e2e4"]));
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get(aiRuntimeHeader)).toBe(OTHER_GAME_ID);
+  });
+
   it("waits beyond ten seconds and retains caller cancellation through body consumption", async () => {
     vi.useFakeTimers();
     try {
@@ -32,7 +65,11 @@ describe("AI turn transport", () => {
         init?.signal?.addEventListener("abort", () =>
           body.reject(new Error("secret-network-canary")),
         );
-        return Promise.resolve({ ok: true, json: () => body.promise } as Response);
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers(),
+          json: () => body.promise,
+        } as Response);
       });
       const api = createAiTurnApi("http://localhost:3001", { fetch });
       const abort = new AbortController();
@@ -89,6 +126,54 @@ describe("AI turn transport", () => {
 });
 
 describe("AI setup transport", () => {
+  it("validates private configuration reads and rejects credentials, catalog references and foreign snapshots", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(jsonResponse({ snapshot: snapshot(), configuration }));
+    const api = createAiSetupApi("http://localhost:3001", { fetch });
+    expect(await api.game(GAME_ID, signal())).toEqual({ snapshot: snapshot(), configuration });
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+    for (const invalid of [
+      { snapshot: snapshot([], { gameId: OTHER_GAME_ID }), configuration },
+      {
+        snapshot: snapshot(),
+        configuration: { ...configuration, white: { ...configuration.white, apiKey: "secret" } },
+      },
+      {
+        snapshot: snapshot(),
+        configuration: {
+          ...configuration,
+          black: { ...configuration.black, catalogId: OTHER_GAME_ID },
+        },
+      },
+    ]) {
+      fetch.mockResolvedValueOnce(jsonResponse(invalid));
+      await expect(api.game(GAME_ID, signal())).rejects.toMatchObject({ kind: "malformed" });
+    }
+  });
+
+  it("sends a credential-free versioned pause on page exit using keepalive", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        jsonResponse(snapshot([], { state: "paused", legalMoves: [], version: 1 })),
+      );
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    const command = {
+      action: "pause",
+      gameId: GAME_ID,
+      commandId: OTHER_GAME_ID,
+      expectedVersion: 0,
+    } as const;
+    api.leave?.(command);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ keepalive: true, credentials: "include" });
+    expect(JSON.parse(requestBody(fetch.mock.calls[0]?.[1])) as unknown).toEqual(command);
+  });
   it("sends credentials only in a no-store, credentialed discovery POST body", async () => {
     const discovered = catalogResponse();
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(jsonResponse(discovered));

@@ -1,4 +1,13 @@
 export const en = {
+  keyRecovery: {
+    title: "Re-enter your API keys",
+    description:
+      "Session-only keys were cleared. Enter the missing keys, then explicitly resume your game.",
+    hint: "Your configuration and accepted moves are preserved. Keys stay in this page only. Entering keys does not start a move.",
+    enter: "Enter missing keys",
+    seatKey: "{{color}} · {{provider}} API key",
+    apply: "Use keys for this page",
+  },
   humanPlay: {
     title: "AI vs human",
     documentTitle: "AI vs human · Neurochess Arena",

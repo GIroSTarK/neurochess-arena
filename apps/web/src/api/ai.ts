@@ -1,9 +1,16 @@
 import {
+  type AiGameResponse,
+  aiGameResponseSchema,
+  aiRuntimeHeader,
+  aiRuntimeIdSchema,
   type AiTurnCommand,
   aiTurnRequestSchema,
   type CreateAiGameRequest,
   createAiGameRequestSchema,
+  gameParamsSchema,
   type GameSnapshot,
+  type LifecycleCommand,
+  lifecycleCommandSchema,
   modelDiscoveryRequestSchema,
   type ModelDiscoveryResponse,
   modelDiscoveryResponseSchema,
@@ -16,6 +23,8 @@ import {
 import { ApiFailure, createGameTransport, validateSnapshot } from "./client";
 
 export interface AiTurnApi {
+  acknowledgeRuntime?(runtimeId: string | null): void;
+  leave?(command: LifecycleCommand): void;
   turn(
     command: AiTurnCommand,
     credential: SessionCredential,
@@ -29,8 +38,48 @@ export function createAiTurnApi(
 ): AiTurnApi {
   // One turn can include model discovery and three provider attempts. Provider transport
   // deadlines belong to the API; the ordinary ten-second client deadline cannot bound a turn.
-  const { gameRequest } = createGameTransport(apiBaseUrl, { ...options, timeoutMs: null });
+  const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
+  let runtimeId: string | null = null;
+  function acknowledgeRuntime(value: string | null) {
+    if (value === null) return;
+    const parsed = aiRuntimeIdSchema.safeParse(value);
+    if (!parsed.success) throw new ApiFailure("malformed");
+    runtimeId = parsed.data;
+  }
+  const { gameRequest } = createGameTransport(apiBaseUrl, {
+    timeoutMs: null,
+    fetch: async (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (runtimeId) headers.set(aiRuntimeHeader, runtimeId);
+      const response = await fetcher(input, runtimeId ? { ...init, headers } : init);
+      if (init?.signal?.aborted) return response;
+      const received = response.headers.get(aiRuntimeHeader);
+      if (received !== null) {
+        const parsed = aiRuntimeIdSchema.safeParse(received);
+        if (!parsed.success) throw new ApiFailure("malformed");
+        const changed = runtimeId !== null && runtimeId !== parsed.data;
+        runtimeId = parsed.data;
+        if (changed && response.status === 409) throw new ApiFailure("restart");
+      }
+      return response;
+    },
+  });
+  const departure = createGameTransport(apiBaseUrl, { ...options, keepalive: true });
   return {
+    acknowledgeRuntime,
+    leave(command) {
+      const body = lifecycleCommandSchema.safeParse(command);
+      if (!body.success || command.action !== "pause") return;
+      // Best effort on page exit; reopening must reconcile and fence again if this loses a race.
+      void departure
+        .gameRequest(
+          "/games/" + command.gameId + "/lifecycle",
+          new AbortController().signal,
+          command.gameId,
+          body.data,
+        )
+        .catch(() => undefined);
+    },
     async turn(command, credential, signal) {
       const body = aiTurnRequestSchema.safeParse({ ...command, credential });
       if (!body.success) throw new ApiFailure("malformed");
@@ -57,17 +106,23 @@ export interface AiSetupApi {
   ): Promise<ModelDiscoveryResponse>;
   create(configuration: CreateAiGameRequest, signal: AbortSignal): Promise<GameSnapshot>;
   unfinished(signal: AbortSignal): Promise<GameSnapshot | null>;
+  game(gameId: string, signal: AbortSignal): Promise<AiGameResponse>;
 }
 
 export function createAiSetupApi(
   apiBaseUrl: string,
   options: { fetch?: typeof fetch; timeoutMs?: number } = {},
 ): AiSetupApi {
-  const { request, gameRequest } = createGameTransport(apiBaseUrl, {
+  const { request, gameRequest, forGame } = createGameTransport(apiBaseUrl, {
     timeoutMs: 30_000,
     ...options,
   });
   return {
+    async game(gameId, signal) {
+      if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
+      const result = await request("/ai/games/" + gameId, aiGameResponseSchema, signal);
+      return { ...result, snapshot: forGame(validateSnapshot(result.snapshot), gameId) };
+    },
     async providers(signal) {
       const { providers } = await request("/ai/providers", providerListResponseSchema, signal);
       if (new Set(providers.map(({ id }) => id)).size !== providers.length) {

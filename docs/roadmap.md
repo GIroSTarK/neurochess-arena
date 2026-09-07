@@ -62,7 +62,7 @@ Deliverables:
 - [x] independent White and Black configuration, including identical-provider/model matches, and AI-versus-human setup with either human color;
 - [x] separate page-memory setup credentials, masked/reveal controls, key loss on refresh/close, credential-free creation, and component/desktop/mobile browser coverage of validation and storage isolation;
 - [x] setup handoff to an authoritative read-only board, existing-game return, paused recovery, and confirmed stop through the shared command session;
-- [ ] key re-entry before resuming a recovered AI game;
+- [x] recovery for both AI modes with saved configuration and complete draw history, page-exit key clearing, key re-entry before explicit continuation, offline/reconnect and API-restart fencing, and mocked browser/integration coverage of uncertain turns;
 - [x] AI-versus-AI orchestration, pause/resume, single paused stepping, presentation speed, and Stop during thinking, with uncertain-response reconciliation and controller/desktop/mobile mock-provider coverage;
 - [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
 - [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;

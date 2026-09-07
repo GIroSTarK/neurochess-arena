@@ -1,4 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import {
+  aiGameResponseSchema,
+  aiRuntimeHeader,
+  aiRuntimeIdSchema,
   aiTurnRequestSchema,
   createAiGameRequestSchema,
   createGameRequestSchema,
@@ -60,8 +65,10 @@ export async function registerGameRoutes(
   options: GameApiOptions,
 ): Promise<void> {
   const routes = app.withTypeProvider<ZodTypeProvider>();
+  const runtimeId = randomUUID();
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
+    reply.header(aiRuntimeHeader, runtimeId);
     if (request.method === "POST" && request.headers.origin !== options.webOrigin) {
       throw new GameRequestError("FORBIDDEN");
     }
@@ -194,6 +201,14 @@ export async function registerGameRoutes(
           throw new GameRequestError("INVALID_REQUEST");
         }
         const principal = await principalFor(request, reply);
+        const expectedRuntime = request.headers[aiRuntimeHeader];
+        if (expectedRuntime !== undefined) {
+          const parsed = aiRuntimeIdSchema.safeParse(expectedRuntime);
+          if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
+          if (parsed.data !== runtimeId) {
+            throw new GameConflictError(await options.games.snapshot(principal, command.gameId));
+          }
+        }
         return await whileConnected(request, reply, (signal) =>
           options.games.aiTurn(principal, command, credential, signal),
         );
@@ -201,6 +216,19 @@ export async function registerGameRoutes(
         credential.apiKey = "";
       }
     },
+  );
+
+  routes.get(
+    "/ai/games/:gameId",
+    {
+      schema: {
+        params: gameParamsSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: aiGameResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.aiGame(await principalFor(request, reply), request.params.gameId),
   );
 
   routes.post(

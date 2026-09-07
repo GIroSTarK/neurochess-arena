@@ -10,10 +10,12 @@ export function PlaybackControls({
   state,
   controller,
   humanColor = null,
+  missingKeys = false,
 }: {
   readonly state: PlaybackState;
   readonly controller: AiPlaybackController;
   readonly humanColor?: ChessColor | null;
+  readonly missingKeys?: boolean;
 }) {
   const { t } = useTranslation();
   const speedId = useId();
@@ -62,7 +64,7 @@ export function PlaybackControls({
       <div className={humanColor ? "grid gap-3" : "grid grid-cols-2 gap-3"}>
         <Button
           variant="primary"
-          aria-disabled={disabled}
+          aria-disabled={disabled || (!pause && missingKeys)}
           onClick={() => {
             void (pause ? controller.pause() : controller.resume());
           }}
@@ -77,7 +79,10 @@ export function PlaybackControls({
           <Button
             variant="secondary"
             aria-disabled={
-              disabled || state.activity !== "idle" || state.game.snapshot.state !== "paused"
+              disabled ||
+              missingKeys ||
+              state.activity !== "idle" ||
+              state.game.snapshot.state !== "paused"
             }
             onClick={() => {
               void controller.next();

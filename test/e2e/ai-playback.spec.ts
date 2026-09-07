@@ -189,48 +189,39 @@ for (const failedReadBack of [false, true]) {
     await expect(next).toHaveAttribute("aria-disabled", "true");
     if (failedReadBack) {
       await page.route(
-        `${API_ORIGIN}/games/${initial.gameId}`,
+        API_ORIGIN + "/games/" + initial.gameId + "/lifecycle",
+        async (route) => {
+          await route.fetch();
+          await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        },
+        { times: 1 },
+      );
+      await page.route(
+        API_ORIGIN + "/games/" + initial.gameId,
         (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
         { times: 1 },
       );
     }
-    const rejectedPause = page.waitForResponse(
-      (response) => response.url().endsWith("/lifecycle") && response.status() === 409,
-    );
     await page.getByRole("button", { name: "Pause", exact: true }).click();
-    expect(await (await rejectedPause).json()).toHaveProperty("code", "INVALID_GAME_STATE");
     if (failedReadBack) {
-      const retry = page.getByRole("button", { name: "Retry recovery" });
+      const retry = page.getByRole("button", { name: "Retry same command" });
       await expect(retry).toHaveAttribute("aria-disabled", "false");
-      await expect(page.getByRole("button", { name: "Stop game" })).toHaveAttribute(
-        "aria-disabled",
-        "true",
-      );
-      await retry.click();
-      const pause = page.getByRole("button", { name: "Pause", exact: true });
-      await expect(pause).toHaveAttribute("aria-disabled", "false");
-      await expect(page.getByRole("button", { name: "Stop game" })).toHaveAttribute(
-        "aria-disabled",
-        "false",
-      );
       await expect(next).toHaveAttribute("aria-disabled", "true");
-      expect(turns).toHaveLength(beforeStep + 1);
-      await pause.click();
+      await retry.click();
     }
     await expect(next).toHaveAttribute("aria-disabled", "false");
     const recovered = await readSnapshot(page, initial.gameId);
     expect(recovered).toMatchObject({
       state: "paused",
-      version: paused.version + 2,
+      version: paused.version + 1,
       fen: paused.fen,
       moves: paused.moves,
     });
     expect(controls.map(({ action, expectedVersion }) => [action, expectedVersion])).toEqual([
-      ...(failedReadBack ? [["pause", paused.version]] : []),
       ["pause", paused.version],
-      ["resume", paused.version],
-      ["pause", paused.version + 1],
+      ...(failedReadBack ? [["pause", paused.version]] : []),
     ]);
+    if (failedReadBack) expect(controls[1]).toEqual(controls[0]);
     await page.waitForTimeout(1_100);
     expect(turns).toHaveLength(beforeStep + 1);
     await next.click();

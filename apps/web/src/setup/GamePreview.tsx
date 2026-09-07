@@ -1,6 +1,6 @@
 import type {
+  AiGameConfiguration,
   ChessColor,
-  CreateAiGameRequest,
   GameSnapshot,
   SessionCredential,
 } from "@neurochess/contracts";
@@ -20,10 +20,13 @@ import { interactionEpoch, isTerminal, isUnfinished } from "../game/state";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 
+import { KeyRecovery } from "./KeyRecovery";
+
 export function GamePreview({
   api,
   turnApi,
   credential,
+  onCredential,
   match,
   initial,
   recovered,
@@ -32,7 +35,8 @@ export function GamePreview({
   readonly api: SandboxApi;
   readonly turnApi: AiTurnApi;
   readonly credential: (color: ChessColor) => SessionCredential | null;
-  readonly match: CreateAiGameRequest | null;
+  readonly onCredential?: (color: ChessColor, credential: SessionCredential) => void;
+  readonly match: AiGameConfiguration | null;
   readonly initial: GameSnapshot;
   readonly recovered: boolean;
   readonly onSetup: () => void;
@@ -46,6 +50,7 @@ export function GamePreview({
       new AiPlaybackController(api, turnApi, initial, {
         recovered,
         credential,
+        isAiGame: match !== null,
         ...(humanColor ? { humanColor } : {}),
       }),
   );
@@ -53,16 +58,23 @@ export function GamePreview({
   const state = activity.game;
   useEffect(() => game.connect(), [game]);
   useEffect(() => {
-    const leave = () => game.disconnect();
-    const returnToPage = (event: PageTransitionEvent) => {
+    const leave = () => game.leave();
+    const offline = () => game.suspend();
+    const online = () => {
       game.connect();
-      if (event.persisted) void game.recover();
+    };
+    const returnToPage = (event: PageTransitionEvent) => {
+      if (event.persisted) game.connect();
     };
     window.addEventListener("pagehide", leave);
     window.addEventListener("pageshow", returnToPage);
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
     return () => {
       window.removeEventListener("pagehide", leave);
       window.removeEventListener("pageshow", returnToPage);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", online);
     };
   }, [game]);
   useLayoutEffect(() => {
@@ -73,6 +85,11 @@ export function GamePreview({
   const snapshot = state.snapshot;
   const epoch = interactionEpoch(state);
   const terminal = snapshot && isTerminal(snapshot);
+  const missingKeys = match
+    ? (["white", "black"] as const).filter(
+        (color) => color !== humanColor && !credential(color)?.apiKey,
+      )
+    : [];
   const retryingCommand =
     state.phase === "submitting" &&
     activity.control === null &&
@@ -136,9 +153,16 @@ export function GamePreview({
             ? t("humanPlay.hint", { color: t(`players.${humanColor}`) })
             : t(match ? "playback.hint" : "setup.previewHint")}
         </p>
-        {recovered ? <p className="text-label text-warning">{t("setup.recoveredHint")}</p> : null}
+        {match && !terminal && missingKeys.length > 0 && onCredential ? (
+          <KeyRecovery match={match} missing={missingKeys} onCredential={onCredential} />
+        ) : null}
         {match && !terminal ? (
-          <PlaybackControls state={activity} controller={game} humanColor={humanColor} />
+          <PlaybackControls
+            state={activity}
+            controller={game}
+            humanColor={humanColor}
+            missingKeys={missingKeys.length > 0}
+          />
         ) : null}
         {showRecovery ? (
           <div role="status" className="space-y-3">

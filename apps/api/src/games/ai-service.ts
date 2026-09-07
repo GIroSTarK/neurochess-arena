@@ -4,6 +4,7 @@ import { createGame } from "@neurochess/chess";
 import {
   type AiConfiguration,
   aiConfigurationSchema,
+  type AiGameResponse,
   type AiTurnCommand,
   type CreateAiGameRequest,
   type GameSnapshot,
@@ -228,6 +229,51 @@ export function createAiGameOperations(
 
   return {
     aiTurn,
+    aiGame: (principal: GuestPrincipal, gameId: string): Promise<AiGameResponse> =>
+      repository.read(async (reader) => {
+        if (!(await reader.getGuest(principal.guestSessionId))) {
+          throw new GameRequestError("UNAUTHORIZED");
+        }
+        const stored = await reader.getGame(gameId);
+        if (!stored) throw new GameRequestError("NOT_FOUND");
+        const { snapshot, participants } = await restoreAuthorized(
+          reader,
+          principal,
+          stored,
+          sandboxEnabled,
+        );
+        authorizeGameControl(principal, stored);
+        if (stored.isSandbox || stored.mode === "human_vs_human") {
+          throw new GameRequestError("NOT_FOUND");
+        }
+        const white = participants.find((seat) => seat.color === "white");
+        const black = participants.find((seat) => seat.color === "black");
+        if (!white || !black) throw new GameIntegrityError();
+        if (stored.mode === "ai_vs_ai") {
+          if (white.seatType !== "ai" || black.seatType !== "ai") throw new GameIntegrityError();
+          return {
+            snapshot,
+            configuration: {
+              mode: stored.mode,
+              white: configurationOf(white),
+              black: configurationOf(black),
+            },
+          };
+        }
+        const human = white.seatType === "human" ? white : black;
+        const ai = human === white ? black : white;
+        if (
+          human.seatType !== "human" ||
+          human.guestSessionId !== principal.guestSessionId ||
+          ai.seatType !== "ai"
+        ) {
+          throw new GameIntegrityError();
+        }
+        return {
+          snapshot,
+          configuration: { mode: stored.mode, humanColor: human.color, ai: configurationOf(ai) },
+        };
+      }),
     listProviders: async (principal: GuestPrincipal) => {
       await requireGuest(principal);
       return providers.list();

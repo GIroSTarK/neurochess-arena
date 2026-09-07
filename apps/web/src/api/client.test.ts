@@ -143,4 +143,22 @@ describe("sandbox transport boundary", () => {
     abort.abort();
     await expect(request).rejects.toMatchObject({ kind: "cancelled" });
   });
+
+  it("does not acknowledge a late response after its controlling request was cancelled", async () => {
+    const body = Promise.withResolvers<unknown>();
+    const onResponse = vi.fn();
+    const api = createSandboxApi("http://localhost:3001", {
+      fetch: vi
+        .fn()
+        .mockResolvedValue({ ok: true, headers: new Headers(), json: () => body.promise }),
+      onResponse,
+    });
+    const abort = new AbortController();
+    const request = api.snapshot(GAME_ID, abort.signal);
+    const assertion = expect(request).rejects.toMatchObject({ kind: "cancelled" });
+    abort.abort();
+    body.resolve(snapshot());
+    await assertion;
+    expect(onResponse).not.toHaveBeenCalled();
+  });
 });

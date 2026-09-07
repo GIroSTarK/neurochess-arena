@@ -32,6 +32,7 @@ export interface PlaybackState {
 
 interface PlaybackOptions {
   readonly recovered: boolean;
+  readonly isAiGame?: boolean;
   readonly humanColor?: ChessColor;
   // This accessor reads page memory. Credentials never enter observable controller state.
   readonly credential: (color: ChessColor) => SessionCredential | null;
@@ -46,6 +47,7 @@ export class AiPlaybackController {
   private state: PlaybackState;
   private connected = false;
   private startOnConnect: boolean;
+  private recoverOnConnect: boolean;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pendingTurn: AiTurnCommand | null = null;
   private lifecycleGeneration = 0;
@@ -75,7 +77,9 @@ export class AiPlaybackController {
       commandId,
       session: this.session,
       navigation: undefined,
+      pausePaused: options.isAiGame !== false,
     });
+    this.recoverOnConnect = options.recovered;
     this.startOnConnect = !options.recovered && initial.state === "active";
   }
 
@@ -89,7 +93,7 @@ export class AiPlaybackController {
     if (!this.connected) {
       this.connected = true;
       this.gate.connect();
-      if (this.options.recovered) void this.recover();
+      if (this.recoverOnConnect) void this.recover();
       else if (this.startOnConnect && this.ready()) {
         this.publish({ automatic: true });
         // Defer the first request so StrictMode's setup/cleanup replay cannot bill a turn.
@@ -126,6 +130,33 @@ export class AiPlaybackController {
       control: null,
       activity: this.pendingTurn ? "uncertain" : "idle",
     });
+  }
+
+  suspend(): void {
+    this.startOnConnect = false;
+    this.recoverOnConnect = true;
+    this.disconnect();
+    this.session.beginRecovery();
+    const { snapshot, pendingCommand } = this.store.get();
+    if (snapshot && isUnfinished(snapshot) && !pendingCommand) {
+      this.store.transition(
+        { phase: "recovery-required", snapshot, pendingCommand: null },
+        { notice: "recovery-required", invalidateInteraction: true },
+      );
+    }
+  }
+
+  leave(): void {
+    const snapshot = this.store.get().snapshot;
+    this.suspend();
+    if (snapshot && isUnfinished(snapshot)) {
+      this.ai.leave?.({
+        action: "pause",
+        gameId: snapshot.gameId,
+        expectedVersion: snapshot.version,
+        commandId: this.commandId(),
+      });
+    }
   }
 
   setSpeed(speed: PlaybackSpeed): void {
@@ -181,6 +212,7 @@ export class AiPlaybackController {
   async recover(): Promise<void> {
     this.halt();
     await this.recovery.recover();
+    if (this.store.get().phase === "ready") this.recoverOnConnect = false;
     this.resolvePendingTurn();
   }
 
@@ -298,7 +330,10 @@ export class AiPlaybackController {
       if (!this.gate.isCurrent(operation)) return;
       this.halt();
       const failure = safeFailure(error);
-      if (this.session.loseAccess(failure)) {
+      if (failure.kind === "restart") {
+        this.gate.finish(operation);
+        await this.recover();
+      } else if (this.session.loseAccess(failure)) {
         this.pendingTurn = null;
         this.publish({ activity: "idle" });
       } else await this.reconcile(operation, command, failure.currentSnapshot);
@@ -371,25 +406,7 @@ export class AiPlaybackController {
       await this.session.lifecycle(command);
       if (!this.isLifecycleCurrent(generation)) return;
       this.resolvePendingTurn();
-      let current = this.store.get();
-      if (
-        action === "pause" &&
-        this.pendingTurn &&
-        current.phase === "ready" &&
-        current.snapshot.state === "paused" &&
-        current.notice === "INVALID_GAME_STATE"
-      ) {
-        // The step may never have reached reservation, making an already-paused Pause
-        // invalid. Resume fences its revision without calling a provider, then recover
-        // paused. Keep active or uncertain recovery snapshots blocked if either leg fails.
-        this.session.beginRecovery();
-        await this.session.lifecycle({ action: "resume" });
-        if (!this.isLifecycleCurrent(generation)) return;
-        if (this.store.get().phase === "recovery-required") await this.recovery.recover();
-        if (!this.isLifecycleCurrent(generation)) return;
-        this.resolvePendingTurn();
-        current = this.store.get();
-      }
+      const current = this.store.get();
       if (current.phase !== "ready" || isTerminal(current.snapshot)) break;
       const target = { pause: "paused", resume: "active", abort: "aborted", resign: "completed" }[
         action

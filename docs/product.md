@@ -83,6 +83,8 @@ Stop requires confirmation. The dialog remains open across accepted moves while 
 
 An AI game does not continue in the background after its controlling browser tab is closed. It is restored in a paused state when the session returns.
 
+Both AI modes restore saved seat configuration and the complete accepted move history. Refresh, close, and page navigation clear session-only keys, including when returning from the browser's back-forward cache. Recovery pauses the game and requires each missing AI seat's key before explicit Resume (or Next move in AI-versus-AI). Dismissing key entry leaves the game paused; entering keys never starts work. An offline connection or API restart interrupts automatic progression and requires paused recovery followed by explicit continuation.
+
 ### AI versus human
 
 The user selects their color and configures the AI opponent with the same provider, model, parameter, and credential controls used by AI-versus-AI mode. The chess engine validates human and AI moves. The game has no chess clock.

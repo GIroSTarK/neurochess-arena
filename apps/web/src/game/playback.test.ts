@@ -218,6 +218,34 @@ describe("AI versus human controller", () => {
 });
 
 describe("AI playback controller", () => {
+  it("rejects a configuring recovery snapshot without issuing lifecycle or provider commands", async () => {
+    const { controller, api, ai } = harness(snapshot([], { state: "configuring" }), true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().game.phase).toBe("recovery-required");
+    expect(api.lifecycle).not.toHaveBeenCalled();
+    expect(ai.turn).not.toHaveBeenCalled();
+  });
+  it("recovers paused after an API restart between turns and requires explicit continuation", async () => {
+    const { controller, api, ai, pending } = harness();
+    await vi.advanceTimersByTimeAsync(0);
+    pending.resolve(snapshot(["e2e4"]));
+    ai.turn.mockRejectedValueOnce(new ApiFailure("restart"));
+    api.snapshot.mockResolvedValueOnce(snapshot(["e2e4"]));
+    api.lifecycle.mockResolvedValueOnce(snapshot(["e2e4"], { state: "paused", version: 2 }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(controller.getSnapshot()).toMatchObject({
+      automatic: false,
+      activity: "idle",
+      game: { phase: "ready", snapshot: { state: "paused", version: 2 } },
+    });
+    expect(ai.turn).toHaveBeenCalledTimes(2);
+    api.lifecycle.mockResolvedValueOnce(snapshot(["e2e4"], { version: 3 }));
+    ai.turn.mockReturnValue(new Promise(() => undefined));
+    await controller.resume();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(ai.turn).toHaveBeenCalledTimes(3);
+    expect(ai.turn.mock.calls[2]?.[0].expectedVersion).toBe(3);
+  });
   it("deduplicates activation and StrictMode reconnect before the first request", async () => {
     const { controller, ai } = harness();
     controller.connect();
@@ -284,7 +312,7 @@ describe("AI playback controller", () => {
 
   it("steps once while paused, can pause that step, and resumes automatic turns explicitly", async () => {
     const paused = snapshot([], { state: "paused", version: 5 });
-    const { controller, api, ai, pending } = harness(paused, true);
+    const { controller, api, ai, pending } = harness(paused);
     await vi.advanceTimersByTimeAsync(0);
     const first = controller.next();
     await controller.next();
@@ -401,33 +429,25 @@ describe("AI playback controller", () => {
 
   it("recovers a failed paused step with no reservation before permitting a fresh turn", async () => {
     const initial = snapshot(["e2e4"], { state: "paused", version: 5 });
-    const resumed = snapshot(["e2e4"], { version: 6 });
-    const recovered = snapshot(["e2e4"], { state: "paused", version: 7 });
+    const recovered = snapshot(["e2e4"], { state: "paused", version: 6 });
     const { controller, api, ai } = harness(initial);
     ai.turn.mockRejectedValueOnce(new ApiFailure("network"));
     await controller.next();
     expect(controller.getSnapshot().activity).toBe("uncertain");
-    const resume = Promise.withResolvers<GameSnapshot>();
-    api.lifecycle
-      .mockRejectedValueOnce(new ApiFailure("api", "INVALID_GAME_STATE"))
-      .mockReturnValueOnce(resume.promise)
-      .mockResolvedValueOnce(recovered);
+    const recovery = Promise.withResolvers<GameSnapshot>();
+    api.lifecycle.mockReturnValueOnce(recovery.promise);
     const pause = controller.pause();
     await vi.advanceTimersByTimeAsync(0);
     await controller.pause();
     await controller.resume();
     await controller.next();
-    expect(api.lifecycle.mock.calls.map(([command]) => command.action)).toEqual([
-      "pause",
-      "resume",
-    ]);
+    expect(api.lifecycle.mock.calls.map(([command]) => command.action)).toEqual(["pause"]);
     expect(controller.getSnapshot()).toMatchObject({
       automatic: false,
       control: "pause",
       game: { snapshot: initial },
     });
-    api.snapshot.mockResolvedValueOnce(resumed);
-    resume.resolve(resumed);
+    recovery.resolve(recovered);
     await pause;
     await vi.advanceTimersByTimeAsync(10_000);
     expect(controller.getSnapshot()).toMatchObject({
@@ -437,16 +457,12 @@ describe("AI playback controller", () => {
     });
     expect(
       api.lifecycle.mock.calls.map(([command]) => [command.action, command.expectedVersion]),
-    ).toEqual([
-      ["pause", 5],
-      ["resume", 5],
-      ["pause", 6],
-    ]);
-    expect(new Set(api.lifecycle.mock.calls.map(([command]) => command.commandId)).size).toBe(3);
+    ).toEqual([["pause", 5]]);
+    expect(api.lifecycle).toHaveBeenCalledTimes(1);
     expect(ai.turn).toHaveBeenCalledTimes(1);
-    ai.turn.mockResolvedValueOnce(snapshot(["e2e4", "e7e5"], { state: "paused", version: 8 }));
+    ai.turn.mockResolvedValueOnce(snapshot(["e2e4", "e7e5"], { state: "paused", version: 7 }));
     await controller.next();
-    expect(ai.turn.mock.calls[1]?.[0].expectedVersion).toBe(7);
+    expect(ai.turn.mock.calls[1]?.[0].expectedVersion).toBe(6);
     expect(ai.turn.mock.calls[1]?.[0].commandId).not.toBe(ai.turn.mock.calls[0]?.[0].commandId);
     expect(controller.getSnapshot().game.snapshot?.state).toBe("paused");
   });
@@ -455,8 +471,7 @@ describe("AI playback controller", () => {
     "restores %s after a rejected lifecycle read-back fails, without clearing turn uncertainty",
     async (action) => {
       const initial = snapshot([], { state: "paused", version: 1 });
-      const resumed = snapshot([], { version: 2 });
-      const recovered = snapshot([], { state: "paused", version: 3 });
+      const recovered = snapshot([], { state: "paused", version: 2 });
       const stopped = snapshot([], { state: "aborted", terminationReason: "aborted", version: 2 });
       const { controller, api, ai } = harness(initial);
       ai.turn.mockRejectedValueOnce(new ApiFailure("network"));
@@ -476,11 +491,7 @@ describe("AI playback controller", () => {
       expect(ai.turn).toHaveBeenCalledTimes(1);
       expect(api.lifecycle).toHaveBeenCalledTimes(1);
       if (action === "pause") {
-        api.lifecycle
-          .mockRejectedValueOnce(new ApiFailure("api", "INVALID_GAME_STATE"))
-          .mockResolvedValueOnce(resumed)
-          .mockResolvedValueOnce(recovered);
-        api.snapshot.mockResolvedValueOnce(initial).mockResolvedValueOnce(resumed);
+        api.lifecycle.mockResolvedValueOnce(recovered);
       } else api.lifecycle.mockResolvedValueOnce(stopped);
       await controller[action]();
       expect(controller.getSnapshot()).toMatchObject({
@@ -511,87 +522,42 @@ describe("AI playback controller", () => {
     expect(api.lifecycle).toHaveBeenCalledTimes(1);
   });
 
-  it("retains an uncertain recovery Resume for identical retry and requires paused recovery afterwards", async () => {
-    const initial = snapshot([], { state: "paused", version: 1 });
-    const resumed = snapshot([], { version: 2 });
-    const recovered = snapshot([], { state: "paused", version: 3 });
-    const { controller, api, ai } = harness(initial);
-    ai.turn.mockRejectedValueOnce(new ApiFailure("network"));
-    await controller.next();
-    api.lifecycle
-      .mockRejectedValueOnce(new ApiFailure("api", "INVALID_GAME_STATE"))
-      .mockRejectedValueOnce(new ApiFailure("network"));
-    await controller.pause();
-    expect(controller.getSnapshot().game).toMatchObject({
-      phase: "uncertain",
-      snapshot: initial,
-      pendingCommand: { action: "resume", expectedVersion: 1 },
-    });
-    await controller.resume();
-    await controller.next();
-    expect(ai.turn).toHaveBeenCalledTimes(1);
-    api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", resumed));
-    await controller.retryCommand();
-    expect(api.lifecycle.mock.calls[2]?.[0]).toEqual(api.lifecycle.mock.calls[1]?.[0]);
-    expect(controller.getSnapshot().game).toMatchObject({
-      phase: "recovery-required",
-      snapshot: resumed,
-    });
-    await controller.resume();
-    await controller.next();
-    api.snapshot.mockResolvedValueOnce(resumed);
-    api.lifecycle.mockResolvedValueOnce(recovered);
-    await controller.recover();
-    expect(controller.getSnapshot()).toMatchObject({
-      automatic: false,
-      activity: "idle",
-      game: { phase: "ready", snapshot: recovered },
-    });
-    expect(ai.turn).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the active revision blocked when the final recovery Pause is uncertain", async () => {
-    const initial = snapshot([], { state: "paused", version: 1 });
-    const resumed = snapshot([], { version: 2 });
-    const recovered = snapshot([], { state: "paused", version: 3 });
-    const { controller, api, ai } = harness(initial);
-    ai.turn.mockRejectedValueOnce(new ApiFailure("network"));
-    await controller.next();
-    api.snapshot.mockResolvedValueOnce(initial).mockResolvedValue(resumed);
-    api.lifecycle
-      .mockRejectedValueOnce(new ApiFailure("api", "INVALID_GAME_STATE"))
-      .mockResolvedValueOnce(resumed)
-      .mockRejectedValueOnce(new ApiFailure("network"));
-    await controller.pause();
-    expect(controller.getSnapshot().game).toMatchObject({
-      phase: "uncertain",
-      snapshot: resumed,
-      pendingCommand: { action: "pause", expectedVersion: 2 },
-    });
-    await controller.resume();
-    await controller.next();
-    expect(ai.turn).toHaveBeenCalledTimes(1);
-    api.lifecycle.mockResolvedValueOnce(recovered);
-    await controller.retryCommand();
-    expect(api.lifecycle.mock.calls[3]?.[0]).toEqual(api.lifecycle.mock.calls[2]?.[0]);
-    expect(controller.getSnapshot()).toMatchObject({
-      automatic: false,
-      activity: "idle",
-      game: { phase: "ready", snapshot: recovered },
-    });
-  });
+  it.each(["active", "paused"] as const)(
+    "retains an uncertain recovery Pause from %s for an identical explicit retry",
+    async (state) => {
+      const initial = snapshot([], { state, version: 1 });
+      const recovered = snapshot([], { state: "paused", version: 2 });
+      const { controller, api, ai } = harness(initial, false, false);
+      api.lifecycle.mockRejectedValueOnce(new ApiFailure("network"));
+      await controller.recover();
+      const pending = controller.getSnapshot().game.pendingCommand;
+      expect(controller.getSnapshot().game).toMatchObject({
+        phase: "uncertain",
+        snapshot: initial,
+        pendingCommand: { action: "pause", expectedVersion: 1 },
+      });
+      await controller.recover();
+      await controller.resume();
+      await controller.next();
+      expect(api.lifecycle).toHaveBeenCalledTimes(1);
+      expect(ai.turn).not.toHaveBeenCalled();
+      api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", recovered));
+      await controller.retryCommand();
+      expect(api.lifecycle.mock.calls[1]?.[0]).toEqual(pending);
+      expect(controller.getSnapshot()).toMatchObject({
+        automatic: false,
+        activity: "idle",
+        game: { phase: "ready", snapshot: recovered },
+      });
+    },
+  );
 
   it("ignores a late paused step after recovery has advanced the revision", async () => {
     const initial = snapshot([], { state: "paused", version: 1 });
-    const resumed = snapshot([], { version: 2 });
-    const recovered = snapshot([], { state: "paused", version: 3 });
+    const recovered = snapshot([], { state: "paused", version: 2 });
     const { controller, api, ai, pending } = harness(initial);
     const step = controller.next();
-    api.snapshot.mockResolvedValueOnce(initial).mockResolvedValue(resumed);
-    api.lifecycle
-      .mockRejectedValueOnce(new ApiFailure("api", "INVALID_GAME_STATE"))
-      .mockResolvedValueOnce(resumed)
-      .mockResolvedValueOnce(recovered);
+    api.lifecycle.mockResolvedValueOnce(recovered);
     await controller.pause();
     pending.resolve(snapshot(["e2e4"], { state: "paused", version: 99 }));
     await step;
@@ -602,6 +568,42 @@ describe("AI playback controller", () => {
     });
     expect(ai.turn).toHaveBeenCalledTimes(1);
   });
+
+  it.each([false, true])(
+    "suspends the controlling page between turns or during a call (thinking=%s) and reconnects paused",
+    async (thinking) => {
+      const { controller, api, ai, pending } = harness();
+      await vi.advanceTimersByTimeAsync(0);
+      if (!thinking) {
+        pending.resolve(snapshot(["e2e4"]));
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      const before = controller.getSnapshot().game.snapshot!;
+      controller.suspend();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(ai.turn).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot()).toMatchObject({
+        automatic: false,
+        game: { phase: "recovery-required" },
+      });
+      api.snapshot.mockResolvedValueOnce(before);
+      api.lifecycle.mockResolvedValueOnce(
+        snapshot(
+          before.moves.map(({ uci }) => uci),
+          { state: "paused", version: before.version + 1 },
+        ),
+      );
+      controller.connect();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(controller.getSnapshot()).toMatchObject({
+        automatic: false,
+        activity: "idle",
+        game: { phase: "ready", snapshot: { state: "paused", moves: before.moves } },
+      });
+      expect(api.lifecycle.mock.calls.at(-1)?.[0].action).toBe("pause");
+      expect(ai.turn).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("can stop while reconciliation is delayed and ignores that obsolete read", async () => {
     const { controller, api, ai, pending } = harness();

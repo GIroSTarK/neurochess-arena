@@ -214,14 +214,12 @@ describe("paused AI stepping", () => {
     expect(
       await api.database.db.$count(gameCommands, eq(gameCommands.gameId, initial.gameId)),
     ).toBe(2);
-    expect((await lifecycle(api, guest, stepped, "pause")).json()).toHaveProperty(
-      "code",
-      "INVALID_GAME_STATE",
-    );
+    const fenced = gameSnapshotSchema.parse((await lifecycle(api, guest, stepped, "pause")).json());
+    expect(fenced).toEqual({ ...stepped, version: 3 });
     const resumed = gameSnapshotSchema.parse(
-      (await lifecycle(api, guest, stepped, "resume")).json(),
+      (await lifecycle(api, guest, fenced, "resume")).json(),
     );
-    expect(resumed).toMatchObject({ state: "active", version: 3, moves: stepped.moves });
+    expect(resumed).toMatchObject({ state: "active", version: 4, moves: stepped.moves });
     expect(resumed.legalMoves.length).toBeGreaterThan(0);
     expect(gate.provider.requests).toHaveLength(1);
   });

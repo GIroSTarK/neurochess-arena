@@ -1,4 +1,10 @@
 export {
+  aiGameConfigurationSchema,
+  aiGameResponseSchema,
+  aiRuntimeHeader,
+  aiRuntimeIdSchema,
+  type AiGameConfiguration,
+  type AiGameResponse,
   createAiGameRequestSchema,
   aiTurnCommandSchema,
   aiTurnRequestSchema,

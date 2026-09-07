@@ -15,6 +15,7 @@ export interface RecoveryContext {
   readonly gate: OperationGate;
   readonly commandId: () => string;
   readonly navigation: SandboxNavigation | undefined;
+  readonly pausePaused?: boolean;
   readonly session: Pick<
     GameSession,
     "accept" | "loseAccess" | "readBack" | "validRevision" | "beginRecovery" | "endRecovery"
@@ -104,8 +105,10 @@ export class RecoveryController {
         { snapshot, pendingCommand: null, phase: "recovering" },
         { notice: store.get().notice, invalidateInteraction: true },
       );
-      if (snapshot.state !== "active") {
-        if (snapshot.state !== "paused" && !isTerminal(snapshot)) throw new ApiFailure("malformed");
+      if (snapshot.state !== "active" && snapshot.state !== "paused" && !isTerminal(snapshot)) {
+        throw new ApiFailure("malformed");
+      }
+      if (isTerminal(snapshot) || (snapshot.state === "paused" && !this.context.pausePaused)) {
         session.accept(snapshot, "existing", "existing");
         return;
       }
@@ -145,7 +148,7 @@ export class RecoveryController {
             { phase: "recovering", snapshot, pendingCommand: null },
             { notice: store.get().notice },
           );
-          if (snapshot.state !== "active") {
+          if (isTerminal(snapshot) || (snapshot.state === "paused" && !this.context.pausePaused)) {
             session.accept(snapshot, "existing", "recovered");
             return;
           }

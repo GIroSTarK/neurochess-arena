@@ -134,7 +134,10 @@ for (const source of ["recovery", "stop"] as const) {
           expiresAt: sql`clock_timestamp() - interval '1 hour'`,
         })
         .where(eq(guestSessions.id, owner.id));
-      const url = `${API_ORIGIN}/games/${initial.gameId}${source === "stop" ? "/lifecycle" : ""}`;
+      const url =
+        source === "stop"
+          ? `${API_ORIGIN}/games/${initial.gameId}/lifecycle`
+          : `${API_ORIGIN}/ai/games/${initial.gameId}`;
       allowUnauthorizedResponse(page, url);
       const failedResponse = page.waitForResponse((response) => response.url() === url);
       if (source === "recovery") await page.getByRole("button", { name: "Return to game" }).click();
@@ -154,20 +157,8 @@ for (const source of ["recovery", "stop"] as const) {
       await exit.click();
       expect((await bootstrap).status()).toBe(200);
       await expect(page.getByRole("button", { name: "Return to game" })).toHaveCount(0);
-      if (source === "recovery") {
-        await configure(page, "White");
-        await configure(page, "Black");
-      } else {
-        for (const color of ["White", "Black"]) {
-          const seat = page.getByRole("region", { name: `${color} configuration` });
-          await expect(seat.getByRole("button", { name: "Load models" })).toHaveAttribute(
-            "aria-disabled",
-            "false",
-          );
-          await seat.getByRole("button", { name: "Load models" }).click();
-          await expect(seat.getByText("Configuration ready", { exact: true })).toBeVisible();
-        }
-      }
+      await configure(page, "White");
+      await configure(page, "Black");
       const nextResponse = page.waitForResponse(
         (response) => response.url() === API_ORIGIN + "/ai/games",
       );

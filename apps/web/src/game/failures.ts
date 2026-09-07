@@ -40,6 +40,7 @@ export function rejectionOf(failure: ApiFailure): RejectionCode | undefined {
 }
 
 export function failureNotice(failure: ApiFailure): SandboxNotice {
+  if (failure.kind === "restart") return "recovery-required";
   return (
     failure.code ??
     (failure.kind === "api" || failure.kind === "cancelled" ? "network" : failure.kind)

@@ -3,6 +3,8 @@
 **Status:** Accepted  
 **Date:** 2026-09-06
 
+Extended by [ADR-0011](0011-ai-page-recovery.md): Pause also fences paused AI games without an outstanding reservation, including requests delayed before reservation.
+
 ## Context
 
 [ADR-0009](0009-ai-turn-persistence.md) initially allows active reservations and up to three attempts per reservation. A provider failure or lifecycle recovery creates a new reservation, which must not erase earlier invalid responses for the same chess turn. Next move also needs to execute from paused state without exposing an active game during provider I/O.

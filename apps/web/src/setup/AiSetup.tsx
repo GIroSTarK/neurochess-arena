@@ -1,9 +1,11 @@
-import type {
-  ChessColor,
-  CreateAiGameRequest,
-  GameSnapshot,
-  ProviderDescriptor,
-  SessionCredential,
+import {
+  type AiGameConfiguration,
+  aiRuntimeHeader,
+  type ChessColor,
+  type CreateAiGameRequest,
+  type GameSnapshot,
+  type ProviderDescriptor,
+  type SessionCredential,
 } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { createAiSetupApi, createAiTurnApi } from "../api/ai";
 import { ApiFailure, createSandboxApi } from "../api/client";
 import { DocumentMetadata } from "../app/DocumentMetadata";
+import { isAccessCode } from "../game/failures";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 
@@ -22,7 +25,11 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const [api] = useState(() => createAiSetupApi(apiBaseUrl));
   const [turnApi] = useState(() => createAiTurnApi(apiBaseUrl));
-  const [common] = useState(() => createSandboxApi(apiBaseUrl));
+  const [common] = useState(() =>
+    createSandboxApi(apiBaseUrl, {
+      onResponse: (response) => turnApi.acknowledgeRuntime?.(response.headers.get(aiRuntimeHeader)),
+    }),
+  );
   const white = useAiSeat(api);
   const black = useAiSeat(api);
   const opponent = useAiSeat(api);
@@ -33,14 +40,43 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<"service" | "create" | "access" | null>(null);
   const [existing, setExisting] = useState<GameSnapshot | null>(null);
+  const existingAi = useRef(false);
   const [preview, setPreview] = useState<{
     snapshot: GameSnapshot;
     recovered: boolean;
-    configuration: CreateAiGameRequest | null;
+    configuration: AiGameConfiguration | null;
   } | null>(null);
   const [starting, setStarting] = useState(false);
   const startAbort = useRef<AbortController | null>(null);
   const playbackCredentials = useRef<Partial<Record<ChessColor, SessionCredential>>>({});
+  const [, credentialsChanged] = useState(0);
+  function clearCredentials() {
+    for (const value of Object.values(playbackCredentials.current)) value.apiKey = "";
+    playbackCredentials.current = {};
+    credentialsChanged((value) => value + 1);
+  }
+  useEffect(() => {
+    const clear = () => {
+      startAbort.current?.abort();
+      startAbort.current = null;
+      setStarting(false);
+      clearCredentials();
+    };
+    window.addEventListener("pagehide", clear);
+    return () => {
+      window.removeEventListener("pagehide", clear);
+      for (const value of Object.values(playbackCredentials.current)) value.apiKey = "";
+      playbackCredentials.current = {};
+    };
+  }, []);
+  useEffect(() => {
+    if (preview) return;
+    const returned = (event: PageTransitionEvent) => {
+      if (event.persisted) setReload((value) => value + 1);
+    };
+    window.addEventListener("pageshow", returned);
+    return () => window.removeEventListener("pageshow", returned);
+  }, [preview]);
   useEffect(() => () => startAbort.current?.abort(), []);
   useEffect(() => {
     const abort = new AbortController();
@@ -58,6 +94,7 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         if (abort.signal.aborted) return;
         setProviders(registered);
         setExisting(aiGame ?? sandboxGame);
+        existingAi.current = aiGame !== null;
         setError(null);
       } catch {
         if (!abort.signal.aborted) setError("service");
@@ -106,6 +143,7 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 },
               };
         setPreview({ snapshot, recovered: false, configuration });
+        for (const seat of [white, black, opponent]) seat.changeKey("");
       }
     } catch (failure: unknown) {
       if (abort.signal.aborted) return;
@@ -115,6 +153,9 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         failure.currentSnapshot
       ) {
         setExisting(failure.currentSnapshot);
+        // A competing creator may have occupied the slot; rediscovery identifies its mode.
+        setLoading(true);
+        setReload((value) => value + 1);
       } else {
         setError(
           failure instanceof ApiFailure &&
@@ -134,6 +175,37 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     // Bootstrap can replace an expired guest, whose catalog references cannot be reused.
     for (const seat of [white, black, opponent]) seat.resetDiscovery();
     setReload((value) => value + 1);
+  }
+  async function returnGame() {
+    if (!existing || startAbort.current || loading || error) return;
+    const abort = new AbortController();
+    startAbort.current = abort;
+    setStarting(true);
+    setError(null);
+    clearCredentials();
+    for (const seat of [white, black, opponent]) seat.changeKey("");
+    try {
+      const restored = existingAi.current ? await api.game(existing.gameId, abort.signal) : null;
+      if (!abort.signal.aborted) {
+        setPreview({
+          snapshot: restored?.snapshot ?? existing,
+          configuration: restored?.configuration ?? null,
+          recovered: true,
+        });
+      }
+    } catch (failure: unknown) {
+      if (!abort.signal.aborted) {
+        const access = failure instanceof ApiFailure && isAccessCode(failure.code);
+        if (access) {
+          setExisting(null);
+          existingAi.current = false;
+        }
+        setError(access ? "access" : "service");
+      }
+    } finally {
+      if (startAbort.current === abort) startAbort.current = null;
+      if (!abort.signal.aborted) setStarting(false);
+    }
   }
   const match = preview?.configuration ?? null;
   const liveCopy = match?.mode === "ai_vs_human" ? "humanPlay" : "playback";
@@ -173,12 +245,16 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
             api={common}
             turnApi={turnApi}
             credential={(color) => playbackCredentials.current[color] ?? null}
+            onCredential={(color, value) => {
+              playbackCredentials.current[color] = value;
+              credentialsChanged((revision) => revision + 1);
+            }}
             match={match}
             initial={preview.snapshot}
             recovered={preview.recovered}
             onSetup={() => {
               setPreview(null);
-              playbackCredentials.current = {};
+              clearCredentials();
               setExisting(null);
               retry();
             }}
@@ -261,19 +337,26 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
             {error ? (
               <div role="alert" className="mb-6 space-y-3 rounded-panel border border-warning p-4">
                 <p>{t(`setup.errors.${error}`)}</p>
-                <Button variant="secondary" onClick={retry}>
-                  {t("setup.retry")}
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (error === "access") setExisting(null);
+                    retry();
+                  }}
+                >
+                  {t(error === "access" ? "setup.returnSetup" : "setup.retry")}
                 </Button>
               </div>
             ) : null}
-            {existing ? (
+            {existing && error !== "access" ? (
               <div className="mb-6 space-y-3 rounded-panel border border-warning p-4" role="status">
                 <p>{t("setup.existing")}</p>
                 <Button
                   variant="primary"
-                  onClick={() =>
-                    setPreview({ snapshot: existing, recovered: true, configuration: null })
-                  }
+                  aria-disabled={starting || loading || error !== null}
+                  onClick={() => {
+                    void returnGame();
+                  }}
                 >
                   {t("setup.returnGame")}
                 </Button>

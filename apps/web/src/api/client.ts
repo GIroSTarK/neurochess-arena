@@ -22,7 +22,7 @@ import type { z } from "zod";
 
 import { parsePosition } from "../position/position";
 
-export type ApiFailureKind = "api" | "network" | "timeout" | "malformed" | "cancelled";
+export type ApiFailureKind = "api" | "network" | "timeout" | "malformed" | "cancelled" | "restart";
 
 /** Only safe codes and validated snapshots survive the transport boundary. */
 export class ApiFailure extends Error {
@@ -58,7 +58,12 @@ export function validateSnapshot(input: unknown): GameSnapshot {
 
 export function createGameTransport(
   apiBaseUrl: string,
-  options: { fetch?: typeof fetch; timeoutMs?: number | null } = {},
+  options: {
+    fetch?: typeof fetch;
+    timeoutMs?: number | null;
+    keepalive?: boolean;
+    onResponse?: (response: Response) => void;
+  } = {},
 ) {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   const timeoutMs =
@@ -82,6 +87,7 @@ export function createGameTransport(
         credentials: "include",
         cache: "no-store",
         redirect: "error",
+        ...(options.keepalive ? { keepalive: true } : {}),
         headers: {
           accept: "application/json",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
@@ -95,6 +101,7 @@ export function createGameTransport(
       } catch {
         throw new ApiFailure("malformed");
       }
+      if (abort.signal.aborted) throw new ApiFailure("cancelled");
       if (!response.ok && !(readiness && response.status === 503)) {
         const error = gameErrorResponseSchema.safeParse(payload);
         if (!error.success) throw new ApiFailure("malformed");
@@ -108,6 +115,7 @@ export function createGameTransport(
       }
       const result = schema.safeParse(payload);
       if (!result.success) throw new ApiFailure("malformed");
+      options.onResponse?.(response);
       return result.data;
     } catch (error: unknown) {
       if (signal.aborted) throw new ApiFailure("cancelled");
@@ -149,7 +157,11 @@ export function createGameTransport(
 
 export function createSandboxApi(
   apiBaseUrl: string,
-  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  options: {
+    fetch?: typeof fetch;
+    timeoutMs?: number;
+    onResponse?: (response: Response) => void;
+  } = {},
 ): SandboxApi {
   const { request, gameRequest, forGame } = createGameTransport(apiBaseUrl, options);
   return {

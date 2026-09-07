@@ -25,6 +25,17 @@ export function useAiSeat(api: AiSetupApi) {
   const previousCatalog = useRef<string | undefined>(undefined);
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => {
+    const clear = () => {
+      pending.current?.abort();
+      pending.current = null;
+      previousCatalog.current = undefined;
+      setKey("");
+      setDiscovery({ status: "idle" });
+    };
+    window.addEventListener("pagehide", clear);
+    return () => window.removeEventListener("pagehide", clear);
+  }, []);
+  useEffect(() => {
     if (discovery.status !== "ready") return;
     const timer = setTimeout(
       () => {

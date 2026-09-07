@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { createGame } from "@neurochess/chess";
 import type {
+  AiGameResponse,
   AiTurnCommand,
   CreateAiGameRequest,
   GamePgnResponse,
@@ -28,6 +29,7 @@ export interface GameService {
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
   createAi(principal: GuestPrincipal, request: CreateAiGameRequest): Promise<GameSnapshot>;
   unfinishedAi(principal: GuestPrincipal): Promise<UnfinishedGameResponse>;
+  aiGame(principal: GuestPrincipal, gameId: string): Promise<AiGameResponse>;
   listProviders(principal: GuestPrincipal): Promise<ProviderListResponse>;
   discoverModels(
     principal: GuestPrincipal,
@@ -115,14 +117,13 @@ export function createGameService(
       } else {
         authorizeGameControl(principal, stored);
       }
-      // Pause also fences an interrupted or in-flight step whose persisted state is already paused.
+      // Fence even requests that have not reserved yet, without briefly resuming a recovered game.
       const cancelPausedStep =
         !isMove &&
         command.action === "pause" &&
         stored.state === "paused" &&
         !stored.isSandbox &&
-        stored.mode !== "human_vs_human" &&
-        (await tx.getTurnReservations(stored.id)).some((row) => row.status === "reserved");
+        stored.mode !== "human_vs_human";
       const accepted = cancelPausedStep
         ? ({ ok: true, value: restored.game.snapshot() } as const)
         : isMove

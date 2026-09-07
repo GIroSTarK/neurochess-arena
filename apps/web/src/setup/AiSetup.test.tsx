@@ -1,4 +1,8 @@
-import { modelDiscoveryRequestSchema } from "@neurochess/contracts";
+import {
+  type AiGameConfiguration,
+  lifecycleCommandSchema,
+  modelDiscoveryRequestSchema,
+} from "@neurochess/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -39,6 +43,18 @@ function mount(
       return Promise.resolve(jsonResponse(catalogResponse(credential.provider)));
     }
     if (path === "/ai/games") return Promise.resolve(jsonResponse(snapshot(), 201));
+    if (path.startsWith("/ai/games/")) {
+      return Promise.resolve(
+        jsonResponse({
+          snapshot: snapshot(),
+          configuration: {
+            mode: "ai_vs_ai",
+            white: { provider: "openai", modelId: "fixture-full", parameters: {} },
+            black: { provider: "anthropic", modelId: "fixture-full", parameters: {} },
+          },
+        }),
+      );
+    }
     if (path.endsWith("/ai-turn")) return new Promise<Response>(() => undefined);
     throw new Error("Unexpected test request");
   });
@@ -84,6 +100,85 @@ function creations(fetch: ReturnType<typeof mount>["fetch"]) {
 }
 
 describe("AI setup", () => {
+  it.each(["ai_vs_ai", "white", "black"] as const)(
+    "recovers %s with saved configuration and gates explicit continuation on every missing key",
+    async (mode) => {
+      const ai = {
+        provider: "openai",
+        modelId: "saved-model",
+        parameters: { temperature: 0 },
+      } as const;
+      const configuration: AiGameConfiguration =
+        mode === "ai_vs_ai"
+          ? { mode, white: ai, black: { ...ai, parameters: { temperature: 1.5 } } }
+          : { mode: "ai_vs_human", humanColor: mode, ai };
+      const history = ["g1f3", "g8f6", "f3g1", "f6g8"];
+      let current = snapshot(history);
+      const { fetch } = mount((path, options) => {
+        if (path === "/ai/games/unfinished") return jsonResponse({ snapshot: current });
+        if (path === `/ai/games/${current.gameId}`) {
+          return jsonResponse({ snapshot: current, configuration });
+        }
+        if (path === `/games/${current.gameId}`) return jsonResponse(current);
+        if (path.endsWith("/lifecycle")) {
+          const command = lifecycleCommandSchema.parse(JSON.parse(requestBody(options)) as unknown);
+          current = snapshot(history, {
+            state: command.action === "resume" ? "active" : "paused",
+            version: command.expectedVersion + 1,
+            ...(command.action === "pause" ? { legalMoves: [] } : {}),
+          });
+          return jsonResponse(current);
+        }
+        return undefined;
+      });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Return to game" }));
+      await screen.findByText("Game paused", { exact: true });
+      const resume = screen.getByRole("button", { name: "Resume" });
+      expect(resume).toHaveAttribute("aria-disabled", "true");
+      const enter = screen.getByRole("button", { name: "Enter missing keys" });
+      await user.click(enter);
+      const colors =
+        mode === "ai_vs_ai" ? ["White", "Black"] : [mode === "white" ? "Black" : "White"];
+      expect(within(screen.getByRole("dialog")).getAllByLabelText(/API key/)).toHaveLength(
+        colors.length,
+      );
+      await user.type(
+        screen.getByLabelText(`${colors[0] ?? "White"} · openai API key`),
+        "discarded-key",
+      );
+      await user.keyboard("{Escape}");
+      expect(enter).toHaveFocus();
+      expect(resume).toHaveAttribute("aria-disabled", "true");
+      await user.click(enter);
+      for (const color of colors) {
+        const field = screen.getByLabelText(`${color} · openai API key`);
+        expect(field).toHaveValue("");
+        expect(field).toHaveAttribute("type", "password");
+        expect(screen.getByRole("button", { name: "Use keys for this page" })).toHaveAttribute(
+          "aria-disabled",
+          "true",
+        );
+        await user.type(field, `reentered-${color}`);
+      }
+      await user.click(screen.getByRole("button", { name: "Use keys for this page" }));
+      expect(resume).toHaveAttribute("aria-disabled", "false");
+      expect(current.state).toBe("paused");
+      expect(current.moves.map(({ uci }) => uci)).toEqual(history);
+      const turns = () =>
+        fetch.mock.calls.filter(([input]) => requestPath(input).endsWith("/ai-turn"));
+      expect(turns()).toHaveLength(0);
+      await user.click(resume);
+      await waitFor(() => expect(current.state).toBe("active"));
+      if (mode !== "white") {
+        await waitFor(() => expect(turns()).toHaveLength(1));
+        expect(JSON.parse(requestBody(turns()[0]?.[1])) as unknown).toMatchObject({
+          credential: { provider: "openai", apiKey: "reentered-White" },
+        });
+      } else expect(turns()).toHaveLength(0);
+    },
+  );
+
   it("returns from the back-forward cache through paused recovery without launching another turn", async () => {
     const initial = snapshot();
     const accepted = snapshot(["e2e4"]);
@@ -99,21 +194,31 @@ describe("AI setup", () => {
     const turns = () =>
       fetch.mock.calls.filter(([input]) => requestPath(input).endsWith("/ai-turn"));
     await waitFor(() => expect(turns()).toHaveLength(1));
+    const bootstraps = fetch.mock.calls.filter(
+      ([input]) => requestPath(input) === "/guest-session",
+    ).length;
     fireEvent(window, new PageTransitionEvent("pagehide", { persisted: true }));
     expect(turns()[0]?.[1]?.signal?.aborted).toBe(true);
     fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Next move" })).toHaveAttribute(
         "aria-disabled",
-        "false",
+        "true",
       ),
     );
-    expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute(
-      "aria-disabled",
-      "false",
-    );
+    expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute("aria-disabled", "true");
     expect(turns()).toHaveLength(1);
-    const lifecycle = fetch.mock.calls.find(([input]) => requestPath(input).endsWith("/lifecycle"));
+    await screen.findByText("Game paused", { exact: true });
+    expect(
+      fetch.mock.calls.filter(([input]) => requestPath(input) === "/guest-session"),
+    ).toHaveLength(bootstraps);
+    await user.click(screen.getByRole("button", { name: "Enter missing keys" }));
+    for (const field of within(screen.getByRole("dialog")).getAllByLabelText(/API key/)) {
+      expect(field).toHaveValue("");
+    }
+    const lifecycle = fetch.mock.calls
+      .filter(([input]) => requestPath(input).endsWith("/lifecycle"))
+      .at(-1);
     expect(JSON.parse(requestBody(lifecycle?.[1])) as unknown).toMatchObject({
       action: "pause",
       expectedVersion: 1,
@@ -470,19 +575,31 @@ describe("AI setup", () => {
 
   it("prevents duplicate starts and presents a competing game without retrying creation", async () => {
     let finish: (response: Response) => void = () => undefined;
+    let occupied = false;
+    const rediscovered = Promise.withResolvers<Response>();
     const { fetch } = mount((path) =>
       path === "/ai/games"
         ? new Promise<Response>((resolve) => {
             finish = resolve;
           })
-        : undefined,
+        : path === "/ai/games/unfinished" && occupied
+          ? rediscovered.promise
+          : undefined,
     );
     await configure("White");
     const { user } = await configure("Black");
     await user.dblClick(screen.getByRole("button", { name: "Start game" }));
     expect(creations(fetch)).toHaveLength(1);
+    occupied = true;
     await act(async () => finish(errorResponse("GAME_CONFLICT", 409, snapshot())));
-    await screen.findByRole("button", { name: "Return to game" });
+    const returnGame = await screen.findByRole("button", { name: "Return to game" });
+    expect(returnGame).toHaveAttribute("aria-disabled", "true");
+    await user.click(returnGame);
+    expect(
+      fetch.mock.calls.some(([input]) => requestPath(input) === `/ai/games/${snapshot().gameId}`),
+    ).toBe(false);
+    await act(async () => rediscovered.resolve(jsonResponse({ snapshot: snapshot() })));
+    expect(returnGame).toHaveAttribute("aria-disabled", "false");
     expect(screen.getByRole("button", { name: "Start game" })).toHaveAttribute(
       "aria-disabled",
       "true",

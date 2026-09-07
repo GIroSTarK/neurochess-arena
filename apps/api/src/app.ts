@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import {
+  aiRuntimeHeader,
   healthResponseSchema,
   readinessResponseSchema,
   type SafeErrorResponse,
@@ -38,6 +39,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(cors, {
     methods: ["GET", "HEAD", "OPTIONS", "POST"],
     credentials: true,
+    exposedHeaders: [aiRuntimeHeader],
     origin(origin, callback) {
       callback(null, origin === options.webOrigin);
     },
