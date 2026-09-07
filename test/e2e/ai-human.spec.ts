@@ -201,7 +201,7 @@ for (const humanColor of ["white", "black"] as const) {
     await page.getByRole("button", { name }).click();
     await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    expect(await readSnapshot(page, current.gameId)).toEqual(current);
+    expect(await readSnapshot(page, current.gameId)).toMatchObject(current);
     await page.getByRole("button", { name }).click();
     await page.getByRole("button", { name: "Confirm resignation" }).click();
     await expect(page.getByRole("button", { name: "Configure another match" })).toBeVisible();

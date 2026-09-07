@@ -180,6 +180,27 @@ const snapshotFields = {
   legalMoves: (a, b) => sameList(a.legalMoves, b.legalMoves, (x, y) => x === y),
   moves: (a, b) =>
     sameList(a.moves, b.moves, (x, y) => Object.values(moveFields).every((same) => same(x, y))),
+  // Attempts can progress without a game revision. Terminal history is immutable.
+  invocations: (a, b) =>
+    (!isTerminal(a) && !isTerminal(b)) ||
+    sameList(
+      a.invocations ?? [],
+      b.invocations ?? [],
+      (x, y) =>
+        x.ply === y.ply &&
+        x.color === y.color &&
+        x.attempt === y.attempt &&
+        x.status === y.status &&
+        x.accepted === y.accepted &&
+        x.commentary === y.commentary &&
+        x.latencyMs === y.latencyMs &&
+        x.usage.inputTokens === y.usage.inputTokens &&
+        x.usage.outputTokens === y.usage.outputTokens &&
+        x.usage.totalTokens === y.usage.totalTokens &&
+        x.error?.kind === y.error?.kind &&
+        (x.error?.kind !== "model_invalid" ||
+          (y.error?.kind === "model_invalid" && x.error.reason === y.error.reason)),
+    ),
 } satisfies Record<keyof GameSnapshot, Equality<GameSnapshot>>;
 
 /** Whether two validated snapshots describe the same accepted state, whatever their key order. */

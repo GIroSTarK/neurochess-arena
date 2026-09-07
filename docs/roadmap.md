@@ -66,7 +66,7 @@ Deliverables:
 - [x] AI-versus-AI orchestration, pause/resume, single paused stepping, presentation speed, and Stop during thinking, with uncertain-response reconciliation and controller/desktop/mobile mock-provider coverage;
 - [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
 - [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;
-- [ ] latency and token telemetry collection and display.
+- [x] private normalized attempt/error history, accepted-move commentary with missing fallback, and latency/reported-token display with explicit unavailable values; both AI modes share replay and PGN controls, with mocked contract, integration, component, and desktop/mobile browser coverage.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
 
@@ -106,7 +106,7 @@ Deliverables:
 
 - Stockfish Web Worker analysis after every move;
 - live and post-game evaluation graph;
-- commentary, attempt, latency, token, and estimated-cost views;
+- richer commentary, attempt, latency, token, and estimated-cost analysis views and totals beyond the basic Phase 2 display;
 - explicit unavailable states for incomplete pricing or usage data;
 - desktop and mobile UX refinement;
 - keyboard navigation, contrast, focus, and reduced-motion review;

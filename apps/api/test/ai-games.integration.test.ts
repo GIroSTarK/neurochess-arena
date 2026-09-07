@@ -347,7 +347,7 @@ describe("authoritative AI execution ownership", () => {
       ]);
       for (const response of duplicates) {
         expect(response.statusCode).toBe(409);
-        expect(response.json()).toHaveProperty("currentSnapshot", current);
+        expect(response.json()).toMatchObject({ currentSnapshot: current });
       }
       expect(gate.provider.requests).toHaveLength(1);
     } finally {
@@ -451,7 +451,7 @@ describe("authoritative AI execution ownership", () => {
         })
         .where(eq(turnReservations.gameId, initial.gameId));
       expect((await turn(api, guest, aiCommand(initial))).statusCode).toBe(409);
-      expect((await discover(api, guest)).json()).toEqual({ snapshot: initial });
+      expect((await discover(api, guest)).json()).toMatchObject({ snapshot: initial });
     } finally {
       gate.release();
     }
@@ -564,7 +564,7 @@ describe("authoritative AI execution ownership", () => {
     const initial = await createAi(api, guest);
     const request = aiCommand(initial);
     expect((await turn(api, guest, request)).statusCode).toBe(500);
-    expect(await snapshot(api, guest, initial.gameId)).toEqual(initial);
+    expect(await snapshot(api, guest, initial.gameId)).toMatchObject(initial);
     expect(
       await api.database.db.$count(gameCommands, eq(gameCommands.gameId, initial.gameId)),
     ).toBe(0);

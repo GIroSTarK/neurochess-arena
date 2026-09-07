@@ -6,6 +6,7 @@ import type { GuestPrincipal } from "../guests/service.js";
 
 import { authorizeGameRead } from "./authorization.js";
 import { GameIntegrityError } from "./errors.js";
+import { withInvocations } from "./telemetry.js";
 
 interface RestoredGame {
   readonly game: ChessGame;
@@ -55,7 +56,9 @@ export async function restoreAuthorized(
     }
     previousVersion = move.version;
   }
-  const snapshot = transportSnapshot(stored.id, stored.version, domain);
+  const position = transportSnapshot(stored.id, stored.version, domain);
+  const snapshot =
+    stored.mode === "human_vs_human" ? position : await withInvocations(reader, position, moves);
   return { game: restored.value, snapshot, moves, participants };
 }
 

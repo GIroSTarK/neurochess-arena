@@ -23,6 +23,7 @@ import { type AiGameOptions, createAiGameOperations } from "./ai-service.js";
 import { authorizeGameControl, authorizeHumanSeat } from "./authorization.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 import { positionOf, restoreAuthorized, transportSnapshot } from "./state.js";
+import { withInvocations } from "./telemetry.js";
 
 export interface GameService {
   readonly sandboxEnabled: boolean;
@@ -154,7 +155,7 @@ export function createGameService(
       if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot)))) {
         throw new GameIntegrityError();
       }
-      return snapshot;
+      return stored.mode === "human_vs_human" ? snapshot : withInvocations(tx, snapshot);
     });
   }
 

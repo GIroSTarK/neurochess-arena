@@ -193,7 +193,7 @@ The browser requests one AI turn at a time. The API:
 5. validates and normalizes the response;
 6. retries model-invalid output at most twice;
 7. commits the legal move only if the game version is still current;
-8. returns the new state and retains normalized telemetry in invocation records for subsequent telemetry views.
+8. returns the new state with a private projection of normalized invocation history.
 
 The reservation must be idempotent so multiple clicks, retries, or network duplicates cannot cause multiple moves. Page exit and offline events stop scheduling and abort request consumption. Page exit also clears all session-only keys and sends a credential-free keepalive Pause. Delivery is best effort; recovery always restores and pauses the authoritative game before explicit continuation. The browser echoes the API runtime UUID acknowledged by session/game reads, lifecycle controls, or AI responses on subsequent turns, allowing the API to reject automatic continuation after a restart before reserving or calling a provider. See [ADR-0011](decisions/0011-ai-page-recovery.md).
 
@@ -322,6 +322,10 @@ If the API is scaled horizontally, add a shared pub/sub or connection-routing la
 ## Telemetry and cost
 
 Store operational metadata required by the product: provider/model, attempt number, duration, reported tokens, normalized errors, and estimated cost. Never store raw keys. Avoid storing complete raw provider payloads by default; retain the normalized move and user-facing commentary needed for replay.
+
+AI snapshots include an optional `invocations` list, omitted before any attempt. After authorization, the API projects it from the existing invocation, reservation, and move records in the snapshot's transaction. Reservation revision and move-command identity determine the target ply and whether a response actually produced an accepted move; matching a UCI string or treating a revision as a ply is insufficient. The projection exposes color, ply, chronological attempt number across all calls for that ply, normalized status/error codes, accepted commentary, latency, and nullable input/output/total token counts. Internal identities, provider request IDs, configuration copies, and raw diagnostics remain private to the API.
+
+Per-move measurements describe the accepted attempt; other calls retain their own measurements in history. No unreported total is inferred. Pending or interrupted calls preserve unavailable values, and only a committed move receives commentary. Attempts can progress without advancing the game revision, so unfinished snapshot reconciliation compares authoritative chess state separately from this metadata. Terminal replay checks the complete immutable snapshot, including telemetry. Both AI modes reuse the private archive controller and canonical PGN export; model context and PGN remain free of commentary and telemetry. Basic presentation excludes pricing, Stockfish, and aggregate analysis.
 
 Cost calculation uses provider-reported token counts and versioned pricing metadata when available. Every cost is labeled as an estimate. Unknown usage or price produces `unavailable`, not zero.
 

@@ -246,7 +246,7 @@ describe("AI recovery across API restarts", () => {
       api = await harness.createApi({ ai: { providers: [{ adapter: provider }] } });
       expect(
         aiGameResponseSchema.parse((await read(api, guest, initial.gameId)).json()).snapshot,
-      ).toEqual(initial);
+      ).toMatchObject(initial);
       expect((await turn(api, guest, aiCommand(initial))).statusCode).toBe(409);
       expect(provider.requests).toHaveLength(0);
       const recovered = gameSnapshotSchema.parse(

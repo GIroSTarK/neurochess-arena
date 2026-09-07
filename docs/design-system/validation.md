@@ -8,7 +8,7 @@
 - Firefox, WebKit, physical touch devices, browser/operating-system zoom, and on-screen keyboards remain unverified. Chromium touch emulation and root-text enlargement are not substitutes for those checks.
 - The production build splits vendor code into separate chunks, but no bundle size budget or field-performance baseline has been established.
 
-The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Sandbox, AI setup, both AI gameplay modes, and recovered-key re-entry checks do not certify provider-attempt/error detail views, account, room, or analysis flows; apply the acceptance checklist as each flow is implemented.
+The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Sandbox, AI setup, both AI gameplay modes, recovered-key re-entry, and basic telemetry/replay checks do not certify account, room, or richer analysis flows; apply the acceptance checklist as each flow is implemented.
 
 ## Static reference limitations
 

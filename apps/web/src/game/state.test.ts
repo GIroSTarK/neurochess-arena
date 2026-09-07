@@ -11,6 +11,35 @@ function reversedKeys(value: GameSnapshot): GameSnapshot {
 }
 
 describe("snapshot equality", () => {
+  it("allows unfinished attempt progress but requires identical terminal telemetry", () => {
+    const active = snapshot(["e2e4"]);
+    const withTelemetry = snapshot(["e2e4"], {
+      invocations: [
+        {
+          ply: 1,
+          color: "white",
+          attempt: 1,
+          status: "succeeded",
+          accepted: true,
+          commentary: "For this move",
+          error: null,
+          latencyMs: 10,
+          usage: { inputTokens: 0, outputTokens: null, totalTokens: null },
+        },
+      ],
+    });
+    expect(sameSnapshot(active, withTelemetry)).toBe(true);
+    const terminal = snapshot(FOOLS_MATE, { invocations: withTelemetry.invocations });
+    expect(sameSnapshot(snapshot(FOOLS_MATE), terminal)).toBe(false);
+    expect(sameSnapshot(terminal, structuredClone(terminal))).toBe(true);
+    expect(
+      sameSnapshot(terminal, {
+        ...terminal,
+        invocations: terminal.invocations?.map((entry) => ({ ...entry, latencyMs: 11 })),
+      }),
+    ).toBe(false);
+  });
+
   it("matches separately built snapshots of one accepted state whatever their key order", () => {
     const accepted = snapshot(FOOLS_MATE);
     const reordered = reversedKeys(snapshot(FOOLS_MATE));

@@ -43,6 +43,54 @@ const moveRecord = {
 };
 const errorEnvelope = { message: "application-supplied text", requestId: "request-1" };
 
+describe("invocation snapshot projection", () => {
+  const invocation = {
+    ply: 1,
+    color: "white",
+    attempt: 1,
+    status: "succeeded",
+    accepted: true,
+    commentary: "<script>plain text</script>",
+    error: null,
+    latencyMs: 0,
+    usage: { inputTokens: 0, outputTokens: 3, totalTokens: null },
+  };
+  const withMove = { ...initialSnapshot, moves: [moveRecord], invocations: [invocation] };
+
+  it("preserves reported zero, unknown totals, and untrusted commentary as text", () => {
+    expect(gameSnapshotSchema.parse(withMove).invocations).toEqual([invocation]);
+  });
+
+  it("rejects mismatched, duplicate or unordered move associations and raw details", () => {
+    for (const invalid of [
+      { ...invocation, ply: 2 },
+      { ...invocation, color: "black" },
+      { ...invocation, attempt: 2 },
+      { ...invocation, providerRequestId: "private" },
+      { ...invocation, accepted: false },
+      { ...invocation, usage: { inputTokens: 0 } },
+      { ...invocation, usage: { ...invocation.usage, outputTokens: -1 } },
+      {
+        ...invocation,
+        status: "provider_error",
+        accepted: false,
+        commentary: null,
+        error: { kind: "provider_auth", message: "secret" },
+      },
+    ]) {
+      expect(gameSnapshotSchema.safeParse({ ...withMove, invocations: [invalid] }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      gameSnapshotSchema.safeParse({
+        ...withMove,
+        invocations: [invocation, { ...invocation, attempt: 2 }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("lifecycle and private read contracts", () => {
   it("requires an explicit human color only for resignation and rejects extra authority", () => {
     const base = { gameId, commandId, expectedVersion: 4 };

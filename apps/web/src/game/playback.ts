@@ -8,8 +8,10 @@ import type {
 import type { AiTurnApi } from "../api/ai";
 import { ApiFailure, type SandboxApi } from "../api/client";
 
+import { ArchiveController } from "./archive";
 import { safeFailure } from "./failures";
 import { type Operation, OperationGate } from "./operations";
+import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
 import {
@@ -42,6 +44,7 @@ export class AiPlaybackController {
   private readonly store = new SandboxStore();
   private readonly gate = new OperationGate();
   private readonly session: GameSession;
+  private readonly archive: ArchiveController;
   private readonly recovery: RecoveryController;
   private readonly listeners = new Set<() => void>();
   private state: PlaybackState;
@@ -58,17 +61,25 @@ export class AiPlaybackController {
     initial: GameSnapshot,
     private readonly options: PlaybackOptions,
     private readonly commandId: () => string = () => crypto.randomUUID(),
+    delivery: PgnDelivery = browserPgnDelivery,
   ) {
     const { store, gate } = this;
     store.transition({ phase: "ready", snapshot: initial, pendingCommand: null }, { notice: null });
     this.state = { game: store.get(), activity: "idle", automatic: false, speed: 1, control: null };
     store.subscribe(() => this.publish({}));
+    this.archive = new ArchiveController({
+      api,
+      delivery,
+      store,
+      isConnected: () => this.connected,
+      loseAccess: (failure) => this.session.loseAccess(failure),
+    });
     this.session = new GameSession({
       api,
       store,
       gate,
       commandId,
-      archive: { cancel: () => undefined, loadReplay: () => Promise.resolve() },
+      archive: this.archive,
     });
     this.recovery = new RecoveryController({
       api,
@@ -93,7 +104,10 @@ export class AiPlaybackController {
     if (!this.connected) {
       this.connected = true;
       this.gate.connect();
-      if (this.recoverOnConnect) void this.recover();
+      const { snapshot, replay } = this.store.get();
+      if (snapshot && isTerminal(snapshot)) {
+        if (!replay) void this.loadReplay();
+      } else if (this.recoverOnConnect) void this.recover();
       else if (this.startOnConnect && this.ready()) {
         this.publish({ automatic: true });
         // Defer the first request so StrictMode's setup/cleanup replay cannot bill a turn.
@@ -108,6 +122,7 @@ export class AiPlaybackController {
     this.connected = false;
     this.cancelTimer();
     this.gate.disconnect();
+    this.archive.cancel();
     const { snapshot, pendingCommand, phase } = this.store.get();
     if (pendingCommand) {
       this.store.transition(
@@ -163,6 +178,18 @@ export class AiPlaybackController {
     if (![0.5, 1, 2].includes(speed)) return;
     this.publish({ speed });
     if (this.timer !== null) this.schedule();
+  }
+
+  loadReplay(): Promise<void> {
+    return this.archive.loadReplay();
+  }
+
+  selectPly(ply: number): void {
+    this.archive.selectPly(ply);
+  }
+
+  exportPgn(action: "copy" | "download"): Promise<void> {
+    return this.archive.exportPgn(action);
   }
 
   async resume(): Promise<void> {
@@ -370,7 +397,7 @@ export class AiPlaybackController {
         this.publish({ activity: "idle" });
       } else {
         // A same-version conflict or GET cannot establish whether the POST will commit later.
-        if (this.store.get().phase === "sync-required") {
+        if (["ready", "sync-required"].includes(this.store.get().phase)) {
           this.session.accept(snapshot, "synchronized", "synchronized");
         }
         this.publish({ activity: "uncertain" });

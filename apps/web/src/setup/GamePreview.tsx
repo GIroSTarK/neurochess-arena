@@ -12,11 +12,15 @@ import type { SandboxApi } from "../api/client";
 import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { announcementMessage, gameStatus } from "../game/messages";
+import { InvocationDetails } from "../game/panels/InvocationDetails";
 import { MoveHistory } from "../game/panels/MoveHistory";
+import { PgnActions } from "../game/panels/PgnActions";
 import { PlaybackControls } from "../game/panels/PlaybackControls";
 import { PlayerSummary } from "../game/panels/PlayerSummary";
+import { ReplayControls } from "../game/panels/ReplayControls";
 import { AiPlaybackController } from "../game/playback";
 import { interactionEpoch, isTerminal, isUnfinished } from "../game/state";
+import { replayView } from "../position/replay";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 
@@ -139,19 +143,23 @@ export function GamePreview({
               void game.submit(move);
             }}
             describedBy={humanColor ? helpId : undefined}
+            view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
           />
         ) : null}
+        {terminal ? <ReplayControls state={state} controller={game} /> : null}
         {humanColor ? <BoardKeyboardHelp id={helpId} /> : null}
       </section>
       <section aria-label={t("sandbox.gameDetails")} className="min-w-0 space-y-5">
         <h2 className="font-display text-section">
-          {t(recovered ? "setup.returned" : "setup.created")}
+          {t(terminal ? "game.status" : recovered ? "setup.returned" : "setup.created")}
         </h2>
         <p role="status">{snapshot ? gameStatus(snapshot, t) : t("setup.accessError")}</p>
         <p className="text-text-secondary">
-          {humanColor
-            ? t("humanPlay.hint", { color: t(`players.${humanColor}`) })
-            : t(match ? "playback.hint" : "setup.previewHint")}
+          {terminal
+            ? t("replay.hint")
+            : humanColor
+              ? t("humanPlay.hint", { color: t(`players.${humanColor}`) })
+              : t(match ? "playback.hint" : "setup.previewHint")}
         </p>
         {match && !terminal && missingKeys.length > 0 && onCredential ? (
           <KeyRecovery match={match} missing={missingKeys} onCredential={onCredential} />
@@ -215,7 +223,19 @@ export function GamePreview({
             ) : null}
           </div>
         ) : null}
-        <MoveHistory moves={snapshot?.moves ?? []} />
+        <MoveHistory
+          moves={snapshot?.moves ?? []}
+          selectedPly={state.replay ? state.replayPly : undefined}
+          onSelect={state.replay ? (ply) => game.selectPly(ply) : undefined}
+        />
+        {snapshot && match ? (
+          <InvocationDetails
+            snapshot={state.replay?.snapshot ?? snapshot}
+            match={match}
+            selectedPly={state.replay ? state.replayPly : undefined}
+          />
+        ) : null}
+        {terminal ? <PgnActions state={state} controller={game} /> : null}
       </section>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcementMessage(state.announcement, t)}

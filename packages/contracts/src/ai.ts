@@ -1,6 +1,21 @@
 import { z } from "zod";
 
+import {
+  aiErrorSchema,
+  type modelInvalidErrorSchema,
+  type providerErrorKindSchema,
+  providerErrorSchema,
+  tokenUsageSchema,
+} from "./ai-telemetry.js";
 import { chessColorSchema, uciMoveSchema } from "./game.js";
+
+export {
+  aiErrorSchema,
+  modelInvalidErrorSchema,
+  providerErrorKindSchema,
+  providerErrorSchema,
+  tokenUsageSchema,
+} from "./ai-telemetry.js";
 
 export const providerIdSchema = z.enum(["openai", "anthropic", "google", "openrouter"]);
 export const providerDescriptorSchema = z.strictObject({
@@ -108,14 +123,6 @@ export const aiMoveResponseSchema = z.strictObject({
   commentary: z.string().max(2_000).optional(),
 });
 
-const tokenCountSchema = z.number().int().nonnegative();
-/** Null means unreported, including partially reported usage. Never infer missing counts. */
-export const tokenUsageSchema = z.strictObject({
-  inputTokens: tokenCountSchema.nullable(),
-  outputTokens: tokenCountSchema.nullable(),
-  totalTokens: tokenCountSchema.nullable(),
-});
-
 export const aiTelemetrySchema = z.strictObject({
   latencyMs: z.number().nonnegative(),
   usage: tokenUsageSchema.nullable(),
@@ -127,23 +134,6 @@ export const aiTelemetrySchema = z.strictObject({
     .regex(/^[a-zA-Z0-9_.:-]+(?![\s\S])/)
     .optional(),
 });
-
-export const providerErrorKindSchema = z.enum([
-  "provider_auth",
-  "provider_quota",
-  "provider_timeout",
-  "provider_unavailable",
-]);
-export const providerErrorSchema = z.strictObject({ kind: providerErrorKindSchema });
-export const modelInvalidErrorSchema = z.strictObject({
-  kind: z.literal("model_invalid"),
-  reason: z.enum(["malformed_output", "illegal_move"]),
-});
-/** Codes only; localization and retry policy belong to the consuming application. */
-export const aiErrorSchema = z.discriminatedUnion("kind", [
-  modelInvalidErrorSchema,
-  providerErrorSchema,
-]);
 
 export const normalizedMoveResponseSchema = z.discriminatedUnion("ok", [
   z.strictObject({

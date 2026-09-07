@@ -1,4 +1,41 @@
 export const en = {
+  telemetry: {
+    latest: "Latest AI moves",
+    selected: "Selected move details",
+    move: "Details for ply {{ply}}",
+    moveLabel: "Ply {{ply}} · {{color}} · {{move}}",
+    noCommentary: "No commentary provided",
+    noMoves: "No accepted AI move yet.",
+    initial: "Initial position. No move selected.",
+    humanMove: "Human move. No model telemetry.",
+    latency: "Latency",
+    inputTokens: "Input tokens",
+    outputTokens: "Output tokens",
+    totalTokens: "Total tokens",
+    unavailable: "Unavailable",
+    milliseconds: "{{value}} ms",
+    measurementHint:
+      "Per-move values describe the accepted attempt. Token counts are provider-reported; missing counts are unavailable.",
+    events: "Attempts and errors",
+    attempt: "Ply {{ply}} · {{color}} · Attempt {{attempt}}",
+    attemptHint:
+      "Attempts count every call for a ply, including retries and interruptions. Expand an attempt for its measurements.",
+    noAttempts: "No recorded attempts yet.",
+    status: {
+      accepted: "Move accepted",
+      succeeded: "Valid response; move not accepted",
+      pending: "Awaiting outcome",
+      abandoned: "Interrupted; outcome unavailable",
+    },
+    errors: {
+      malformed_output: "Invalid move response",
+      illegal_move: "Illegal move response",
+      provider_auth: "Provider authentication failed",
+      provider_quota: "Provider quota or rate limit reached",
+      provider_timeout: "Provider request timed out",
+      provider_unavailable: "Provider unavailable",
+    },
+  },
   keyRecovery: {
     title: "Re-enter your API keys",
     description:
@@ -263,6 +300,7 @@ export const en = {
   },
   replay: {
     title: "Replay",
+    hint: "Select a move to inspect its position, commentary, and measurements.",
     position: "Ply {{ply}} of {{count}}",
     loading: "Loading replay…",
     first: "First",

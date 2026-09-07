@@ -100,6 +100,8 @@ The shell contains the wordmark, Arena, and authentication/account access. Regis
 
 The live information rail shows both models' latest commentary and compact per-move latency, total tokens, and estimated cost. Moves is the default detail tab; Analysis contains the graph and usage breakdown, and Events contains attempts and recovery events. On mobile these become successive sections after the board and controls. Show cumulative telemetry in Analysis and result summaries.
 
+The basic AI telemetry view uses successive sections for latest accepted AI moves, measurements, and expandable attempts. Replay shows only the selected ply's commentary and measurements, with explicit initial-position and human-move states; attempt history stays available for the full game. Its attempt labels count all calls for that ply, including provider failures and interruptions, without an “of 3” denominator. Analysis tabs, totals, pricing, and Stockfish belong to the later analysis milestone in the [roadmap](roadmap.md).
+
 Forms use two equal seat columns on desktop and stacked White then Black sections on mobile. Keep the provider, credential, and model fields together; advanced parameters start collapsed. Overlays center on desktop and become scrollable sheets on mobile. Opening the keyboard must leave the focused field and recovery action reachable.
 
 ## Component specifications

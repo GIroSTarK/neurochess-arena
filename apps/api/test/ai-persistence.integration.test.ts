@@ -96,7 +96,13 @@ describe("AI persistence composes with existing authoritative private commands",
       await tx.commitAiTurn(owner, { position: positionOf(accepted, 1), move: accepted.moves[0]! });
     });
     const restored = await snapshot(api, guest, gameId);
-    expect(restored).toEqual({ ...accepted, gameId, version: 1 });
+    expect(restored).toMatchObject({ ...accepted, gameId, version: 1 });
+    expect(restored.invocations?.[0]).toMatchObject({
+      ply: 1,
+      accepted: true,
+      commentary: "Test commentary",
+      latencyMs: 0,
+    });
     expect(restored.pgn).not.toContain("Test commentary");
     const intruder = await harness.guest(api);
     const denied = await api.app.inject({

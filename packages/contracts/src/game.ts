@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { modelInvalidErrorSchema, providerErrorSchema, tokenUsageSchema } from "./ai-telemetry.js";
 import { safeErrorResponseSchema } from "./system.js";
 
 export const chessColorSchema = z.enum(["white", "black"]);
@@ -71,6 +72,46 @@ export const moveRecordSchema = z.strictObject({
   fen: z.string().min(1),
 });
 
+const invocationFields = {
+  ply: z.number().int().positive(),
+  color: chessColorSchema,
+  /** Counts all calls for this ply across manual retries, including interrupted calls. */
+  attempt: z.number().int().positive(),
+  latencyMs: z.number().nonnegative().nullable(),
+  usage: tokenUsageSchema,
+};
+const unacceptedFields = { accepted: z.literal(false), commentary: z.null() };
+
+export const gameInvocationSchema = z.discriminatedUnion("status", [
+  z
+    .strictObject({
+      ...invocationFields,
+      status: z.literal("succeeded"),
+      accepted: z.boolean(),
+      commentary: z.string().max(2_000).nullable(),
+      error: z.null(),
+    })
+    .refine((invocation) => invocation.accepted || invocation.commentary === null),
+  z.strictObject({
+    ...invocationFields,
+    ...unacceptedFields,
+    status: z.literal("model_invalid"),
+    error: modelInvalidErrorSchema,
+  }),
+  z.strictObject({
+    ...invocationFields,
+    ...unacceptedFields,
+    status: z.literal("provider_error"),
+    error: providerErrorSchema,
+  }),
+  z.strictObject({
+    ...invocationFields,
+    ...unacceptedFields,
+    status: z.enum(["pending", "abandoned"]),
+    error: z.null(),
+  }),
+]);
+
 const snapshotFields = {
   gameId: gameIdSchema,
   version: gameVersionSchema,
@@ -80,6 +121,7 @@ const snapshotFields = {
   inCheck: z.boolean(),
   legalMoves: z.array(uciMoveSchema),
   moves: z.array(moveRecordSchema),
+  invocations: z.array(gameInvocationSchema).optional(),
 };
 
 export const gameSnapshotSchema = z
@@ -100,6 +142,24 @@ export const gameSnapshotSchema = z
       if (move.ply !== index + 1) {
         context.addIssue({ code: "custom", path: ["moves", index, "ply"] });
       }
+    });
+    const acceptedPlies = new Set<number>();
+    let previousPly = 0;
+    let previousAttempt = 0;
+    snapshot.invocations?.forEach((invocation, index) => {
+      if (
+        invocation.ply < previousPly ||
+        invocation.ply > snapshot.moves.length + 1 ||
+        invocation.color !== (invocation.ply % 2 === 1 ? "white" : "black") ||
+        invocation.attempt !== (invocation.ply === previousPly ? previousAttempt + 1 : 1) ||
+        (invocation.accepted &&
+          (invocation.ply > snapshot.moves.length || acceptedPlies.has(invocation.ply)))
+      ) {
+        context.addIssue({ code: "custom", path: ["invocations", index] });
+      }
+      if (invocation.accepted) acceptedPlies.add(invocation.ply);
+      previousPly = invocation.ply;
+      previousAttempt = invocation.attempt;
     });
   });
 
@@ -179,6 +239,7 @@ export type GameLifecycle = z.infer<typeof gameLifecycleSchema>;
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export type MoveRecord = z.infer<typeof moveRecordSchema>;
+export type GameInvocation = z.infer<typeof gameInvocationSchema>;
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
 export type MoveCommand = z.infer<typeof moveCommandSchema>;
 export type LifecycleCommand = z.infer<typeof lifecycleCommandSchema>;

@@ -33,6 +33,7 @@ import { assertAiExecutionAttached, withAiLease } from "./ai-lease.js";
 import { authorizeGameControl } from "./authorization.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 import { positionOf, restoreAuthorized, transportSnapshot } from "./state.js";
+import { withInvocations } from "./telemetry.js";
 
 export interface AiGameOptions {
   readonly providers?: readonly ProviderRegistration[];
@@ -196,7 +197,7 @@ export function createAiGameOperations(
               position: positionOf(snapshot),
               ...(acceptedMove ? { move: acceptedMove } : {}),
             });
-            return snapshot;
+            return withInvocations(tx, snapshot);
           });
           if (accepted) return accepted;
           assertAiExecutionAttached(signal);

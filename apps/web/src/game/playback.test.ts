@@ -5,6 +5,7 @@ import type { AiTurnApi } from "../api/ai";
 import { ApiFailure, type SandboxApi } from "../api/client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot as position } from "../test/fixtures";
 
+import type { PgnDelivery } from "./pgn";
 import { AiPlaybackController } from "./playback";
 
 const white: SessionCredential = { provider: "openai", apiKey: "white-memory-key" };
@@ -21,7 +22,13 @@ function snapshot(
   });
 }
 
-function harness(initial = snapshot(), recovered = false, keys = true, humanColor?: ChessColor) {
+function harness(
+  initial = snapshot(),
+  recovered = false,
+  keys = true,
+  humanColor?: ChessColor,
+  delivery?: PgnDelivery,
+) {
   const api = {
     ready: vi.fn<SandboxApi["ready"]>().mockResolvedValue(true),
     bootstrap: vi.fn<SandboxApi["bootstrap"]>().mockResolvedValue(),
@@ -37,18 +44,30 @@ function harness(initial = snapshot(), recovered = false, keys = true, humanColo
       }),
     ),
     unfinished: vi.fn<SandboxApi["unfinished"]>().mockResolvedValue(null),
-    replay: vi.fn<SandboxApi["replay"]>(),
+    replay: vi.fn<SandboxApi["replay"]>().mockImplementation(async () => {
+      if (initial.state !== "completed" && initial.state !== "aborted") {
+        throw new ApiFailure("malformed");
+      }
+      return { snapshot: initial, initialFen: position().fen };
+    }),
     pgn: vi.fn<SandboxApi["pgn"]>(),
   };
   const ai = { turn: vi.fn<AiTurnApi["turn"]>() };
   const pending = Promise.withResolvers<GameSnapshot>();
   ai.turn.mockReturnValue(pending.promise);
-  const controller = new AiPlaybackController(api, ai, initial, {
-    recovered,
-    ...(humanColor ? { humanColor } : {}),
-    credential: (color) =>
-      keys && color !== humanColor ? (color === "white" ? white : black) : null,
-  });
+  const controller = new AiPlaybackController(
+    api,
+    ai,
+    initial,
+    {
+      recovered,
+      ...(humanColor ? { humanColor } : {}),
+      credential: (color) =>
+        keys && color !== humanColor ? (color === "white" ? white : black) : null,
+    },
+    undefined,
+    delivery,
+  );
   controllers.push(controller);
   controller.connect();
   return { controller, api, ai, pending, initial };
@@ -58,6 +77,98 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   controllers.splice(0).forEach((controller) => controller.disconnect());
   vi.useRealTimers();
+});
+
+describe("AI private replay and export", () => {
+  it.each([undefined, "white", "black"] as const)(
+    "reopens terminal history without credentials for human seat %s",
+    async (humanColor) => {
+      const ply = humanColor === "white" ? 2 : 1;
+      const accepted = snapshot(FOOLS_MATE, {
+        invocations: [
+          {
+            ply,
+            color: ply === 1 ? "white" : "black",
+            attempt: 1,
+            status: "succeeded",
+            accepted: true,
+            commentary: "Associated explanation",
+            error: null,
+            latencyMs: 25,
+            usage: { inputTokens: 5, outputTokens: 0, totalTokens: null },
+          },
+        ],
+      });
+      const delivery = {
+        copy: vi.fn<PgnDelivery["copy"]>().mockResolvedValue(true),
+        download: vi.fn<PgnDelivery["download"]>(),
+      };
+      const { controller, api, ai } = harness(accepted, true, false, humanColor, delivery);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.getSnapshot().game.replay?.snapshot).toEqual(accepted);
+      for (let cursor = 0; cursor <= accepted.moves.length; cursor++) {
+        controller.selectPly(cursor);
+        expect(controller.getSnapshot().game.replayPly).toBe(cursor);
+        expect(controller.getSnapshot().game.snapshot).toEqual(accepted);
+      }
+      api.pgn.mockResolvedValue({
+        gameId: accepted.gameId,
+        version: accepted.version,
+        pgn: accepted.pgn,
+      });
+      await controller.exportPgn("copy");
+      await controller.exportPgn("download");
+      expect(delivery.copy).toHaveBeenCalledWith(accepted.pgn);
+      expect(delivery.download).toHaveBeenCalledWith(accepted.pgn, accepted.gameId);
+      expect(ai.turn).not.toHaveBeenCalled();
+      expect(api.lifecycle).not.toHaveBeenCalled();
+    },
+  );
+
+  it("clears commentary, replay and export when private access is lost", async () => {
+    const { controller, api } = harness(snapshot(FOOLS_MATE), false, false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().game.replay).not.toBeNull();
+    api.pgn.mockRejectedValue(new ApiFailure("api", "UNAUTHORIZED"));
+    await controller.exportPgn("copy");
+    expect(controller.getSnapshot().game).toMatchObject({
+      phase: "access-error",
+      snapshot: null,
+      replay: null,
+      exportText: null,
+    });
+  });
+
+  it("refreshes attempt history at the same revision without releasing an uncertain turn", async () => {
+    const initial = snapshot();
+    const { controller, api, ai } = harness(initial);
+    const during = snapshot([], {
+      invocations: [
+        {
+          ply: 1,
+          color: "white",
+          attempt: 1,
+          status: "pending",
+          accepted: false,
+          commentary: null,
+          error: null,
+          latencyMs: null,
+          usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+        },
+      ],
+    });
+    ai.turn.mockRejectedValueOnce(new ApiFailure("network"));
+    api.snapshot.mockResolvedValue(during);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      activity: "uncertain",
+      automatic: false,
+      game: { snapshot: during },
+    });
+    await controller.resume();
+    await controller.next();
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("AI versus human controller", () => {

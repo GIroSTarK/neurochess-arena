@@ -65,7 +65,14 @@ describe("AI retry accounting and manual recovery", () => {
       expect(provider.requests).toHaveLength(3);
       const retry = aiCommand(paused);
       const stillPaused = gameSnapshotSchema.parse((await turn(restarted, guest, retry)).json());
-      expect(stillPaused).toEqual({ ...paused, version: 2 });
+      expect(stillPaused).toEqual({
+        ...paused,
+        version: 2,
+        invocations: [
+          ...(paused.invocations ?? []),
+          expect.objectContaining({ attempt: 4, status: "provider_error", error: { kind } }),
+        ],
+      });
       expect(provider.requests).toHaveLength(4);
       expect((await turn(api, guest, { ...retry, expectedVersion: 2 })).statusCode).toBe(409);
       const accepted = await turn(restarted, guest, aiCommand(stillPaused));
@@ -194,7 +201,7 @@ describe("paused AI stepping", () => {
         pgn: initial.pgn,
         legalMoves: initial.legalMoves,
       });
-      expect(await snapshot(other, guest, initial.gameId)).toEqual(paused);
+      expect(await snapshot(other, guest, initial.gameId)).toMatchObject(paused);
       expect((await turn(other, guest, request)).statusCode).toBe(409);
       expect((await turn(other, guest, aiCommand(paused))).statusCode).toBe(409);
     } finally {
@@ -461,9 +468,9 @@ describe("AI lifecycle completion races and interruptions", () => {
         code: "GAME_CONFLICT",
         currentSnapshot: paused,
       });
-      expect(await snapshot(other, guest, initial.gameId)).toEqual(paused);
+      expect(await snapshot(other, guest, initial.gameId)).toMatchObject(paused);
       recovered = gameSnapshotSchema.parse((await lifecycle(other, guest, paused, "pause")).json());
-      expect(recovered).toEqual({ ...paused, version: 2 });
+      expect(recovered).toMatchObject({ ...paused, version: 2 });
     } finally {
       gate.release();
     }
