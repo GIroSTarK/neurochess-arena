@@ -3,6 +3,8 @@ import type { ProviderDescriptor } from "@neurochess/contracts";
 import type { AiProviderAdapter } from "../../apps/api/src/providers/adapter";
 import { models } from "../ai-models";
 
+import { requestAcceptanceMove } from "./acceptance-providers";
+
 const telemetryAttempts = new Map<string, number>();
 
 export const setupProviders = (
@@ -36,6 +38,9 @@ export const setupProviders = (
       return { ok: true, value: models(descriptor.id) };
     },
     async requestMove(input) {
+      if (input.apiKey.startsWith("fixture-acceptance:")) {
+        return requestAcceptanceMove(descriptor, input);
+      }
       const promotion = input.apiKey === "fixture-human-promotion";
       const recovery = input.apiKey.startsWith("fixture-recovery");
       const telemetry = input.apiKey.startsWith("fixture-telemetry-");

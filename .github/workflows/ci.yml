@@ -66,7 +66,7 @@ jobs:
       - name: Install Chromium for browser tests
         run: npx playwright install --with-deps chromium
 
-      - name: Test the sandbox in desktop and mobile browsers
+      - name: Test sandbox and AI acceptance in desktop and mobile browsers
         run: npm run test:e2e
 
       - name: Smoke-test built services

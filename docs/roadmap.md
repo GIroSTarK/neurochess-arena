@@ -67,8 +67,11 @@ Deliverables:
 - [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
 - [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;
 - [x] private normalized attempt/error history, accepted-move commentary with missing fallback, and latency/reported-token display with explicit unavailable values; both AI modes share replay and PGN controls, with mocked contract, integration, component, and desktop/mobile browser coverage.
+- [x] Phase 2 desktop/mobile acceptance matrix through real game APIs and PostgreSQL with mocked provider boundaries: all provider pairings, identical models, both human colors, invalid-output exhaustion, provider-error recovery, privacy, and the shared single-game limit; see the [coverage map](development.md#phase-2-acceptance-coverage) for lifecycle and refresh coverage and the [opt-in live-provider smoke procedure](development.md#opt-in-real-provider-smoke).
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
+
+Phase 2 remains open. The failure-feedback deliverable still needs the [specified intermediate retry progress and rejected-key correction beside the affected seat](design-system.md#game-state-and-recovery); current attempts appear after a response returns, and key replacement uses refresh/re-entry. Automated acceptance proves the mocked application paths; live OpenAI, Anthropic, Google, and OpenRouter behavior has not been verified in this handoff. Record actual provider/model smoke results separately before claiming live compatibility.
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
