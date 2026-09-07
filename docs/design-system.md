@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-07
 
 ## Purpose and authority
 
@@ -165,7 +165,9 @@ Announce accepted moves, turn changes, check, and results through a concise poli
 
 Routine move/lifecycle feedback preserves the status panel's geometry and the positions of controls and move history. Reserve localized variants without fixed heights or duplicated interactive controls. Error details may expand for readability; the terminal result/replay view is a separate layout transition.
 
-Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable actions, including lifecycle, replay navigation, PGN export, Start, and New game, remain focusable and visibly disabled through `aria-disabled`, but reject activation and a held activation key. Returning responses must not steal focus if the user has moved elsewhere. When an accepted Start or New game removes the activated control, focus lands on the board's current square; recovery on page load never moves focus. Updated game state invalidates destructive confirmations independently of control focus.
+Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable actions, including lifecycle, replay navigation, PGN export, Start, and New game, remain focusable and visibly disabled through `aria-disabled`, but reject activation and a held activation key. Returning responses must not steal focus if the user has moved elsewhere. When an accepted Start or New game removes the activated control, focus lands on the board's current square; recovery on page load never moves focus.
+
+Sandbox lifecycle confirmations close when the accepted position or interaction state changes. In the AI arena, Stop confirmation belongs to the unfinished game: accepted moves and pauses preserve the dialog and its focus. Confirming submits Stop against the latest accepted revision. The dialog closes on cancellation, submission, game completion, loss of access, or switching games. If synchronization temporarily blocks commands, keep the dialog open with confirmation disabled and an explanation; Cancel remains available. Opening the dialog alone does not stop playback.
 
 ## Game state and recovery
 

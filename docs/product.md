@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 
 ## Vision
 
@@ -76,6 +76,10 @@ The user configures White and Black independently:
 The same provider and model may be selected for both colors. The game starts from the standard initial chess position and has no chess clock. The user can pause, resume, request the next move, adjust playback speed, or stop the game.
 
 Next move executes one AI turn from a paused game and leaves an unfinished game paused. A terminal chess result or technical loss still completes the game. Resume permits active play; Stop records `aborted` without awarding a win or loss. Lifecycle changes invalidate any pending AI result.
+
+Starting a configured AI-versus-AI match begins automatic progression, with only one AI turn requested at a time. Speed changes the presentation gap after an accepted move, without changing provider deadlines or chess rules. Pause and Stop remain usable while a model is thinking, and the board preserves the last accepted position. An uncertain response stops automatic progression; an unchanged snapshot requires explicit Pause to invalidate the unresolved turn before a new step or resume. No AI request is automatically resent after a transport failure.
+
+Stop requires confirmation. The dialog remains open across accepted moves while the same game is unfinished, and confirmation applies to the latest accepted position. Opening the dialog alone leaves playback running; completion, loss of access, or switching games closes it.
 
 An AI game does not continue in the background after its controlling browser tab is closed. It is restored in a paused state when the session returns.
 

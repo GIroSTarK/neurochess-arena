@@ -1,4 +1,26 @@
 export const en = {
+  playback: {
+    title: "AI vs AI",
+    documentTitle: "AI vs AI · Neurochess Arena",
+    description: "Follow your selected contenders from the opening move to the final result.",
+    hint: "Watch one accepted move at a time. Pause or stop while a model is thinking.",
+    controls: "AI playback controls",
+    next: "Next move",
+    speed: "Playback speed",
+    slow: "0.5× · Slow",
+    normal: "1× · Normal",
+    fast: "2× · Fast",
+    speedHint:
+      "Speed changes the gap between moves: 2, 1, or 0.5 seconds. Model response time is unchanged.",
+    thinking: "{{color}} is choosing a move…",
+    pacing: "Waiting before the next move…",
+    idle: "Automatic play is off. Resume or request one next move.",
+    applying: "Applying your game control…",
+    synchronizing: "Checking the accepted position…",
+    uncertain:
+      "The turn could not be confirmed. Pause to secure the position before continuing, or stop the game.",
+    synchronize: "Check position",
+  },
   setup: {
     documentTitle: "Set up a match · Neurochess Arena",
     skip: "Skip to match setup",
@@ -82,7 +104,7 @@ export const en = {
     created: "Game created",
     returned: "Your existing game",
     previewHint:
-      "Your game position is ready to inspect. AI playback controls are not available yet. You can stop this game to configure another match.",
+      "Your game position is ready to inspect. Playback is unavailable for this game. You can stop it to configure another match.",
     recoveredHint:
       "Recovered games stay paused. Session-only keys were not restored; AI play requires key re-entry.",
     accessError: "This game is no longer available to your guest session.",

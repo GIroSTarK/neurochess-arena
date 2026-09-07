@@ -58,10 +58,11 @@ export function validateSnapshot(input: unknown): GameSnapshot {
 
 export function createGameTransport(
   apiBaseUrl: string,
-  options: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  options: { fetch?: typeof fetch; timeoutMs?: number | null } = {},
 ) {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-  const timeoutMs = Math.max(1, Math.min(options.timeoutMs ?? 10_000, 30_000));
+  const timeoutMs =
+    options.timeoutMs === null ? null : Math.max(1, Math.min(options.timeoutMs ?? 10_000, 30_000));
 
   async function request<T>(
     path: string,
@@ -74,7 +75,7 @@ export function createGameTransport(
     const cancel = () => abort.abort();
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) abort.abort();
-    const timeout = setTimeout(() => abort.abort(), timeoutMs);
+    const timeout = timeoutMs === null ? undefined : setTimeout(() => abort.abort(), timeoutMs);
     try {
       const response = await fetcher(new URL(path, apiBaseUrl), {
         method: body === undefined ? "GET" : "POST",

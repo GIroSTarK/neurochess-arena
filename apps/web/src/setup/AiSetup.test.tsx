@@ -39,6 +39,7 @@ function mount(
       return Promise.resolve(jsonResponse(catalogResponse(credential.provider)));
     }
     if (path === "/ai/games") return Promise.resolve(jsonResponse(snapshot(), 201));
+    if (path.endsWith("/ai-turn")) return new Promise<Response>(() => undefined);
     throw new Error("Unexpected test request");
   });
   vi.stubGlobal("fetch", fetch);
@@ -83,6 +84,42 @@ function creations(fetch: ReturnType<typeof mount>["fetch"]) {
 }
 
 describe("AI setup", () => {
+  it("returns from the back-forward cache through paused recovery without launching another turn", async () => {
+    const initial = snapshot();
+    const accepted = snapshot(["e2e4"]);
+    const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
+    const { fetch } = mount((path) => {
+      if (path === `/games/${initial.gameId}`) return jsonResponse(accepted);
+      if (path.endsWith("/lifecycle")) return jsonResponse(paused);
+      return undefined;
+    });
+    const { user } = await configure("White");
+    await configure("Black");
+    await user.click(screen.getByRole("button", { name: "Start game" }));
+    const turns = () =>
+      fetch.mock.calls.filter(([input]) => requestPath(input).endsWith("/ai-turn"));
+    await waitFor(() => expect(turns()).toHaveLength(1));
+    fireEvent(window, new PageTransitionEvent("pagehide", { persisted: true }));
+    expect(turns()[0]?.[1]?.signal?.aborted).toBe(true);
+    fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next move" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Resume" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    expect(turns()).toHaveLength(1);
+    const lifecycle = fetch.mock.calls.find(([input]) => requestPath(input).endsWith("/lifecycle"));
+    expect(JSON.parse(requestBody(lifecycle?.[1])) as unknown).toMatchObject({
+      action: "pause",
+      expectedVersion: 1,
+    });
+  });
+
   it.each(["recovery", "stop"] as const)(
     "returns to setup and bootstraps the session after %s loses access",
     async (source) => {
@@ -235,7 +272,16 @@ describe("AI setup", () => {
     expect(window.location.href + JSON.stringify(window.history.state)).not.toContain(
       "fixture-White-key",
     );
-    expect(fetch.mock.calls.some(([input]) => requestPath(input).endsWith("/ai-turn"))).toBe(false);
+    await waitFor(() =>
+      expect(
+        fetch.mock.calls.filter(([input]) => requestPath(input).endsWith("/ai-turn")),
+      ).toHaveLength(1),
+    );
+    const turn = fetch.mock.calls.find(([input]) => requestPath(input).endsWith("/ai-turn"));
+    expect(JSON.parse(requestBody(turn?.[1])) as unknown).toMatchObject({
+      expectedVersion: 0,
+      credential: { provider: "openai", apiKey: "fixture-White-key" },
+    });
   });
 
   it.each(["White", "Black"] as const)(

@@ -1,4 +1,4 @@
-import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
+import type { AiConfiguration, ChessColor, GameSnapshot } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
 import { PieceIcon } from "../../board/PieceIcon";
@@ -16,9 +16,11 @@ function activity(snapshot: GameSnapshot | null, color: ChessColor): (typeof act
 export function PlayerSummary({
   color,
   snapshot,
+  ai,
 }: {
   readonly color: ChessColor;
   readonly snapshot: GameSnapshot | null;
+  readonly ai?: AiConfiguration;
 }) {
   const { t } = useTranslation();
   const isTurn = snapshot?.state === "active" && snapshot.turn === color;
@@ -31,7 +33,10 @@ export function PlayerSummary({
       <PieceIcon color={color} kind="k" className="size-8 max-sm:size-[min(1.5rem,24px)]" />
       <div className="flex min-w-0 flex-col wrap-anywhere">
         <span className="text-label text-text-secondary">{t(`players.${color}`)}</span>
-        <strong className="font-semibold max-sm:text-label">{t("players.guest")}</strong>
+        <strong className="font-semibold max-sm:text-label">
+          {ai ? ai.modelId : t("players.guest")}
+        </strong>
+        {ai ? <span className="text-caption text-text-secondary">{ai.provider}</span> : null}
         <span className={cx("text-caption", isTurn ? "text-accent" : "text-text-muted")}>
           <StableText
             value={t(`players.${activity(snapshot, color)}`)}

@@ -33,8 +33,30 @@ export const setupProviders = (
       }
       return { ok: true, value: models(descriptor.id) };
     },
-    requestMove() {
-      throw new Error("AI_SETUP_MUST_NOT_EXECUTE_TURNS");
+    async requestMove(input) {
+      const delay = input.apiKey === "fixture-playback-slow" ? 11_000 : 1_500;
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          clearTimeout(timer);
+          input.signal?.removeEventListener("abort", finish);
+          resolve();
+        };
+        // Setup-only fixtures hold their first turn so creation/recovery assertions remain
+        // independent of playback. Every provider operation here is an in-process mock.
+        const timer = input.apiKey.startsWith("fixture-playback")
+          ? setTimeout(finish, delay)
+          : undefined;
+        input.signal?.addEventListener("abort", finish, { once: true });
+        if (input.signal?.aborted) finish();
+      });
+      if (input.signal?.aborted) {
+        return { ok: false, error: { kind: "provider_unavailable" }, latencyMs: 0, usage: null };
+      }
+      const move = ["f2f3", "e7e5", "g2g4", "d8h4"].find((move) =>
+        input.context.legalMoves.includes(move),
+      );
+      if (!move) throw new Error("PLAYBACK_FIXTURE_EXHAUSTED");
+      return { ok: true, value: { move, latencyMs: delay, usage: null } };
     },
   } satisfies AiProviderAdapter,
 }));

@@ -112,6 +112,13 @@ for (const source of ["recovery", "stop"] as const) {
     if (source === "recovery") {
       await page.reload();
       await expect(page.getByRole("button", { name: "Return to game" })).toBeVisible();
+    } else {
+      // Quiesce playback so this case tests expiry on Stop, not the newly automatic turn.
+      await page.getByRole("button", { name: "Pause", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Next move" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      );
     }
     const database = integrationDatabase();
     try {
@@ -317,6 +324,7 @@ test("independent identical-model setup, credential-free creation, refresh loss,
   await expect(page.getByRole("heading", { name: "Game created" })).toBeVisible();
   await expect(page.getByRole("grid", { name: "Chessboard" })).toBeVisible();
   expect(snapshot.moves).toEqual([]);
+  await expect.poll(() => turns).toBe(1);
   await page.reload();
   await expect(page.getByRole("button", { name: "Return to game" })).toBeVisible();
   await expect(
@@ -335,10 +343,10 @@ test("independent identical-model setup, credential-free creation, refresh loss,
   await page.getByRole("button", { name: "Stop game" }).click();
   await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await page.getByRole("dialog").getByRole("button", { name: "Stop game" }).click();
-  await expect(page.getByText(/Game stopped/)).toBeVisible();
+  await expect(page.getByText(/Game stopped/).first()).toBeVisible();
   await page.getByRole("button", { name: "Configure another match" }).click();
   await expect(page.getByRole("button", { name: "Return to game" })).toHaveCount(0);
-  expect(turns).toBe(0);
+  expect(turns).toBe(1);
 });
 
 for (const color of ["White", "Black"] as const) {

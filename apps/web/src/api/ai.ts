@@ -1,4 +1,6 @@
 import {
+  type AiTurnCommand,
+  aiTurnRequestSchema,
   type CreateAiGameRequest,
   createAiGameRequestSchema,
   type GameSnapshot,
@@ -12,6 +14,39 @@ import {
 } from "@neurochess/contracts";
 
 import { ApiFailure, createGameTransport, validateSnapshot } from "./client";
+
+export interface AiTurnApi {
+  turn(
+    command: AiTurnCommand,
+    credential: SessionCredential,
+    signal: AbortSignal,
+  ): Promise<GameSnapshot>;
+}
+
+export function createAiTurnApi(
+  apiBaseUrl: string,
+  options: { fetch?: typeof fetch } = {},
+): AiTurnApi {
+  // One turn can include model discovery and three provider attempts. Provider transport
+  // deadlines belong to the API; the ordinary ten-second client deadline cannot bound a turn.
+  const { gameRequest } = createGameTransport(apiBaseUrl, { ...options, timeoutMs: null });
+  return {
+    async turn(command, credential, signal) {
+      const body = aiTurnRequestSchema.safeParse({ ...command, credential });
+      if (!body.success) throw new ApiFailure("malformed");
+      try {
+        return await gameRequest(
+          "/games/" + command.gameId + "/ai-turn",
+          signal,
+          command.gameId,
+          body.data,
+        );
+      } finally {
+        body.data.credential.apiKey = "";
+      }
+    },
+  };
+}
 
 export interface AiSetupApi {
   providers(signal: AbortSignal): Promise<ProviderDescriptor[]>;

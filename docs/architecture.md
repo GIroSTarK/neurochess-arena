@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 
 ## Architectural drivers
 
@@ -69,7 +69,7 @@ Responsibilities:
 
 The client is not authoritative for legal moves, game results, authorization, participant identity, or room state.
 
-The [AI setup flow](development.md#ai-setup-ui) keeps each seat's non-secret draft and discovered capabilities separate from its page-memory credential. Provider and key changes cancel obsolete discovery; requests cannot replace a newer seat catalog. Shared schemas validate provider lists, discovery results, and credential-free creation. The accepted game handoff reuses the existing board, versioned command session, operation gate, and paused recovery without enabling human moves or requesting AI turns.
+The [AI setup flow](development.md#ai-setup-ui) keeps each seat's non-secret draft and discovered capabilities separate from its page-memory credential. Provider and key changes cancel obsolete discovery; requests cannot replace a newer seat catalog. Shared schemas validate provider lists, discovery results, and credential-free creation. The accepted AI-versus-AI handoff starts the [playback controller](development.md#ai-playback-ui) using those separate seat credentials, the existing read-only board, versioned command session, operation gate, and paused recovery.
 
 ### Fastify API
 
@@ -179,6 +179,10 @@ Recovery sends the same versioned pause command as the Pause control. It reconci
 Terminal replay and PGN use the same authorized full-history verification as snapshots. Replay returns the terminal snapshot and initial FEN; a separate client cursor selects the displayed verified FEN/SAN/UCI without modifying the accepted snapshot. Export returns the verified canonical PGN in JSON. Copy and UTF-8 file download use identical text, with a selectable-text clipboard fallback. These endpoints reject unfinished games; access loss clears loaded private data. There are no provider adapters, rooms, or WebSockets in this flow.
 
 ### AI turns
+
+The web playback controller separates accepted game state, turn activity, and automatic-progression intent. A synchronous gate prevents duplicate requests before React renders; a single timer schedules the presentation gap only after an accepted active response. Pause and confirmed Stop halt scheduling, invalidate the client request generation, and immediately use the shared lifecycle command path. An accepted server revision prevents the old turn committing. If completion wins the lock, a pause/stop intent follows the authorized conflict snapshot with at most three lifecycle attempts. Terminal outcomes and provider pauses halt scheduling.
+
+AI-turn transport deliberately has no client deadline: one turn may include discovery and three attempts, each subject to the API's provider transport deadlines. Ordinary game requests retain their ten-second timeout. Caller cancellation remains effective through response-body consumption. Failed or conflicting turns never trigger an automatic resend: read-back adopts only the same game's non-regressing accepted snapshot and leaves progression off. An unchanged revision stays uncertain and blocks fresh turns until explicit Pause or Stop advances it. Disconnect/page exit cancels scheduling and request consumption; reopening uses paused recovery.
 
 The browser requests one AI turn at a time. The API:
 

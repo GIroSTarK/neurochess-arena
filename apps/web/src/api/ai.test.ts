@@ -2,9 +2,16 @@ import type { CreateAiGameRequest, SessionCredential } from "@neurochess/contrac
 import { describe, expect, it, vi } from "vitest";
 
 import { catalogResponse, models } from "../../../../test/ai-models";
-import { errorResponse, jsonResponse, snapshot } from "../test/fixtures";
+import {
+  errorResponse,
+  GAME_ID,
+  jsonResponse,
+  OTHER_GAME_ID,
+  requestBody,
+  snapshot,
+} from "../test/fixtures";
 
-import { createAiSetupApi } from "./ai";
+import { createAiSetupApi, createAiTurnApi } from "./ai";
 
 const credential: SessionCredential = { provider: "openai", apiKey: "fixture-memory-only-key" };
 const configuration: CreateAiGameRequest = {
@@ -13,6 +20,73 @@ const configuration: CreateAiGameRequest = {
   black: { provider: "openai", modelId: "fixture-full", parameters: {} },
 };
 const signal = () => new AbortController().signal;
+
+describe("AI turn transport", () => {
+  const command = { gameId: GAME_ID, commandId: OTHER_GAME_ID, expectedVersion: 0 };
+
+  it("waits beyond ten seconds and retains caller cancellation through body consumption", async () => {
+    vi.useFakeTimers();
+    try {
+      const body = Promise.withResolvers<unknown>();
+      const fetch = vi.fn<typeof globalThis.fetch>((_input, init) => {
+        init?.signal?.addEventListener("abort", () =>
+          body.reject(new Error("secret-network-canary")),
+        );
+        return Promise.resolve({ ok: true, json: () => body.promise } as Response);
+      });
+      const api = createAiTurnApi("http://localhost:3001", { fetch });
+      const abort = new AbortController();
+      const pending = api.turn(command, credential, abort.signal);
+      const checked = expect(pending).rejects.toMatchObject({
+        kind: "cancelled",
+        message: "cancelled",
+      });
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+      expect(fetch.mock.calls[0]).toEqual([
+        new URL(`http://localhost:3001/games/${GAME_ID}/ai-turn`),
+        expect.objectContaining({
+          credentials: "include",
+          cache: "no-store",
+          redirect: "error",
+          headers: { accept: "application/json", "content-type": "application/json" },
+        }),
+      ]);
+      expect(JSON.parse(requestBody(fetch.mock.calls[0]?.[1])) as unknown).toEqual({
+        ...command,
+        credential,
+      });
+      abort.abort();
+      await checked;
+      expect(credential.apiKey).toBe("fixture-memory-only-key");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("validates requests, snapshots and conflict ownership", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(jsonResponse(snapshot(["e2e4"])));
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    await expect(
+      api.turn({ ...command, commandId: "invalid" }, credential, signal()),
+    ).rejects.toMatchObject({ kind: "malformed" });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await api.turn(command, credential, signal())).toEqual(snapshot(["e2e4"]));
+    fetch.mockResolvedValueOnce(errorResponse("GAME_CONFLICT", 409, snapshot()));
+    await expect(api.turn(command, credential, signal())).rejects.toMatchObject({
+      code: "GAME_CONFLICT",
+      currentSnapshot: snapshot(),
+    });
+    fetch.mockResolvedValueOnce(
+      errorResponse("GAME_CONFLICT", 409, snapshot([], { gameId: OTHER_GAME_ID })),
+    );
+    await expect(api.turn(command, credential, signal())).rejects.toMatchObject({
+      kind: "malformed",
+    });
+  });
+});
 
 describe("AI setup transport", () => {
   it("sends credentials only in a no-store, credentialed discovery POST body", async () => {

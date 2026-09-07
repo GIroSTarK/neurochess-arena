@@ -3,11 +3,12 @@ import type {
   CreateAiGameRequest,
   GameSnapshot,
   ProviderDescriptor,
+  SessionCredential,
 } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { createAiSetupApi } from "../api/ai";
+import { createAiSetupApi, createAiTurnApi } from "../api/ai";
 import { ApiFailure, createSandboxApi } from "../api/client";
 import { DocumentMetadata } from "../app/DocumentMetadata";
 import { Button } from "../ui/Button";
@@ -20,6 +21,7 @@ import { useAiSeat } from "./useAiSeat";
 export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const [api] = useState(() => createAiSetupApi(apiBaseUrl));
+  const [turnApi] = useState(() => createAiTurnApi(apiBaseUrl));
   const [common] = useState(() => createSandboxApi(apiBaseUrl));
   const white = useAiSeat(api);
   const black = useAiSeat(api);
@@ -31,11 +33,14 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<"service" | "create" | "access" | null>(null);
   const [existing, setExisting] = useState<GameSnapshot | null>(null);
-  const [preview, setPreview] = useState<{ snapshot: GameSnapshot; recovered: boolean } | null>(
-    null,
-  );
+  const [preview, setPreview] = useState<{
+    snapshot: GameSnapshot;
+    recovered: boolean;
+    configuration: CreateAiGameRequest | null;
+  } | null>(null);
   const [starting, setStarting] = useState(false);
   const startAbort = useRef<AbortController | null>(null);
+  const playbackCredentials = useRef<Partial<Record<ChessColor, SessionCredential>>>({});
   useEffect(() => () => startAbort.current?.abort(), []);
   useEffect(() => {
     const abort = new AbortController();
@@ -87,7 +92,16 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     setError(null);
     try {
       const snapshot = await api.create(configuration, abort.signal);
-      if (!abort.signal.aborted) setPreview({ snapshot, recovered: false });
+      if (!abort.signal.aborted) {
+        playbackCredentials.current =
+          configuration.mode === "ai_vs_ai"
+            ? {
+                white: { provider: configuration.white.provider, apiKey: white.key },
+                black: { provider: configuration.black.provider, apiKey: black.key },
+              }
+            : {};
+        setPreview({ snapshot, recovered: false, configuration });
+      }
     } catch (failure: unknown) {
       if (abort.signal.aborted) return;
       if (
@@ -116,9 +130,10 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     for (const seat of [white, black, opponent]) seat.resetDiscovery();
     setReload((value) => value + 1);
   }
+  const match = preview?.configuration?.mode === "ai_vs_ai" ? preview.configuration : null;
   return (
     <div className="mx-auto w-[min(1280px,calc(100%_-_2rem))] pb-[max(2rem,env(safe-area-inset-bottom))] md:w-[min(1280px,calc(100%_-_3rem))] lg:w-[min(1280px,calc(100%_-_4rem))]">
-      <DocumentMetadata arena />
+      <DocumentMetadata arena playback={match !== null} />
       <a
         className="sr-only top-3 left-4 z-20 rounded-control bg-accent p-3 text-on-accent focus:not-sr-only focus:fixed"
         href="#setup"
@@ -140,19 +155,25 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         <div className="py-8">
           <p className="mb-3 text-label font-semibold text-accent">{t("setup.eyebrow")}</p>
           <h1 className="font-display text-title font-medium md:text-display">
-            {t("setup.title")}
+            {t(match ? "playback.title" : "setup.title")}
           </h1>
-          <p className="mt-3 max-w-3xl text-text-secondary">{t("setup.description")}</p>
+          <p className="mt-3 max-w-3xl text-text-secondary">
+            {t(match ? "playback.description" : "setup.description")}
+          </p>
         </div>
         {preview ? (
           <GamePreview
             key={preview.snapshot.gameId}
             api={common}
+            turnApi={turnApi}
+            credential={(color) => playbackCredentials.current[color] ?? null}
+            match={match}
             initial={preview.snapshot}
             recovered={preview.recovered}
             orientation={mode === "ai_vs_human" ? humanColor : "white"}
             onSetup={() => {
               setPreview(null);
+              playbackCredentials.current = {};
               setExisting(null);
               retry();
             }}
@@ -245,7 +266,9 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 <p>{t("setup.existing")}</p>
                 <Button
                   variant="primary"
-                  onClick={() => setPreview({ snapshot: existing, recovered: true })}
+                  onClick={() =>
+                    setPreview({ snapshot: existing, recovered: true, configuration: null })
+                  }
                 >
                   {t("setup.returnGame")}
                 </Button>

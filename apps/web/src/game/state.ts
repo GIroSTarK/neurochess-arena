@@ -137,7 +137,7 @@ export function isUnfinished(snapshot: GameSnapshot): boolean {
 
 /**
  * Combines the accepted position with client-side invalidation. Changes discard board
- * selection and open confirmations.
+ * selection and confirmations tied to a particular position.
  */
 export function interactionEpoch({
   snapshot,
