@@ -246,7 +246,9 @@ export function AiSetup({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
             turnApi={turnApi}
             credential={(color) => playbackCredentials.current[color] ?? null}
             onCredential={(color, value) => {
-              playbackCredentials.current[color] = value;
+              const { [color]: previous, ...remaining } = playbackCredentials.current;
+              if (previous) previous.apiKey = "";
+              playbackCredentials.current = value ? { ...remaining, [color]: value } : remaining;
               credentialsChanged((revision) => revision + 1);
             }}
             match={match}

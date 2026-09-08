@@ -11,6 +11,7 @@ import type { AiTurnApi } from "../api/ai";
 import type { SandboxApi } from "../api/client";
 import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
+import { providerFailure } from "../game/ai-feedback";
 import { announcementMessage, gameStatus } from "../game/messages";
 import { InvocationDetails } from "../game/panels/InvocationDetails";
 import { MoveHistory } from "../game/panels/MoveHistory";
@@ -39,7 +40,7 @@ export function GamePreview({
   readonly api: SandboxApi;
   readonly turnApi: AiTurnApi;
   readonly credential: (color: ChessColor) => SessionCredential | null;
-  readonly onCredential?: (color: ChessColor, credential: SessionCredential) => void;
+  readonly onCredential?: (color: ChessColor, credential: SessionCredential | null) => void;
   readonly match: AiGameConfiguration | null;
   readonly initial: GameSnapshot;
   readonly recovered: boolean;
@@ -54,6 +55,7 @@ export function GamePreview({
       new AiPlaybackController(api, turnApi, initial, {
         recovered,
         credential,
+        rejectCredential: (color) => onCredential?.(color, null),
         isAiGame: match !== null,
         ...(humanColor ? { humanColor } : {}),
       }),
@@ -89,9 +91,16 @@ export function GamePreview({
   const snapshot = state.snapshot;
   const epoch = interactionEpoch(state);
   const terminal = snapshot && isTerminal(snapshot);
+  const failure = providerFailure(snapshot);
+  const authColor = failure?.error.kind === "provider_auth" ? failure.color : null;
+  const updateCredential = (color: ChessColor, value: SessionCredential) => {
+    onCredential?.(color, value);
+    game.credentialUpdated(color);
+  };
   const missingKeys = match
     ? (["white", "black"] as const).filter(
-        (color) => color !== humanColor && !credential(color)?.apiKey,
+        (color) =>
+          color !== humanColor && (!credential(color)?.apiKey || activity.rejectedKey === color),
       )
     : [];
   const retryingCommand =
@@ -128,7 +137,22 @@ export function GamePreview({
                   : color !== humanColor
                     ? { ai: match.ai }
                     : {})}
-              />
+              >
+                {authColor === color && onCredential ? (
+                  <KeyRecovery
+                    match={match}
+                    missing={[color]}
+                    rejected
+                    corrected={!missingKeys.includes(color)}
+                    disabled={
+                      state.phase !== "ready" ||
+                      activity.control !== null ||
+                      activity.activity !== "idle"
+                    }
+                    onCredential={updateCredential}
+                  />
+                ) : null}
+              </PlayerSummary>
             ))}
           </div>
         ) : null}
@@ -161,8 +185,8 @@ export function GamePreview({
               ? t("humanPlay.hint", { color: t(`players.${humanColor}`) })
               : t(match ? "playback.hint" : "setup.previewHint")}
         </p>
-        {match && !terminal && missingKeys.length > 0 && onCredential ? (
-          <KeyRecovery match={match} missing={missingKeys} onCredential={onCredential} />
+        {match && !terminal && missingKeys.some((color) => color !== authColor) && onCredential ? (
+          <KeyRecovery match={match} missing={missingKeys} onCredential={updateCredential} />
         ) : null}
         {match && !terminal ? (
           <PlaybackControls
@@ -230,7 +254,12 @@ export function GamePreview({
         />
         {snapshot && match ? (
           <InvocationDetails
-            snapshot={state.replay?.snapshot ?? snapshot}
+            snapshot={
+              state.replay?.snapshot ??
+              (activity.invocations
+                ? { ...snapshot, invocations: [...activity.invocations] }
+                : snapshot)
+            }
             match={match}
             selectedPly={state.replay ? state.replayPly : undefined}
           />

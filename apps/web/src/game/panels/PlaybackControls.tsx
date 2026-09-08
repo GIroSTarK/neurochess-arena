@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
 import { StableText } from "../../ui/StableText";
+import { providerFailure } from "../ai-feedback";
 import type { AiPlaybackController, PlaybackState } from "../playback";
 
 export function PlaybackControls({
@@ -21,6 +22,10 @@ export function PlaybackControls({
   const speedId = useId();
   const disabled = state.game.phase !== "ready" || state.control !== null;
   const pause = state.automatic || state.activity !== "idle";
+  const retry = providerFailure(state.game.snapshot) !== null;
+  const hasProviderFailure = state.game.snapshot?.invocations?.some(
+    ({ status }) => status === "provider_error",
+  );
   const status = state.control
     ? t("playback.applying")
     : humanColor && state.game.phase === "submitting"
@@ -28,9 +33,11 @@ export function PlaybackControls({
       : humanColor && state.game.phase === "synchronizing"
         ? t("playback.synchronizing")
         : state.activity === "thinking"
-          ? t("playback.thinking", {
-              color: t(state.game.snapshot?.turn === "black" ? "players.black" : "players.white"),
-            })
+          ? state.retry > 0
+            ? t("playback.retrying", { retry: state.retry })
+            : t("playback.thinking", {
+                color: t(state.game.snapshot?.turn === "black" ? "players.black" : "players.white"),
+              })
           : state.activity === "synchronizing"
             ? t("playback.synchronizing")
             : state.activity === "uncertain"
@@ -46,12 +53,18 @@ export function PlaybackControls({
       role="group"
       aria-label={t(humanColor ? "humanPlay.controls" : "playback.controls")}
     >
-      <p role="status" className="text-text-secondary">
+      <p
+        role="status"
+        aria-atomic="true"
+        className={state.retry > 0 ? "text-warning" : "text-text-secondary"}
+      >
         <StableText
           value={status}
           variants={[
             t("playback.thinking", { color: t("players.white") }),
             t("playback.thinking", { color: t("players.black") }),
+            t("playback.retrying", { retry: 1 }),
+            t("playback.retrying", { retry: 2 }),
             t("playback.pacing"),
             t("playback.idle"),
             t("playback.applying"),
@@ -75,12 +88,13 @@ export function PlaybackControls({
             align="center"
           />
         </Button>
-        {!humanColor ? (
+        {!humanColor || (hasProviderFailure && state.game.snapshot?.state === "paused") ? (
           <Button
             variant="secondary"
             aria-disabled={
               disabled ||
               missingKeys ||
+              (Boolean(humanColor) && !retry) ||
               state.activity !== "idle" ||
               state.game.snapshot.state !== "paused"
             }
@@ -88,7 +102,11 @@ export function PlaybackControls({
               void controller.next();
             }}
           >
-            {t("playback.next")}
+            <StableText
+              value={t(retry || humanColor ? "playback.retry" : "playback.next")}
+              variants={[t("playback.retry"), t("playback.next")]}
+              align="center"
+            />
           </Button>
         ) : null}
       </div>

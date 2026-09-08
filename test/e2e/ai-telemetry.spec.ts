@@ -53,7 +53,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     await expect(page.getByText("Illegal move response", { exact: true })).toBeVisible();
     expect((await readSnapshot(page, initial.gameId)).state).toBe("paused");
     const retry = page.getByRole("button", {
-      name: mode === "ai_vs_ai" ? "Next move" : "Resume",
+      name: "Retry move",
       exact: true,
     });
     await expect(retry).toHaveAttribute("aria-disabled", "false");
@@ -74,9 +74,9 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     await retried.locator("summary").press("Enter");
     await expect(retried).toHaveAttribute("open", "");
     await expect(retried.getByText("125 ms")).toBeVisible();
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
     if (mode === "ai_vs_ai") {
       await page.getByRole("combobox", { name: "Playback speed" }).selectOption("2");
-      await page.getByRole("button", { name: "Resume", exact: true }).click();
     } else {
       for (const move of ["e7e5", "d8h4"]) {
         await expect(

@@ -28,6 +28,51 @@ const signal = () => new AbortController().signal;
 describe("AI turn transport", () => {
   const command = { gameId: GAME_ID, commandId: OTHER_GAME_ID, expectedVersion: 0 };
 
+  it("reads private progress without keys and never acknowledges its runtime", async () => {
+    const observed = jsonResponse(snapshot());
+    observed.headers.set(aiRuntimeHeader, OTHER_GAME_ID);
+    const conflict = errorResponse("GAME_CONFLICT", 409, snapshot());
+    conflict.headers.set(aiRuntimeHeader, OTHER_GAME_ID);
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(observed)
+      .mockResolvedValueOnce(conflict);
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    api.acknowledgeRuntime?.(GAME_ID);
+    await expect(api.progress?.(GAME_ID, signal())).rejects.toMatchObject({ kind: "restart" });
+    expect(fetch.mock.calls[0]).toEqual([
+      new URL(`http://localhost:3001/games/${GAME_ID}`),
+      expect.objectContaining({ method: "GET", credentials: "include", cache: "no-store" }),
+    ]);
+    expect(fetch.mock.calls[0]?.[1]?.body).toBeUndefined();
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).has(aiRuntimeHeader)).toBe(false);
+    await expect(api.turn(command, credential, signal())).rejects.toMatchObject({
+      kind: "restart",
+    });
+    expect(new Headers(fetch.mock.calls[1]?.[1]?.headers).get(aiRuntimeHeader)).toBe(GAME_ID);
+  });
+
+  it("validates progress identity and cancels late body consumption", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse(snapshot([], { gameId: OTHER_GAME_ID })))
+      .mockResolvedValueOnce(jsonResponse({ ...snapshot(), invocations: [{ apiKey: "unsafe" }] }));
+    const api = createAiTurnApi("http://localhost:3001", { fetch });
+    await expect(api.progress?.(GAME_ID, signal())).rejects.toMatchObject({ kind: "malformed" });
+    await expect(api.progress?.(GAME_ID, signal())).rejects.toMatchObject({ kind: "malformed" });
+    const body = Promise.withResolvers<unknown>();
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => body.promise,
+      headers: new Headers(),
+    } as Response);
+    const abort = new AbortController();
+    const pending = api.progress?.(GAME_ID, abort.signal);
+    abort.abort();
+    body.resolve(snapshot());
+    await expect(pending).rejects.toMatchObject({ kind: "cancelled" });
+  });
+
   it("binds subsequent turns to the API runtime and signals a restart without resending work", async () => {
     const accepted = jsonResponse(snapshot(["e2e4"]));
     accepted.headers.set(aiRuntimeHeader, GAME_ID);

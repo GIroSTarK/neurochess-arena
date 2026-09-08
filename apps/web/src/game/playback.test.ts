@@ -1,4 +1,9 @@
-import type { ChessColor, GameSnapshot, SessionCredential } from "@neurochess/contracts";
+import type {
+  ChessColor,
+  GameInvocation,
+  GameSnapshot,
+  SessionCredential,
+} from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiTurnApi } from "../api/ai";
@@ -77,6 +82,172 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   controllers.splice(0).forEach((controller) => controller.disconnect());
   vi.useRealTimers();
+});
+
+function invocation(attempt: number, error: GameInvocation["error"] = null): GameInvocation {
+  return {
+    ply: 1,
+    color: "white",
+    attempt,
+    accepted: false,
+    commentary: null,
+    latencyMs: null,
+    usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+    ...(error?.kind === "model_invalid"
+      ? { status: "model_invalid", error }
+      : error
+        ? { status: "provider_error", error }
+        : { status: "pending", error: null }),
+  };
+}
+
+describe("live AI feedback", () => {
+  const invalid = { kind: "model_invalid", reason: "illegal_move" } as const;
+
+  it("shows both retries while the POST is pending, preserves the board, and clears progress on completion", async () => {
+    const { controller, ai, pending, initial } = harness();
+    const first = [invocation(1, invalid), invocation(2)];
+    const second = [invocation(1, invalid), invocation(2, invalid), invocation(3)];
+    const progress = vi
+      .fn<NonNullable<AiTurnApi["progress"]>>()
+      .mockResolvedValueOnce({ ...initial, invocations: first })
+      .mockResolvedValue({ ...initial, invocations: second });
+    Object.assign(ai, { progress });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(controller.getSnapshot()).toMatchObject({
+      activity: "thinking",
+      retry: 1,
+      invocations: first,
+    });
+    expect(controller.getSnapshot().game.snapshot).toEqual(initial);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(controller.getSnapshot().retry).toBe(2);
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+    pending.resolve(snapshot(["e2e4"]));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      activity: "idle",
+      retry: 0,
+      invocations: null,
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(progress).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["pause", "stop", "disconnect", "suspend"] as const)(
+    "cancels pending progress on %s and ignores its late result",
+    async (action) => {
+      const { controller, ai, initial } = harness();
+      const read = Promise.withResolvers<GameSnapshot>();
+      const progress = vi.fn<NonNullable<AiTurnApi["progress"]>>().mockReturnValue(read.promise);
+      Object.assign(ai, { progress });
+      await vi.advanceTimersByTimeAsync(500);
+      await controller[action]();
+      expect(progress.mock.calls[0]?.[1].aborted).toBe(true);
+      read.resolve({ ...initial, invocations: [invocation(1, invalid), invocation(2)] });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(controller.getSnapshot()).toMatchObject({ retry: 0, invocations: null });
+      expect(progress).toHaveBeenCalledTimes(1);
+      expect(ai.turn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("rejects foreign, changed and late progress without replaying the turn or overlapping reads", async () => {
+    const { controller, ai, initial, pending } = harness();
+    const read = Promise.withResolvers<GameSnapshot>();
+    const progress = vi
+      .fn<NonNullable<AiTurnApi["progress"]>>()
+      .mockResolvedValueOnce({
+        ...initial,
+        gameId: OTHER_GAME_ID,
+        invocations: [invocation(1, invalid)],
+      })
+      .mockRejectedValueOnce(new ApiFailure("network"))
+      .mockResolvedValueOnce(snapshot(["e2e4"]))
+      .mockReturnValue(read.promise);
+    Object.assign(ai, { progress });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(progress).toHaveBeenCalledTimes(4);
+    expect(controller.getSnapshot()).toMatchObject({
+      activity: "thinking",
+      retry: 0,
+      invocations: null,
+    });
+    expect(controller.getSnapshot().game.snapshot).toEqual(initial);
+    pending.resolve(snapshot(["e2e4"]));
+    await vi.advanceTimersByTimeAsync(0);
+    read.resolve({ ...initial, invocations: [invocation(1, invalid)] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().game.snapshot?.moves).toHaveLength(1);
+    expect(controller.getSnapshot().invocations).toBeNull();
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["restart", "access"] as const)(
+    "stops the pending turn after progress detects %s",
+    async (kind) => {
+      const { controller, ai, api } = harness();
+      const progress = vi
+        .fn<NonNullable<AiTurnApi["progress"]>>()
+        .mockRejectedValue(
+          kind === "restart" ? new ApiFailure("restart") : new ApiFailure("api", "UNAUTHORIZED"),
+        );
+      Object.assign(ai, { progress });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(ai.turn.mock.calls[0]?.[2].aborted).toBe(true);
+      expect(ai.turn).toHaveBeenCalledTimes(1);
+      expect(progress).toHaveBeenCalledTimes(1);
+      expect(controller.getSnapshot().automatic).toBe(false);
+      if (kind === "restart") {
+        expect(api.lifecycle).toHaveBeenCalledWith(
+          expect.objectContaining({ action: "pause" }),
+          expect.any(AbortSignal),
+        );
+        expect(controller.getSnapshot().game.snapshot?.state).toBe("paused");
+      } else {
+        expect(controller.getSnapshot().game).toMatchObject({
+          snapshot: null,
+          phase: "access-error",
+        });
+      }
+    },
+  );
+
+  it("blocks a rejected key until correction and preserves the invalid budget through manual retry", async () => {
+    const { controller, ai, pending, api } = harness();
+    await vi.advanceTimersByTimeAsync(0);
+    const invocations = [invocation(1, invalid), invocation(2, { kind: "provider_auth" })];
+    pending.resolve(snapshot([], { state: "paused", version: 1, invocations }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().rejectedKey).toBe("white");
+    await controller.next();
+    await controller.resume();
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+    controller.credentialUpdated("black");
+    expect(controller.getSnapshot().rejectedKey).toBe("white");
+    controller.credentialUpdated("white");
+    expect(controller.getSnapshot().rejectedKey).toBeNull();
+    expect(ai.turn).toHaveBeenCalledTimes(1);
+    const repeated = Promise.withResolvers<GameSnapshot>();
+    ai.turn.mockReturnValue(repeated.promise);
+    void controller.next();
+    expect(controller.getSnapshot()).toMatchObject({ activity: "thinking", retry: 1 });
+    expect(ai.turn).toHaveBeenCalledTimes(2);
+    expect(ai.turn.mock.calls[1]?.[0].commandId).not.toBe(ai.turn.mock.calls[0]?.[0].commandId);
+    const rejected = snapshot([], {
+      state: "paused",
+      version: 2,
+      invocations: [...invocations, invocation(3, { kind: "provider_auth" })],
+    });
+    repeated.resolve(rejected);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().rejectedKey).toBe("white");
+    controller.credentialUpdated("white");
+    api.lifecycle.mockResolvedValue({ ...rejected, version: 3 });
+    await controller.pause();
+    expect(controller.getSnapshot().rejectedKey).toBeNull();
+    expect(ai.turn).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("AI private replay and export", () => {

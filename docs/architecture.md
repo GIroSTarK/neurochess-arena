@@ -184,6 +184,10 @@ The web playback controller separates accepted game state, turn activity, and au
 
 AI-turn transport deliberately has no client deadline: one turn may include discovery and three attempts, each subject to the API's provider transport deadlines. Ordinary game requests retain their ten-second timeout. Caller cancellation remains effective through response-body consumption. Failed or conflicting turns never trigger an automatic resend: read-back adopts only the same game's non-regressing accepted snapshot and leaves progression off. An unchanged revision stays uncertain and blocks fresh turns until explicit Pause or Stop advances it. Disconnect/page exit cancels scheduling and request consumption; reopening uses paused recovery.
 
+While an AI-turn POST is pending, the browser reads its private snapshot every 500 ms after the previous progress read completes. These credential-free reads use the ordinary deadline and never overlap. Only invocation metadata for the same game and unchanged accepted position is displayed; the POST still determines the accepted position and lifecycle. The retry label counts recorded model-invalid responses for the current ply across reservations, excluding provider errors and interruptions. Turn settlement, lifecycle controls, and disconnection cancel progress reads and ignore late results. A failed metadata read cannot resend the turn. Access loss clears the private view; a changed API runtime cancels the turn and invokes paused recovery without acknowledging the observed runtime.
+
+A confirmed provider-auth failure invalidates only the affected seat's page-memory key and blocks continuation until replacement. Key correction preserves the other seat and saved configuration, never performs discovery or generation, and requires explicit Retry move or Resume. Retry move executes one paused AI turn in either mode. The UI remembers which failure was corrected so historical auth errors cannot invalidate its replacement again.
+
 The browser requests one AI turn at a time. The API:
 
 1. authorizes the requester and reserves the expected turn/version;

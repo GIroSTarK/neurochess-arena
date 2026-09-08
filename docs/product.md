@@ -168,6 +168,8 @@ The normalized response contract is:
 - The invalid-output budget belongs to the current chess turn. Manual retry, pause/resume, and interrupted requests preserve recorded invalid responses; only an accepted move starts a new budget. An interrupted attempt with no recorded response does not consume it.
 - Retry attempts and terminal reasons are visible in the game event history.
 
+Both AI modes show retry progress while the model request is still pending. A rejected key has an explanation and an Update key action beside the affected model; replacing it preserves the other seat's key and requires no reload. Saving the replacement does not start work. Retry move requests one AI turn from the paused position and leaves an unfinished game paused; Resume explicitly restores active play.
+
 ## Live game experience
 
 The game screen shows:

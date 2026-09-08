@@ -25,6 +25,7 @@ import { ApiFailure, createGameTransport, validateSnapshot } from "./client";
 export interface AiTurnApi {
   acknowledgeRuntime?(runtimeId: string | null): void;
   leave?(command: LifecycleCommand): void;
+  progress?(gameId: string, signal: AbortSignal): Promise<GameSnapshot>;
   turn(
     command: AiTurnCommand,
     credential: SessionCredential,
@@ -65,8 +66,23 @@ export function createAiTurnApi(
     },
   });
   const departure = createGameTransport(apiBaseUrl, { ...options, keepalive: true });
+  const progress = createGameTransport(apiBaseUrl, {
+    ...options,
+    onResponse: (response) => {
+      const received = response.headers.get(aiRuntimeHeader);
+      if (received === null) return;
+      const parsed = aiRuntimeIdSchema.safeParse(received);
+      if (!parsed.success) throw new ApiFailure("malformed");
+      // Observing progress must never acknowledge a restarted runtime for the pending turn.
+      if (runtimeId !== null && runtimeId !== parsed.data) throw new ApiFailure("restart");
+    },
+  });
   return {
     acknowledgeRuntime,
+    async progress(gameId, signal) {
+      if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
+      return progress.gameRequest("/games/" + gameId, signal, gameId);
+    },
     leave(command) {
       const body = lifecycleCommandSchema.safeParse(command);
       if (!body.success || command.action !== "pause") return;

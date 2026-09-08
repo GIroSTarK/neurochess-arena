@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import type { ProviderDescriptor } from "@neurochess/contracts";
 
 import type { MoveRequest } from "../../apps/api/src/providers/adapter";
@@ -12,6 +14,17 @@ const scripts = new Map<string, ScriptedMockProvider>();
 
 export async function requestAcceptanceMove(descriptor: ProviderDescriptor, input: MoveRequest) {
   const scenario = input.apiKey.split(":")[1];
+  if (scenario === "live-retries") {
+    await setTimeout(1_800, undefined, { signal: input.signal }).catch(() => undefined);
+    if (input.signal?.aborted) {
+      return {
+        ok: false as const,
+        error: { kind: "provider_unavailable" as const },
+        latencyMs: 0,
+        usage: null,
+      };
+    }
+  }
   if (scenario === "illegal-success") {
     // Even a structurally valid adapter success must pass authoritative chess validation.
     return {
@@ -38,13 +51,15 @@ export async function requestAcceptanceMove(descriptor: ProviderDescriptor, inpu
     const prefix: MockMoveStep[] =
       scenario === "invalid"
         ? invalid
-        : scenario === "budget"
-          ? [invalid[0]!, { error: { kind: "provider_quota" } }, ...invalid.slice(1)]
-          : scenario === "provider_quota" ||
-              scenario === "provider_timeout" ||
-              scenario === "provider_unavailable"
-            ? [{ error: { kind: scenario } }]
-            : [];
+        : scenario === "live-retries"
+          ? invalid.slice(0, 2)
+          : scenario === "budget"
+            ? [invalid[0]!, { error: { kind: "provider_quota" } }, ...invalid.slice(1)]
+            : scenario === "provider_quota" ||
+                scenario === "provider_timeout" ||
+                scenario === "provider_unavailable"
+              ? [{ error: { kind: scenario } }]
+              : [];
     script = createScriptedMockProvider({
       descriptor,
       models: models(descriptor.id),

@@ -293,13 +293,6 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       await page.waitForTimeout(1_100);
       expect(turns).toHaveLength(1);
       if (error === "provider_auth") {
-        await page.reload();
-        await activate(page.getByRole("button", { name: "Return to game" }), touch);
-        await expect(
-          page
-            .getByRole("region", { name: "Game details" })
-            .getByText("Game paused", { exact: true }),
-        ).toBeVisible();
         const saved = aiGameResponseSchema.parse(
           await (await page.request.get(`${API_ORIGIN}/ai/games/${snapshot.gameId}`)).json(),
         );
@@ -308,8 +301,8 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
           "aria-disabled",
           "true",
         );
-        await activate(page.getByRole("button", { name: "Enter missing keys" }), touch);
-        const dialog = page.getByRole("dialog", { name: "Re-enter your API keys" });
+        await activate(page.getByRole("button", { name: "Update key" }), touch);
+        const dialog = page.getByRole("dialog", { name: "Update this model's API key" });
         for (const input of await dialog.locator("input").all()) {
           await expect(input).toHaveValue("");
           await expect(input).toHaveAttribute("type", "password");
@@ -320,7 +313,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
         expect(turns).toHaveLength(1);
       }
       const retry = page.getByRole("button", {
-        name: mode === "ai_vs_ai" ? "Next move" : "Resume",
+        name: "Retry move",
         exact: true,
       });
       await expect(retry).toHaveAttribute("aria-disabled", "false");
@@ -336,10 +329,8 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       expect(turns).toHaveLength(2);
       expect(turns[1]?.commandId).not.toBe(turns[0]?.commandId);
       expect(turns[1]?.expectedVersion).toBeGreaterThan(turns[0]!.expectedVersion);
-      if (mode === "ai_vs_ai") {
-        expect(retried.state).toBe("paused");
-        await activate(page.getByRole("button", { name: "Resume", exact: true }), touch);
-      }
+      expect(retried.state).toBe("paused");
+      await activate(page.getByRole("button", { name: "Resume", exact: true }), touch);
       await finishMate(page, match, snapshot, touch);
     });
   }
@@ -361,10 +352,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     expect(
       (await readSnapshot(page, snapshot.gameId)).invocations?.map(({ status }) => status),
     ).toEqual(["model_invalid", "provider_error"]);
-    await activate(
-      page.getByRole("button", { name: mode === "ai_vs_ai" ? "Next move" : "Resume", exact: true }),
-      touch,
-    );
+    await activate(page.getByRole("button", { name: "Retry move", exact: true }), touch);
     await expect(page.getByRole("button", { name: "Configure another match" })).toBeVisible();
     const terminal = await readSnapshot(page, snapshot.gameId);
     expect(terminal).toMatchObject({

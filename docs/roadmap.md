@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0 and 1 completed; Phase 2 in progress
+**Status:** Phases 0, 1, and 2 completed
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-08
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -47,6 +47,8 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 
 ## Phase 2 — AI arena core
 
+**Status:** Completed. Remaining browser/device and accessibility validation limits are tracked in [design validation](design-system/validation.md) and Phase 5 below.
+
 Deliverables:
 
 - [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
@@ -65,13 +67,12 @@ Deliverables:
 - [x] recovery for both AI modes with saved configuration and complete draw history, page-exit key clearing, key re-entry before explicit continuation, offline/reconnect and API-restart fencing, and mocked browser/integration coverage of uncertain turns;
 - [x] AI-versus-AI orchestration, pause/resume, single paused stepping, presentation speed, and Stop during thinking, with uncertain-response reconciliation and controller/desktop/mobile mock-provider coverage;
 - [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
-- [ ] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry;
+- [x] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry, including live retry/attempt progress, rejected-key correction beside either AI seat without reload, and desktop/mobile regression coverage;
 - [x] private normalized attempt/error history, accepted-move commentary with missing fallback, and latency/reported-token display with explicit unavailable values; both AI modes share replay and PGN controls, with mocked contract, integration, component, and desktop/mobile browser coverage.
 - [x] Phase 2 desktop/mobile acceptance matrix through real game APIs and PostgreSQL with mocked provider boundaries: all provider pairings, identical models, both human colors, invalid-output exhaustion, provider-error recovery, privacy, and the shared single-game limit; see the [coverage map](development.md#phase-2-acceptance-coverage) for lifecycle and refresh coverage and the [opt-in live-provider smoke procedure](development.md#opt-in-real-provider-smoke).
+- [x] manual live-provider smoke for OpenAI, Anthropic, Google, and OpenRouter: the user confirmed completing the documented procedure with each provider and approved the observed behavior on 2026-09-08. Exact model IDs and run configurations were not supplied; this records user-confirmed verification of the tested setups.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
-
-Phase 2 remains open. The failure-feedback deliverable still needs the [specified intermediate retry progress and rejected-key correction beside the affected seat](design-system.md#game-state-and-recovery); current attempts appear after a response returns, and key replacement uses refresh/re-entry. Automated acceptance proves the mocked application paths; live OpenAI, Anthropic, Google, and OpenRouter behavior has not been verified in this handoff. Record actual provider/model smoke results separately before claiming live compatibility.
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 

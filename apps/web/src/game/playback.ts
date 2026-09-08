@@ -1,6 +1,7 @@
 import type {
   AiTurnCommand,
   ChessColor,
+  GameInvocation,
   GameSnapshot,
   SessionCredential,
 } from "@neurochess/contracts";
@@ -8,6 +9,7 @@ import type {
 import type { AiTurnApi } from "../api/ai";
 import { ApiFailure, type SandboxApi } from "../api/client";
 
+import { invalidRetries, providerFailure } from "./ai-feedback";
 import { ArchiveController } from "./archive";
 import { safeFailure } from "./failures";
 import { type Operation, OperationGate } from "./operations";
@@ -30,6 +32,9 @@ export interface PlaybackState {
   readonly automatic: boolean;
   readonly speed: PlaybackSpeed;
   readonly control: LifecycleAction["action"] | null;
+  readonly retry: number;
+  readonly invocations: readonly GameInvocation[] | null;
+  readonly rejectedKey: ChessColor | null;
 }
 
 interface PlaybackOptions {
@@ -38,6 +43,7 @@ interface PlaybackOptions {
   readonly humanColor?: ChessColor;
   // This accessor reads page memory. Credentials never enter observable controller state.
   readonly credential: (color: ChessColor) => SessionCredential | null;
+  readonly rejectCredential?: (color: ChessColor) => void;
 }
 
 export class AiPlaybackController {
@@ -54,6 +60,8 @@ export class AiPlaybackController {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pendingTurn: AiTurnCommand | null = null;
   private lifecycleGeneration = 0;
+  private cancelProgress: (() => void) | null = null;
+  private rejectedAttempt: string | null = null;
 
   constructor(
     private readonly api: SandboxApi,
@@ -65,8 +73,20 @@ export class AiPlaybackController {
   ) {
     const { store, gate } = this;
     store.transition({ phase: "ready", snapshot: initial, pendingCommand: null }, { notice: null });
-    this.state = { game: store.get(), activity: "idle", automatic: false, speed: 1, control: null };
-    store.subscribe(() => this.publish({}));
+    this.state = {
+      game: store.get(),
+      activity: "idle",
+      automatic: false,
+      speed: 1,
+      control: null,
+      retry: 0,
+      invocations: null,
+      rejectedKey: null,
+    };
+    store.subscribe(() => {
+      this.observeCredentialFailure();
+      this.publish({});
+    });
     this.archive = new ArchiveController({
       api,
       delivery,
@@ -104,6 +124,7 @@ export class AiPlaybackController {
     if (!this.connected) {
       this.connected = true;
       this.gate.connect();
+      this.observeCredentialFailure();
       const { snapshot, replay } = this.store.get();
       if (snapshot && isTerminal(snapshot)) {
         if (!replay) void this.loadReplay();
@@ -121,6 +142,7 @@ export class AiPlaybackController {
     this.lifecycleGeneration += 1;
     this.connected = false;
     this.cancelTimer();
+    this.stopProgress();
     this.gate.disconnect();
     this.archive.cancel();
     const { snapshot, pendingCommand, phase } = this.store.get();
@@ -178,6 +200,22 @@ export class AiPlaybackController {
     if (![0.5, 1, 2].includes(speed)) return;
     this.publish({ speed });
     if (this.timer !== null) this.schedule();
+  }
+
+  credentialUpdated(color: ChessColor): void {
+    if (this.state.rejectedKey === color && this.options.credential(color)?.apiKey) {
+      this.publish({ rejectedKey: null });
+    }
+  }
+
+  private observeCredentialFailure(): void {
+    const failure = providerFailure(this.store.get().snapshot);
+    if (failure?.error.kind !== "provider_auth") return;
+    const attempt = `${failure.ply}:${failure.attempt}`;
+    if (this.rejectedAttempt === attempt) return;
+    this.rejectedAttempt = attempt;
+    this.state = { ...this.state, rejectedKey: failure.color };
+    this.options.rejectCredential?.(failure.color);
   }
 
   loadReplay(): Promise<void> {
@@ -277,6 +315,7 @@ export class AiPlaybackController {
       this.connected &&
       !this.state.control &&
       this.state.activity === "idle" &&
+      this.state.rejectedKey === null &&
       phase === "ready" &&
       isUnfinished(snapshot) &&
       (this.options.humanColor === "white" || this.options.credential("white") !== null) &&
@@ -338,10 +377,12 @@ export class AiPlaybackController {
       commandId: this.commandId(),
     };
     this.pendingTurn = command;
-    this.publish({ activity: "thinking" });
+    this.publish({ activity: "thinking", retry: invalidRetries(before), invocations: null });
+    this.startProgress(operation, before);
     try {
       const snapshot = await this.ai.turn(command, credential, operation.abort.signal);
       if (!this.gate.isCurrent(operation)) return;
+      this.stopProgress();
       if (!this.valid(snapshot, command) || snapshot.version <= command.expectedVersion) {
         throw new ApiFailure("malformed");
       }
@@ -355,6 +396,7 @@ export class AiPlaybackController {
       if (snapshot.state !== "active") this.halt();
     } catch (error: unknown) {
       if (!this.gate.isCurrent(operation)) return;
+      this.stopProgress();
       this.halt();
       const failure = safeFailure(error);
       if (failure.kind === "restart") {
@@ -370,6 +412,57 @@ export class AiPlaybackController {
         this.schedule();
       }
     }
+  }
+
+  private stopProgress(): void {
+    this.cancelProgress?.();
+    this.cancelProgress = null;
+    this.publish({ retry: 0, invocations: null });
+  }
+
+  private startProgress(operation: Operation, before: GameSnapshot): void {
+    const read = this.ai.progress?.bind(this.ai);
+    if (!read) return;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const cancel = () => {
+      clearTimeout(timer);
+      abort.abort();
+      operation.abort.signal.removeEventListener("abort", cancel);
+    };
+    this.cancelProgress = cancel;
+    operation.abort.signal.addEventListener("abort", cancel, { once: true });
+    const current = () => !abort.signal.aborted && this.gate.isCurrent(operation);
+    const poll = async () => {
+      try {
+        const snapshot = await read(before.gameId, abort.signal);
+        // Progress is metadata only. The turn response still owns position/lifecycle acceptance.
+        if (current() && sameSnapshot(snapshot, before)) {
+          this.publish({
+            retry: invalidRetries(snapshot),
+            invocations: snapshot.invocations ?? [],
+          });
+        }
+      } catch (error: unknown) {
+        if (!current()) return;
+        const failure = safeFailure(error);
+        if (failure.kind === "restart") {
+          this.gate.invalidate();
+          this.stopProgress();
+          void this.recover();
+        } else if (this.session.loseAccess(failure)) {
+          this.gate.invalidate();
+          this.stopProgress();
+          this.pendingTurn = null;
+          this.halt();
+          this.publish({ activity: "idle", rejectedKey: null });
+        }
+        // A failed metadata read cannot establish the outcome or justify resending the POST.
+      } finally {
+        if (current()) timer = setTimeout(() => void poll(), 500);
+      }
+    };
+    timer = setTimeout(() => void poll(), 500);
   }
 
   private valid(snapshot: GameSnapshot, command: AiTurnCommand): boolean {
@@ -428,6 +521,7 @@ export class AiPlaybackController {
     // The lifecycle lane supersedes the AI request without waiting for provider I/O. Its
     // accepted revision, not client cancellation, is what prevents a late move committing.
     if (this.pendingTurn) this.gate.invalidate();
+    this.stopProgress();
     this.publish({ control: action });
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.session.lifecycle(command);

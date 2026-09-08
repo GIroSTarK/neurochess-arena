@@ -16,10 +16,16 @@ export function KeyRecovery({
   match,
   missing,
   onCredential,
+  rejected = false,
+  corrected = false,
+  disabled = false,
 }: {
   readonly match: AiGameConfiguration;
   readonly missing: readonly ChessColor[];
   readonly onCredential: (color: ChessColor, credential: SessionCredential) => void;
+  readonly rejected?: boolean;
+  readonly corrected?: boolean;
+  readonly disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -31,10 +37,16 @@ export function KeyRecovery({
   return (
     <div className="space-y-3 rounded-panel border border-warning bg-surface p-4">
       <p role="status" className="text-warning">
-        {t("keyRecovery.description")}
+        {t(
+          rejected
+            ? corrected
+              ? "keyRecovery.corrected"
+              : "keyRecovery.rejected"
+            : "keyRecovery.description",
+        )}
       </p>
-      <Button variant="secondary" onClick={() => setOpen(true)}>
-        {t("keyRecovery.enter")}
+      <Button variant="secondary" aria-disabled={disabled} onClick={() => setOpen(true)}>
+        {t(rejected ? "keyRecovery.update" : "keyRecovery.enter")}
       </Button>
       {open ? (
         <KeyDialog
@@ -42,6 +54,7 @@ export function KeyRecovery({
           missing={missing}
           onCancel={() => setOpen(false)}
           onCredential={onCredential}
+          rejected={rejected}
         />
       ) : null}
     </div>
@@ -53,11 +66,13 @@ function KeyDialog({
   missing,
   onCancel,
   onCredential,
+  rejected,
 }: {
   readonly match: AiGameConfiguration;
   readonly missing: readonly ChessColor[];
   readonly onCancel: () => void;
   readonly onCredential: (color: ChessColor, credential: SessionCredential) => void;
+  readonly rejected: boolean;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -75,7 +90,11 @@ function KeyDialog({
       }).success,
   );
   return (
-    <Dialog title={t("keyRecovery.title")} description={t("keyRecovery.hint")} onCancel={onCancel}>
+    <Dialog
+      title={t(rejected ? "keyRecovery.updateTitle" : "keyRecovery.title")}
+      description={t("keyRecovery.hint")}
+      onCancel={onCancel}
+    >
       <form
         className="mt-4 space-y-5"
         noValidate
