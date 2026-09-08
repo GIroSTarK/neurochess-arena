@@ -21,7 +21,7 @@ npm run verify
 | Build, dependency, startup, or deployment configuration                      | Run `npm run smoke` after building, with PostgreSQL available.                                                                                  |
 | Milestone acceptance                                                         | Run the full browser suite and verify the milestone exit criteria and applicable MVP acceptance requirements. Record remaining coverage limits. |
 
-Browser, migration-metadata, and smoke checks are separate from `verify`. CI runs Docker Compose validation, migration application twice, `db:check`, `verify`, the complete browser suite, and the built-service smoke. Real-provider smoke is never part of these commands.
+Browser, migration-metadata, and smoke checks are separate from `verify`. [CI](../.github/workflows/ci.yml) runs Docker Compose validation, migration application twice, `db:check`, `verify`, and the built-service smoke in the `checks` job. The complete desktop and mobile-touch browser projects run alongside it in two separate jobs, each with its own runner and ephemeral PostgreSQL instance. These three jobs each have a 15-minute limit; the final `verify` status requires all three to succeed. Real-provider smoke is never part of these commands.
 
 Add or update tests for behavior changes. Report commands actually run and relevant results in the change summary, PR, or CI. Keep progress in the [roadmap](roadmap.md) and current validation gaps in [design validation](design-system/validation.md); do not append run logs to canonical guides.
 
