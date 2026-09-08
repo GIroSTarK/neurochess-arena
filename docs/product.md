@@ -1,7 +1,10 @@
 # Product specification
 
-**Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-07
+**Status:** Canonical MVP specification
+
+**Scope:** Target behavior for the full MVP; implementation status belongs in the [roadmap](roadmap.md).
+
+**Last updated:** 2026-09-08
 
 ## Vision
 
@@ -105,7 +108,7 @@ The [local development sandbox](architecture.md#local-development-sandbox) is a 
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.
 - Completed and aborted games show the result and reason, read-only replay starting at the final position, and private PGN copy/download. New game does not delete the previous record; its URL remains accessible only to the owning guest session until access expires. There is no guest history list.
 
-The [sandbox walkthrough](development.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production retention and automated cleanup remain separate decisions. Implementation progress belongs in the [roadmap](roadmap.md).
+The [sandbox walkthrough](gameplay.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production retention and automated cleanup remain separate decisions. Implementation progress belongs in the [roadmap](roadmap.md).
 
 ## Chess and AI behavior
 
@@ -203,12 +206,20 @@ Saved games are private in the MVP. There are no public game or live spectator l
 
 ## Game lifecycle
 
-The canonical game states are:
+The canonical states and transitions are:
 
-```text
-configuring -> active <-> paused -> completed
-                    \-----------> aborted
-```
+| From                 | Action or event                                                                | To          |
+| -------------------- | ------------------------------------------------------------------------------ | ----------- |
+| `configuring`        | Start a valid configuration                                                    | `active`    |
+| `active`             | Pause                                                                          | `paused`    |
+| `paused`             | Resume                                                                         | `active`    |
+| `paused` AI game     | Pause for recovery or to invalidate uncertain work                             | `paused`    |
+| `active`             | Accept a move without a terminal result                                        | `active`    |
+| `paused`             | Execute an AI Next move or Retry move without a terminal result                | `paused`    |
+| `active` or `paused` | Reach a chess result, accept human resignation, or record an AI technical loss | `completed` |
+| `active` or `paused` | Stop/abort                                                                     | `aborted`   |
+
+Actions remain subject to mode, seat, and authorization rules. A chess result from paused state can occur when an AI step completes the game. The [game protocol](game-protocol.md) defines command revisions and recovery fencing; a revision change need not change the lifecycle state.
 
 `completed` includes normal chess results and technical losses. The termination reason distinguishes checkmate, draw type, human resignation, and model technical loss.
 
@@ -236,9 +247,26 @@ The MVP is ready when:
 
 ## Open product decisions
 
-- Avatar source and whether custom avatar uploads are included in the MVP
-- Exact retention period for an inactive guest game
-- Exact supported parameter matrix for each provider and model
-- Whether an aborted game should be visually grouped separately from completed history
-- Final deployment platform and production region
-- Repository license
+These questions are unresolved. Decide the affected behavior before implementing its schema or authorization flow, then update the owning contract and add an ADR when the decision is consequential. They do not change the existing MVP requirements.
+
+### Before Phase 3 — Accounts and deletion
+
+| Decision                            | Behavior to define                                                                                                                                                                                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guest-to-account transition         | Whether and how an unfinished guest game transfers on registration or sign-in; what happens when the guest and account each already have an active or paused game.                                                                                                   |
+| Session precedence and sign-out     | Which principal authorizes requests when both cookies are present; how sign-out affects the current game, recovery, and page-memory credentials.                                                                                                                     |
+| Game, history, and account deletion | Whether removing a shared human game affects only one participant's history or the shared record; what remains for the opponent; how deletion handles unfinished games and pending AI work. Establish these semantics before choosing deletion cascades for Phase 3. |
+| Saved-credential revocation         | What the owner sees when a selected credential is revoked, including an unfinished game or provider request already in flight.                                                                                                                                       |
+| Profile identity                    | Avatar source and whether custom uploads are included in the MVP.                                                                                                                                                                                                    |
+
+### Before Phase 4 — Guest reconnection
+
+Human rooms permit reconnection without a time limit, while the [guest identity contract](game-protocol.md#guest-identity-and-authorization) expires inactive sessions and never revives an expired identity. Define whether and how an original guest can reclaim their seat after expiry, and how room retention supports that guarantee. Session expiry must not be treated as a chess timeout or forfeiture.
+
+### Other open decisions
+
+- Production retention period and automated cleanup for inactive guest data, required before production guest gameplay.
+- Provider/model capability coverage beyond the verified metadata in the [provider reference](providers.md); live discovery and the existing conservative capability policy remain binding.
+- Whether an aborted game should be visually grouped separately from completed history.
+- Final deployment platform and production region.
+- Repository license.

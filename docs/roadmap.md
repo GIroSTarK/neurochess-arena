@@ -24,26 +24,19 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** Completed. See the [sandbox walkthrough](development.md#sandbox-ui) for usage and [verification strategy](architecture.md#verification-strategy) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system/validation.md) and Phase 5 below.
+**Status:** Completed. See the [sandbox walkthrough](gameplay.md#sandbox-ui) for usage and [verification strategy](testing.md#mvp-acceptance) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system/validation.md) and Phase 5 below.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
 Deliverables:
 
-- [x] dark responsive application shell and accessible keyboard/touch chessboard, explicit promotion, and read-only SAN history;
-- [x] standard initial position and complete legal move handling;
-- [x] server-authoritative sandbox creation and human move command;
-- [x] guest-cookie bootstrap, private ownership checks, and concurrency-safe enforcement of one `active` or `paused` owned game per guest session;
-- [x] atomic move/FEN/PGN/version persistence, natural result detection, and full-history database restoration;
-- [x] PostgreSQL integration tests for ownership, concurrency, rollback, migration constraints, and restoration;
-- [x] recovery of an unfinished sandbox game as `paused`, with explicit resume and complete draw history;
-- [x] pause, resume, abort, and human-resignation commands with shared accepted-command receipts;
-- [x] private terminal replay and PGN copy/download, with guest-session access to previous game URLs;
-- [x] unit tests for standard chess outcomes and the [automatic draw policy](product.md#automatic-draw-policy);
-- [x] typed UI localization layer with bundled English strings, fallback, safe API-code mapping, and localized announcements;
-- [x] client command/recovery tests and desktop/mobile Playwright gameplay and accessibility checks against the disposable PostgreSQL database.
+- [x] deterministic standard-position chess, full legal move handling, natural results, automatic draws, and full-history restoration;
+- [x] server-authoritative guest sandbox with private ownership, one unfinished-game slot, atomic versioned commands, and lifecycle receipts;
+- [x] paused recovery, explicit lifecycle controls, private terminal replay, and canonical PGN copy/download;
+- [x] localized responsive dark UI, keyboard/touch board interaction, explicit promotion, and accessible controls;
+- [x] unit, PostgreSQL integration, and desktop/mobile browser coverage of chess, concurrency, authorization, recovery, replay, and accessibility; see [acceptance requirements](testing.md#mvp-acceptance).
 
-Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](architecture.md#verification-strategy).
+Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](testing.md#mvp-acceptance).
 
 ## Phase 2 — AI arena core
 
@@ -51,30 +44,22 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 
 Deliverables:
 
-- [x] shared AI runtime schemas, common server-side provider interface, authoritative model context, and scripted mock adapter with provider contract tests;
-- [x] AI game modes, independent seat configuration, normalized invocation attempts, and durable leased turn reservations with PostgreSQL migration, rollback, constraint, and concurrency tests;
-- [x] guest AI creation/discovery and one authoritative AI turn through the existing command service, with mocked PostgreSQL integration tests for both modes, duplicate execution prevention, lifecycle invalidation, and atomic commit;
-- [x] AI retry accounting across manual retries and interruptions, technical losses, provider-error pause, and API pause/resume/stop/paused stepping with mocked completion-race tests;
-- [x] guest-protected backend model discovery through the provider registry, bounded credential-free capability catalogs, server-side parameter filtering, and request-only AI-turn keys with mocked isolation, redaction, cancellation, and persistence tests;
-- [x] OpenAI live model discovery and Responses move adapter with conservative capability metadata, normalized output/errors/telemetry, mocked shared contract and API integration tests;
-- [x] Anthropic paginated discovery and Messages adapter with live capability mapping, normalized content/errors/usage, and mocked shared contract and mixed-provider game integration tests;
-- [x] Google paginated model discovery and GenerateContent adapter with model eligibility, conservative capability mapping, normalized output/errors/usage, and mocked shared contract and game-service integration tests;
-- [x] OpenRouter live discovery and Chat Completions adapter preserving model IDs and variants, with routed capability/output/error/usage normalization and mocked shared contract and game-service integration tests;
-- [x] localized AI setup with live model discovery, searchable model selection, capability-aware parameter controls, and loading/failure/empty/unsupported states;
-- [x] independent White and Black configuration, including identical-provider/model matches, and AI-versus-human setup with either human color;
-- [x] separate page-memory setup credentials, masked/reveal controls, key loss on refresh/close, credential-free creation, and component/desktop/mobile browser coverage of validation and storage isolation;
-- [x] setup handoff to an authoritative read-only board, existing-game return, paused recovery, and confirmed stop through the shared command session;
-- [x] recovery for both AI modes with saved configuration and complete draw history, page-exit key clearing, key re-entry before explicit continuation, offline/reconnect and API-restart fencing, and mocked browser/integration coverage of uncertain turns;
-- [x] AI-versus-AI orchestration, pause/resume, single paused stepping, presentation speed, and Stop during thinking, with uncertain-response reconciliation and controller/desktop/mobile mock-provider coverage;
-- [x] AI-versus-human gameplay using the configured human color, authorized board interaction, automatic AI replies, explicit promotion, and human resignation, with both-color completion and seat-rejection coverage;
-- [x] browser controls and feedback for invalid-output retries, technical loss, provider-error pause, and manual retry, including live retry/attempt progress, rejected-key correction beside either AI seat without reload, and desktop/mobile regression coverage;
-- [x] private normalized attempt/error history, accepted-move commentary with missing fallback, and latency/reported-token display with explicit unavailable values; both AI modes share replay and PGN controls, with mocked contract, integration, component, and desktop/mobile browser coverage.
-- [x] Phase 2 desktop/mobile acceptance matrix through real game APIs and PostgreSQL with mocked provider boundaries: all provider pairings, identical models, both human colors, invalid-output exhaustion, provider-error recovery, privacy, and the shared single-game limit; see the [coverage map](development.md#phase-2-acceptance-coverage) for lifecycle and refresh coverage and the [opt-in live-provider smoke procedure](development.md#opt-in-real-provider-smoke).
-- [x] manual live-provider smoke for OpenAI, Anthropic, Google, and OpenRouter: the user confirmed completing the documented procedure with each provider and approved the observed behavior on 2026-09-08. Exact model IDs and run configurations were not supplied; this records user-confirmed verification of the tested setups.
+- [x] shared runtime-validated provider boundary and OpenAI, Anthropic, Google, and OpenRouter adapters with live discovery, conservative capabilities, normalized output/errors/usage, and mocked contract tests;
+- [x] independent effective AI seat configuration, normalized invocations, durable leased reservations, atomic move completion, and the shared guest single-game limit;
+- [x] turn-wide invalid-output budgets, technical losses, provider-error pause, paused stepping, lifecycle invalidation, and explicit recovery without duplicate provider execution;
+- [x] localized setup and complete AI-versus-AI / AI-versus-human flows, including identical models, either human color, playback controls, promotion, and resignation;
+- [x] page-memory keys, refresh/offline/API-restart recovery, explicit key re-entry, and per-seat rejected-key correction;
+- [x] live retry feedback, private attempt/error history, accepted commentary, reported latency/tokens, and shared replay/PGN controls;
+- [x] [acceptance matrix](testing.md#phase-2-acceptance-coverage) through real game APIs/PostgreSQL with mocked provider boundaries, covering all provider pairings, both human colors, failure recovery, privacy, and concurrency;
+- [x] manual live-provider smoke for OpenAI, Anthropic, Google, and OpenRouter: the user confirmed completing the [documented procedure](testing.md#opt-in-real-provider-smoke) with each provider and approved the observed behavior on 2026-09-08. Exact model IDs and run configurations were not supplied; this records user-confirmed verification of the tested setups.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
 
 ## Phase 3 — Accounts, encrypted credentials, and history
+
+**Status:** Next milestone
+
+Before implementing the affected schema and authorization flows, resolve the [account-transition, deletion, and credential-revocation decisions](product.md#before-phase-3--accounts-and-deletion). Record the chosen behavior in the canonical contracts and an ADR when consequential.
 
 Deliverables:
 
@@ -90,6 +75,8 @@ Deliverables:
 Exit condition: registered and guest lifecycle rules match the product specification, including deletion and credential-security tests.
 
 ## Phase 4 — Private online human games
+
+Resolve the [guest reconnection decision](product.md#before-phase-4--guest-reconnection) before implementing guest room membership. Extend the single-game invariant to joining, non-owning participants as required by [ADR-0006](decisions/0006-guest-owned-game-commands.md).
 
 Deliverables:
 
@@ -116,6 +103,7 @@ Deliverables:
 - keyboard navigation, contrast, focus, and reduced-motion review;
 - cross-browser end-to-end suite;
 - rate limiting, security headers, dependency audit, backup and restore check;
+- production guest retention/cleanup and saved-credential encryption-key backup/rotation procedures, as required by [product](product.md#other-open-decisions) and [ADR-0004](decisions/0004-bring-your-own-key-security.md);
 - deployment selection, production configuration, monitoring, and release checklist.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.

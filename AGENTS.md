@@ -11,11 +11,14 @@ Rules below always apply. Before a material change, read the sources and section
 - `docs/product.md`: game behavior, permissions, and MVP scope.
 - `docs/architecture.md`: component boundaries, data flow, persistence, and security.
 - `docs/design-system.md`: presentation, UI interaction, and accessibility.
-- `docs/development.md`: setup, environment, API usage, migrations, and verification.
+- `docs/development.md`: setup, environment, migrations, and task-based navigation to detailed references.
+- `docs/testing.md`: required verification, focused checks, and acceptance coverage.
 - `docs/roadmap.md`: delivery order and milestone status, when planning work or assessing progress.
 - `docs/decisions/README.md`: find and read the accepted ADRs relevant to the affected area.
 
 When code and documentation disagree, determine the intended behavior before editing. Correct whichever is wrong; update both when the contract changes. Do not change a requirement merely to match a bug.
+
+Use the [task navigation](docs/development.md#task-navigation) to find the relevant game protocol, provider reference, or gameplay walkthrough. Read an accepted ADR together with its applicable extensions in the [decision index](docs/decisions/README.md#reading-related-decisions). Open product decisions are unresolved questions, not permission to silently choose new behavior.
 
 ## Technical baseline
 
@@ -82,14 +85,13 @@ Do not add JSDoc to every function, method, hook, or component by default. Add J
 
 ## Verification
 
-Run the smallest relevant checks while iterating and the full configured baseline before handing off a change:
+Run the smallest relevant checks while iterating. Every change must pass the full configured baseline before handoff:
 
 ```text
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run verify
 ```
+
+This runs formatting, lint, typecheck, unit/integration/architecture tests, and build. The [verification requirements](docs/testing.md#required-checks) define database setup and additional browser, migration, and built-service checks by change type; those checks are not included in `verify`.
 
 Add or update tests for behavior changes. Prioritize tests for chess-state transitions, move validation, provider normalization, retry classification, credential redaction, authorization, game privacy, WebSocket reconnection, and the three primary user flows.
 

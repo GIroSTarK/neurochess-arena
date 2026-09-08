@@ -18,6 +18,18 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0010](0010-ai-paused-stepping-and-retry-accounting.md) | Accepted | Paused AI stepping and invalid-output budgets across reservations     |
 | [0011](0011-ai-page-recovery.md)                        | Accepted | AI page recovery, paused revision fencing, and API runtime continuity |
 
+## Reading related decisions
+
+Read decisions for the affected area together with their extensions. An accepted ADR records its original context and scope; references to a later implementation slice are historical, while current delivery status belongs in the [roadmap](../roadmap.md). An extension replaces only the clauses it names; the other guarantees remain binding.
+
+| Area                                | Decision chain     | Current contract                                                                                                          |
+| ----------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Guest commands, lifecycle, replay   | 0006 → 0007        | [Guest authorization and shared commands](../game-protocol.md#guest-identity-and-authorization)                           |
+| AI reservations, stepping, recovery | 0009 → 0010 → 0011 | [AI execution](../game-protocol.md#ai-turn-execution) and [recovery](../game-protocol.md#recovery-and-runtime-continuity) |
+| Provider and credential boundaries  | 0003 + 0004        | [Provider reference](../providers.md) and [credential lifecycle](../architecture.md#credential-lifecycle)                 |
+
+The tables above link each numbered ADR. Use the current contract for implementation details and the ADR chain for the constraints and rationale. Report a disagreement rather than silently preferring an older clause or rewriting an accepted decision.
+
 ## Status values
 
 - `Proposed`: under discussion and not yet binding.

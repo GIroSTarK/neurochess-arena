@@ -18,6 +18,6 @@ The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Sand
 
 ## Verification workflow
 
-Use the [design acceptance checklist](../design-system.md#accessibility-and-acceptance), [browser test setup](../development.md#browser-tests), and [configured baseline](../development.md#root-commands). Record actual commands, results, the tested revision/environment, and retained evidence in the change summary, PR, or CI. Never include credential-bearing artifacts.
+Use the [design acceptance checklist](../design-system.md#accessibility-and-acceptance), [browser test setup](../testing.md#browser-tests), and [configured baseline](../testing.md#required-checks). Record actual commands, results, the tested revision/environment, and retained evidence in the change summary, PR, or CI. Never include credential-bearing artifacts.
 
 Update this document only when a coverage gap or reference limitation changes. Do not append successful-run summaries, test counts, pixel measurements, or temporary screenshot paths. Earlier dated reports remain available in this file's Git history.

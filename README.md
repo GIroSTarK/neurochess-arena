@@ -39,33 +39,29 @@ The development services are available at:
 
 `npm run infra:down` stops PostgreSQL but preserves its named data volume.
 
-The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env` and restart the API. See the [sandbox walkthrough](docs/development.md#sandbox-ui) for play, paused recovery, lifecycle controls, and private replay/export. Production cannot enable it.
+The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env` and restart the API. See the [sandbox walkthrough](docs/gameplay.md#sandbox-ui) for play, paused recovery, lifecycle controls, and private replay/export. Production cannot enable it.
 
 ## Verification
 
-`npm test` includes real PostgreSQL integration tests. Ensure `.env` contains the explicit `TEST_DATABASE_URL` from `.env.example`, then run the complete local baseline:
+Every change must pass `npm run verify`, including formatting, lint, types, unit/integration/architecture tests, and build. Ensure `.env` contains the explicit disposable `TEST_DATABASE_URL` from `.env.example`:
 
 ```text
 npm run infra:test:up
 npm run verify
+```
+
+For browser/game-flow changes and milestone acceptance, also run the complete browser suite:
+
+```text
 npm exec playwright -- install chromium
 npm run test:e2e
 ```
 
-The repository also exposes the required checks individually:
-
-```text
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
-
-After a successful build, `npm start` runs the compiled API and the Vite production preview. With PostgreSQL running, `npm run smoke` checks both built services.
+The [verification guide](docs/testing.md#required-checks) is the canonical checklist, including migration and built-service checks. After a successful build, `npm start` runs the compiled API and the Vite production preview; `npm run smoke` checks both built services with PostgreSQL available.
 
 Use `npm run test:unit` for database-free checks. The separate test service uses disposable storage on port 5433; it does not share the development database volume.
 
-The [browser suite](docs/development.md#browser-tests) starts isolated Fastify/Vite services on localhost ports 3101/5174. It covers desktop and mobile touch gameplay, promotion, keyboard navigation, responsive layouts, and automated accessibility. Browser traces are disabled to avoid recording guest cookie headers.
+The [browser suite](docs/testing.md#browser-tests) starts isolated Fastify/Vite services on localhost ports 3101/5174. It covers desktop and mobile touch gameplay, promotion, keyboard navigation, responsive layouts, and automated accessibility. Browser traces are disabled to avoid recording guest cookie headers.
 
 ## Database workflow
 
@@ -99,7 +95,7 @@ Automated architecture checks keep the browser out of API and database code, pre
 
 Environment files are ignored by Git. API startup validates configuration without printing values, request logging strips URL queries and redacts credential-like fields, and errors use a safe public response contract.
 
-Raw provider keys must never be committed, logged, included in analytics, or stored in browser persistence. See [ADR-0004](docs/decisions/0004-bring-your-own-key-security.md) for the complete future credential lifecycle.
+Raw provider keys must never be committed, logged, included in analytics, or stored in browser persistence. See [ADR-0004](docs/decisions/0004-bring-your-own-key-security.md) for the credential policy.
 
 ## Project documentation
 
@@ -107,7 +103,10 @@ Raw provider keys must never be committed, logged, included in analytics, or sto
 - [Design system](docs/design-system.md) and [screen concepts](docs/design-system/concepts/README.md)
 - [Architecture](docs/architecture.md)
 - [MVP roadmap](docs/roadmap.md)
-- [Development guide](docs/development.md)
+- [Development guide and task navigation](docs/development.md)
+- [Game protocol](docs/game-protocol.md) and [gameplay walkthroughs](docs/gameplay.md)
+- [Provider reference](docs/providers.md)
+- [Verification guide](docs/testing.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Instructions for coding agents](AGENTS.md)
 

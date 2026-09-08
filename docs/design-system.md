@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-08
 
 ## Purpose and authority
 
@@ -55,7 +55,7 @@ Hover and pressed states add a neutral surface or an inset contrasting keyline. 
 | Interface and commentary  | `--font-ui`      | `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
 | Notation and measurements | `--font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`                     |
 
-Orbitron and Inter are bundled locally by the sandbox app. The families map to `font-display`, `font-ui`, and `font-mono`; the size tokens map to `text-caption` through `text-display` and carry their line height. Keep body copy and control labels in the UI family. The base layer sets `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
+Orbitron and Inter are bundled locally by the web app. The families map to `font-display`, `font-ui`, and `font-mono`; the size tokens map to `text-caption` through `text-display` and carry their line height. Keep body copy and control labels in the UI family. The base layer sets `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
 
 | Style / size token | Size / line height   | Weight | Application                                   |
 | ------------------ | -------------------- | ------ | --------------------------------------------- |
@@ -106,7 +106,7 @@ Forms use two equal seat columns on desktop and stacked White then Black section
 
 ## Component specifications
 
-The names below identify component families for future implementation in the web app. Presentation state and localized strings belong in the web layer; shared transport contracts remain in `packages/contracts` as required by the architecture.
+The names below identify component families in the web app. Presentation state and localized strings belong in the web layer; shared transport contracts remain in `packages/contracts` as required by the architecture.
 
 ### Core controls
 
@@ -141,19 +141,19 @@ On narrow screens, fields and menus fit the available width, primary actions may
 
 ### Arena components
 
-| Component            | Required presentation and behavior                                                                                                                                                                                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Player summary       | Explicit White/Black label, human name or provider and model, optional avatar, activity. Equal prominence and spacing for both seats, including identical-model matches. Human seats omit AI-only fields.                                                                    |
-| Chessboard           | Exactly 8×8; White at bottom by default for AI observation, the human's color at bottom for play. Coordinates remain correct after a flip. Standard Staunton silhouettes with contrasting outlines. Server-accepted state is authoritative.                                  |
-| Board overlays       | Selected square uses a contrasting inset frame; legal targets use dots and captures use rings; last move uses corner marks; check marks the king square plus text. Keep keyboard focus distinct using a dual light/dark keyline. Re-evaluate contrast on both square colors. |
-| Evaluation indicator | Label “Stockfish evaluation”; positive numeric scores favor White, negative favor Black. Mate values name the benefiting color. Pending/unavailable remains explicit; never imply an evaluation is a win probability.                                                        |
-| Playback toolbar     | Pause, Resume, Next move, selected speed, Stop where the mode permits. Next move is available while paused with required credentials ready. Explain speed as presentation pacing; it is not a chess clock or a guarantee of provider latency.                                |
-| Move list            | Move number, White SAN, Black SAN, current/selected move. UCI remains the machine format. Preserve reader scroll when they inspect earlier rows. Replay selection synchronizes the displayed position, commentary, evaluation, and per-move metrics.                         |
-| Commentary entry     | Color, model, associated move, concise text, optional measurements                                                                                                                                                                                                           |
-| Telemetry row        | Per-move latency, input/output/total tokens when known, estimated cost; compact view may show total tokens with details in Analysis. Use consistent units and tabular digits.                                                                                                |
-| Evaluation graph     | Move/ply axis, neutral baseline, selected-move marker, labeled score or mate. Keep unknown samples as gaps. Provide selected values and an accessible tabular/text equivalent. Do not draw mate as an invented numeric centipawn score.                                      |
-| Event history        | Ordered attempts, safe normalized reason, and recovery/result events. “Attempt 2 of 3” and “Retry 1 of 2” describe different counts; label them explicitly. Never include raw provider payloads or credentials.                                                              |
-| Result summary       | Result, winner where applicable, termination reason, totals, replay actions, PGN copy/download. Draw, technical loss, and stopped game receive their own wording. A generic red “Error” cannot replace the result.                                                           |
+| Component            | Required presentation and behavior                                                                                                                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Player summary       | Explicit White/Black label, human name or provider and model, optional avatar, activity. Equal prominence and spacing for both seats, including identical-model matches. Human seats omit AI-only fields.                                                                                                                         |
+| Chessboard           | Exactly 8×8; White at bottom by default for AI observation, the human's color at bottom for play. Coordinates remain correct after a flip. Standard Staunton silhouettes with contrasting outlines. Server-accepted state is authoritative.                                                                                       |
+| Board overlays       | Selected square uses a contrasting inset frame; legal targets use dots and captures use rings; last move uses corner marks; check marks the king square plus text. Keep keyboard focus distinct using a dual light/dark keyline. Re-evaluate contrast on both square colors.                                                      |
+| Evaluation indicator | Label “Stockfish evaluation”; positive numeric scores favor White, negative favor Black. Mate values name the benefiting color. Pending/unavailable remains explicit; never imply an evaluation is a win probability.                                                                                                             |
+| Playback toolbar     | Pause, Resume, Next move, selected speed, Stop where the mode permits. Next move is available while paused with required credentials ready. Explain speed as presentation pacing; it is not a chess clock or a guarantee of provider latency.                                                                                     |
+| Move list            | Move number, White SAN, Black SAN, current/selected move. UCI remains the machine format. Preserve reader scroll when they inspect earlier rows. Replay selection synchronizes the displayed position, commentary, evaluation, and per-move metrics.                                                                              |
+| Commentary entry     | Color, model, associated move, concise text, optional measurements                                                                                                                                                                                                                                                                |
+| Telemetry row        | Per-move latency, input/output/total tokens when known, estimated cost; compact view may show total tokens with details in Analysis. Use consistent units and tabular digits.                                                                                                                                                     |
+| Evaluation graph     | Move/ply axis, neutral baseline, selected-move marker, labeled score or mate. Keep unknown samples as gaps. Provide selected values and an accessible tabular/text equivalent. Do not draw mate as an invented numeric centipawn score.                                                                                           |
+| Event history        | Ordered attempts, safe normalized reason, and recovery/result events. Use “Attempt N” for all calls at a ply, without an “of 3” denominator; “Retry 1 of 2” counts retries after model-invalid output. Follow the [counter definitions](game-protocol.md#terms-and-counters). Never include raw provider payloads or credentials. |
+| Result summary       | Result, winner where applicable, termination reason, totals, replay actions, PGN copy/download. Draw, technical loss, and stopped game receive their own wording. A generic red “Error” cannot replace the result.                                                                                                                |
 
 Commentary is viewer-facing explanation, never a transcript of hidden reasoning. Render it as untrusted text; the empty state is exactly **No commentary provided**. Keep it visually separate from Stockfish analysis. Neither commentary nor analysis changes legal move authority or enters the opponent's model prompt.
 
@@ -273,7 +273,7 @@ Review the following before accepting an implementation:
 
 1. At 320, 390, 768, 1024, and 1440px, keep the full board and every primary action reachable without horizontal page scrolling. Check 200% text enlargement, mobile keyboards, long names, and translated-text expansion.
 2. Operate setup, tabs, dialogs, board selection, castling, en passant, promotion/underpromotion, replay, and export by keyboard. Check focus return and reduced motion.
-3. Distinguish all three attempts, provider pauses, refresh key loss, missing commentary/metrics, stale commands, human disconnects, checkmate, draws, technical loss, and aborted games.
+3. Distinguish invalid-output retry progress and exhaustion from total invocation attempts, provider pauses, refresh key loss, missing commentary/metrics, stale commands, human disconnects, checkmate, draws, technical loss, and aborted games.
 4. Confirm identical-model matches remain distinguishable, both colors receive equal space, and a guest cannot see saved-key or room-creation controls as available actions.
 5. Compare each rendered screen to its concept for copy, hierarchy, typography, tokens, geometry, and board position. Validate legal positions independently; visual appeal cannot excuse a wrong square or piece.
 6. Run the configured formatting, lint, typecheck, test, and build baseline. Add behavior tests when components are implemented; static concept images do not establish runtime accessibility or game correctness.
