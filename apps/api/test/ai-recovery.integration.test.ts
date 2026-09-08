@@ -210,6 +210,9 @@ describe("AI recovery across API restarts", () => {
       expect(finished.moves).toHaveLength(100);
       expect(finished.fen.split(" ")[4]).toBe("100");
     },
+    // A full 100-ply API game includes real PostgreSQL reservation and telemetry writes.
+    // Allow slower hosts to complete this scenario within a separate, bounded timeout.
+    60_000,
   );
 
   it.each(["active", "paused"] as const)(
