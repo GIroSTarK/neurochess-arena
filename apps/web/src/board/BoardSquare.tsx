@@ -14,6 +14,7 @@ interface BoardSquareProps {
   readonly focusable: boolean;
   readonly showRank: boolean;
   readonly showFile: boolean;
+  readonly hideRankOnDesktop?: boolean;
   readonly ref: Ref<HTMLButtonElement>;
   readonly onFocus: () => void;
   readonly onActivate: () => void;
@@ -49,6 +50,7 @@ export function BoardSquare({
   focusable,
   showRank,
   showFile,
+  hideRankOnDesktop = false,
   ref,
   onFocus,
   onActivate,
@@ -78,7 +80,14 @@ export function BoardSquare({
         onKeyDown={onKeyDown}
       >
         {showRank ? (
-          <span className={cx(coordinateClassName, "top-[3px] left-[3px]")} aria-hidden="true">
+          <span
+            className={cx(
+              coordinateClassName,
+              "top-[3px] left-[3px]",
+              hideRankOnDesktop && "lg:hidden",
+            )}
+            aria-hidden="true"
+          >
             {square[1]}
           </span>
         ) : null}

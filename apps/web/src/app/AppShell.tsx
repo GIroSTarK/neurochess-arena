@@ -1,12 +1,15 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { cx } from "../ui/cx";
+
 interface AppShellProps {
   readonly mainId: string;
   readonly skipLabel: string;
   readonly context: ReactNode;
   readonly footer: ReactNode;
   readonly announcement: string;
+  readonly navigation?: ReactNode;
   readonly children: ReactNode;
 }
 
@@ -16,6 +19,7 @@ export function AppShell({
   context,
   footer,
   announcement,
+  navigation,
   children,
 }: AppShellProps) {
   const { t } = useTranslation();
@@ -27,11 +31,28 @@ export function AppShell({
       >
         {skipLabel}
       </a>
-      <header className="flex min-h-22 flex-wrap items-center justify-between gap-6 border-b border-divider py-3 max-sm:min-h-19 max-sm:gap-3">
-        <p className="font-display text-body font-semibold tracking-[0.035em] uppercase max-sm:max-w-44 max-sm:text-caption">
-          <span className="inline-block">{t("app.brand")}</span>{" "}
-          <span className="inline-block text-accent">{t("app.arena")}</span>
-        </p>
+      <header
+        className={cx(
+          "flex flex-wrap items-center justify-between gap-6 border-b border-divider max-sm:gap-3",
+          navigation ? "min-h-18" : "min-h-22 py-3 max-sm:min-h-19",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-14 self-stretch">
+          <p
+            className={cx(
+              "font-display font-semibold tracking-[0.035em] uppercase max-sm:max-w-44",
+              navigation ? "text-wordmark max-sm:text-label" : "text-body max-sm:text-caption",
+            )}
+          >
+            <span className="inline-block">{t("app.brand")}</span>{" "}
+            <span className="inline-block text-accent">{t("app.arena")}</span>
+          </p>
+          {navigation ? (
+            <nav className="hidden self-stretch md:flex" aria-label={t("app.navigation")}>
+              {navigation}
+            </nav>
+          ) : null}
+        </div>
         <span className="text-right text-label text-text-muted max-sm:max-w-32 max-sm:text-caption">
           {context}
         </span>

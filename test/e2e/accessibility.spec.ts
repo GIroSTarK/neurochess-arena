@@ -126,6 +126,8 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   await page.keyboard.press("Control+End");
   await expect(square(page, "h1")).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Flip board" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("grid")).toHaveAttribute("data-orientation", "black");

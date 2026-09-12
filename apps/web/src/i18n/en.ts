@@ -6,9 +6,14 @@ export const en = {
     description: "Play both colors in the Neurochess Arena development chess sandbox.",
     skipLink: "Skip to the sandbox",
     localDevelopment: "Local development",
+    navigation: "Main navigation",
   },
   sandbox: {
     title: "Development sandbox",
+    liveTitle: "Sandbox",
+    controlHint: "You control both colors.",
+    moveHint: "Select a piece, then a highlighted square.",
+    sessionFooter: "Private game · Available while your guest session lasts.",
     description: "You control both colors. Select a piece, then a highlighted square.",
     entryTitle: "A board for your next idea.",
     entryDescription: "Start a standard chess game and play White and Black from this browser.",
@@ -47,6 +52,7 @@ export const en = {
     toMove: "To move",
     waiting: "Waiting",
     inspecting: "View board",
+    paused: "Paused",
     label: "{{color}} player",
   },
   game: {

@@ -443,7 +443,7 @@ describe("localized sandbox application", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent("Blanc joue e4. Au tour de Noir"),
     );
-    expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sandbox" })).toBeInTheDocument();
   });
 
   it("keeps focus on Start while creation is pending, then lands on the board", async () => {
