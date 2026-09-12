@@ -103,7 +103,9 @@ export class GameSession {
   /** Clears all private game data on an access failure; explicit action is required afterwards. */
   loseAccess(failure: ApiFailure): boolean {
     if (!isAccessCode(failure.code)) return false;
-    const { store, archive } = this.context;
+    const { store, archive, gate } = this.context;
+    // Responses authorized before access was lost cannot repopulate private state.
+    gate.invalidate();
     archive.cancel();
     store.transition(
       { snapshot: null, pendingCommand: null, phase: "access-error" },

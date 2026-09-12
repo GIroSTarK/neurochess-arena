@@ -149,7 +149,6 @@ export class SandboxController {
       }
     } catch (error: unknown) {
       if (!this.gate.isCurrent(operation)) return;
-      if (this.store.get().phase === "access-error") return;
       const failure = safeFailure(error);
       if (failure.code === "GAME_CONFLICT" && failure.currentSnapshot) {
         // The occupied slot is the authorized game; reopen it paused.
