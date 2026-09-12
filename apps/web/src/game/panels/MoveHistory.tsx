@@ -21,6 +21,8 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   const language = i18n.resolvedLanguage ?? "en";
   const moveNumber = useMemo(() => new Intl.NumberFormat(language), [language]);
   const scroller = useRef<HTMLDivElement>(null);
+  const tableHead = useRef<HTMLTableSectionElement>(null);
+  const selectedMove = useRef<HTMLButtonElement>(null);
   const followLatest = useRef(true);
   const rows = [];
   for (let index = 0; index < moves.length; index += 2) {
@@ -28,8 +30,29 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   }
   useLayoutEffect(() => {
     const element = scroller.current;
-    if (element && followLatest.current) element.scrollTop = element.scrollHeight;
-  }, [moves.length]);
+    if (!element) return;
+    if (selectedPly === undefined) {
+      if (followLatest.current) element.scrollTop = element.scrollHeight;
+      return;
+    }
+    if (selectedPly === 0) {
+      element.scrollTop = 0;
+      return;
+    }
+    const target = selectedMove.current;
+    if (!target) return;
+    const viewport = element.getBoundingClientRect();
+    const selection = target.getBoundingClientRect();
+    // Scroll only this panel, clearing the sticky header and the 2px focus ring's 3px offset.
+    const top =
+      viewport.top +
+      element.clientTop +
+      (tableHead.current?.getBoundingClientRect().height ?? 0) +
+      5;
+    const bottom = viewport.top + element.clientTop + element.clientHeight - 5;
+    if (selection.top < top) element.scrollTop += selection.top - top;
+    else if (selection.bottom > bottom) element.scrollTop += selection.bottom - bottom;
+  }, [moves.length, selectedPly]);
 
   function notation(move: MoveRecord | undefined) {
     if (!move) {
@@ -42,6 +65,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
     if (onSelect) {
       return (
         <button
+          ref={move.ply === selectedPly ? selectedMove : undefined}
           type="button"
           className={cx(
             "block min-h-target min-w-target rounded-control border border-transparent bg-transparent p-2 text-start aria-[current]:border-accent",
@@ -90,7 +114,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
       >
         <table className="w-full table-fixed border-collapse text-left">
           <caption className="sr-only">{t("moves.caption")}</caption>
-          <thead className="sticky top-0 z-1 bg-canvas">
+          <thead ref={tableHead} className="sticky top-0 z-1 bg-canvas">
             <tr>
               <th
                 scope="col"
