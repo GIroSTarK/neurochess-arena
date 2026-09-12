@@ -1,6 +1,6 @@
 # Sandbox adaptation — v1
 
-**Status:** Draft for visual review, 2026-09-12. This proposal covers the design step of the sandbox remake; it does not mark the remake implemented or replace accepted product contracts.
+**Status:** Visual direction selected for the Sandbox remake, 2026-09-12. The [roadmap](../../../roadmap.md#sandbox-presentation-remake--before-phase-2) tracks implementation. These references do not mark the remake implemented or replace accepted product contracts.
 
 Sandbox uses the same arena composition as the [core journey concepts](../README.md): equal participants, a dominant board, controls beneath it, and an information rail. The [design system](../../../design-system.md) remains the authority for exact tokens, type sizes, responsive tiers, and accessibility. [Sandbox behavior](../../../product.md#development-sandbox) remains unchanged.
 
@@ -76,6 +76,6 @@ For pending, uncertain-command, access-loss, promotion, and confirmation states,
 
 ## Review and implementation boundary
 
-Review the common shell and frame, turn/result hierarchy, live toolbar, mobile entry order, recovery placement, and replay/export composition as one coordinated proposal. Approval would select a visual direction for the next implementation step; it would not certify runtime behavior.
+The selected direction covers the common shell and frame, turn/result hierarchy, live toolbar, mobile entry order, recovery placement, and replay/export composition. Visual selection does not certify runtime behavior; apply the implementation acceptance checks as each surface is built.
 
 Images guide composition and appearance. Use the written design-system tokens and actual font metrics rather than sampling raster shading, estimating touch targets from image pixels, or stretching a board to match a generated raster. Build the board as an exact square 8×8 grid and keep pieces as readable SVG assets; generated screenshots never become the interactive UI. Broader state, keyboard, 320px, enlarged-text, and browser verification belongs to implementation, following the existing [acceptance checklist](../../../design-system.md#accessibility-and-acceptance).

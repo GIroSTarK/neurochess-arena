@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../../ui/Button";
-import { Icon } from "../../ui/Icon";
+import { StartButton as StartControl } from "../../arena/panels/StartButton";
 import type { SandboxController } from "../controller";
 import type { SandboxPhase, SandboxState } from "../state";
 
@@ -23,19 +22,15 @@ export function StartButton({
 }) {
   const { t } = useTranslation();
   return (
-    <Button
-      variant="primary"
-      className="mt-8"
-      aria-disabled={
+    <StartControl
+      label={t(phaseLabels[state.phase] ?? "actions.start")}
+      disabled={
         state.readiness !== "ready" ||
         !["entry", "access-error", "unavailable"].includes(state.phase)
       }
-      onClick={() => {
+      onStart={() => {
         void controller.start();
       }}
-    >
-      {t(phaseLabels[state.phase] ?? "actions.start")}
-      <Icon path="M5 12h14m-6-6 6 6-6 6" />
-    </Button>
+    />
   );
 }

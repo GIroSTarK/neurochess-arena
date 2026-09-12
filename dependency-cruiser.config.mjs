@@ -17,6 +17,17 @@ export default {
       to: { path: "(^|/)(apps/api|packages/database)/" },
     },
     {
+      name: "arena-presentation-no-sandbox",
+      comment:
+        "Reusable arena, board, and UI components receive data and callbacks from mode adapters.",
+      severity: "error",
+      from: {
+        path: "(^|/)apps/web/src/(arena|board|ui)/",
+        pathNot: "\\.test\\.tsx?$",
+      },
+      to: { path: "(^|/)apps/web/src/(api|game)/" },
+    },
+    {
       name: "api-no-web",
       comment: "The API must not depend on web implementation code.",
       severity: "error",

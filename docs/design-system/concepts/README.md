@@ -13,7 +13,7 @@ These are static design references. The [guide](../../design-system.md) defines 
 
 Mobile references target a 390px CSS viewport; their raster pixel dimensions are independent of CSS viewport dimensions. Content may continue below the first viewport. The implementation must also work at 320px and with enlarged text.
 
-The [Sandbox adaptation v1](sandbox-v1/README.md) is a separate draft for visual review, with entry, live, recovery, and replay references for desktop and mobile. It derives from these core journeys without replacing them.
+The [Sandbox adaptation v1](sandbox-v1/README.md) is the selected visual direction for the Sandbox remake, with entry, live, recovery, and replay references for desktop and mobile. It derives from these core journeys without replacing them; implementation progress belongs in the [roadmap](../../roadmap.md#sandbox-presentation-remake--before-phase-2).
 
 ## Setup
 

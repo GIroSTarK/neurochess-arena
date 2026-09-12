@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0 and 1 completed
+**Status:** Phases 0 and 1 completed; Sandbox presentation remake in progress
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-12
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -44,6 +44,19 @@ Deliverables:
 - [x] client command/recovery tests and desktop/mobile Playwright gameplay and accessibility checks against the disposable PostgreSQL database.
 
 Exit condition: one guest in the development sandbox can complete and replay a deterministic chess game from one browser without AI or realtime rooms, passing the [Phase 1 verification checks](architecture.md#verification-strategy).
+
+## Sandbox presentation remake — before Phase 2
+
+Use the [selected Sandbox concepts](design-system/concepts/sandbox-v1/README.md) to establish the shared presentation foundation for the three public modes.
+
+- [x] select coordinated entry, live, recovery, and replay concepts for desktop and mobile;
+- [x] extract the shared shell, arena layout, participant and game panels behind Sandbox adapters, with an enforced presentation boundary;
+- [ ] apply the live composition and board-toolbar action hierarchy;
+- [ ] apply the entry, recovery, and result/replay compositions;
+- [ ] exercise the shared presentation with explicit human/AI reference scenarios and future panel slots;
+- [ ] complete concept-to-browser comparison and responsive, keyboard, recovery, and replay acceptance.
+
+Exit condition: Sandbox uses the selected arena design, and the same presentation components can serve the upcoming modes through their own data and actions.
 
 ## Phase 2 — AI arena core
 
