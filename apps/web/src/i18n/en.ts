@@ -209,7 +209,7 @@ export const en = {
   },
   announcements: {
     started: "Sandbox started. {{status}}",
-    existing: "Your game in progress is open. {{status}}",
+    existing: "Your game is open. {{status}}",
     move: "{{color}} played {{move}}. {{status}}",
     synchronized: "Position synchronized. {{status}}",
     lifecycle: "{{status}}",

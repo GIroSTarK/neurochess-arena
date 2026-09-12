@@ -484,6 +484,24 @@ describe("automatic paused recovery and lifecycle commands", () => {
     });
   });
 
+  it("does not describe a game completed during recovery as paused", async () => {
+    const { api, controller } = harness();
+    api.unfinished.mockResolvedValueOnce(snapshot(FOOLS_MATE.slice(0, 3)));
+    const completed = snapshot(FOOLS_MATE);
+    api.replay.mockResolvedValueOnce(
+      gameReplayResponseSchema.parse({ snapshot: completed, initialFen: snapshot().fen }),
+    );
+    api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", completed));
+    await controller.recover();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      snapshot: completed,
+      notice: null,
+      announcement: { kind: "existing", snapshot: completed },
+    });
+    expect(api.lifecycle).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a lost recovery pause uncertain and retries the identical command", async () => {
     const { api, controller } = harness(snapshot(["e2e4"]));
     api.unfinished.mockResolvedValue(snapshot(["e2e4"]));
@@ -579,8 +597,7 @@ describe("automatic paused recovery and lifecycle commands", () => {
 });
 
 describe("private terminal replay and export", () => {
-  async function terminal() {
-    const initial = snapshot(FOOLS_MATE);
+  async function terminal(initial = snapshot(FOOLS_MATE)) {
     const delivery = {
       copy: vi.fn<PgnDelivery["copy"]>().mockResolvedValue(true),
       download: vi.fn<PgnDelivery["download"]>(),
@@ -594,6 +611,119 @@ describe("private terminal replay and export", () => {
     await vi.waitFor(() => expect(result.controller.getSnapshot().replay).not.toBeNull());
     return { ...result, delivery };
   }
+  it.each(
+    (["completed", "aborted"] as const).flatMap((state) =>
+      (["bootstrap", "create"] as const).flatMap((stage) =>
+        (["network", "timeout", "malformed", "api"] as const).map((kind) => ({
+          state,
+          stage,
+          kind,
+        })),
+      ),
+    ),
+  )(
+    "preserves a $state replay after $stage fails with $kind and allows retry",
+    async ({ state, stage, kind }) => {
+      const initial =
+        state === "completed"
+          ? snapshot(FOOLS_MATE)
+          : snapshot(["e2e4"], {
+              state: "aborted",
+              terminationReason: "aborted",
+              legalMoves: [],
+              version: 2,
+            });
+      const { api, controller, delivery } = await terminal(initial);
+      controller.selectPly(1);
+      delivery.copy.mockResolvedValueOnce(false);
+      await controller.exportPgn("copy");
+      const before = controller.getSnapshot();
+      const failure =
+        kind === "api" ? new ApiFailure("api", "INTERNAL_SERVER_ERROR") : new ApiFailure(kind);
+      if (stage === "bootstrap") api.bootstrap.mockRejectedValueOnce(failure);
+      else api.create.mockRejectedValueOnce(failure);
+
+      await controller.start();
+
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: "ready",
+        snapshot: initial,
+        pendingCommand: null,
+        replay: before.replay,
+        replayPly: 1,
+        replayPhase: "idle",
+        exportPhase: "manual",
+        exportText: initial.pgn,
+        notice: failure.code ?? kind,
+        announcement: { kind: "notice", notice: failure.code ?? kind },
+      });
+      expect(api.create).toHaveBeenCalledTimes(stage === "bootstrap" ? 1 : 2);
+      const next = snapshot([], { gameId: OTHER_GAME_ID });
+      api.create.mockResolvedValueOnce(next);
+      await controller.start();
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: "ready",
+        snapshot: next,
+        replay: null,
+        exportText: null,
+        notice: null,
+      });
+    },
+  );
+  it.each(["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"] as const)(
+    "still clears private terminal state when New game fails with %s",
+    async (code) => {
+      const { api, controller, delivery } = await terminal();
+      delivery.copy.mockResolvedValueOnce(false);
+      await controller.exportPgn("copy");
+      api.create.mockRejectedValueOnce(new ApiFailure("api", code));
+      await controller.start();
+      expect(controller.getSnapshot()).toMatchObject({
+        snapshot: null,
+        replay: null,
+        replayPly: 0,
+        exportText: null,
+        notice: code === "NOT_FOUND" ? "sandbox-unavailable" : code,
+      });
+    },
+  );
+  it("does not restore a terminal game if export loses access while creation is pending", async () => {
+    const { api, controller } = await terminal();
+    const pending = Promise.withResolvers<ReturnType<typeof snapshot>>();
+    api.create.mockReturnValueOnce(pending.promise);
+    const request = controller.start();
+    await vi.waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
+    api.pgn.mockRejectedValueOnce(new ApiFailure("api", "UNAUTHORIZED"));
+    await controller.exportPgn("copy");
+    pending.reject(new ApiFailure("network"));
+    await request;
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "access-error",
+      snapshot: null,
+      replay: null,
+      exportText: null,
+      notice: "UNAUTHORIZED",
+    });
+  });
+  it("lets an in-flight replay finish after New game fails", async () => {
+    const { api, controller, initial } = await terminal();
+    const pending = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
+    api.replay.mockReturnValueOnce(pending.promise);
+    const replayRequest = controller.loadReplay();
+    api.create.mockRejectedValueOnce(new ApiFailure("network"));
+    await controller.start();
+    expect(api.replay.mock.calls.at(-1)?.[1].aborted).toBe(false);
+    pending.resolve(
+      gameReplayResponseSchema.parse({ snapshot: initial, initialFen: snapshot().fen }),
+    );
+    await replayRequest;
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      snapshot: initial,
+      replayPhase: "idle",
+      replayNotice: null,
+    });
+  });
   it("keeps replay selection separate from the accepted snapshot and sends no moves", async () => {
     const { api, controller, initial } = await terminal();
     expect(controller.getSnapshot().replayPly).toBe(4);

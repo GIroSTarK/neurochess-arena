@@ -371,6 +371,33 @@ describe("localized sandbox application", () => {
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
   });
 
+  it.each(["completed", "aborted"] as const)(
+    "reopens a %s game without an unfinished-game notice or announcement",
+    async (state) => {
+      const terminal =
+        state === "completed"
+          ? snapshot(FOOLS_MATE)
+          : snapshot(["e2e4"], { state, terminationReason: "aborted", legalMoves: [], version: 2 });
+      window.history.replaceState(null, "", "/?game=" + terminal.gameId);
+      const fetch = mockApi((path) => {
+        if (path === "/games/" + terminal.gameId) return jsonResponse(terminal);
+        if (path.endsWith("/replay")) {
+          return jsonResponse({ snapshot: terminal, initialFen: snapshot().fen });
+        }
+        return undefined;
+      });
+      renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+      await screen.findByRole("heading", {
+        name: state === "completed" ? "Black wins" : "Game stopped",
+      });
+      expect(screen.queryByText(/You already have a game in progress/)).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Your game is open.");
+      expect(screen.getByRole("status")).not.toHaveTextContent(/in progress|paused/);
+      expect(screen.getByRole("grid")).toHaveAttribute("data-fen", terminal.fen);
+      expect(fetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+    },
+  );
+
   it.each(["replay", "Copy PGN", "Download PGN"])(
     "announces safe %s failures without moving focus",
     async (operation) => {

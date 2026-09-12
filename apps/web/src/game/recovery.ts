@@ -106,7 +106,7 @@ export class RecoveryController {
       );
       if (snapshot.state !== "active") {
         if (snapshot.state !== "paused" && !isTerminal(snapshot)) throw new ApiFailure("malformed");
-        session.accept(snapshot, "existing", "existing");
+        session.accept(snapshot, "existing", isTerminal(snapshot) ? null : "existing");
         return;
       }
       const command: LifecycleCommand = {
@@ -146,7 +146,7 @@ export class RecoveryController {
             { notice: store.get().notice },
           );
           if (snapshot.state !== "active") {
-            session.accept(snapshot, "existing", "recovered");
+            session.accept(snapshot, "existing", isTerminal(snapshot) ? null : "recovered");
             return;
           }
           continue;

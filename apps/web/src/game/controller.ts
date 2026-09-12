@@ -1,7 +1,7 @@
 import type { SandboxApi } from "../api/client";
 
 import { ArchiveController } from "./archive";
-import { failureNotice, safeFailure } from "./failures";
+import { failureNotice, isAccessCode, safeFailure } from "./failures";
 import type { SandboxNavigation } from "./navigation";
 import { OperationGate } from "./operations";
 import { browserPgnDelivery, type PgnDelivery } from "./pgn";
@@ -149,14 +149,24 @@ export class SandboxController {
       }
     } catch (error: unknown) {
       if (!this.gate.isCurrent(operation)) return;
+      if (this.store.get().phase === "access-error") return;
       const failure = safeFailure(error);
-      this.archive.cancel();
       if (failure.code === "GAME_CONFLICT" && failure.currentSnapshot) {
         // The occupied slot is the authorized game; reopen it paused.
+        this.archive.cancel();
         await this.recovery.pauseRecovered(operation, failure.currentSnapshot);
       } else {
         const unavailable = failure.code === "NOT_FOUND";
         const notice = unavailable ? "sandbox-unavailable" : failureNotice(failure);
+        const retained = this.store.get().snapshot;
+        if (retained && isTerminal(retained) && !isAccessCode(failure.code)) {
+          this.store.transition(
+            { snapshot: retained, pendingCommand: null, phase: "ready" },
+            { notice, announcement: { kind: "notice", notice } },
+          );
+          return;
+        }
+        this.archive.cancel();
         this.store.transition(
           { snapshot: null, pendingCommand: null, phase: unavailable ? "unavailable" : "entry" },
           { notice, announcement: { kind: "notice", notice }, invalidateInteraction: true },

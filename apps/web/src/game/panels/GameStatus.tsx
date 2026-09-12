@@ -220,7 +220,7 @@ export function GameStatus({
         <Button
           variant="primary"
           className="mt-6"
-          aria-disabled={busy}
+          aria-disabled={busy || state.readiness !== "ready"}
           onClick={() => {
             void controller.start();
           }}

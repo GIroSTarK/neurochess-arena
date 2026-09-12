@@ -175,6 +175,29 @@ describe("stable game status feedback", () => {
     expect(screen.getAllByText("Continue")).toHaveLength(1);
   });
 
+  it.each(["checking", "unavailable"] as const)(
+    "keeps New game focusable but inactive while readiness is %s",
+    async (readiness) => {
+      const terminal = snapshot(FOOLS_MATE);
+      const initial = props(readyState({ snapshot: terminal, readiness }));
+      const { rerender } = renderLocalized(<GameStatus {...initial} />);
+      const control = screen.getByRole("button", { name: "New game" });
+      expect(control).toHaveAttribute("aria-disabled", "true");
+      await userEvent.click(control);
+      expect(control).toHaveFocus();
+      await userEvent.keyboard("{Enter} ");
+      expect(initial.controller.start).not.toHaveBeenCalled();
+      if (readiness === "unavailable") {
+        await userEvent.click(screen.getByRole("button", { name: "Retry connection" }));
+        expect(initial.controller.checkReadiness).toHaveBeenCalledTimes(1);
+      }
+      rerender(<GameStatus {...initial} state={readyState({ snapshot: terminal })} />);
+      expect(control).toHaveAttribute("aria-disabled", "false");
+      await userEvent.click(control);
+      expect(initial.controller.start).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each([
     {
       name: "Retry same move",
