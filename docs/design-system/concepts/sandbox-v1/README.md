@@ -47,24 +47,24 @@ The board, move table, button, icon, disclosure, and dialog families are shared 
 
 Existing action labels continue to come from the [English catalog](../../../../apps/web/src/i18n/en.ts). New or rearranged copy stays in that localization layer when implemented. This table fixes the proposal's visible text independently of raster lettering.
 
-| Location                       | Copy                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Shared header                  | NEUROCHESS ARENA; Arena; Local development                                                             |
-| Entry title and subtitle       | Sandbox; Play both colors in one browser.                                                              |
-| Entry desktop introduction     | Ready when you are; Start a standard chess game and play White and Black from this browser.            |
-| Entry mobile introduction      | Start a standard chess game.                                                                           |
-| Entry preview and session note | Standard starting position; Starting creates a private guest session.; Unfinished games reopen paused. |
-| Active header                  | Sandbox; Black to move; Private guest game                                                             |
-| Active guidance                | You control both colors.; Select a piece, then a highlighted square.                                   |
-| Recovery header                | Sandbox; Game paused · Black to move                                                                   |
-| Recovery notice                | Game recovered; Your position and move history were restored.; Resume when ready.                      |
-| Replay header                  | Black wins by checkmate; Sandbox · Game complete · 2... Qh4#; 0–1                                      |
-| Replay details                 | Ply 4 of 4; Replay keeps the final result unchanged.                                                   |
-| Move history                   | Moves; Move; White; Black; 3 plies or 4 plies                                                          |
-| Game footer                    | Private game · Available while your guest session lasts.; Service ready                                |
-| Entry footer                   | Development only; Service ready                                                                        |
+| Location                       | Copy                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Shared header                  | NEUROCHESS ARENA; Arena; Local development                                                          |
+| Entry title and subtitle       | Sandbox; Play both colors in one browser.                                                           |
+| Entry desktop introduction     | Ready when you are; Start a standard chess game and play White and Black from this browser.         |
+| Entry mobile introduction      | Start a standard chess game.                                                                        |
+| Entry preview and session note | Standard starting position; Starting uses a private guest session.; Unfinished games reopen paused. |
+| Active header                  | Sandbox; Black to move; Private guest game                                                          |
+| Active guidance                | You control both colors.; Select a piece, then a highlighted square.                                |
+| Recovery header                | Sandbox; Game paused · Black to move                                                                |
+| Recovery notice                | Game recovered; Your position and move history were restored.; Resume when ready.                   |
+| Replay header                  | Black wins by checkmate; Sandbox · Game complete · 2... Qh4#; 0–1                                   |
+| Replay details                 | Ply 4 of 4; Replay keeps the final result unchanged.                                                |
+| Move history                   | Moves; Move; White; Black; 3 plies or 4 plies                                                       |
+| Game footer                    | Private game · Available while your guest session lasts.; Service ready                             |
+| Entry footer                   | Development only; Service ready                                                                     |
 
-The entry session-creation note describes the anonymous entry fixture. When a guest session already exists, use context-appropriate copy such as Uses your private guest session. before starting another game. Private guest game on the preview describes the game that Start will create, not an already-created game. The result heading, turn, count, score, and availability labels are state-derived; the sample strings are not constants for every game.
+The session note applies both to anonymous entry and to an existing guest with no unfinished game: Start can create or reuse the private session. Private guest game on the preview describes the game that Start will create, not an already-created game. The result heading, turn, count, score, and availability labels are state-derived; the sample strings are not constants for every game.
 
 ## Fixtures and state constraints
 

@@ -78,7 +78,7 @@ export function square(page: Page, coordinate: string): Locator {
 export async function startSandbox(page: Page, touch: boolean): Promise<GameSnapshot> {
   await page.goto("/");
   await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
-  await expect(page.getByRole("heading", { name: "Development sandbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sandbox" })).toBeVisible();
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   const start = page.getByRole("button", { name: "Start sandbox", exact: true });
   await expect(start).toBeEnabled();

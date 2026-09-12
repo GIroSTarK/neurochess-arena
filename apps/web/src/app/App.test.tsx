@@ -1,5 +1,5 @@
 import { moveCommandSchema } from "@neurochess/contracts";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ async function start() {
   const button = screen.getByRole("button", { name: "Start sandbox" });
   await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
   await userEvent.click(button);
-  await screen.findByRole("grid", { name: "Chessboard" });
+  await waitFor(() => expect(button).not.toBeInTheDocument());
 }
 
 describe("localized sandbox application", () => {
@@ -65,7 +65,14 @@ describe("localized sandbox application", () => {
         <App apiBaseUrl="http://localhost:3001" />
       </StrictMode>,
     );
-    expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sandbox" })).toBeInTheDocument();
+    const preview = screen.getByRole("grid", { name: "Chessboard" });
+    expect(preview).toHaveAttribute("aria-readonly", "true");
+    expect(preview).toHaveAttribute("data-fen", snapshot().fen);
+    expect(screen.queryByRole("region", { name: "Move history" })).not.toBeInTheDocument();
+    await userEvent.click(square("e2"));
+    await userEvent.click(square("e4"));
+    expect(preview).toHaveAttribute("data-fen", snapshot().fen);
     const button = screen.getByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     expect(
@@ -82,7 +89,7 @@ describe("localized sandbox application", () => {
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
     ).toHaveLength(0);
     await act(async () => bootstrap.resolve(jsonResponse({ status: "ready" })));
-    await screen.findByRole("grid");
+    await screen.findByRole("button", { name: "Pause" });
     expect(
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
     ).toHaveLength(1);
@@ -284,7 +291,9 @@ describe("localized sandbox application", () => {
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
     const restart = await screen.findByRole("button", { name: "Start sandbox again" });
-    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+    expect(screen.queryByRole("region", { name: "Move history" })).not.toBeInTheDocument();
     expect(
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
     ).toHaveLength(1);
@@ -363,12 +372,22 @@ describe("localized sandbox application", () => {
         ).toBeInTheDocument(),
       );
     }
-    expect(screen.getByRole("heading", { name: "Black wins" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Black wins by checkmate" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
       "Black played Qh4#. Black wins. Checkmate. Result: 0-1.",
     );
     expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
+    const playArea = within(screen.getByRole("region", { name: "Play area" }));
+    expect(playArea.getByRole("button", { name: "Copy PGN" })).toBeInTheDocument();
+    expect(playArea.getByRole("button", { name: "Download PGN" })).toBeInTheDocument();
+    await userEvent.click(playArea.getByRole("button", { name: "First" }));
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+    expect(
+      screen.getByRole("heading", { name: "Black wins by checkmate", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Result: 0-1")).toHaveTextContent("0–1");
+    expect(screen.getByText("Sandbox · Game complete · 2... Qh4#")).toBeInTheDocument();
   });
 
   it.each(["completed", "aborted"] as const)(
@@ -388,7 +407,7 @@ describe("localized sandbox application", () => {
       });
       renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
       await screen.findByRole("heading", {
-        name: state === "completed" ? "Black wins" : "Game stopped",
+        name: state === "completed" ? "Black wins by checkmate" : "Game stopped",
       });
       expect(screen.queryByText("Your current game is open.")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("Your game is open.");
@@ -483,11 +502,11 @@ describe("localized sandbox application", () => {
     await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
     act(() => startButton.focus());
     await user.keyboard("{Enter}");
-    const history = screen.getByRole("region", { name: "Move history" });
-    act(() => history.focus());
+    const navigation = screen.getByRole("link", { name: "Arena" });
+    act(() => navigation.focus());
     await act(async () => creation.resolve(jsonResponse(snapshot(), 201)));
     await screen.findByRole("grid");
-    expect(history).toHaveFocus();
+    expect(navigation).toHaveFocus();
   });
 
   it("lands on the board after New game replaces a finished game", async () => {
@@ -523,7 +542,7 @@ describe("localized sandbox application", () => {
           : undefined,
     );
     renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
-    await screen.findByRole("heading", { name: "Game paused" });
+    await screen.findByRole("heading", { name: /^Game paused ·/ });
     expect(screen.getByRole("grid").contains(document.activeElement)).toBe(false);
   });
 });

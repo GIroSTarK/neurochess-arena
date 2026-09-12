@@ -35,7 +35,7 @@ describe("stable game status feedback", () => {
         .map((p) => p.textContent);
     expect(paragraphs()).toEqual([]);
     expect(screen.getByRole("heading", { name: "White to move" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Game paused" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Game paused ·/ })).toBeNull();
 
     const pending = {
       action: "resume" as const,
@@ -46,7 +46,7 @@ describe("stable game status feedback", () => {
     rerender(<GameStatus {...initial} state={readyState({ snapshot: paused() })} />);
     expect(paragraphs()).toEqual([]);
     expect(screen.getByRole("button", { name: "Resume" })).toBe(control);
-    expect(screen.getByRole("heading", { name: "Game paused" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Game paused ·/ })).toBeInTheDocument();
 
     rerender(
       <GameStatus
@@ -61,7 +61,7 @@ describe("stable game status feedback", () => {
     expect(paragraphs()).toEqual(["Applying your game command…"]);
     expect(control).toHaveAttribute("aria-disabled", "true");
     expect(activity).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("heading", { name: "Game paused" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Game paused ·/ })).toBeInTheDocument();
 
     rerender(<GameStatus {...initial} />);
     expect(container.querySelector("[data-testid=status-feedback]")).toBe(feedback);

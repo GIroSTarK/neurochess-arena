@@ -79,7 +79,7 @@ test("keeps live status above the board and game controls below it", async ({ pa
   await activate(title, touch);
   await page.screenshot({ path: testInfo.outputPath("live.png"), fullPage: true });
   await activate(pause, touch);
-  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   const resume = page.getByRole("button", { name: "Resume", exact: true });
   await checkButtonSizing(resume);
   await expect(resume).toBeFocused();

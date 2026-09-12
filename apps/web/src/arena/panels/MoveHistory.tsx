@@ -72,7 +72,10 @@ export function MoveHistory({ moves, selectedPly, onSelect, variant = "panel" }:
           ref={move.ply === selectedPly ? selectedMove : undefined}
           type="button"
           className={cx(
-            "block min-h-target min-w-target rounded-control border border-transparent bg-transparent p-2 text-start aria-[current]:border-accent",
+            "block min-h-target min-w-target bg-transparent p-2",
+            variant === "rail"
+              ? "w-full text-center hover:bg-surface-raised focus-visible:-outline-offset-2"
+              : "rounded-control border border-transparent text-start aria-[current]:border-accent",
             currentMoveClassName,
           )}
           aria-current={move.ply === selectedPly ? "step" : undefined}

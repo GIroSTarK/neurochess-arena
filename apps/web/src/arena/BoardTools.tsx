@@ -1,7 +1,7 @@
 import type { ChessColor } from "@neurochess/contracts";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { BoardKeyboardHelp } from "../board/BoardKeyboardHelp";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 
@@ -15,18 +15,39 @@ export function BoardTools({
   readonly helpId: string;
 }) {
   const { t } = useTranslation();
+  const orientationId = useId();
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
     <>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <Button variant="secondary" className="flex-auto" onClick={onFlip}>
-          <Icon path="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4" />
-          {t("actions.flip")}
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-divider pt-2">
+        <Button
+          variant="quiet"
+          padding="compact"
+          className="flex-[1_1_8rem]"
+          aria-describedby={orientationId}
+          onClick={onFlip}
+        >
+          <Icon path="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5" />
+          <span className="min-w-0">{t("actions.flip")}</span>
         </Button>
-        <span className="text-right text-label text-text-secondary">
-          {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-        </span>
+        <Button
+          variant="quiet"
+          padding="compact"
+          className="flex-[1_1_8rem]"
+          aria-expanded={helpOpen}
+          aria-controls={helpId}
+          onClick={() => setHelpOpen((previous) => !previous)}
+        >
+          <Icon path="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h10" />
+          <span className="min-w-0">{t("board.keyboardHelp")}</span>
+        </Button>
       </div>
-      <BoardKeyboardHelp id={helpId} />
+      <span id={orientationId} className="sr-only">
+        {t(orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
+      </span>
+      <p id={helpId} hidden={!helpOpen} className="mt-4 text-body text-text-secondary">
+        {t("board.instructions")}
+      </p>
     </>
   );
 }

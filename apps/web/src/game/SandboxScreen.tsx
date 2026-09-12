@@ -8,14 +8,16 @@ import { ArenaLayout } from "../arena/ArenaLayout";
 import { BoardTools } from "../arena/BoardTools";
 import { EntryPanel } from "../arena/EntryPanel";
 import { MoveHistory } from "../arena/panels/MoveHistory";
+import { RecoveryNotice } from "../arena/RecoveryNotice";
 import { ServiceStatus } from "../arena/ServiceStatus";
 import { StatusFeedback } from "../arena/StatusFeedback";
 import { StatusSummary } from "../arena/StatusSummary";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
+import { standardPositionPreview } from "../position/preview";
+import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 
 import { CommandRecovery } from "./panels/CommandRecovery";
-import { GameStatus } from "./panels/GameStatus";
 import { LifecycleControls } from "./panels/LifecycleControls";
 import { PgnActions } from "./panels/PgnActions";
 import { ReplayControls } from "./panels/ReplayControls";
@@ -32,12 +34,26 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const board = useRef<ChessboardHandle>(null);
   const view = sandboxPresentation(state, t);
   const status = sandboxStatusPresentation(state, t);
+  const feedback = {
+    ...status,
+    feedback: status.feedback
+      ? {
+          ...status.feedback,
+          notices: status.feedback.notices.map((notice) => ({
+            ...notice,
+            visible:
+              notice.visible &&
+              !(view.recovery && (notice.id === "recovered" || notice.id === "existing")),
+          })),
+        }
+      : null,
+  };
   const feedbackVisible =
-    (status.feedback !== null &&
-      (status.feedback.activeId !== null ||
-        status.feedback.notices.some((notice) => notice.visible))) ||
-    status.notice !== null ||
-    status.followUp !== null;
+    (feedback.feedback !== null &&
+      (feedback.feedback.activeId !== null ||
+        feedback.feedback.notices.some((notice) => notice.visible))) ||
+    feedback.notice !== null ||
+    feedback.followUp !== null;
   const { startedGameId } = view;
 
   useLayoutEffect(() => {
@@ -58,132 +74,187 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       skipLabel={t("app.skipLink")}
       context={t("app.localDevelopment")}
       navigation={
-        view.live ? (
-          <a
-            href="#sandbox"
-            aria-current="page"
-            className="flex min-h-18 items-center border-b-2 border-accent px-1 text-label text-text"
-          >
-            {t("app.arena")}
-          </a>
-        ) : undefined
+        <a
+          href="#sandbox"
+          aria-current="page"
+          className="flex min-h-18 items-center border-b-2 border-accent px-1 text-label text-text"
+        >
+          {t("app.arena")}
+        </a>
       }
       footer={
-        view.live ? (
-          <div className="flex flex-col items-center justify-center gap-x-6 gap-y-2 md:flex-row">
-            <span>{t("sandbox.sessionFooter")}</span>
-            <ServiceStatus state={state.readiness} compact />
-          </div>
-        ) : (
-          t("sandbox.footer")
-        )
+        <div className="flex flex-col items-center justify-center gap-x-6 gap-y-2 md:flex-row">
+          <span>{t(view.board ? "sandbox.sessionFooter" : "sandbox.footer")}</span>
+          <ServiceStatus state={state.readiness} compact />
+        </div>
       }
       announcement={view.announcement}
     >
       <ArenaHeader
-        variant={view.live ? "live" : "standard"}
-        title={t(view.live ? "sandbox.liveTitle" : "sandbox.title")}
+        variant="live"
+        title={view.result?.title ?? t("sandbox.title")}
         description={
-          view.live ? (
-            <StatusSummary {...status} pausedLabel={t("game.pausedTitle")} />
+          view.result ? (
+            view.result.description
+          ) : view.live ? (
+            <StatusSummary
+              {...status}
+              pausedLabels={(["white", "black"] as const).map((color) =>
+                t("game.pausedTurn", { color: t(`players.${color}`) }),
+              )}
+            />
           ) : (
             t("sandbox.description")
           )
         }
         trailing={
-          view.live ? (
-            <span className="flex max-w-full items-center gap-2 text-label text-text-secondary">
-              <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
-              {t("sandbox.privacy")}
+          <span
+            className={cx(
+              "max-w-full items-center gap-2 text-label text-text-secondary",
+              view.board ? "flex" : "hidden lg:flex",
+            )}
+          >
+            <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
+            {t("sandbox.privacy")}
+          </span>
+        }
+        score={
+          view.result ? (
+            <span
+              aria-label={view.result.scoreLabel}
+              className="inline-block rounded-control border border-control-border px-3 py-2 font-display text-title text-text"
+            >
+              {view.result.score}
             </span>
-          ) : (
-            <ServiceStatus state={state.readiness} />
-          )
+          ) : undefined
         }
       />
       <ArenaLayout
-        variant={view.live ? "live" : "standard"}
+        variant="live"
         players={view.players}
         playAreaLabel={t("sandbox.playArea")}
         detailsLabel={t("sandbox.gameDetails")}
-        board={
-          view.board ? (
+        introduction={
+          !view.board ? (
             <>
-              <Chessboard
-                ref={board}
-                {...view.board}
-                orientation={orientation}
-                coordinates={view.live ? "framed" : "inside"}
-                onMove={(move) => {
-                  void controller.submit(move);
-                }}
-                describedBy={helpId}
+              <EntryPanel
+                title={t("sandbox.entryTitle")}
+                description={t("sandbox.entryDescription")}
+                compactDescription={t("sandbox.entryCompactDescription")}
+                action={<StartButton state={state} controller={controller} />}
               />
-              {view.live ? (
+              <StatusFeedback {...status} />
+              <CommandRecovery state={state} controller={controller} />
+            </>
+          ) : undefined
+        }
+        board={
+          <>
+            <Chessboard
+              ref={board}
+              {...(view.board ?? {
+                canMove: false,
+                view: standardPositionPreview,
+                interactionEpoch: "preview",
+              })}
+              orientation={view.board ? orientation : "white"}
+              coordinates="framed"
+              onMove={(move) => {
+                void controller.submit(move);
+              }}
+              describedBy={helpId}
+            />
+            {!view.board ? (
+              <>
+                <p className="mt-4 text-label text-text-secondary">{t("sandbox.preview")}</p>
+                <p id={helpId} className="sr-only">
+                  {t("board.instructions")}
+                </p>
+              </>
+            ) : view.live ? (
+              <>
+                {view.recovery ? (
+                  <div className="mt-4 lg:hidden">
+                    <RecoveryNotice {...view.recovery} />
+                  </div>
+                ) : null}
                 <LifecycleControls
                   state={state}
                   controller={controller}
                   boardTools={{ orientation, onFlip: flipBoard, helpId }}
                 />
-              ) : (
-                <>
-                  {view.terminal ? <ReplayControls state={state} controller={controller} /> : null}
-                  <BoardTools orientation={orientation} onFlip={flipBoard} helpId={helpId} />
-                </>
-              )}
-            </>
-          ) : (
-            <EntryPanel
-              title={t("sandbox.entryTitle")}
-              description={t("sandbox.entryDescription")}
-              action={<StartButton state={state} controller={controller} />}
-            />
-          )
-        }
-        details={
-          <>
-            {!view.live ? <GameStatus state={state} controller={controller} /> : null}
-            <MoveHistory
-              moves={view.moves}
-              variant={view.live ? "rail" : "panel"}
-              selectedPly={view.selectedPly}
-              onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
-            />
-            {view.live ? (
-              <>
-                <div className="border-t border-divider pt-4 text-body text-text-secondary">
-                  {/* Guidance and passive feedback reserve one track; recovery actions stay outside hidden content. */}
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)]">
-                    <div
-                      className="min-w-0 self-start [grid-area:1/1] aria-hidden:invisible"
-                      aria-hidden={feedbackVisible}
-                    >
-                      <p>{t("sandbox.controlHint")}</p>
-                      <p className="mt-1">{t("sandbox.moveHint")}</p>
-                    </div>
-                    <div
-                      className="min-w-0 self-start [grid-area:1/1] aria-hidden:invisible"
-                      aria-hidden={!feedbackVisible}
-                    >
-                      <StatusFeedback {...status} />
-                    </div>
-                  </div>
-                  <CommandRecovery state={state} controller={controller} />
-                </div>
               </>
             ) : (
               <>
-                {view.terminal ? <PgnActions state={state} controller={controller} /> : null}
-                <div className="text-label text-text-muted">
-                  <span className="flex items-center gap-2 text-text-secondary">
-                    <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
-                    {t("sandbox.privacy")}
-                  </span>
-                  <p className="mt-2">{t("sandbox.memoryHint")}</p>
-                </div>
+                {view.terminal ? (
+                  <>
+                    <ReplayControls state={state} controller={controller} />
+                    <PgnActions state={state} controller={controller} />
+                  </>
+                ) : null}
+                <BoardTools orientation={orientation} onFlip={flipBoard} helpId={helpId} />
               </>
             )}
           </>
+        }
+        details={
+          view.board ? (
+            <>
+              <MoveHistory
+                moves={view.moves}
+                variant="rail"
+                selectedPly={view.selectedPly}
+                onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+              />
+              <div className="border-t border-divider pt-4 text-body text-text-secondary">
+                {view.terminal ? (
+                  <>
+                    <StartButton state={state} controller={controller} />
+                    <p className="mt-6">{t("replay.hint")}</p>
+                    <StatusFeedback {...status} />
+                  </>
+                ) : (
+                  <>
+                    {view.recovery ? (
+                      <div className="hidden lg:block">
+                        <RecoveryNotice {...view.recovery} />
+                      </div>
+                    ) : null}
+                    <div
+                      className={
+                        view.recovery && !feedbackVisible
+                          ? "hidden"
+                          : "grid min-w-0 grid-cols-[minmax(0,1fr)]"
+                      }
+                    >
+                      <div
+                        className="min-w-0 self-start [grid-area:1/1] aria-hidden:invisible"
+                        aria-hidden={feedbackVisible || view.recovery !== null}
+                      >
+                        <p>{t("sandbox.controlHint")}</p>
+                        <p className="mt-1">{t("sandbox.moveHint")}</p>
+                      </div>
+                      <div
+                        className="min-w-0 self-start [grid-area:1/1] aria-hidden:invisible"
+                        aria-hidden={!feedbackVisible}
+                      >
+                        <StatusFeedback {...feedback} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <CommandRecovery state={state} controller={controller} />
+              </div>
+            </>
+          ) : (
+            <div className="flex items-start gap-3 border-t border-divider pt-6 text-label text-text-secondary">
+              <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
+              <div>
+                <p>{t("sandbox.sessionHint")}</p>
+                <p className="mt-1">{t("sandbox.reopenHint")}</p>
+              </div>
+            </div>
+          )
         }
       />
     </AppShell>

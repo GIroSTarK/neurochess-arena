@@ -106,7 +106,7 @@ for (const enlarged of [false, true]) {
       current = gameSnapshotSchema.parse(await response.json());
     }
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
     await activate(page.getByRole("button", { name: "Abort game", exact: true }), touch);
     await activate(
       page.getByRole("dialog").getByRole("button", { name: "Stop game", exact: true }),

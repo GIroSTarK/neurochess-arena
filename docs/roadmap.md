@@ -2,7 +2,7 @@
 
 **Status:** Phases 0 and 1 completed; Sandbox presentation remake in progress
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-13
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -52,7 +52,7 @@ Use the [selected Sandbox concepts](design-system/concepts/sandbox-v1/README.md)
 - [x] select coordinated entry, live, recovery, and replay concepts for desktop and mobile;
 - [x] extract the shared shell, arena layout, participant and game panels behind Sandbox adapters, with an enforced presentation boundary;
 - [x] apply the live composition and board-toolbar action hierarchy;
-- [ ] apply the entry, recovery, and result/replay compositions;
+- [x] apply the entry, recovery, and result/replay compositions;
 - [ ] exercise the shared presentation with explicit human/AI reference scenarios and future panel slots;
 - [ ] complete concept-to-browser comparison and responsive, keyboard, recovery, and replay acceptance.
 

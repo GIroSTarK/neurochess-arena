@@ -2,6 +2,7 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
+import { Icon } from "../../ui/Icon";
 
 export function PgnActions({
   busy,
@@ -19,14 +20,11 @@ export function PgnActions({
   const { t } = useTranslation();
   const headingId = useId();
   return (
-    <section
-      className="min-w-0 rounded-control border border-control-border bg-surface p-4"
-      aria-labelledby={headingId}
-    >
-      <h2 id={headingId} className="text-label font-semibold">
+    <section className="mt-4 min-w-0" aria-labelledby={headingId}>
+      <h2 id={headingId} className="sr-only">
         {t("export.title")}
       </h2>
-      <div className="my-4 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button
           variant="secondary"
           className="flex-[1_1_8rem]"
@@ -35,16 +33,18 @@ export function PgnActions({
             onExport("copy");
           }}
         >
+          <Icon path="M9 9h11v12H9zM15 9V3H3v12h6" />
           {t("export.copy")}
         </Button>
         <Button
-          variant="secondary"
+          variant="primary"
           className="flex-[1_1_8rem]"
           aria-disabled={busy}
           onClick={() => {
             onExport("download");
           }}
         >
+          <Icon path="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6" />
           {t("export.download")}
         </Button>
       </div>

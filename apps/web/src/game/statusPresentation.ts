@@ -49,6 +49,7 @@ export function sandboxStatusPresentation(state: SandboxState, t: TFunction): St
     ? [
         t("game.pausedTitle"),
         ...(["white", "black"] as const).flatMap((color) => [
+          t("game.pausedTurn", { color: t(`players.${color}`) }),
           t("game.turn", { color: t(`players.${color}`) }),
           t("game.turnInCheck", { color: t(`players.${color}`) }),
         ]),

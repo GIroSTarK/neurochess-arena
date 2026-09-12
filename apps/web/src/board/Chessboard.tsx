@@ -12,18 +12,21 @@ import { squareLabel } from "./labels";
 import { PromotionDialog } from "./PromotionDialog";
 import { useBoardSelection } from "./useBoardSelection";
 
-interface ChessboardProps {
-  readonly snapshot: GameSnapshot;
+type ChessboardProps = {
   readonly orientation: ChessColor;
-  readonly canMove: boolean;
   readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
   readonly describedBy?: string | undefined;
   readonly coordinates?: "inside" | "framed";
-  /** A position to present instead of the accepted snapshot; it disables moves. */
-  readonly view?: BoardView | undefined;
   readonly ref?: Ref<ChessboardHandle> | undefined;
-}
+} & (
+  | {
+      readonly snapshot: GameSnapshot;
+      readonly canMove: boolean;
+      readonly view?: BoardView | undefined;
+    }
+  | { readonly snapshot?: undefined; readonly canMove: false; readonly view: BoardView }
+);
 
 export interface ChessboardHandle {
   /** Moves focus to the square holding the board's tab stop, scrolling it into view. */
@@ -48,14 +51,14 @@ export function Chessboard({
   ref,
 }: ChessboardProps) {
   const { t } = useTranslation();
-  const fen = view?.fen ?? snapshot.fen;
+  const fen = view?.fen ?? snapshot?.fen ?? "";
   const position = useMemo(() => parsePosition(fen), [fen]);
   const rows = useMemo(() => visualRows(orientation), [orientation]);
   const [buttons] = useState(() => new Map<Square, HTMLButtonElement>());
   const [focusedSquare, setFocusedSquare] = useState<Square>("e2");
   const enabled = !view && canMove && snapshot.state === "active" && position !== null;
   const selection = useBoardSelection({
-    legalMoves: snapshot.legalMoves,
+    legalMoves: snapshot?.legalMoves ?? [],
     epoch: interactionEpoch,
     enabled,
     onMove,
@@ -110,13 +113,13 @@ export function Chessboard({
 
   if (!position) return <p>{t("board.invalidPosition")}</p>;
 
-  const inCheck = view?.inCheck ?? snapshot.inCheck;
+  const inCheck = view?.inCheck ?? snapshot?.inCheck ?? false;
   const marks: BoardMarks = {
     position,
     source: selection.source,
     targets: selection.targets,
-    lastMove: view ? view.lastMove : snapshot.moves.at(-1)?.uci,
-    checkedColor: inCheck ? (view?.turn ?? snapshot.turn) : null,
+    lastMove: view ? view.lastMove : snapshot?.moves.at(-1)?.uci,
+    checkedColor: inCheck ? position.turn : null,
   };
   const { promotion } = selection;
 

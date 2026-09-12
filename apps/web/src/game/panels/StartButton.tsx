@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { StartButton as StartControl } from "../../arena/panels/StartButton";
 import type { SandboxController } from "../controller";
-import type { SandboxPhase, SandboxState } from "../state";
+import { isTerminal, type SandboxPhase, type SandboxState } from "../state";
 
 type StartLabel =
   "actions.start" | "actions.starting" | "actions.retryStart" | "actions.restartSession";
@@ -21,12 +21,16 @@ export function StartButton({
   readonly controller: Pick<SandboxController, "start">;
 }) {
   const { t } = useTranslation();
+  const terminal = state.snapshot !== null && isTerminal(state.snapshot);
   return (
     <StartControl
-      label={t(phaseLabels[state.phase] ?? "actions.start")}
+      label={t(terminal ? "actions.newGame" : (phaseLabels[state.phase] ?? "actions.start"))}
+      variant={terminal ? "secondary" : "primary"}
       disabled={
         state.readiness !== "ready" ||
-        !["entry", "access-error", "unavailable"].includes(state.phase)
+        (terminal
+          ? state.phase !== "ready"
+          : !["entry", "access-error", "unavailable"].includes(state.phase))
       }
       onStart={() => {
         void controller.start();

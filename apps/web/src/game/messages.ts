@@ -40,7 +40,9 @@ export function resultTitle(snapshot: GameSnapshot, t: TFunction): string {
 }
 
 export function gameStatus(snapshot: GameSnapshot, t: TFunction): string {
-  if (snapshot.state === "paused") return t("game.pausedTitle");
+  if (snapshot.state === "paused") {
+    return t("game.pausedTurn", { color: t(`players.${snapshot.turn}`) });
+  }
   if (snapshot.state === "configuring") return t("game.configuring");
   if (snapshot.terminationReason) {
     return t("game.resultWithScore", {

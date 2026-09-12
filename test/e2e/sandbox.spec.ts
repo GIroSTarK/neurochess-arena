@@ -76,7 +76,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
     current = await playMove(page, current, move, touch);
   }
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   const paused = await readSnapshot(page, current.gameId);
   expect(paused).toEqual({
     ...current,
@@ -91,7 +91,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   current = gameSnapshotSchema.parse(await (await resume).json());
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   for (const move of ["g2g4", "d8h4"]) current = await playMove(page, current, move, touch);
-  await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
   await expect(square(page, "e1")).toHaveAttribute("data-check", "true");
   const restored = await readSnapshot(page, current.gameId);
@@ -147,7 +147,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(next.moves).toEqual([]);
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   await expect(page.getByText("Your current game is open.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("Your game is open.");
   expect(new URL(page.url()).searchParams.get("game")).toBe(restored.gameId);
@@ -214,7 +214,7 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   const paused = await readSnapshot(page, current.gameId);
   expect(paused).toEqual({
     ...current,
@@ -223,7 +223,7 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
     legalMoves: [],
   });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   expect(await readSnapshot(page, current.gameId)).toEqual(paused);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
 });
@@ -237,7 +237,7 @@ test("confirms both resignation colors and abortion with accessible cancellation
       action: "Resign White",
       title: "Resign White?",
       confirm: "Confirm resignation",
-      heading: "Black wins",
+      heading: "Black wins by resignation",
       result: "0-1",
       reason: "human_resignation",
     },
@@ -245,7 +245,7 @@ test("confirms both resignation colors and abortion with accessible cancellation
       action: "Resign Black",
       title: "Resign Black?",
       confirm: "Confirm resignation",
-      heading: "White wins",
+      heading: "White wins by resignation",
       result: "1-0",
       reason: "human_resignation",
     },
@@ -307,7 +307,12 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     const stranger = await isolated.newPage();
     await stranger.goto(page.url());
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
-    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    await expect(stranger.getByRole("grid")).toHaveAttribute(
+      "data-fen",
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    );
+    await expect(stranger.getByRole("region", { name: "Move history" })).toHaveCount(0);
     for (const suffix of ["replay", "pgn"]) {
       expect(
         (
@@ -325,7 +330,12 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     ).toBe(200);
     await stranger.reload();
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
-    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    await expect(stranger.getByRole("grid")).toHaveAttribute(
+      "data-fen",
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    );
+    await expect(stranger.getByRole("region", { name: "Move history" })).toHaveCount(0);
     for (const suffix of ["replay", "pgn"]) {
       expect(
         (

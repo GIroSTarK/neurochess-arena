@@ -32,7 +32,36 @@ function player(color: ChessColor, snapshot: GameSnapshot | null, t: TFunction):
 
 export function sandboxPresentation(state: SandboxState, t: TFunction) {
   const { snapshot } = state;
+  const lastMove = snapshot?.moves.at(-1);
+  const recovered =
+    snapshot?.state === "paused" &&
+    (state.notice === "recovered" ||
+      state.notice === "existing" ||
+      state.announcement?.kind === "existing");
+  const result = snapshot?.terminationReason
+    ? {
+        title: t(`results.${snapshot.terminationReason}`, {
+          winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
+        }),
+        description: t(lastMove ? "sandbox.resultContextWithMove" : "sandbox.resultContext", {
+          status: t(snapshot.state === "aborted" ? "reasons.aborted" : "game.complete"),
+          move: lastMove
+            ? `${Math.ceil(lastMove.ply / 2)}${lastMove.ply % 2 === 0 ? "..." : "."} ${lastMove.san}`
+            : "",
+        }),
+        score: snapshot.result === "1/2-1/2" ? "½–½" : snapshot.result.replace("-", "–"),
+        scoreLabel: t("game.score", { score: snapshot.result }),
+      }
+    : null;
   return {
+    result,
+    recovery: recovered
+      ? {
+          title: t("sandbox.recoveredTitle"),
+          description: t("sandbox.recoveredDescription"),
+          hint: t("sandbox.resumeHint"),
+        }
+      : null,
     players: { white: player("white", snapshot, t), black: player("black", snapshot, t) },
     live: snapshot !== null && isUnfinished(snapshot),
     board: snapshot
