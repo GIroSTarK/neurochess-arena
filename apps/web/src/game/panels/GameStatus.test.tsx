@@ -44,9 +44,7 @@ describe("stable game status feedback", () => {
       commandId: crypto.randomUUID(),
     };
     rerender(<GameStatus {...initial} state={readyState({ snapshot: paused() })} />);
-    expect(paragraphs()).toEqual([
-      "Your full move history is preserved. Choose Resume to continue playing.",
-    ]);
+    expect(paragraphs()).toEqual([]);
     expect(screen.getByRole("button", { name: "Resume" })).toBe(control);
     expect(screen.getByRole("heading", { name: "Game paused" })).toBeInTheDocument();
 
@@ -60,10 +58,7 @@ describe("stable game status feedback", () => {
         })}
       />,
     );
-    expect(paragraphs()).toEqual([
-      "Applying your game command…",
-      "You can still inspect the board while the move is confirmed.",
-    ]);
+    expect(paragraphs()).toEqual(["Applying your game command…"]);
     expect(control).toHaveAttribute("aria-disabled", "true");
     expect(activity).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("heading", { name: "Game paused" })).toBeInTheDocument();
@@ -76,10 +71,10 @@ describe("stable game status feedback", () => {
   });
 
   it.each([
-    ["existing", "You already have a game in progress. Your current position is open."],
-    ["recovered", "Your game has been recovered and paused. Choose Resume when you are ready."],
+    ["existing", "Your current game is open."],
+    ["recovered", "Game recovered. Resume when ready."],
     ["synchronized", "The accepted position is up to date."],
-  ] as const)("exposes only the %s notice in place of the paused hint", (notice, message) => {
+  ] as const)("exposes only the %s notice when paused", (notice, message) => {
     const initial = props(readyState({ snapshot: paused(), notice }));
     const { container, rerender } = renderLocalized(<GameStatus {...initial} />);
     const feedback = container.querySelector<HTMLElement>("[data-testid=status-feedback]")!;
@@ -104,10 +99,7 @@ describe("stable game status feedback", () => {
       within(feedback)
         .getAllByRole("paragraph")
         .map((p) => p.textContent),
-    ).toEqual([
-      "Recovering your game…",
-      "You can still inspect the board while the move is confirmed.",
-    ]);
+    ).toEqual(["Recovering your game…"]);
   });
 
   it("keeps error explanations and their synchronization feedback accessible", () => {
@@ -123,10 +115,7 @@ describe("stable game status feedback", () => {
       within(feedback)
         .getAllByRole("paragraph")
         .map((p) => p.textContent),
-    ).toEqual([
-      "Checking the accepted position…",
-      "You can still inspect the board while the move is confirmed.",
-    ]);
+    ).toEqual(["Checking the accepted position…"]);
     expect(screen.getByText("That move is no longer legal.")).toBeInTheDocument();
     rerender(<GameStatus {...initial} state={readyState({ notice: "ILLEGAL_MOVE" })} />);
     expect(

@@ -148,7 +148,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
-  await expect(page.getByText(/You already have a game in progress/)).toHaveCount(0);
+  await expect(page.getByText("Your current game is open.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("Your game is open.");
   expect(new URL(page.url()).searchParams.get("game")).toBe(restored.gameId);
   expect(await readSnapshot(page, restored.gameId)).toEqual(restored);
@@ -291,7 +291,7 @@ test("confirms both resignation colors and abortion with accessible cancellation
     await expect(page.getByRole("button", { name: "New game" })).toBeEnabled();
     await page.reload();
     await expect(page.getByRole("heading", { name: ending.heading })).toBeVisible();
-    await expect(page.getByText(/You already have a game in progress/)).toHaveCount(0);
+    await expect(page.getByText("Your current game is open.", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("status")).toContainText("Your game is open.");
     await expect(page.getByRole("status")).not.toContainText("in progress");
   }

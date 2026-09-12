@@ -22,8 +22,6 @@ for (const enlarged of [false, true]) {
             submitting: "Submitting your move… Waiting for confirmation from the chess server.",
             synchronizing:
               "Checking the accepted position… Waiting for the chess server to return the complete confirmed position and move history.",
-            pendingHint:
-              "You can still inspect the board while the move is confirmed. New moves will be available after confirmation.",
           },
         });
         await i18n.changeLanguage("en-XA");

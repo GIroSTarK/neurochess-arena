@@ -89,7 +89,7 @@ export function GameStatus({
     : [];
 
   return (
-    <section className="rounded-panel bg-surface p-6 max-sm:p-4" aria-labelledby={headingId}>
+    <section className="rounded-panel bg-surface px-6 py-4 max-sm:px-4" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-label text-text-secondary">{t("game.status")}</p>
         {snapshot ? (
@@ -106,7 +106,7 @@ export function GameStatus({
           </span>
         ) : null}
       </div>
-      <h2 id={headingId} className="mt-4 text-title font-semibold max-sm:text-[1.5rem]/8">
+      <h2 id={headingId} className="mt-3 text-title font-semibold max-sm:text-[1.5rem]/8">
         <StableText value={title} variants={titleVariants} />
       </h2>
       {snapshot?.terminationReason ? (
@@ -122,7 +122,7 @@ export function GameStatus({
       ) : null}
       {busy || unfinished ? (
         <div
-          className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] text-text-secondary"
+          className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] text-text-secondary"
           data-testid="status-feedback"
         >
           <div
@@ -149,19 +149,9 @@ export function GameStatus({
                 </p>
               ))}
             </div>
-            {snapshot ? (
-              <p className="col-start-2 text-label text-text-secondary">{t("game.pendingHint")}</p>
-            ) : null}
           </div>
-          {unfinished ? (
-            <>
-              <p
-                className={feedbackSlotClassName}
-                aria-hidden={busy || state.notice !== null || snapshot.state !== "paused"}
-              >
-                {t("game.pausedHint")}
-              </p>
-              {routineNotices.map((notice) => (
+          {unfinished
+            ? routineNotices.map((notice) => (
                 <p
                   key={notice}
                   className={cx(feedbackSlotClassName, noticeClassName)}
@@ -169,9 +159,8 @@ export function GameStatus({
                 >
                   {noticeMessage(notice, t)}
                 </p>
-              ))}
-            </>
-          ) : null}
+              ))
+            : null}
         </div>
       ) : null}
       {state.notice && !routineNotice ? (

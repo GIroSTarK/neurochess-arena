@@ -390,7 +390,7 @@ describe("localized sandbox application", () => {
       await screen.findByRole("heading", {
         name: state === "completed" ? "Black wins" : "Game stopped",
       });
-      expect(screen.queryByText(/You already have a game in progress/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Your current game is open.")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("Your game is open.");
       expect(screen.getByRole("status")).not.toHaveTextContent(/in progress|paused/);
       expect(screen.getByRole("grid")).toHaveAttribute("data-fen", terminal.fen);

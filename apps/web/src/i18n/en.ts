@@ -61,7 +61,6 @@ export const en = {
     turn: "{{color}} to move",
     turnInCheck: "{{color}} to move. Check.",
     pausedTitle: "Game paused",
-    pausedHint: "Your full move history is preserved. Choose Resume to continue playing.",
     configuringHint: "This game has not started. The board is available for inspection.",
     stopped: "Game stopped",
     whiteWins: "White wins",
@@ -71,7 +70,6 @@ export const en = {
     submitting: "Submitting your move…",
     synchronizing: "Checking the accepted position…",
     recovering: "Recovering your game…",
-    pendingHint: "You can still inspect the board while the move is confirmed.",
     uncertainHint: "Game controls are locked until the pending command is resolved.",
   },
   reasons: {
@@ -85,7 +83,7 @@ export const en = {
     aborted: "Stopped by the owner",
   },
   notices: {
-    existing: "You already have a game in progress. Your current position is open.",
+    existing: "Your current game is open.",
     sandboxUnavailable:
       "The development sandbox is unavailable on this server. Enable it on your development server, then retry.",
     unauthorized:
@@ -109,7 +107,7 @@ export const en = {
     syncRequired:
       "The current position could not be checked. Check the game status before moving again.",
     synchronized: "The accepted position is up to date.",
-    recovered: "Your game has been recovered and paused. Choose Resume when you are ready.",
+    recovered: "Game recovered. Resume when ready.",
     recoveryRequired: "Recovery is not complete. Retry recovery before continuing.",
   },
   lifecycle: {
