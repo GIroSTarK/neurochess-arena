@@ -1,12 +1,21 @@
 import { lazy, Suspense, useSyncExternalStore } from "react";
 
-import { SandboxScreen } from "../game/SandboxScreen";
-
 import { DocumentMetadata } from "./DocumentMetadata";
 import { readAppPage, subscribeToNavigation } from "./navigation";
+import { SandboxLoadingScreen } from "./SandboxLoadingScreen";
 import { StaticScreen } from "./StaticScreen";
 
 declare const __ARENA_REFERENCE_ENABLED__: boolean;
+
+// Keep the import behind Vite's literal flag so disabled builds omit the whole client.
+const SandboxScreen =
+  import.meta.env.SANDBOX_ENABLED === "true"
+    ? lazy(() =>
+        import("../game/SandboxScreen").then((module) => ({
+          default: module.SandboxScreen,
+        })),
+      )
+    : null;
 
 const ArenaReferenceScreen =
   import.meta.env.DEV && __ARENA_REFERENCE_ENABLED__
@@ -39,19 +48,22 @@ export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
       </>
     );
   }
-  const page =
-    requestedPage === "reference" || (requestedPage === "sandbox" && !sandboxEnabled)
-      ? "not-found"
-      : requestedPage;
+  if (requestedPage === "sandbox" && sandboxEnabled && SandboxScreen) {
+    return (
+      <>
+        <DocumentMetadata page="sandbox" />
+        <Suspense fallback={<SandboxLoadingScreen />}>
+          <SandboxScreen apiBaseUrl={apiBaseUrl} />
+        </Suspense>
+      </>
+    );
+  }
+  const page = requestedPage === "arena" ? "arena" : "not-found";
 
   return (
     <>
       <DocumentMetadata page={page} />
-      {page === "sandbox" ? (
-        <SandboxScreen apiBaseUrl={apiBaseUrl} />
-      ) : (
-        <StaticScreen page={page} sandboxEnabled={sandboxEnabled} />
-      )}
+      <StaticScreen page={page} sandboxEnabled={sandboxEnabled && SandboxScreen !== null} />
     </>
   );
 }

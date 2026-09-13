@@ -85,6 +85,44 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
   await expect(page).toHaveTitle("Neurochess Arena");
 });
 
+test("Sandbox loads on demand and keeps navigation visible while its module is pending", async ({
+  page,
+}, testInfo) => {
+  const loading = Promise.withResolvers<void>();
+  let sandboxRequested = false;
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
+  });
+  await page.route("**/src/game/SandboxScreen.tsx", async (route) => {
+    sandboxRequested = true;
+    await loading.promise;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  expect(sandboxRequested).toBe(false);
+  await page.getByRole("link", { name: "Sandbox", exact: true }).click();
+  await expect(page).toHaveURL(/\/sandbox$/);
+  await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
+  await expect(page.getByRole("status")).toHaveText("Loading sandbox…");
+  await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
+  await expect(page.getByRole("grid")).toHaveCount(0);
+  expect(sandboxRequested).toBe(true);
+  expect(apiRequests).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("sandbox-loading.png"), fullPage: true });
+
+  loading.resolve();
+  await expect(page.getByRole("grid", { name: "Chessboard" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
+  await expect(page.getByText("Loading sandbox…")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sandbox", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
 test("private game URLs belong to Sandbox while Arena ignores game parameters", async ({
   page,
 }, testInfo) => {

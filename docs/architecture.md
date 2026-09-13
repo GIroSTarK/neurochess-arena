@@ -157,7 +157,7 @@ Snapshot reads use a read-only `REPEATABLE READ` transaction so history and vers
 
 ### Sandbox web client
 
-The application shell separates Arena (`/`) from Sandbox (`/sandbox`). Vite exposes only the explicit `SANDBOX_ENABLED` value from the shared root environment to the web environment validator; it does not expose other server variables. The flag controls both navigation and screen mounting, while API authorization remains authoritative. Native page links leave the sandbox controller's lifetime; returning uses the existing paused-recovery flow. Game parameters are read only on the Sandbox page.
+The application shell separates Arena (`/`) from Sandbox (`/sandbox`). Vite exposes only the explicit `SANDBOX_ENABLED` value from the shared root environment to the web environment validator; it does not expose other server variables. The flag controls navigation, screen mounting, and a build-time import boundary: disabled builds omit the Sandbox client; enabled builds load it lazily on the Sandbox route, keeping navigation and a localized loading notice visible while it downloads. API authorization remains authoritative. Native page links leave the sandbox controller's lifetime; returning uses the existing paused-recovery flow. Game parameters are read only on the Sandbox page.
 
 `apps/web/src/api/client.ts` validates HTTP requests and responses with the existing contracts, uses credentialed/no-store requests, and cancels requests after ten seconds or when their owner disconnects. It retains only safe error codes and validated conflict snapshots; server message fields and exception text never enter the UI. The FEN presentation parser checks display syntax without generating moves or adjudicating games.
 

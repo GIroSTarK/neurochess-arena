@@ -49,7 +49,7 @@ function mockApi(route: Route = () => undefined) {
 }
 
 async function start() {
-  const button = screen.getByRole("button", { name: "Start sandbox" });
+  const button = await screen.findByRole("button", { name: "Start sandbox" });
   await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
   await userEvent.click(button);
   await waitFor(() => expect(button).not.toBeInTheDocument());
@@ -66,14 +66,14 @@ describe("localized sandbox application", () => {
       </StrictMode>,
     );
     expect(screen.getByRole("heading", { name: "Sandbox" })).toBeInTheDocument();
-    const preview = screen.getByRole("grid", { name: "Chessboard" });
+    const preview = await screen.findByRole("grid", { name: "Chessboard" });
     expect(preview).toHaveAttribute("aria-readonly", "true");
     expect(preview).toHaveAttribute("data-fen", snapshot().fen);
     expect(screen.queryByRole("region", { name: "Move history" })).not.toBeInTheDocument();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
     expect(preview).toHaveAttribute("data-fen", snapshot().fen);
-    const button = screen.getByRole("button", { name: "Start sandbox" });
+    const button = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     expect(
       fetch.mock.calls.every(([url]) =>
@@ -309,7 +309,7 @@ describe("localized sandbox application", () => {
       path === "/sandbox/games" ? errorResponse("NOT_FOUND", 404) : undefined,
     );
     renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
-    const button = screen.getByRole("button", { name: "Start sandbox" });
+    const button = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     await userEvent.click(button);
     const retry = await screen.findByRole("button", { name: "Retry sandbox" });
@@ -472,7 +472,7 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
     renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     const user = userEvent.setup();
-    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    const startButton = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
     act(() => startButton.focus());
     await user.keyboard("{Enter}");
@@ -500,7 +500,7 @@ describe("localized sandbox application", () => {
     mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
     renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     const user = userEvent.setup();
-    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    const startButton = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
     act(() => startButton.focus());
     await user.keyboard("{Enter}");
