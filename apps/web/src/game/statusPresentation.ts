@@ -59,24 +59,6 @@ export function sandboxStatusPresentation(state: SandboxState, t: TFunction): St
   return {
     title,
     titleVariants,
-    lifecycle: snapshot
-      ? {
-          state: snapshot.state,
-          label: t(`game.${snapshot.state}`),
-          variants: unfinished ? [t("game.active"), t("game.paused")] : [],
-        }
-      : null,
-    result: snapshot?.terminationReason
-      ? {
-          reason: t(`reasons.${snapshot.terminationReason}`),
-          score: snapshot.result,
-        }
-      : null,
-    description: !snapshot
-      ? t("game.beforeStartHint")
-      : snapshot.state === "configuring"
-        ? t("game.configuringHint")
-        : null,
     feedback:
       busy || unfinished
         ? {
