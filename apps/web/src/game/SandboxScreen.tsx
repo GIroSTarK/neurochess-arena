@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
+import { ArenaDetails } from "../arena/ArenaDetails";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { ArenaLayout } from "../arena/ArenaLayout";
 import { BoardTools } from "../arena/BoardTools";
@@ -192,13 +193,16 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         }
         details={
           view.board ? (
-            <>
-              <MoveHistory
-                moves={view.moves}
-                variant="rail"
-                selectedPly={view.selectedPly}
-                onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
-              />
+            <ArenaDetails
+              moves={
+                <MoveHistory
+                  moves={view.moves}
+                  variant="rail"
+                  selectedPly={view.selectedPly}
+                  onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+                />
+              }
+            >
               <div className="shrink-0 border-t border-divider pt-4 text-body text-text-secondary">
                 {view.terminal ? (
                   <>
@@ -238,7 +242,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 )}
                 <CommandRecovery state={state} controller={controller} />
               </div>
-            </>
+            </ArenaDetails>
           ) : (
             <div className="flex items-start gap-3 border-t border-divider pt-6 text-label text-text-secondary">
               <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />

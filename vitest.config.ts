@@ -9,6 +9,7 @@ function workspacePath(relativePath: string): string {
 }
 
 export default defineConfig({
+  define: { __ARENA_REFERENCE_ENABLED__: "true" },
   plugins: [react()],
   resolve: {
     alias: {

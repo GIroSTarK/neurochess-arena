@@ -1,4 +1,4 @@
-import type { ChessColor, GameReplayResponse } from "@neurochess/contracts";
+import type { ChessColor, MoveRecord } from "@neurochess/contracts";
 
 import { parsePosition } from "./position";
 
@@ -10,7 +10,13 @@ export interface BoardView {
   readonly lastMove: string | undefined;
 }
 
-export function replayView(replay: GameReplayResponse, ply: number): BoardView | undefined {
+export function replayView(
+  replay: {
+    readonly initialFen: string;
+    readonly snapshot: { readonly moves: readonly MoveRecord[] };
+  },
+  ply: number,
+): BoardView | undefined {
   if (!Number.isInteger(ply) || ply < 0 || ply > replay.snapshot.moves.length) return undefined;
   const move = replay.snapshot.moves[ply - 1];
   const fen = move?.fen ?? replay.initialFen;

@@ -37,9 +37,11 @@ const vendorChunks = [
   { name: "i18n", test: /node_modules[\\/](i18next|react-i18next)[\\/]/ },
 ];
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode, command }) => ({
   // Validate before injection so a misconfigured value never enters the browser bundle.
   define: {
+    // NODE_ENV can make DEV true during a build; fixtures require the dev server itself.
+    __ARENA_REFERENCE_ENABLED__: JSON.stringify(command === "serve"),
     "import.meta.env.SANDBOX_ENABLED": JSON.stringify(
       parseSandboxFlag(
         loadEnv(mode, fileURLToPath(new URL("../..", import.meta.url)), "SANDBOX_ENABLED")

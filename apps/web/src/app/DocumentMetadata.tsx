@@ -8,11 +8,13 @@ export function DocumentMetadata({ page = "arena" }: { readonly page?: AppPage }
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "en";
     document.title =
-      page === "sandbox"
-        ? t("sandbox.documentTitle")
-        : page === "not-found"
-          ? t("notFound.documentTitle")
-          : t("app.title");
+      page === "reference"
+        ? t("reference.documentTitle")
+        : page === "sandbox"
+          ? t("sandbox.documentTitle")
+          : page === "not-found"
+            ? t("notFound.documentTitle")
+            : t("app.title");
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute(

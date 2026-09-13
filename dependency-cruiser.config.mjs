@@ -25,6 +25,14 @@ export default {
         path: "(^|/)apps/web/src/(arena|board|ui)/",
         pathNot: "\\.test\\.tsx?$",
       },
+      to: { path: "(^|/)apps/web/src/(api|game|reference)/" },
+    },
+    {
+      name: "reference-no-sandbox",
+      comment:
+        "Reference scenarios exercise presentation without Sandbox controllers or HTTP clients.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/reference/", pathNot: "\\.test\\.tsx?$" },
       to: { path: "(^|/)apps/web/src/(api|game)/" },
     },
     {

@@ -68,6 +68,8 @@ Set up the guest's two independent session credentials with synthetic masking gl
 
 ## Review-only edge cases
 
+The [development reference screen](../development.md#arena-reference-scenarios) reuses this legal game for human/human, both human/AI seat assignments, different models, and identical long model names. Its illustrative data deliberately omits Black's second-ply commentary/usage/pricing and fourth-ply pricing to exercise unavailable states. These variations are distinct from the complete values in the primary concept table above.
+
 Use these alongside the primary concepts when implementing components; they do not require extra MVP screens:
 
 - Identical provider/model on both seats, a long model identifier, and 50% longer labels.

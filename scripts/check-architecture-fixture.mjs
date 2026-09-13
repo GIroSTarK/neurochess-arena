@@ -9,6 +9,14 @@ const fixtures = [
     path: "apps/web/src/arena/forbidden-sandbox-import.ts",
     rule: "arena-presentation-no-sandbox",
   },
+  {
+    path: "apps/web/src/arena/forbidden-reference-import.ts",
+    rule: "arena-presentation-no-sandbox",
+  },
+  {
+    path: "apps/web/src/reference/forbidden-sandbox-import.ts",
+    rule: "reference-no-sandbox",
+  },
   { path: "apps/api/forbidden-chess-internal-import.ts", rule: "chess-public-entrypoint-only" },
   { path: "packages/chess/forbidden-fastify-import.ts", rule: "shared-leaves-no-infrastructure" },
   {

@@ -45,6 +45,7 @@ export function LifecycleControls({
 }: LifecycleControlsProps) {
   const { t } = useTranslation();
   const padding = boardTools ? "compact" : "normal";
+  const threeColumns = Boolean(onTogglePause);
   // Equal label reservations keep the gaps between compact resignation buttons identical.
   const resignationLabels = resignations.map(({ color }) =>
     t(color === "white" ? "lifecycle.resignWhite" : "lifecycle.resignBlack"),
@@ -75,7 +76,10 @@ export function LifecycleControls({
       aria-disabled={disabled}
       className={
         boardTools
-          ? "max-lg:border-control-border max-lg:bg-surface lg:@lg:col-start-3 lg:@lg:row-start-1"
+          ? cx(
+              "max-lg:border-control-border max-lg:bg-surface lg:@lg:row-start-1",
+              threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
+            )
           : undefined
       }
       onClick={() => confirm({ action: "abort" })}
@@ -94,7 +98,8 @@ export function LifecycleControls({
       <div
         className={cx(
           "grid grid-cols-2",
-          boardTools ? "gap-2 lg:@lg:grid-cols-3 lg:@lg:gap-y-3" : "gap-3",
+          boardTools ? "gap-2 lg:@lg:gap-y-3" : "gap-3",
+          Boolean(boardTools) && threeColumns && "lg:@lg:grid-cols-3",
         )}
       >
         {onTogglePause ? (
@@ -119,7 +124,10 @@ export function LifecycleControls({
           <Button
             padding={padding}
             variant="secondary"
-            className="lg:@lg:col-start-2 lg:@lg:row-start-1"
+            className={cx(
+              "lg:@lg:row-start-1",
+              threeColumns ? "lg:@lg:col-start-2" : "lg:@lg:col-start-1",
+            )}
             aria-describedby={orientationId}
             onClick={boardTools.onFlip}
           >
@@ -158,7 +166,10 @@ export function LifecycleControls({
             <Button
               padding={padding}
               variant="quiet"
-              className="max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:col-start-3 lg:@lg:row-start-3 lg:@lg:justify-self-start"
+              className={cx(
+                "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
+                threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
+              )}
               aria-expanded={helpOpen}
               aria-controls={boardTools.helpId}
               onClick={() => setHelpOpen((previous) => !previous)}

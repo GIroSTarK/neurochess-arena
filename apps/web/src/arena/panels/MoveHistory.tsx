@@ -9,6 +9,7 @@ interface MoveHistoryProps {
   readonly selectedPly?: number | undefined;
   readonly onSelect?: ((ply: number) => void) | undefined;
   readonly variant?: "panel" | "rail";
+  readonly showHeading?: boolean;
 }
 
 const cellClassName = "border-b border-divider wrap-anywhere";
@@ -16,7 +17,13 @@ const cellClassName = "border-b border-divider wrap-anywhere";
 const currentMoveClassName =
   "aria-[current]:bg-surface-raised aria-[current]:font-semibold aria-[current]:text-accent aria-[current]:shadow-[inset_2px_0_0_var(--color-accent)]";
 
-export function MoveHistory({ moves, selectedPly, onSelect, variant = "panel" }: MoveHistoryProps) {
+export function MoveHistory({
+  moves,
+  selectedPly,
+  onSelect,
+  variant = "panel",
+  showHeading = true,
+}: MoveHistoryProps) {
   const { t, i18n } = useTranslation();
   const headingId = useId();
   const language = i18n.resolvedLanguage ?? "en";
@@ -103,10 +110,16 @@ export function MoveHistory({ moves, selectedPly, onSelect, variant = "panel" }:
       aria-labelledby={headingId}
     >
       <div
-        className={cx(
-          "flex shrink-0 flex-wrap items-center justify-between gap-3",
-          variant === "rail" ? "border-b border-divider pb-2" : "border-b-2 border-accent pb-3",
-        )}
+        className={
+          showHeading
+            ? cx(
+                "flex shrink-0 flex-wrap items-center justify-between gap-3",
+                variant === "rail"
+                  ? "border-b border-divider pb-2"
+                  : "border-b-2 border-accent pb-3",
+              )
+            : "sr-only"
+        }
       >
         <h2
           id={headingId}

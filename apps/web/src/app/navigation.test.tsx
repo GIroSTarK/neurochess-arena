@@ -52,6 +52,30 @@ describe("Arena and Sandbox routes", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each(["/dev/arena", "/dev/arena/"])(
+    "keeps the disabled reference route %s independent of the API",
+    (path) => {
+      visit(path, false);
+      expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not expose test scenarios in production even when Sandbox is enabled", () => {
+    vi.stubEnv("DEV", false);
+    visit("/dev/arena", true);
+    expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("loads the development reference screen without guest or game requests", async () => {
+    vi.stubEnv("DEV", true);
+    visit("/dev/arena?game=" + GAME_ID, true);
+    expect(await screen.findByRole("region", { name: "Test data" })).toBeVisible();
+    expect(document.title).toBe("Arena test scenarios · Neurochess Arena");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("recovers a private game at its Sandbox URL", async () => {
     const paused = snapshot([], { state: "paused", legalMoves: [], version: 1 });
     fetch.mockImplementation((input) =>
