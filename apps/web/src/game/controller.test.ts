@@ -812,6 +812,70 @@ describe("private terminal replay and export", () => {
     expect(delivery.download).toHaveBeenCalledWith(initial.pgn, initial.gameId);
     expect(controller.getSnapshot().exportText).toBeNull();
   });
+  it.each(["response", "failure"] as const)(
+    "clears a cancelled replay reload and ignores its late %s during a retry",
+    async (outcome) => {
+      const { api, controller, initial } = await terminal();
+      const replay = controller.getSnapshot().replay;
+      const cancelled = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
+      const retry = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
+      api.replay.mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(retry.promise);
+      controller.selectPly(1);
+      const interrupted = controller.loadReplay();
+      controller.selectPly(2);
+
+      controller.disconnect();
+      expect(api.replay.mock.calls[1]?.[1].aborted).toBe(true);
+      const retained = { replay, replayPly: 2, replayPhase: "idle", replayNotice: null };
+      expect(controller.getSnapshot()).toMatchObject(retained);
+      const disconnect = controller.connect();
+      expect(controller.getSnapshot()).toMatchObject(retained);
+      expect(api.replay).toHaveBeenCalledTimes(2);
+
+      const next = controller.loadReplay();
+      if (outcome === "response") cancelled.resolve(replay!);
+      else cancelled.reject(new ApiFailure("cancelled"));
+      await interrupted;
+      expect(controller.getSnapshot()).toMatchObject({ ...retained, replayPhase: "loading" });
+      await controller.loadReplay();
+      expect(api.replay).toHaveBeenCalledTimes(3);
+
+      retry.resolve(replay!);
+      await next;
+      expect(controller.getSnapshot()).toMatchObject({
+        ...retained,
+        replayPly: initial.moves.length,
+      });
+      disconnect();
+    },
+  );
+  it("restarts a cancelled initial replay on reconnect without accepting its late response", async () => {
+    const initial = snapshot(FOOLS_MATE);
+    const replay = gameReplayResponseSchema.parse({
+      snapshot: initial,
+      initialFen: snapshot().fen,
+    });
+    const { api, controller } = harness(initial);
+    const cancelled = Promise.withResolvers<typeof replay>();
+    const retry = Promise.withResolvers<typeof replay>();
+    api.replay.mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(retry.promise);
+    await controller.checkReadiness();
+    await controller.start();
+
+    controller.disconnect();
+    expect(api.replay.mock.calls[0]?.[1].aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({ replay: null, replayPhase: "idle" });
+    const disconnect = controller.connect();
+    expect(api.replay).toHaveBeenCalledTimes(2);
+    cancelled.resolve(replay);
+    await cancelled.promise;
+    expect(controller.getSnapshot()).toMatchObject({ replay: null, replayPhase: "loading" });
+
+    retry.resolve(replay);
+    await vi.waitFor(() => expect(controller.getSnapshot().replayPhase).toBe("idle"));
+    expect(controller.getSnapshot()).toMatchObject({ replay, replayPly: initial.moves.length });
+    disconnect();
+  });
   it.each(["copy", "download"] as const)(
     "makes interrupted %s export retryable after reconnect and keeps the retry current",
     async (action) => {

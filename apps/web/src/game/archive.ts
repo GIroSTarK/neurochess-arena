@@ -155,14 +155,23 @@ export class ArchiveController {
     }
   }
 
-  /** Aborts in-flight archive requests and makes interrupted exports retryable. */
+  /** Clears interrupted reads' loading state while preserving verified replay selection. */
   cancel(): void {
+    const { store } = this.context;
     for (const slot of ["replay", "export"] as const) {
       this.requests[slot]?.abort();
       this.requests[slot] = null;
     }
-    if (this.context.store.get().exportPhase === "loading") {
-      this.context.store.setExport(emptyExport);
+    const state = store.get();
+    if (state.replayPhase === "loading") {
+      store.setReplay({
+        ...(state.replay ? { replay: state.replay, replayPly: state.replayPly } : emptyReplay),
+        replayPhase: "idle",
+        replayNotice: null,
+      });
+    }
+    if (store.get().exportPhase === "loading") {
+      store.setExport(emptyExport);
     }
   }
 

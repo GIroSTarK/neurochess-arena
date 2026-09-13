@@ -1,4 +1,4 @@
-import { Activity, type ReactNode, useId, useRef, useState } from "react";
+import { Activity, type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { cx } from "./cx";
 
@@ -17,10 +17,28 @@ export function DetailTabs({
 }) {
   const prefix = useId();
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const removedFocus = useRef<HTMLElement | null>(null);
   const [selected, setSelected] = useState(tabs[0].id);
   const [focused, setFocused] = useState(tabs[0].id);
   const selectedId = tabs.some((tab) => tab.id === selected) ? selected : tabs[0].id;
   const focusedId = tabs.some((tab) => tab.id === focused) ? focused : selectedId;
+
+  // Ref cleanup sees focus before removal; after the commit it may already be on the body.
+  function rememberFocus(element: HTMLElement): void {
+    if (element.contains(element.ownerDocument.activeElement)) removedFocus.current = element;
+  }
+
+  useLayoutEffect(() => {
+    const removed = removedFocus.current;
+    removedFocus.current = null;
+    if (
+      removed &&
+      !removed.isConnected &&
+      removed.ownerDocument.activeElement === removed.ownerDocument.body
+    ) {
+      buttons.current.get(focusedId)?.focus();
+    }
+  });
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -29,8 +47,12 @@ export function DetailTabs({
           <button
             key={tab.id}
             ref={(element) => {
-              if (element) buttons.current.set(tab.id, element);
-              else buttons.current.delete(tab.id);
+              if (!element) return;
+              buttons.current.set(tab.id, element);
+              return () => {
+                rememberFocus(element);
+                buttons.current.delete(tab.id);
+              };
             }}
             type="button"
             role="tab"
@@ -65,6 +87,9 @@ export function DetailTabs({
       {tabs.map((tab) => (
         <div
           key={tab.id}
+          ref={(element) => {
+            if (element) return () => rememberFocus(element);
+          }}
           id={`${prefix}-panel-${tab.id}`}
           role="tabpanel"
           aria-labelledby={`${prefix}-tab-${tab.id}`}
