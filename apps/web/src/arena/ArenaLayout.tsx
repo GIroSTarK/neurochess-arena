@@ -54,7 +54,7 @@ export function ArenaLayout({
       </section>
       <aside
         className={cx(
-          "flex min-w-0 flex-col gap-8 max-lg:mx-auto max-lg:w-full max-lg:max-w-[640px]",
+          "flex min-h-0 min-w-0 flex-col gap-8 max-lg:mx-auto max-lg:w-full max-lg:max-w-[640px]",
           variant === "live" && "lg:border-l lg:border-divider lg:pl-8",
           Boolean(introduction) && "lg:col-start-2 lg:row-start-2",
         )}

@@ -21,6 +21,18 @@ test("preserves lifecycle keyboard focus through pending commands without steali
   page,
 }, testInfo) => {
   await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const secondaryActions = page.getByRole("button", {
+    name: /^(Abort game|Resign White|Resign Black)$/,
+  });
+  await expect(secondaryActions).toHaveCount(3);
+  const actionFrames = () =>
+    secondaryActions.evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return { border: style.borderColor, background: style.backgroundColor };
+      }),
+    );
+  const initialFrames = await actionFrames();
   let release = Promise.withResolvers<void>();
   let requests = 0;
   await page.route(API_ORIGIN + "/games/*/lifecycle", async (route) => {
@@ -38,6 +50,15 @@ test("preserves lifecycle keyboard focus through pending commands without steali
       await expect.poll(() => requests).toBe(index + 1);
       await expect(control).toBeFocused();
       await expect(control).toHaveAttribute("aria-disabled", "true");
+      for (const action of await secondaryActions.all()) {
+        await expect(action).toHaveAttribute("aria-disabled", "true");
+      }
+      await expect.poll(actionFrames).toEqual(initialFrames);
+      if (index === 0) {
+        await page
+          .getByRole("group", { name: "Game controls" })
+          .screenshot({ path: testInfo.outputPath("controls-pending.png") });
+      }
       await page.keyboard.press("Enter");
       await page.keyboard.press("Space");
       expect(requests).toBe(index + 1);
@@ -52,6 +73,7 @@ test("preserves lifecycle keyboard focus through pending commands without steali
         exact: true,
       });
       await expect(next).toHaveAttribute("aria-disabled", "false");
+      await expect.poll(actionFrames).toEqual(initialFrames);
       if (index === 2) await expect(square(page, "e2")).toBeFocused();
       else await expect(next).toBeFocused();
     }

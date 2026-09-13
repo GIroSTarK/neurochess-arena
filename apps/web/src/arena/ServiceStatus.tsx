@@ -6,9 +6,9 @@ import { Icon } from "../ui/Icon";
 type ServiceState = "checking" | "ready" | "unavailable";
 
 const connectionMarks: Record<ServiceState, string> = {
-  checking: "",
-  ready: "text-success",
-  unavailable: "text-warning",
+  checking: "border-current",
+  ready: "border-success bg-success text-canvas",
+  unavailable: "border-current text-warning",
 };
 
 export function ServiceStatus({
@@ -30,7 +30,7 @@ export function ServiceStatus({
     >
       <span
         className={cx(
-          "inline-grid shrink-0 place-items-center rounded-full border border-current font-semibold",
+          "inline-grid shrink-0 place-items-center rounded-full border font-semibold",
           compact ? "size-4" : "size-5",
           connectionMarks[state],
         )}

@@ -206,7 +206,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 selectedPly={view.selectedPly}
                 onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
               />
-              <div className="border-t border-divider pt-4 text-body text-text-secondary">
+              <div className="shrink-0 border-t border-divider pt-4 text-body text-text-secondary">
                 {view.terminal ? (
                   <>
                     <StartButton state={state} controller={controller} />

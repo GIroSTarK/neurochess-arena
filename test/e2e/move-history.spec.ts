@@ -3,7 +3,108 @@ import { gameSnapshotSchema } from "@neurochess/contracts";
 import type * as webI18n from "../../apps/web/src/i18n";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
-import { acceptedMove, activate, expect, square, startSandbox, test } from "./fixtures";
+import { acceptedMove, activate, expect, playMove, square, startSandbox, test } from "./fixtures";
+
+const longGameMoves = [
+  "a2a3 a7a6 b2b3 b7b6 c2c3 c7c6 d2d3 d7d6 e2e3 e7e6 f2f3 f7f6 g2g3 g7g6 h2h3 h7h6",
+  "a3a4 a6a5 b3b4 b6b5 c3c4 c6c5 d3d4 d6d5 e3e4 e6e5 f3f4 f6f5 g3g4 g6g5 h3h4 h6h5",
+]
+  .join(" ")
+  .split(" ");
+
+test("uses available rail height without letting move rows grow the arena", async ({
+  page,
+}, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  let current = await startSandbox(page, touch);
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const history = page.getByRole("region", { name: "Move history", exact: true });
+  const arena = page.getByTestId("arena-frame");
+  const arenaHeight = () => arena.evaluate((element) => element.getBoundingClientRect().height);
+  const initialHeight = await arenaHeight();
+  const playArea = page.getByRole("region", { name: "Play area", exact: true });
+  const playHeight = () => playArea.evaluate((element) => element.getBoundingClientRect().height);
+  const initialPlayHeight = await playHeight();
+
+  async function checkRailHeight() {
+    const layout = await history.evaluate((element) => {
+      const rail = element.closest("aside")!;
+      const play = rail.previousElementSibling!;
+      const supporting = rail.lastElementChild!;
+      return {
+        railHeight: rail.getBoundingClientRect().height,
+        playHeight: play.getBoundingClientRect().height,
+        railBottom: rail.getBoundingClientRect().bottom,
+        supportingBottom: supporting.getBoundingClientRect().bottom,
+        scrollHeight: element.scrollHeight,
+        height: element.clientHeight,
+      };
+    });
+    expect(layout.railHeight).toBeCloseTo(layout.playHeight, 0);
+    expect(layout.supportingBottom).toBeCloseTo(layout.railBottom, 0);
+    return layout;
+  }
+
+  for (const move of longGameMoves.slice(0, 24)) {
+    current = await playMove(page, current, move, touch);
+  }
+  expect(await playHeight()).toBeCloseTo(initialPlayHeight, 0);
+  if (!touch) {
+    expect(await arenaHeight()).toBeCloseTo(initialHeight, 0);
+    const layout = await checkRailHeight();
+    expect(layout.height).toBeGreaterThan(448);
+    expect(layout.scrollHeight).toBe(layout.height);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath("history-24-plies.png"), fullPage: true });
+
+  for (const move of longGameMoves.slice(24)) {
+    current = await playMove(page, current, move, touch);
+  }
+  expect(await playHeight()).toBeCloseTo(initialPlayHeight, 0);
+  expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+    true,
+  );
+  if (!touch) {
+    expect(await arenaHeight()).toBeCloseTo(initialHeight, 0);
+    for (const width of [1100, 1440]) {
+      await page.setViewportSize({ width, height: 1080 });
+      await checkRailHeight();
+    }
+    const beforeHelp = await history.evaluate((element) => element.clientHeight);
+    await page.getByRole("button", { name: "Keyboard controls", exact: true }).click();
+    await expect
+      .poll(() => history.evaluate((element) => element.clientHeight))
+      .toBeGreaterThan(beforeHelp);
+    await checkRailHeight();
+  }
+});
+
+test("scrolls the page over empty and short move histories", async ({ page }, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  await page.setViewportSize({ width: touch ? 390 : 1440, height: 500 });
+  let current = await startSandbox(page, touch);
+  const history = page.getByRole("region", { name: "Move history", exact: true });
+
+  async function scrollPageOverHistory() {
+    expect(await history.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(
+      true,
+    );
+    await history.hover();
+    const before = await page.evaluate(() => window.scrollY);
+    const direction = before > 50 ? -1 : 1;
+    await page.mouse.wheel(0, direction * 200);
+    await expect
+      .poll(async () => ((await page.evaluate(() => window.scrollY)) - before) * direction)
+      .toBeGreaterThan(50);
+    expect(await history.evaluate((element) => element.scrollTop)).toBe(0);
+  }
+
+  await scrollPageOverHistory();
+  for (const move of ["e2e4", "e7e5", "g1f3"]) current = await playMove(page, current, move, touch);
+  await scrollPageOverHistory();
+});
 
 for (const enlarged of [false, true]) {
   test(`keeps move history in place while moves are submitted and accepted${enlarged ? " with enlarged translations" : ""}`, async ({
@@ -86,12 +187,7 @@ for (const enlarged of [false, true]) {
     let current = await startSandbox(page, touch);
     const initialFen = current.fen;
     // Build a long history through real commands; this test exercises replay navigation, not move entry.
-    const moves = [
-      "a2a3 a7a6 b2b3 b7b6 c2c3 c7c6 d2d3 d7d6 e2e3 e7e6 f2f3 f7f6 g2g3 g7g6 h2h3 h7h6",
-      "a3a4 a6a5 b3b4 b6b5 c3c4 c6c5 d3d4 d6d5 e3e4 e6e5 f3f4 f6f5 g3g4 g6g5 h3h4 h6h5",
-    ]
-      .join(" ")
-      .split(" ");
+    const moves = longGameMoves;
     for (const move of moves) {
       const response = await page.request.post(API_ORIGIN + "/games/" + current.gameId + "/moves", {
         headers: { Origin: WEB_ORIGIN },
@@ -121,6 +217,15 @@ for (const enlarged of [false, true]) {
     expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
       true,
     );
+    await history.hover();
+    const middle = await history.evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+      return element.scrollTop;
+    });
+    const pageBeforeWheel = await page.evaluate(() => window.scrollY);
+    await page.mouse.wheel(0, -Math.min(40, middle / 2));
+    await expect.poll(scrollTop).toBeLessThan(middle);
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageBeforeWheel);
 
     async function navigate(name: string, ply: number) {
       const control = page.getByRole("button", { name, exact: true });

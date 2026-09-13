@@ -42,6 +42,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const unavailable = ariaDisabled === true || ariaDisabled === "true";
+  const quiet = variant === "quiet" || variant === "quiet-danger";
   return (
     <button
       type={type}
@@ -49,8 +50,9 @@ export function Button({
         "inline-flex min-h-target max-w-full items-center justify-center gap-2 rounded-control border py-2 text-center text-label font-semibold",
         padding === "compact" ? "px-2" : "px-4",
         "motion-safe:transition-[box-shadow,background-color] motion-safe:duration-120 motion-safe:ease-arena",
-        "disabled:border-control-border disabled:bg-surface-raised disabled:text-text-secondary",
-        "aria-disabled:border-control-border aria-disabled:bg-surface-raised aria-disabled:text-text-secondary",
+        quiet
+          ? "disabled:text-text-muted aria-disabled:text-text-muted"
+          : "disabled:border-control-border disabled:bg-surface-raised disabled:text-text-secondary aria-disabled:border-control-border aria-disabled:bg-surface-raised aria-disabled:text-text-secondary",
         variants[variant],
         className,
       )}

@@ -98,10 +98,13 @@ export function MoveHistory({ moves, selectedPly, onSelect, variant = "panel" }:
   }
 
   return (
-    <section className="min-w-0" aria-labelledby={headingId}>
+    <section
+      className={cx("min-w-0", variant === "rail" && "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col")}
+      aria-labelledby={headingId}
+    >
       <div
         className={cx(
-          "flex flex-wrap items-center justify-between gap-3",
+          "flex shrink-0 flex-wrap items-center justify-between gap-3",
           variant === "rail" ? "border-b border-divider pb-2" : "border-b-2 border-accent pb-3",
         )}
       >
@@ -121,7 +124,11 @@ export function MoveHistory({ moves, selectedPly, onSelect, variant = "panel" }:
       </div>
       <div
         ref={scroller}
-        className="mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto overscroll-contain"
+        className={cx(
+          "mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto",
+          // Table rows must not determine the arena's height; the play area supplies its space.
+          variant === "rail" && "lg:max-h-none lg:min-h-0 lg:flex-1 lg:contain-size",
+        )}
         role="region"
         aria-label={t("moves.scrollLabel")}
         tabIndex={0}
