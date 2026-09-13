@@ -1,11 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 
-import type * as webI18n from "../../apps/web/src/i18n";
-
+import { expectArenaLayout } from "./arena-layout";
 import { API_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, square, startSandbox, test } from "./fixtures";
-import { expectUnbrokenWords } from "./text-layout";
+import { setPseudoLocalization } from "./text-layout";
 
 const widths = [320, 390, 768, 1024, 1440];
 const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -23,37 +22,6 @@ async function bounds(locator: Locator) {
   });
 }
 
-async function checkViewport(page: Page) {
-  const layout = await page.evaluate(() => {
-    const board = document.querySelector('[role="grid"]')!.getBoundingClientRect();
-    const width = document.documentElement.clientWidth;
-    const controls = [...document.querySelectorAll("button:not([data-square])")].filter((element) =>
-      element.checkVisibility(),
-    );
-    return {
-      overflow: document.documentElement.scrollWidth > width,
-      square: Math.abs(board.width - board.height) < 1,
-      boardWidth: board.width,
-      boardFits: board.left >= 15 && board.right <= width - 15,
-      seats: [...document.querySelectorAll("[data-seat]")].map(
-        (element) => element.getBoundingClientRect().width,
-      ),
-      controlsFit: controls.every((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.left >= 0 && rect.right <= width + 1 && rect.height >= 44 && rect.width >= 44;
-      }),
-    };
-  });
-  expect(layout.overflow).toBe(false);
-  expect(layout.square).toBe(true);
-  expect(layout.boardWidth).toBeLessThanOrEqual(640);
-  expect(layout.boardFits).toBe(true);
-  expect(layout.seats).toHaveLength(2);
-  expect(layout.seats[0]).toBeCloseTo(layout.seats[1]!, 0);
-  expect(layout.controlsFit).toBe(true);
-  await expectUnbrokenWords(page.locator("button:not([data-square]), [data-seat]"));
-}
-
 async function checkLayouts(
   page: Page,
   testInfo: TestInfo,
@@ -67,33 +35,15 @@ async function checkLayouts(
   try {
     for (const enlarged of [false, true]) {
       if (enlarged) {
-        await page.evaluate(async () => {
-          const modulePath = "/src/i18n/index.ts";
-          const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
-          function expand(value: unknown): unknown {
-            if (typeof value === "string") {
-              return value + " extra".repeat(Math.ceil(value.length / 12));
-            }
-            if (value && typeof value === "object") {
-              return Object.fromEntries(
-                Object.entries(value).map(([key, entry]) => [key, expand(entry)]),
-              );
-            }
-            return value;
-          }
-          i18n.addResourceBundle(
-            "en-XA",
-            "translation",
-            expand(i18n.getResourceBundle("en", "translation")),
-          );
-          await i18n.changeLanguage("en-XA");
+        await setPseudoLocalization(page, true);
+        await page.evaluate(() => {
           document.documentElement.style.fontSize = "200%";
         });
       }
       for (const width of widths) {
         await page.setViewportSize({ width, height: 1080 });
         await page.evaluate(() => document.fonts.ready);
-        await checkViewport(page);
+        await expectArenaLayout(page);
         await expect(board).toHaveAttribute("data-fen", fen!);
         await expect(board.getByRole("gridcell")).toHaveCount(64);
         await expect(board.locator("[data-piece]")).toHaveCount(32);
@@ -134,10 +84,8 @@ async function checkLayouts(
     });
     throw error;
   } finally {
-    await page.evaluate(async () => {
-      const modulePath = "/src/i18n/index.ts";
-      const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
-      await i18n.changeLanguage("en");
+    await setPseudoLocalization(page, false);
+    await page.evaluate(() => {
       document.documentElement.style.fontSize = "";
     });
     await page.setViewportSize(viewport);

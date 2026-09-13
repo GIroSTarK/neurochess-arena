@@ -1,6 +1,33 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+
+import type * as webI18n from "../../apps/web/src/i18n";
 
 import { expect } from "./fixtures";
+
+export async function setPseudoLocalization(page: Page, enabled: boolean) {
+  // Inject expanded resources through the dev module to keep test locales out of the app bundle.
+  await page.evaluate(async (enabled) => {
+    const modulePath = "/src/i18n/index.ts";
+    const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
+    if (enabled) {
+      function expand(value: unknown): unknown {
+        if (typeof value === "string") return value + " extra".repeat(Math.ceil(value.length / 12));
+        if (value && typeof value === "object") {
+          return Object.fromEntries(
+            Object.entries(value).map(([key, entry]) => [key, expand(entry)]),
+          );
+        }
+        return value;
+      }
+      i18n.addResourceBundle(
+        "en-XA",
+        "translation",
+        expand(i18n.getResourceBundle("en", "translation")),
+      );
+    }
+    await i18n.changeLanguage(enabled ? "en-XA" : "en");
+  }, enabled);
+}
 
 export async function expectUnbrokenWords(locator: Locator) {
   const broken = await locator.evaluateAll((elements) =>
