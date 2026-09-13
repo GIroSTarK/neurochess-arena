@@ -179,7 +179,6 @@ function ReferenceMatch({
               canMove={false}
               interactionEpoch={`${snapshot.state}-${ply}`}
               orientation={orientation}
-              coordinates="framed"
               describedBy={helpId}
               onMove={() => undefined}
             />

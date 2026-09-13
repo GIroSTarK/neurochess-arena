@@ -13,8 +13,6 @@ interface BoardSquareProps {
   /** Whether this square holds the board's single tab stop. */
   readonly focusable: boolean;
   readonly showRank: boolean;
-  readonly showFile: boolean;
-  readonly hideRankOnDesktop?: boolean;
   readonly ref: Ref<HTMLButtonElement>;
   readonly onFocus: () => void;
   readonly onActivate: () => void;
@@ -49,8 +47,6 @@ export function BoardSquare({
   column,
   focusable,
   showRank,
-  showFile,
-  hideRankOnDesktop = false,
   ref,
   onFocus,
   onActivate,
@@ -81,19 +77,10 @@ export function BoardSquare({
       >
         {showRank ? (
           <span
-            className={cx(
-              coordinateClassName,
-              "top-[3px] left-[3px]",
-              hideRankOnDesktop && "lg:hidden",
-            )}
+            className={cx(coordinateClassName, "top-[3px] left-[3px] lg:hidden")}
             aria-hidden="true"
           >
             {square[1]}
-          </span>
-        ) : null}
-        {showFile ? (
-          <span className={cx(coordinateClassName, "right-[3px] bottom-[3px]")} aria-hidden="true">
-            {square[0]}
           </span>
         ) : null}
         {state.lastMove ? (

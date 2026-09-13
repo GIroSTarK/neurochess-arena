@@ -17,7 +17,6 @@ type ChessboardProps = {
   readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
   readonly describedBy?: string | undefined;
-  readonly coordinates?: "inside" | "framed";
   readonly ref?: Ref<ChessboardHandle> | undefined;
 } & (
   | {
@@ -46,7 +45,6 @@ export function Chessboard({
   interactionEpoch,
   onMove,
   describedBy,
-  coordinates = "inside",
   view,
   ref,
 }: ChessboardProps) {
@@ -154,8 +152,6 @@ export function Chessboard({
                     column={columnIndex + 1}
                     focusable={focusedSquare === square}
                     showRank={columnIndex === 0}
-                    showFile={coordinates === "inside" && rowIndex === 7}
-                    hideRankOnDesktop={coordinates === "framed"}
                     ref={(element) => {
                       if (element) buttons.set(square, element);
                       else buttons.delete(square);
@@ -172,26 +168,22 @@ export function Chessboard({
             </div>
           ))}
         </div>
-        {coordinates === "framed" ? (
-          <>
-            <div
-              className="pointer-events-none absolute top-0 right-full hidden aspect-[1/8] h-[calc(100%_-_1.5rem)] w-6 grid-rows-8 place-items-center font-mono text-caption text-text-muted lg:grid"
-              aria-hidden="true"
-            >
-              {rows.map((row) => (
-                <span key={row[0]?.[1]}>{row[0]?.[1]}</span>
-              ))}
-            </div>
-            <div
-              className="pointer-events-none grid h-6 grid-cols-8 items-end text-center font-mono text-caption text-text-muted"
-              aria-hidden="true"
-            >
-              {rows[0]?.map((square) => (
-                <span key={square}>{square[0]}</span>
-              ))}
-            </div>
-          </>
-        ) : null}
+        <div
+          className="pointer-events-none absolute top-0 right-full hidden aspect-[1/8] h-[calc(100%_-_1.5rem)] w-6 grid-rows-8 place-items-center font-mono text-caption text-text-muted lg:grid"
+          aria-hidden="true"
+        >
+          {rows.map((row) => (
+            <span key={row[0]?.[1]}>{row[0]?.[1]}</span>
+          ))}
+        </div>
+        <div
+          className="pointer-events-none grid h-6 grid-cols-8 items-end text-center font-mono text-caption text-text-muted"
+          aria-hidden="true"
+        >
+          {rows[0]?.map((square) => (
+            <span key={square}>{square[0]}</span>
+          ))}
+        </div>
       </div>
       {promotion && enabled ? (
         <PromotionDialog

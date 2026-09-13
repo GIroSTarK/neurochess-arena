@@ -41,6 +41,30 @@ describe("accessible chessboard", () => {
   });
 
   it.each(["white", "black"] as const)(
+    "orders framed coordinates with %s at the bottom without adding grid cells or tab stops",
+    (orientation) => {
+      renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);
+      const grid = screen.getByRole("grid", { name: "Chessboard" });
+      const files = screen.getAllByText(/^[a-h]$/);
+      const ranks = screen.getAllByText(/^[1-8]$/).filter((label) => !grid.contains(label));
+      expect(files.map((label) => label.textContent).join("")).toBe(
+        orientation === "white" ? "abcdefgh" : "hgfedcba",
+      );
+      expect(ranks.map((label) => label.textContent).join("")).toBe(
+        orientation === "white" ? "87654321" : "12345678",
+      );
+      for (const label of [...files, ...ranks]) {
+        expect(grid).not.toContainElement(label);
+        expect(label.closest('[aria-hidden="true"]')).not.toBeNull();
+      }
+      expect(within(grid).getAllByRole("gridcell")).toHaveLength(64);
+      expect(screen.getAllByRole("button").filter((button) => button.tabIndex === 0)).toEqual([
+        square("e2"),
+      ]);
+    },
+  );
+
+  it.each(["white", "black"] as const)(
     "follows visible directions, row ends and corners with %s at the bottom",
     async (orientation) => {
       renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);

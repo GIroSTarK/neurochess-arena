@@ -14,7 +14,7 @@ export function LifecycleControls({
 }: {
   readonly state: SandboxState;
   readonly controller: Pick<SandboxController, "lifecycle">;
-  readonly boardTools?: LifecycleControlsProps["boardTools"];
+  readonly boardTools: LifecycleControlsProps["boardTools"];
 }) {
   const { t } = useTranslation();
   return (

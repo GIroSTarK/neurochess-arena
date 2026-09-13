@@ -26,28 +26,53 @@ describe("shared lifecycle capabilities", () => {
       boardTools: { orientation: "white" as const, onFlip: flip, helpId: "board-help" },
     };
     const { rerender } = renderLocalized(<LifecycleControls {...props} />);
-    expect(screen.getAllByRole("button")).toEqual(
-      [
-        "Pause",
-        "Flip board",
-        "Resign White",
-        "Resign Black",
-        "Keyboard controls",
-        "Abort game",
-      ].map((name) => screen.getByRole("button", { name })),
-    );
+    const buttons = [
+      "Pause",
+      "Flip board",
+      "Resign White",
+      "Resign Black",
+      "Keyboard controls",
+      "Abort game",
+    ].map((name) => screen.getByRole("button", { name }));
+    expect(screen.getAllByRole("button")).toEqual(buttons);
+    const user = userEvent.setup();
+    for (const button of buttons) {
+      await user.tab();
+      expect(button).toHaveFocus();
+    }
+    const flipButton = screen.getByRole("button", { name: "Flip board" });
+    expect(flipButton).toHaveAccessibleDescription("White at bottom");
     const pause = screen.getByRole("button", { name: "Pause" });
     await userEvent.click(pause);
     expect(togglePause).toHaveBeenCalledOnce();
 
-    rerender(<LifecycleControls {...props} paused disabled />);
+    rerender(
+      <LifecycleControls
+        {...props}
+        paused
+        disabled
+        boardTools={{ ...props.boardTools, orientation: "black" }}
+      />,
+    );
     expect(screen.getByRole("button", { name: "Resume" })).toBe(pause);
     expect(pause).toHaveFocus();
+    expect(flipButton).toHaveAccessibleDescription("Black at bottom");
     await userEvent.keyboard("{Enter} ");
     expect(togglePause).toHaveBeenCalledOnce();
+    for (const button of buttons.slice(1)) {
+      await user.tab();
+      expect(button).toHaveFocus();
+    }
+    for (const name of ["Resign White", "Resign Black"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      await user.click(button);
+      await user.keyboard("{Enter} ");
+    }
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(abort).not.toHaveBeenCalled();
+    expect(resign).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Flip board" }));
     expect(flip).toHaveBeenCalledOnce();
     const help = screen.getByRole("button", { name: "Keyboard controls" });
@@ -58,27 +83,37 @@ describe("shared lifecycle capabilities", () => {
     expect(document.getElementById("board-help")).not.toBeVisible();
   });
 
-  it("offers resignation only for the supplied human seat", async () => {
-    const resign = vi.fn();
-    renderLocalized(
-      <LifecycleControls
-        paused={false}
-        disabled={false}
-        epoch="match:1"
-        abortDescription="Stop this test match."
-        resignations={[{ color: "black", onResign: resign }]}
-      />,
-    );
-    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Abort game" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Resign White" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Resign Black" }));
-    expect(resign).not.toHaveBeenCalled();
-    await userEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm resignation" }),
-    );
-    expect(resign).toHaveBeenCalledExactlyOnceWith();
-  });
+  it.each(["white", "black"] as const)(
+    "offers resignation only for the %s human seat",
+    async (color) => {
+      const resign = vi.fn();
+      renderLocalized(
+        <LifecycleControls
+          paused={false}
+          disabled={false}
+          epoch="match:1"
+          abortDescription="Stop this test match."
+          resignations={[{ color, onResign: resign }]}
+          boardTools={{ orientation: color, onFlip: vi.fn(), helpId: "board-help" }}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Abort game" })).toBeNull();
+      const resignation = color === "white" ? "Resign White" : "Resign Black";
+      expect(screen.getAllByRole("button")).toEqual(
+        ["Flip board", resignation, "Keyboard controls"].map((name) =>
+          screen.getByRole("button", { name }),
+        ),
+      );
+      await userEvent.click(screen.getByRole("button", { name: resignation }));
+      expect(resign).not.toHaveBeenCalled();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm resignation" }),
+      );
+      expect(resign).toHaveBeenCalledExactlyOnceWith();
+      expect(screen.getByRole("button", { name: resignation })).toHaveFocus();
+    },
+  );
 
   it("dismisses a confirmation when its action is withdrawn without a new position", async () => {
     const abort = vi.fn();
@@ -88,6 +123,7 @@ describe("shared lifecycle capabilities", () => {
       epoch: "match:1",
       resignations: [],
       abortDescription: "Stop this test match.",
+      boardTools: { orientation: "white" as const, onFlip: vi.fn(), helpId: "board-help" },
     };
     const { rerender } = renderLocalized(<LifecycleControls {...props} onAbort={abort} />);
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
@@ -99,6 +135,9 @@ describe("shared lifecycle capabilities", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("button", { name: "Abort game" })).toBeNull();
     expect(abort).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button")).toEqual(
+      ["Flip board", "Keyboard controls"].map((name) => screen.getByRole("button", { name })),
+    );
 
     rerender(<LifecycleControls {...props} onAbort={abort} />);
 

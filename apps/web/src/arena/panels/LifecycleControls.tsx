@@ -26,13 +26,11 @@ export interface LifecycleControlsProps {
     readonly color: ChessColor;
     readonly onResign: () => void;
   }[];
-  readonly boardTools?:
-    | {
-        readonly orientation: ChessColor;
-        readonly onFlip: () => void;
-        readonly helpId: string;
-      }
-    | undefined;
+  readonly boardTools: {
+    readonly orientation: ChessColor;
+    readonly onFlip: () => void;
+    readonly helpId: string;
+  };
 }
 
 export function LifecycleControls({
@@ -46,7 +44,6 @@ export function LifecycleControls({
   boardTools,
 }: LifecycleControlsProps) {
   const { t } = useTranslation();
-  const padding = boardTools ? "compact" : "normal";
   const threeColumns = Boolean(onTogglePause);
   // Equal label reservations keep the gaps between compact resignation buttons identical.
   const resignationLabels = resignations.map(({ color }) =>
@@ -73,50 +70,39 @@ export function LifecycleControls({
 
   const abort = onAbort ? (
     <Button
-      padding={padding}
-      variant={boardTools ? "quiet-danger" : "secondary"}
+      padding="compact"
+      variant="quiet-danger"
       aria-disabled={disabled}
-      className={
-        boardTools
-          ? cx(
-              "max-lg:border-control-border max-lg:bg-surface lg:@lg:row-start-1",
-              threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
-            )
-          : undefined
-      }
+      className={cx(
+        "max-lg:border-control-border max-lg:bg-surface lg:@lg:row-start-1",
+        threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
+      )}
       onClick={() => confirm({ action: "abort" })}
     >
-      {boardTools ? <Icon path="M6 6h12v12H6z" /> : null}
+      <Icon path="M6 6h12v12H6z" />
       <span className="min-w-0">{t("lifecycle.abort")}</span>
     </Button>
   ) : null;
 
   return (
-    <div
-      className={boardTools ? "@container mt-6" : "mt-4"}
-      aria-label={t("lifecycle.controls")}
-      role="group"
-    >
+    <div className="@container mt-6" aria-label={t("lifecycle.controls")} role="group">
       <div
         className={cx(
-          "grid",
-          boardTools
-            ? "grid-cols-1 gap-2 @min-[18rem]:grid-cols-2 lg:@lg:gap-y-3"
-            : "grid-cols-2 gap-3",
-          Boolean(boardTools) && threeColumns && "lg:@lg:grid-cols-3",
+          "grid grid-cols-1 gap-2 @min-[18rem]:grid-cols-2 lg:@lg:gap-y-3",
+          threeColumns && "lg:@lg:grid-cols-3",
         )}
       >
         {onTogglePause ? (
           <Button
-            padding={padding}
+            padding="compact"
             variant="primary"
             aria-disabled={disabled}
-            className={boardTools ? "lg:@lg:col-start-1 lg:@lg:row-start-1" : undefined}
+            className="lg:@lg:col-start-1 lg:@lg:row-start-1"
             onClick={() => {
               if (!disabled) onTogglePause();
             }}
           >
-            {boardTools ? <Icon path={paused ? "M8 5v14l11-7z" : "M9 5v14M15 5v14"} /> : null}
+            <Icon path={paused ? "M8 5v14l11-7z" : "M9 5v14M15 5v14"} />
             <StableText
               value={t(paused ? "lifecycle.resume" : "lifecycle.pause")}
               variants={[t("lifecycle.pause"), t("lifecycle.resume")]}
@@ -124,40 +110,32 @@ export function LifecycleControls({
             />
           </Button>
         ) : null}
-        {boardTools ? (
-          <Button
-            padding={padding}
-            variant="secondary"
-            className={cx(
-              "lg:@lg:row-start-1",
-              threeColumns ? "lg:@lg:col-start-2" : "lg:@lg:col-start-1",
-            )}
-            aria-describedby={orientationId}
-            onClick={boardTools.onFlip}
-          >
-            <Icon path="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5" />
-            <span className="min-w-0">{t("actions.flip")}</span>
-          </Button>
-        ) : (
-          abort
-        )}
+        <Button
+          padding="compact"
+          variant="secondary"
+          className={cx(
+            "lg:@lg:row-start-1",
+            threeColumns ? "lg:@lg:col-start-2" : "lg:@lg:col-start-1",
+          )}
+          aria-describedby={orientationId}
+          onClick={boardTools.onFlip}
+        >
+          <Icon path="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5" />
+          <span className="min-w-0">{t("actions.flip")}</span>
+        </Button>
         {resignations.map(({ color }, index) => (
           <Button
             key={color}
-            padding={padding}
-            variant={boardTools ? "quiet" : "secondary"}
-            className={
-              boardTools
-                ? cx(
-                    "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
-                    index === 0 ? "lg:@lg:col-start-1" : "lg:@lg:col-start-2",
-                  )
-                : undefined
-            }
+            padding="compact"
+            variant="quiet"
+            className={cx(
+              "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
+              index === 0 ? "lg:@lg:col-start-1" : "lg:@lg:col-start-2",
+            )}
             aria-disabled={disabled}
             onClick={() => confirm({ action: "resign", losingColor: color })}
           >
-            {boardTools ? <Icon path="M5 21V4m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0" /> : null}
+            <Icon path="M5 21V4m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0" />
             <StableText
               value={t(color === "white" ? "lifecycle.resignWhite" : "lifecycle.resignBlack")}
               variants={resignationLabels}
@@ -165,44 +143,32 @@ export function LifecycleControls({
             />
           </Button>
         ))}
-        {boardTools ? (
-          <>
-            <Button
-              padding={padding}
-              variant="quiet"
-              className={cx(
-                "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
-                threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
-              )}
-              aria-expanded={helpOpen}
-              aria-controls={boardTools.helpId}
-              onClick={() => setHelpOpen((previous) => !previous)}
-            >
-              <Icon path="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h10" />
-              <span className="min-w-0">{t("board.keyboardHelp")}</span>
-            </Button>
-            {abort}
-            <span
-              className="col-span-full col-start-1 row-start-2 hidden h-px bg-divider lg:@lg:block"
-              aria-hidden="true"
-            />
-          </>
-        ) : null}
+        <Button
+          padding="compact"
+          variant="quiet"
+          className={cx(
+            "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
+            threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
+          )}
+          aria-expanded={helpOpen}
+          aria-controls={boardTools.helpId}
+          onClick={() => setHelpOpen((previous) => !previous)}
+        >
+          <Icon path="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h10" />
+          <span className="min-w-0">{t("board.keyboardHelp")}</span>
+        </Button>
+        {abort}
+        <span
+          className="col-span-full col-start-1 row-start-2 hidden h-px bg-divider lg:@lg:block"
+          aria-hidden="true"
+        />
       </div>
-      {boardTools ? (
-        <>
-          <span id={orientationId} className="sr-only">
-            {t(boardTools.orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-          </span>
-          <p
-            id={boardTools.helpId}
-            hidden={!helpOpen}
-            className="mt-4 text-body text-text-secondary"
-          >
-            {t("board.instructions")}
-          </p>
-        </>
-      ) : null}
+      <span id={orientationId} className="sr-only">
+        {t(boardTools.orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
+      </span>
+      <p id={boardTools.helpId} hidden={!helpOpen} className="mt-4 text-body text-text-secondary">
+        {t("board.instructions")}
+      </p>
       {confirmation ? (
         <ConfirmationDialog
           action={confirmation}

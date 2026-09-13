@@ -151,7 +151,6 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 interactionEpoch: "preview",
               })}
               orientation={view.board ? orientation : "white"}
-              coordinates="framed"
               onMove={(move) => {
                 void controller.submit(move);
               }}

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { mockController, OTHER_GAME_ID, readyState, snapshot } from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
@@ -9,7 +9,12 @@ import { LifecycleControls } from "./LifecycleControls";
 
 function props() {
   const controller = mockController();
-  return { controller, state: readyState(), lifecycle: controller.lifecycle };
+  return {
+    controller,
+    state: readyState(),
+    lifecycle: controller.lifecycle,
+    boardTools: { orientation: "white" as const, onFlip: vi.fn(), helpId: "board-help" },
+  };
 }
 
 describe("lifecycle confirmations", () => {
