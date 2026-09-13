@@ -1,23 +1,145 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { errorResponse, GAME_ID, jsonResponse, OTHER_GAME_ID, snapshot } from "../test/fixtures";
+import {
+  errorResponse,
+  FOOLS_MATE,
+  GAME_ID,
+  jsonResponse,
+  OTHER_GAME_ID,
+  requestBody,
+  snapshot,
+} from "../test/fixtures";
 
-import { ApiFailure, createSandboxApi } from "./client";
+import { ApiFailure, createSandboxApi, type SandboxApi } from "./client";
+
+interface RequestContract {
+  method: "GET" | "POST";
+  path: string;
+  body?: unknown;
+  payload: unknown;
+  status?: number;
+  result: unknown;
+  invoke: (api: SandboxApi, signal: AbortSignal) => Promise<unknown>;
+}
 
 describe("sandbox transport boundary", () => {
-  it("checks readiness rather than liveness, with bounded, credentialed, no-store requests", async () => {
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(jsonResponse({ status: "ready" }));
-    const api = createSandboxApi("http://localhost:3001", { fetch });
-    expect(await api.ready(new AbortController().signal)).toBe(true);
-    expect(fetch).toHaveBeenCalledWith(
-      new URL("http://localhost:3001/ready"),
-      expect.objectContaining({
-        credentials: "include",
-        cache: "no-store",
-        signal: expect.any(AbortSignal) as unknown,
-      }),
+  describe("successful request contracts", () => {
+    const current = snapshot([], { gameId: OTHER_GAME_ID, version: 7 });
+    const moved = snapshot(["e2e4"], { gameId: OTHER_GAME_ID, version: 8 });
+    const paused = snapshot([], {
+      gameId: OTHER_GAME_ID,
+      state: "paused",
+      legalMoves: [],
+      version: 8,
+    });
+    const terminal = snapshot(FOOLS_MATE, { gameId: OTHER_GAME_ID });
+    const replay = { snapshot: terminal, initialFen: current.fen };
+    const pgn = { gameId: terminal.gameId, version: terminal.version, pgn: terminal.pgn };
+    const command = {
+      gameId: OTHER_GAME_ID,
+      expectedVersion: current.version,
+      commandId: "57e9326d-dba5-4593-9b92-12d7919d50d1",
+    };
+    const move = { ...command, move: "e2e4" };
+    const pause = { ...command, action: "pause" } as const;
+    const requests: Record<keyof SandboxApi, RequestContract> = {
+      ready: {
+        method: "GET",
+        path: "/ready",
+        payload: { status: "ready" },
+        result: true,
+        invoke: (api, signal) => api.ready(signal),
+      },
+      bootstrap: {
+        method: "POST",
+        path: "/guest-session",
+        body: {},
+        payload: { status: "ready" },
+        result: undefined,
+        invoke: (api, signal) => api.bootstrap(signal),
+      },
+      create: {
+        method: "POST",
+        path: "/sandbox/games",
+        body: {},
+        payload: snapshot(),
+        status: 201,
+        result: snapshot(),
+        invoke: (api, signal) => api.create(signal),
+      },
+      snapshot: {
+        method: "GET",
+        path: `/games/${OTHER_GAME_ID}`,
+        payload: current,
+        result: current,
+        invoke: (api, signal) => api.snapshot(OTHER_GAME_ID, signal),
+      },
+      move: {
+        method: "POST",
+        path: `/games/${OTHER_GAME_ID}/moves`,
+        body: move,
+        payload: moved,
+        result: moved,
+        invoke: (api, signal) => api.move(move, signal),
+      },
+      lifecycle: {
+        method: "POST",
+        path: `/games/${OTHER_GAME_ID}/lifecycle`,
+        body: pause,
+        payload: paused,
+        result: paused,
+        invoke: (api, signal) => api.lifecycle(pause, signal),
+      },
+      unfinished: {
+        method: "GET",
+        path: "/sandbox/games/unfinished",
+        payload: { snapshot: current },
+        result: current,
+        invoke: (api, signal) => api.unfinished(signal),
+      },
+      replay: {
+        method: "GET",
+        path: `/games/${OTHER_GAME_ID}/replay`,
+        payload: replay,
+        result: replay,
+        invoke: (api, signal) => api.replay(OTHER_GAME_ID, signal),
+      },
+      pgn: {
+        method: "GET",
+        path: `/games/${OTHER_GAME_ID}/pgn`,
+        payload: pgn,
+        result: pgn,
+        invoke: (api, signal) => api.pgn(OTHER_GAME_ID, signal),
+      },
+    };
+
+    it.each(Object.entries(requests))(
+      "%s sends the exact endpoint, method, JSON body, and credentialed request options",
+      async (_name, { method, path, body, payload, status = 200, result, invoke }) => {
+        const fetch = vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(jsonResponse(payload, status));
+        const origin = "https://api.neurochess.test:8443";
+        const api = createSandboxApi(origin, { fetch });
+
+        expect(await invoke(api, new AbortController().signal)).toEqual(result);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch).toHaveBeenCalledWith(new URL(path, origin), {
+          method,
+          credentials: "include",
+          cache: "no-store",
+          redirect: "error",
+          headers: {
+            accept: "application/json",
+            ...(body === undefined ? {} : { "content-type": "application/json" }),
+          },
+          ...(body === undefined ? {} : { body: expect.any(String) as unknown }),
+          signal: expect.any(AbortSignal) as unknown,
+        });
+        if (body !== undefined) {
+          expect(JSON.parse(requestBody(fetch.mock.calls[0]?.[1]))).toEqual(body);
+        }
+      },
     );
   });
 
