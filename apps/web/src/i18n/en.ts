@@ -68,6 +68,8 @@ export const en = {
     mixedHint: "Only the human seat receives a resignation action.",
     aiHint: "Both seats are models. No resignation actions are supplied.",
     pausedHint: "This fixture is paused. Resume changes its local presentation state.",
+    abortDescription:
+      "This stops the local fixture without awarding a win or loss. Replay is available on this page; reloading or changing the scenario or reference state resets it.",
   },
   notFound: {
     title: "Page unavailable",
@@ -85,6 +87,8 @@ export const en = {
     controlHint: "You control both colors.",
     moveHint: "Select a piece, then a highlighted square.",
     sessionFooter: "Private game · Available while your guest session lasts.",
+    abortDescription:
+      "This ends the game without awarding a win or loss. Its moves remain available for replay and PGN export during your guest session.",
     description: "Play both colors in one browser.",
     entryTitle: "Ready when you are",
     entryDescription: "Start a standard chess game and play White and Black from this browser.",
@@ -210,8 +214,6 @@ export const en = {
     resignBlack: "Resign Black",
     submitting: "Applying your game command…",
     abortTitle: "Stop this game?",
-    abortDescription:
-      "This ends the game without awarding a win or loss. Its moves remain available for replay and PGN export during your guest session.",
     resignTitle: "Resign {{color}}?",
     resignDescription: "{{winner}} will win by resignation. This result cannot be undone.",
     confirmAbort: "Stop game",

@@ -134,6 +134,45 @@ for (const scenario of [
   });
 }
 
+test("reference abortion explains temporary replay and preserves confirmation focus", async ({
+  page,
+}, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
+  });
+  await page.goto("/dev/arena");
+  await expect(page).toHaveTitle("Arena test scenarios · Neurochess Arena");
+  await expect(page.locator("vite-error-overlay")).toHaveCount(0);
+  const trigger = page.getByRole("button", { name: "Abort game" });
+  await activate(trigger, touch);
+  const dialog = page.getByRole("dialog", { name: "Stop this game?" });
+  await expect(dialog).toHaveAccessibleDescription(
+    "This stops the local fixture without awarding a win or loss. Replay is available on this page; reloading or changing the scenario or reference state resets it.",
+  );
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath("reference-abort.png") });
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Stop game" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("region", { name: "Replay" })).toHaveCount(0);
+  await activate(trigger, touch);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await activate(dialog.getByRole("button", { name: "Stop game" }), touch);
+  await expect(page.getByRole("heading", { name: "Game stopped" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Replay" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Copy|Download) PGN$/ })).toHaveCount(0);
+  await activate(page.getByRole("button", { name: "First", exact: true }), touch);
+  await expect(page.getByText("Ply 0 of 3")).toBeVisible();
+  await page.reload();
+  await expect(trigger).toBeVisible();
+  await expect(page.getByRole("region", { name: "Replay" })).toHaveCount(0);
+  expect(apiRequests).toEqual([]);
+});
+
 test("reference data stays out of Sandbox and is unavailable when Sandbox is disabled", async ({
   page,
 }, testInfo) => {

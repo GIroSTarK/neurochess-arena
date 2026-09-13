@@ -21,6 +21,7 @@ export interface LifecycleControlsProps {
   readonly epoch: string;
   readonly onTogglePause?: (() => void) | undefined;
   readonly onAbort?: (() => void) | undefined;
+  readonly abortDescription: string;
   readonly resignations: readonly {
     readonly color: ChessColor;
     readonly onResign: () => void;
@@ -40,6 +41,7 @@ export function LifecycleControls({
   epoch,
   onTogglePause,
   onAbort,
+  abortDescription,
   resignations,
   boardTools,
 }: LifecycleControlsProps) {
@@ -204,6 +206,7 @@ export function LifecycleControls({
       {confirmation ? (
         <ConfirmationDialog
           action={confirmation}
+          abortDescription={abortDescription}
           onCancel={() => setConfirmation(null)}
           onConfirm={() => {
             setConfirmation(null);
@@ -218,10 +221,12 @@ export function LifecycleControls({
 /** Destructive confirmation: Cancel comes first so it receives the initial focus. */
 function ConfirmationDialog({
   action,
+  abortDescription,
   onCancel,
   onConfirm,
 }: {
   readonly action: Confirmation;
+  readonly abortDescription: string;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
@@ -235,7 +240,7 @@ function ConfirmationDialog({
       }
       description={
         action.action === "abort"
-          ? t("lifecycle.abortDescription")
+          ? abortDescription
           : t("lifecycle.resignDescription", {
               winner: t(action.losingColor === "white" ? "players.black" : "players.white"),
             })

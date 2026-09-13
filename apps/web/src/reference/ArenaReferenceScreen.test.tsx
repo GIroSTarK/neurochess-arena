@@ -69,6 +69,37 @@ describe("shared arena reference scenarios", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("explains local replay and aborts only the fixture after confirmation", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    renderLocalized(<ArenaReferenceScreen />);
+    const abort = screen.getByRole("button", { name: "Abort game" });
+    await user.click(abort);
+    const dialog = screen.getByRole("dialog", { name: "Stop this game?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "This stops the local fixture without awarding a win or loss. Replay is available on this page; reloading or changing the scenario or reference state resets it.",
+    );
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+    await user.click(cancel);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(abort).toHaveFocus();
+    expect(screen.queryByRole("region", { name: "Replay" })).not.toBeInTheDocument();
+    await user.click(abort);
+    await user.click(screen.getByRole("button", { name: "Stop game" }));
+    expect(screen.getByRole("heading", { name: "Game stopped" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Replay" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "First" }));
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", standardPositionPreview.fen);
+    expect(screen.queryByRole("button", { name: "Copy PGN" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download PGN" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Test scenario"), "aiHuman");
+    expect(screen.getByRole("button", { name: "Abort game" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Replay" })).not.toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("updates local pause, flip and confirmed human resignation through the shared controls", async () => {
     const user = userEvent.setup();
     renderLocalized(<ArenaReferenceScreen />);

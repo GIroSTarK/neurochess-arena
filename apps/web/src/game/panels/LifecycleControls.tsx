@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import {
   LifecycleControls as LifecyclePanel,
   type LifecycleControlsProps,
@@ -14,6 +16,7 @@ export function LifecycleControls({
   readonly controller: Pick<SandboxController, "lifecycle">;
   readonly boardTools?: LifecycleControlsProps["boardTools"];
 }) {
+  const { t } = useTranslation();
   return (
     <LifecyclePanel
       boardTools={boardTools}
@@ -28,6 +31,7 @@ export function LifecycleControls({
       onAbort={() => {
         void controller.lifecycle({ action: "abort" });
       }}
+      abortDescription={t("sandbox.abortDescription")}
       resignations={(["white", "black"] as const).map((color) => ({
         color,
         onResign: () => {

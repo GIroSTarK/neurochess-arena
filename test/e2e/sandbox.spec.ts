@@ -342,6 +342,12 @@ test("confirms both resignation colors and abortion with accessible cancellation
     await activate(trigger, touch);
     let dialog = page.getByRole("dialog", { name: ending.title, exact: true });
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    if (ending.reason === "aborted") {
+      await expect(dialog).toHaveAccessibleDescription(
+        "This ends the game without awarding a win or loss. Its moves remain available for replay and PGN export during your guest session.",
+      );
+      await page.screenshot({ path: testInfo.outputPath("sandbox-abort.png") });
+    }
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByRole("button", { name: ending.confirm })).toBeFocused();
     await page.keyboard.press("Escape");

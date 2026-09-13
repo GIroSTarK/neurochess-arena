@@ -13,6 +13,20 @@ function props() {
 }
 
 describe("lifecycle confirmations", () => {
+  it("explains guest-session replay and PGN export before aborting", async () => {
+    const initial = props();
+    renderLocalized(<LifecycleControls {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
+    const dialog = screen.getByRole("dialog", { name: "Stop this game?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "This ends the game without awarding a win or loss. Its moves remain available for replay and PGN export during your guest session.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(initial.lifecycle).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Stop game" }));
+    expect(initial.lifecycle).toHaveBeenCalledExactlyOnceWith({ action: "abort" });
+  });
+
   it.each([
     { name: "Abort game", confirm: "Stop game", action: { action: "abort" } },
     {

@@ -215,6 +215,7 @@ function ReferenceMatch({
                   scenario.canPause ? () => apply(paused ? game.resume() : game.pause()) : undefined
                 }
                 onAbort={() => apply(game.abort())}
+                abortDescription={t("reference.abortDescription")}
                 resignations={
                   scenario.human
                     ? [

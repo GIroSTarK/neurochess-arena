@@ -18,6 +18,7 @@ describe("shared lifecycle capabilities", () => {
       epoch: "match:1",
       onTogglePause: togglePause,
       onAbort: abort,
+      abortDescription: "Stop this test match.",
       resignations: [
         { color: "white" as const, onResign: resign },
         { color: "black" as const, onResign: resign },
@@ -64,6 +65,7 @@ describe("shared lifecycle capabilities", () => {
         paused={false}
         disabled={false}
         epoch="match:1"
+        abortDescription="Stop this test match."
         resignations={[{ color: "black", onResign: resign }]}
       />,
     );
@@ -80,10 +82,17 @@ describe("shared lifecycle capabilities", () => {
 
   it("dismisses a confirmation when its action is withdrawn without a new position", async () => {
     const abort = vi.fn();
-    const props = { paused: false, disabled: false, epoch: "match:1", resignations: [] };
+    const props = {
+      paused: false,
+      disabled: false,
+      epoch: "match:1",
+      resignations: [],
+      abortDescription: "Stop this test match.",
+    };
     const { rerender } = renderLocalized(<LifecycleControls {...props} onAbort={abort} />);
     await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
     expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(props.abortDescription);
 
     rerender(<LifecycleControls {...props} />);
 
