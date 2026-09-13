@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -15,7 +17,7 @@ import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { integrationDatabase } from "../database.js";
 
-import { API_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
 
 async function main() {
   // This guard runs before creating a pool, applying migrations or listening.
@@ -40,6 +42,20 @@ async function main() {
     },
   });
   process.env.VITE_API_BASE_URL = API_ORIGIN;
+  process.env.SANDBOX_ENABLED = "false";
+  const disabledWeb = await createServer({
+    cacheDir: join(tmpdir(), "neurochess-playwright-disabled-vite"),
+    root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
+    configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
+    mode: "test",
+    server: {
+      host: "localhost",
+      port: Number(new URL(DISABLED_WEB_ORIGIN).port),
+      strictPort: true,
+    },
+    logLevel: "error",
+  });
+  process.env.SANDBOX_ENABLED = "true";
   const web = await createServer({
     root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
     configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
@@ -51,6 +67,7 @@ async function main() {
   function close(): Promise<void> {
     closing ??= (async () => {
       await web.close();
+      await disabledWeb.close();
       await app.close();
       try {
         if (guestIds.size > 0) {
@@ -76,6 +93,7 @@ async function main() {
     await database.check();
     await runMigrations(database);
     await app.listen({ host: "localhost", port: Number(new URL(API_ORIGIN).port) });
+    await disabledWeb.listen();
     await web.listen();
     process.stdout.write("Sandbox browser test services ready.\n");
   } catch {
@@ -88,7 +106,7 @@ async function main() {
 
 void main().catch(() => {
   process.stderr.write(
-    "Browser test setup failed. TEST_DATABASE_URL must target the disposable test service; ports 3101 and 5174 must be free.\n",
+    "Browser test setup failed. TEST_DATABASE_URL must target the disposable test service; ports 3101, 5174 and 5175 must be free.\n",
   );
   process.exitCode = 1;
 });

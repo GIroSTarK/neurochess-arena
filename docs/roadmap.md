@@ -53,6 +53,7 @@ Use the [selected Sandbox concepts](design-system/concepts/sandbox-v1/README.md)
 - [x] extract the shared shell, arena layout, participant and game panels behind Sandbox adapters, with an enforced presentation boundary;
 - [x] apply the live composition and board-toolbar action hierarchy;
 - [x] apply the entry, recovery, and result/replay compositions;
+- [x] separate the Arena placeholder from flag-gated Sandbox navigation;
 - [ ] exercise the shared presentation with explicit human/AI reference scenarios and future panel slots;
 - [ ] complete concept-to-browser comparison and responsive, keyboard, recovery, and replay acceptance.
 

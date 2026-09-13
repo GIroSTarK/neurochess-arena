@@ -6,7 +6,7 @@ import { SandboxController } from "./controller";
 import { browserNavigation } from "./navigation";
 
 /**
- * One controller for the life of the mounted application. The API origin comes from the parsed
+ * One controller for the life of the mounted sandbox screen. The API origin comes from the parsed
  * environment and does not change at runtime, so the controller is created once as state rather
  * than memoized: React may discard a memo cache, which would silently replace the session.
  */

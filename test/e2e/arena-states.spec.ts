@@ -50,7 +50,7 @@ test("entry previews standard chess without creating a guest and places one Star
   page.on("request", (request) => {
     if (request.method() === "POST") writes.push(new URL(request.url()).pathname);
   });
-  await page.goto("/");
+  await page.goto("/sandbox");
   await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   const start = page.getByRole("button", { name: "Start sandbox", exact: true });

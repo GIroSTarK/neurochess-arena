@@ -1,6 +1,9 @@
 import { z } from "zod";
 
+const sandboxFlagSchema = z.enum(["true", "false"]).default("false");
+
 const webEnvironmentSchema = z.object({
+  SANDBOX_ENABLED: sandboxFlagSchema.transform((value) => value === "true"),
   VITE_API_BASE_URL: z.url().refine((value) => {
     if (!URL.canParse(value)) return false;
     const url = new URL(value);
@@ -16,6 +19,7 @@ const webEnvironmentSchema = z.object({
 });
 
 export interface WebEnvironment {
+  readonly SANDBOX_ENABLED: boolean;
   readonly VITE_API_BASE_URL: string;
 }
 
@@ -27,6 +31,12 @@ export class WebEnvironmentValidationError extends Error {
     this.name = "WebEnvironmentValidationError";
     this.variables = variables;
   }
+}
+
+export function parseSandboxFlag(input: unknown): "true" | "false" {
+  const result = sandboxFlagSchema.safeParse(input);
+  if (!result.success) throw new WebEnvironmentValidationError(["SANDBOX_ENABLED"]);
+  return result.data;
 }
 
 export function parseWebEnvironment(input: Record<string, unknown>): WebEnvironment {

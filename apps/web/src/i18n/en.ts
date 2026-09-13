@@ -2,13 +2,29 @@ export const en = {
   app: {
     brand: "Neurochess",
     arena: "Arena",
-    title: "Development sandbox · Neurochess Arena",
-    description: "Play both colors in the Neurochess Arena development chess sandbox.",
-    skipLink: "Skip to the sandbox",
+    title: "Neurochess Arena",
+    description: "Observe and compare AI models playing chess in Neurochess Arena.",
+    skipLink: "Skip to main content",
     localDevelopment: "Local development",
     navigation: "Main navigation",
   },
+  arena: {
+    status: "In development",
+    headline: "Watch models make their moves.",
+    description:
+      "An arena for observing and comparing AI models playing chess. Model matchups and AI-versus-human games are on the way.",
+    openSandbox: "Open development sandbox",
+  },
+  notFound: {
+    title: "Page unavailable",
+    description: "This page is not available. Return to the arena to continue.",
+    backToArena: "Back to Arena",
+    documentTitle: "Page unavailable · Neurochess Arena",
+  },
   sandbox: {
+    documentTitle: "Development sandbox · Neurochess Arena",
+    documentDescription: "Play both colors in the Neurochess Arena development chess sandbox.",
+    skipLink: "Skip to the sandbox",
     title: "Sandbox",
     liveTitle: "Sandbox",
     controlHint: "You control both colors.",

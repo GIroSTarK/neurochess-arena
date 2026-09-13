@@ -38,7 +38,7 @@ describe("error boundary", () => {
     expect(screen.getByRole("heading", { name: "Something went wrong" })).toBeInTheDocument();
     expect(screen.getByText(/Reload to continue/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("render-secret-canary");
-    expect(document.title).toBe("Development sandbox · Neurochess Arena");
+    expect(document.title).toBe("Neurochess Arena");
     // React still receives the exception through the root handler; only the page omits it.
     expect(caught).toHaveLength(1);
     expect(caught[0]).toBeInstanceOf(Error);

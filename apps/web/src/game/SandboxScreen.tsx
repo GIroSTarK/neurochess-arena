@@ -2,6 +2,7 @@ import type { ChessColor } from "@neurochess/contracts";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { ArenaLayout } from "../arena/ArenaLayout";
@@ -71,17 +72,9 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   return (
     <AppShell
       mainId="sandbox"
-      skipLabel={t("app.skipLink")}
+      skipLabel={t("sandbox.skipLink")}
       context={t("app.localDevelopment")}
-      navigation={
-        <a
-          href="#sandbox"
-          aria-current="page"
-          className="flex min-h-18 items-center border-b-2 border-accent px-1 text-label text-text"
-        >
-          {t("app.arena")}
-        </a>
-      }
+      navigation={<AppNavigation page="sandbox" sandboxEnabled />}
       footer={
         <div className="flex flex-col items-center justify-center gap-x-6 gap-y-2 md:flex-row">
           <span>{t(view.board ? "sandbox.sessionFooter" : "sandbox.footer")}</span>

@@ -33,27 +33,28 @@ export function AppShell({
       </a>
       <header
         className={cx(
-          "flex flex-wrap items-center justify-between gap-6 border-b border-divider max-sm:gap-3",
+          "flex flex-wrap items-center justify-between gap-x-6 border-b border-divider max-sm:gap-x-3",
           navigation ? "min-h-18" : "min-h-22 py-3 max-sm:min-h-19",
         )}
       >
-        <div className="flex min-w-0 items-center gap-14 self-stretch">
-          <p
-            className={cx(
-              "font-display font-semibold tracking-[0.035em] uppercase max-sm:max-w-44",
-              navigation ? "text-wordmark max-sm:text-label" : "text-body max-sm:text-caption",
-            )}
+        <p
+          className={cx(
+            "py-3 font-display font-semibold tracking-[0.035em] uppercase max-sm:max-w-44",
+            navigation ? "text-wordmark max-sm:text-label" : "text-body max-sm:text-caption",
+          )}
+        >
+          <span className="inline-block">{t("app.brand")}</span>{" "}
+          <span className="inline-block text-accent">{t("app.arena")}</span>
+        </p>
+        {navigation ? (
+          <nav
+            className="order-3 flex basis-full gap-6 self-stretch md:order-none md:mr-auto md:ml-8 md:basis-auto"
+            aria-label={t("app.navigation")}
           >
-            <span className="inline-block">{t("app.brand")}</span>{" "}
-            <span className="inline-block text-accent">{t("app.arena")}</span>
-          </p>
-          {navigation ? (
-            <nav className="hidden self-stretch md:flex" aria-label={t("app.navigation")}>
-              {navigation}
-            </nav>
-          ) : null}
-        </div>
-        <span className="text-right text-label text-text-muted max-sm:max-w-32 max-sm:text-caption">
+            {navigation}
+          </nav>
+        ) : null}
+        <span className="py-3 text-right text-label text-text-muted max-sm:max-w-32 max-sm:text-caption">
           {context}
         </span>
       </header>

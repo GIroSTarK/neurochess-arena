@@ -37,7 +37,7 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 | `WEB_ORIGIN`                | API        | Exact browser origin allowed by CORS                                      |
 | `DATABASE_URL`              | API, tools | PostgreSQL connection URL                                                 |
 | `LOG_LEVEL`                 | API        | Pino log level                                                            |
-| `SANDBOX_ENABLED`           | API        | Exactly `true` or `false`; defaults to false; production rejects true     |
+| `SANDBOX_ENABLED`           | API, web   | Exactly `true` or `false`; defaults to false; production API rejects true |
 | `GUEST_SESSION_TTL_SECONDS` | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400                  |
 | `VITE_API_BASE_URL`         | web        | Public HTTP(S) API origin, without credentials, paths, query, or fragment |
 | `POSTGRES_*`                | Compose    | Local database name, user, password, and port                             |
@@ -45,6 +45,8 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 | `TEST_POSTGRES_PORT`        | Compose    | Separate test-service port, defaults to 5433                              |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
+
+Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_` variables. Both applications read the same root `.env`; no second Sandbox flag is needed. Restart development services after changing it, or rebuild the web bundle and restart the API when using `npm start`. The web value is fixed at Vite startup/build time; API checks still apply if the configurations differ.
 
 ## Root commands
 
@@ -95,7 +97,7 @@ Special-position fixtures live in `packages/chess/test`, outside the production 
 
 ## Sandbox UI
 
-Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173` and choose **Start sandbox**. The service readiness indicator checks the database through `/ready`; sandbox availability is determined by creation, so a healthy server can still report that its sandbox is disabled. Enable it on the development server and choose **Retry sandbox**.
+Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` shows the upcoming AI experience and makes no game or readiness requests. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.
 
 One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.
 
@@ -103,7 +105,7 @@ The entry screen shows a read-only standard-position preview. Its single **Start
 
 An uncertain submission keeps the original move or lifecycle command in memory. **Check game status** reads the authorized snapshot; **Retry same move** or **Retry same command** reuses the original ID, version, and payload. A same-version GET is still uncertain because the first request could commit later. Rejections also require synchronization before another command. Access loss clears the private position, replay, and export text, returns to the standard-position preview, and requires **Start sandbox again**.
 
-Creation updates the private URL to `/?game=<uuid>`. Refresh, reopening that URL, or opening the root page with an existing guest discovers the game without bootstrapping a new guest. Recovery pauses an active game through a versioned command before enabling controls; an already-paused game requires no write. Choose **Resume** explicitly to continue. Concurrent active snapshots are reconciled with at most three pause attempts before **Retry recovery** is offered. An uncertain pause follows the same command retry flow as a move.
+Creation updates the private URL to `/sandbox?game=<uuid>`. Refresh, reopening that URL, or opening `/sandbox` with an existing guest discovers the game without bootstrapping a new guest. Visiting Arena leaves the game unchanged; returning to Sandbox uses paused recovery. Recovery pauses an active game through a versioned command before enabling controls; an already-paused game requires no write. Choose **Resume** explicitly to continue. Concurrent active snapshots are reconciled with at most three pause attempts before **Retry recovery** is offered. An uncertain pause follows the same command retry flow as a move.
 
 **Pause** and **Resume** preserve the position and history. **Abort**, **Resign White**, and **Resign Black** are available while active or paused. The confirmation dialog initially focuses Cancel and explains the outcome. Abortion displays **Game stopped**, keeps result `*`, and releases the unfinished-game slot. Resignation awards the other color the win, including when the resigning color is off-turn.
 
@@ -177,9 +179,9 @@ npm run verify
 npm run test:e2e
 ```
 
-Playwright starts the actual Fastify guest/game services and Vite app at `http://localhost:3101` and `http://localhost:5174`. These ports must be free; the suite refuses to reuse existing servers. The test entrypoint validates `TEST_DATABASE_URL` with the same `_test`/no-options guard as integration tests before opening a connection or applying reviewed migrations. It never falls back to `DATABASE_URL`. No arbitrary-position endpoint or mocked gameplay API is used.
+Playwright starts the actual Fastify guest/game services and Vite app at `http://localhost:3101` and `http://localhost:5174`, plus a Sandbox-disabled web app at `http://localhost:5175`. These ports must be free; the suite refuses to reuse existing servers. The test entrypoint validates `TEST_DATABASE_URL` with the same `_test`/no-options guard as integration tests before opening a connection or applying reviewed migrations. It never falls back to `DATABASE_URL`. No arbitrary-position endpoint or mocked gameplay API is used.
 
-Desktop Chromium and a Chromium mobile-touch context create a game, play part of Fool's Mate, refresh into paused recovery, explicitly resume, complete checkmate, navigate every replay position, copy/download PGN, start another game, and reopen the previous private URL. Downloaded text must exactly equal persisted PGN; clipboard readback normalizes Windows CRLF conversion while the client writes the canonical text unchanged. Further cases cover both resignation colors, neutral abortion, isolated-guest access denial, root-page recovery, and White knight/Black rook underpromotions through legal moves from the standard position.
+Desktop Chromium and a Chromium mobile-touch context create a game, play part of Fool's Mate, refresh into paused recovery, explicitly resume, complete checkmate, navigate every replay position, copy/download PGN, start another game, and reopen the previous private URL. Downloaded text must exactly equal persisted PGN; clipboard readback normalizes Windows CRLF conversion while the client writes the canonical text unchanged. Further cases cover both resignation colors, neutral abortion, isolated-guest access denial, Sandbox-entry recovery, private game URLs, enabled/disabled navigation, and White knight/Black rook underpromotions through legal moves from the standard position.
 
 Accessibility and layout checks cover keyboard directions and Tab order, modal focus containment/return, 44px controls, reduced motion, 320/390/768/1024/1440px layouts, 200% text, 50% expanded test resources, stable move-history placement during commands, and axe checks. Expansion is injected by the test into the dev module; it is not a product locale or flag.
 

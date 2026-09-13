@@ -5,7 +5,7 @@ import { GAME_ID, OTHER_GAME_ID } from "../test/fixtures";
 import { browserNavigation } from "./navigation";
 
 function visit(search: string) {
-  window.history.replaceState(null, "", "/" + search);
+  window.history.replaceState(null, "", "/sandbox" + search);
 }
 
 describe("browser navigation", () => {
@@ -14,7 +14,7 @@ describe("browser navigation", () => {
     expect(browserNavigation().read()).toEqual({ kind: "game", gameId: GAME_ID });
   });
 
-  it("finds no game on the root page or among unrelated parameters", () => {
+  it("finds no game on the sandbox entry page or among unrelated parameters", () => {
     visit("");
     expect(browserNavigation().read()).toEqual({ kind: "none" });
     visit("?other=" + GAME_ID);
@@ -38,7 +38,7 @@ describe("browser navigation", () => {
     const replace = vi.spyOn(window.history, "replaceState");
     const navigation = browserNavigation();
     navigation.open(GAME_ID);
-    expect(window.location.pathname + window.location.search).toBe("/?game=" + GAME_ID);
+    expect(window.location.pathname + window.location.search).toBe("/sandbox?game=" + GAME_ID);
     expect(push).toHaveBeenCalledTimes(1);
     expect(replace).not.toHaveBeenCalled();
     navigation.open(OTHER_GAME_ID, true);
