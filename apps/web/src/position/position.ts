@@ -1,7 +1,7 @@
 import type { ChessColor } from "@neurochess/contracts";
 
-export const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
-export const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
 export type Square = `${(typeof FILES)[number]}${(typeof RANKS)[number]}`;
 export type PieceKind = "p" | "r" | "n" | "b" | "q" | "k";
 export type PromotionKind = "q" | "r" | "b" | "n";

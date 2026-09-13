@@ -147,12 +147,6 @@
   }
 }
 
-@utility checkered-backdrop {
-  background:
-    linear-gradient(135deg, var(--color-canvas), transparent),
-    repeating-conic-gradient(var(--color-surface) 0% 25%, var(--color-canvas) 0% 50%) 50% / 25% 25%;
-}
-
 /* Last-move corner marks: dark strokes with a light keyline so they read on both square colors. */
 @utility corner-marks {
   background:

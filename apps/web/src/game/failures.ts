@@ -5,14 +5,14 @@ import { ApiFailure } from "../api/client";
 import type { SandboxNotice } from "./state";
 
 /** Codes that end the guest's access to the loaded game. */
-export const accessCodes = [
+const accessCodes = [
   "UNAUTHORIZED",
   "FORBIDDEN",
   "NOT_FOUND",
 ] as const satisfies readonly GameErrorCode[];
 
 /** Codes that reject a command outright; the accepted position is re-read before another. */
-export const rejectionCodes = [
+const rejectionCodes = [
   "INVALID_REQUEST",
   "INVALID_UCI",
   "ILLEGAL_MOVE",

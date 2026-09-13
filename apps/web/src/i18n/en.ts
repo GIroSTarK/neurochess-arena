@@ -47,7 +47,6 @@ export const en = {
     commentaryMove: "{{color}} · {{model}} · {{move}}",
     noCommentary: "No commentary provided",
     commentaryOne: "Makes space for the king’s knight.",
-    commentaryTwo: "Occupies the center and opens the diagonal.",
     commentaryThree: "Gains space on the kingside.",
     commentaryFour: "The open diagonal allows checkmate.",
     telemetry: "Illustrative telemetry",
@@ -83,7 +82,6 @@ export const en = {
     skipLink: "Skip to the sandbox",
     title: "Sandbox",
     loading: "Loading sandbox…",
-    liveTitle: "Sandbox",
     controlHint: "You control both colors.",
     moveHint: "Select a piece, then a highlighted square.",
     sessionFooter: "Private game · Available while your guest session lasts.",
@@ -104,8 +102,6 @@ export const en = {
     playArea: "Play area",
     gameDetails: "Game details",
     privacy: "Private guest game",
-    memoryHint:
-      "Unfinished games reopen paused. Keep this private game URL to return while your guest session remains available.",
     footer: "Development only",
   },
   actions: {
