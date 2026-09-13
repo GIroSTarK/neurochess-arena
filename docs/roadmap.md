@@ -47,6 +47,8 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 
 ## Sandbox presentation remake — before Phase 2
 
+**Status:** Completed
+
 Use the [selected Sandbox concepts](design-system/concepts/sandbox-v1/README.md) to establish the shared presentation foundation for the three public modes.
 
 - [x] select coordinated entry, live, recovery, and replay concepts for desktop and mobile;
