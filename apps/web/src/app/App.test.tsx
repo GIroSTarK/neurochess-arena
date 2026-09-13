@@ -386,7 +386,8 @@ describe("localized sandbox application", () => {
     expect(
       screen.getByRole("heading", { name: "Black wins by checkmate", level: 1 }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Result: 0-1")).toHaveTextContent("0–1");
+    expect(screen.getByText("Result: 0-1")).toBeInTheDocument();
+    expect(screen.getByText("0–1")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByText("Sandbox · Game complete · 2... Qh4#")).toBeInTheDocument();
   });
 

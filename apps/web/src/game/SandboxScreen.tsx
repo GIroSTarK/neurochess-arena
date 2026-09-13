@@ -115,10 +115,11 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         score={
           view.result ? (
             <span
-              aria-label={view.result.scoreLabel}
+              data-testid="game-score"
               className="inline-block rounded-control border border-control-border px-3 py-2 font-display text-title text-text"
             >
-              {view.result.score}
+              <span className="sr-only">{view.result.scoreLabel}</span>
+              <span aria-hidden="true">{view.result.score}</span>
             </span>
           ) : undefined
         }

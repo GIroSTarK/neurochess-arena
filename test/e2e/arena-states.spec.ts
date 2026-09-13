@@ -228,18 +228,22 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   await result.click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("replay.png"), fullPage: true });
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-        .analyze()
-    ).violations,
-  ).toEqual([]);
+  const accessibility = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  const scoreAccessibility = await new AxeBuilder({ page })
+    .include('[data-testid="game-score"]')
+    .withRules(["aria-prohibited-attr"])
+    .analyze();
+  expect(scoreAccessibility.violations).toEqual([]);
+  expect(scoreAccessibility.incomplete).toEqual([]);
   const first = page.getByRole("button", { name: "First", exact: true });
   await activate(first, touch);
   await expect(board).toHaveAttribute("data-fen", initialFen);
   await expect(result).toBeVisible();
-  await expect(page.getByLabel("Result: 0-1", { exact: true })).toHaveText("0–1");
+  await expect(page.getByTestId("game-score")).toMatchAriaSnapshot('- text: "Result: 0-1"');
+  await expect(page.getByText("0–1", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Sandbox · Game complete · 2... Qh4#", { exact: true }),
   ).toBeVisible();
