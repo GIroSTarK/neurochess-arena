@@ -46,14 +46,11 @@ export function sandboxStatusPresentation(state: SandboxState, t: TFunction): St
       : gameStatus(snapshot, t)
     : t("game.beforeStart");
   const titleVariants = unfinished
-    ? [
-        t("game.pausedTitle"),
-        ...(["white", "black"] as const).flatMap((color) => [
-          t("game.pausedTurn", { color: t(`players.${color}`) }),
-          t("game.turn", { color: t(`players.${color}`) }),
-          t("game.turnInCheck", { color: t(`players.${color}`) }),
-        ]),
-      ]
+    ? (["white", "black"] as const).flatMap((color) => [
+        t("game.pausedTurn", { color: t(`players.${color}`) }),
+        t("game.turn", { color: t(`players.${color}`) }),
+        t("game.turnInCheck", { color: t(`players.${color}`) }),
+      ])
     : [];
 
   return {
