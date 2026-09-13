@@ -42,6 +42,10 @@ describe("shared lifecycle capabilities", () => {
     }
     const flipButton = screen.getByRole("button", { name: "Flip board" });
     expect(flipButton).toHaveAccessibleDescription("White at bottom");
+    const help = screen.getByRole("button", { name: "Keyboard controls" });
+    expect(help).toHaveAttribute("aria-expanded", "false");
+    expect(help).toHaveAttribute("aria-controls", "board-help");
+    expect(document.getElementById("board-help")).not.toBeVisible();
     const pause = screen.getByRole("button", { name: "Pause" });
     await userEvent.click(pause);
     expect(togglePause).toHaveBeenCalledOnce();
@@ -75,11 +79,21 @@ describe("shared lifecycle capabilities", () => {
     expect(resign).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Flip board" }));
     expect(flip).toHaveBeenCalledOnce();
-    const help = screen.getByRole("button", { name: "Keyboard controls" });
-    await userEvent.click(help);
+    for (const button of buttons.slice(2, 5)) {
+      await user.tab();
+      expect(button).toHaveFocus();
+    }
+    await user.keyboard("{Enter}");
     expect(help).toHaveAttribute("aria-expanded", "true");
     expect(document.getElementById("board-help")).toBeVisible();
-    await userEvent.click(help);
+    expect(help).toHaveFocus();
+    rerender(<LifecycleControls {...props} paused disabled epoch="match:2" />);
+    expect(flipButton).toHaveAccessibleDescription("White at bottom");
+    expect(help).toHaveFocus();
+    expect(help).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById("board-help")).toBeVisible();
+    await user.keyboard(" ");
+    expect(help).toHaveAttribute("aria-expanded", "false");
     expect(document.getElementById("board-help")).not.toBeVisible();
   });
 

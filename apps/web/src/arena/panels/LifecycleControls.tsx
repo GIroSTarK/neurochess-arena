@@ -1,5 +1,5 @@
 import type { ChessColor } from "@neurochess/contracts";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
@@ -7,6 +7,7 @@ import { cx } from "../../ui/cx";
 import { Dialog } from "../../ui/Dialog";
 import { Icon } from "../../ui/Icon";
 import { StableText } from "../../ui/StableText";
+import { type BoardInspectionProps, useBoardInspection } from "../useBoardInspection";
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: ChessColor };
 
@@ -26,11 +27,7 @@ export interface LifecycleControlsProps {
     readonly color: ChessColor;
     readonly onResign: () => void;
   }[];
-  readonly boardTools: {
-    readonly orientation: ChessColor;
-    readonly onFlip: () => void;
-    readonly helpId: string;
-  };
+  readonly boardTools: BoardInspectionProps;
 }
 
 export function LifecycleControls({
@@ -49,8 +46,17 @@ export function LifecycleControls({
   const resignationLabels = resignations.map(({ color }) =>
     t(color === "white" ? "lifecycle.resignWhite" : "lifecycle.resignBlack"),
   );
-  const orientationId = useId();
-  const [helpOpen, setHelpOpen] = useState(false);
+  const { flipButton, helpButton, descriptions } = useBoardInspection(boardTools, {
+    flipVariant: "secondary",
+    flipClassName: cx(
+      "lg:@lg:row-start-1",
+      threeColumns ? "lg:@lg:col-start-2" : "lg:@lg:col-start-1",
+    ),
+    helpClassName: cx(
+      "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
+      threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
+    ),
+  });
   const [pendingConfirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const pending = pendingConfirmation?.action;
   const confirmedAction =
@@ -110,19 +116,7 @@ export function LifecycleControls({
             />
           </Button>
         ) : null}
-        <Button
-          padding="compact"
-          variant="secondary"
-          className={cx(
-            "lg:@lg:row-start-1",
-            threeColumns ? "lg:@lg:col-start-2" : "lg:@lg:col-start-1",
-          )}
-          aria-describedby={orientationId}
-          onClick={boardTools.onFlip}
-        >
-          <Icon path="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5" />
-          <span className="min-w-0">{t("actions.flip")}</span>
-        </Button>
+        {flipButton}
         {resignations.map(({ color }, index) => (
           <Button
             key={color}
@@ -143,32 +137,14 @@ export function LifecycleControls({
             />
           </Button>
         ))}
-        <Button
-          padding="compact"
-          variant="quiet"
-          className={cx(
-            "max-lg:border-control-border max-lg:bg-surface max-lg:text-text lg:@lg:row-start-3 lg:@lg:justify-self-start",
-            threeColumns ? "lg:@lg:col-start-3" : "lg:@lg:col-start-2",
-          )}
-          aria-expanded={helpOpen}
-          aria-controls={boardTools.helpId}
-          onClick={() => setHelpOpen((previous) => !previous)}
-        >
-          <Icon path="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h10" />
-          <span className="min-w-0">{t("board.keyboardHelp")}</span>
-        </Button>
+        {helpButton}
         {abort}
         <span
           className="col-span-full col-start-1 row-start-2 hidden h-px bg-divider lg:@lg:block"
           aria-hidden="true"
         />
       </div>
-      <span id={orientationId} className="sr-only">
-        {t(boardTools.orientation === "white" ? "board.whiteBottom" : "board.blackBottom")}
-      </span>
-      <p id={boardTools.helpId} hidden={!helpOpen} className="mt-4 text-body text-text-secondary">
-        {t("board.instructions")}
-      </p>
+      {descriptions}
       {confirmation ? (
         <ConfirmationDialog
           action={confirmation}
