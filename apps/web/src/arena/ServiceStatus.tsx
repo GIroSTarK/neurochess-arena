@@ -11,33 +11,25 @@ const connectionMarks: Record<ServiceState, string> = {
   unavailable: "border-current text-warning",
 };
 
-export function ServiceStatus({
-  state,
-  compact = false,
-}: {
-  readonly state: ServiceState;
-  readonly compact?: boolean;
-}) {
+export function ServiceStatus({ state }: { readonly state: ServiceState }) {
   const { t } = useTranslation();
   return (
     <div
       className={cx(
-        "flex shrink-0 items-center gap-2",
-        compact ? "text-caption" : "text-label",
-        compact && state === "ready" ? "text-success" : "text-text-secondary",
+        "flex shrink-0 items-center gap-2 text-caption",
+        state === "ready" ? "text-success" : "text-text-secondary",
       )}
       aria-label={t("connection.label")}
     >
       <span
         className={cx(
-          "inline-grid shrink-0 place-items-center rounded-full border font-semibold",
-          compact ? "size-4" : "size-5",
+          "inline-grid size-4 shrink-0 place-items-center rounded-full border font-semibold",
           connectionMarks[state],
         )}
         aria-hidden="true"
       >
         <Icon
-          size={compact ? "xs" : "sm"}
+          size="xs"
           path={
             state === "ready"
               ? "m5 12 4 4L19 6"

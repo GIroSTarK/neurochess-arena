@@ -79,13 +79,12 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       footer={
         <div className="flex flex-col items-center justify-center gap-x-6 gap-y-2 md:flex-row">
           <span>{t(view.board ? "sandbox.sessionFooter" : "sandbox.footer")}</span>
-          <ServiceStatus state={state.readiness} compact />
+          <ServiceStatus state={state.readiness} />
         </div>
       }
       announcement={view.announcement}
     >
       <ArenaHeader
-        variant="live"
         title={view.result?.title ?? t("sandbox.title")}
         description={
           view.result ? (
@@ -125,7 +124,6 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
         }
       />
       <ArenaLayout
-        variant="live"
         players={view.players}
         playAreaLabel={t("sandbox.playArea")}
         detailsLabel={t("sandbox.gameDetails")}
@@ -198,7 +196,6 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
               moves={
                 <MoveHistory
                   moves={view.moves}
-                  variant="rail"
                   selectedPly={view.selectedPly}
                   onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
                 />

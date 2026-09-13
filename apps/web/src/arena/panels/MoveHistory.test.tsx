@@ -1,12 +1,25 @@
 import { fireEvent, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { snapshot } from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 
 import { MoveHistory } from "./MoveHistory";
 
-describe("read-only SAN history", () => {
+describe("shared SAN history rail", () => {
+  it("labels the empty history and keeps its scroll area keyboard reachable", () => {
+    renderLocalized(<MoveHistory moves={[]} />);
+    const history = within(screen.getByRole("region", { name: "Moves" }));
+    expect(history.getByRole("heading", { name: "Moves", level: 2 })).toBeInTheDocument();
+    expect(history.getByRole("region", { name: "Move history" })).toHaveAttribute("tabindex", "0");
+    const table = history.getByRole("table");
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(3);
+    expect(within(table).getByRole("cell")).toHaveAttribute("colspan", "3");
+    expect(within(table).getByText("Your first move starts the story.")).toBeInTheDocument();
+    expect(within(table).queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("groups White and Black by full move number and marks only the latest accepted ply", () => {
     const moves = snapshot(["e2e4", "e7e5", "g1f3"]).moves;
     renderLocalized(<MoveHistory moves={moves} />);
@@ -36,5 +49,28 @@ describe("read-only SAN history", () => {
     height = 1040;
     rerender(<MoveHistory moves={snapshot(["e2e4", "e7e5", "g1f3"]).moves} />);
     expect(scroller.scrollTop).toBe(1040);
+  });
+
+  it("keeps tabbed replay history named and selects SAN by keyboard without owning the cursor", async () => {
+    const moves = snapshot(["e2e4", "e7e5", "g1f3"]).moves;
+    const onSelect = vi.fn();
+    const { rerender } = renderLocalized(
+      <MoveHistory moves={moves} selectedPly={0} onSelect={onSelect} showHeading={false} />,
+    );
+    const history = screen.getByRole("region", { name: "Moves" });
+    const first = within(history).getByRole("button", { name: "View ply 1: e4" });
+    first.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(1);
+    expect(first).toHaveFocus();
+    expect(history.querySelector("[aria-current]")).toBeNull();
+
+    rerender(<MoveHistory moves={moves} selectedPly={1} onSelect={onSelect} showHeading={false} />);
+    expect(first).toHaveAttribute("aria-current", "step");
+    expect(history.querySelectorAll("[aria-current]")).toHaveLength(1);
+    expect(first).toHaveFocus();
+    expect(within(history).getByRole("button", { name: "View ply 3: Nf3" })).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 });

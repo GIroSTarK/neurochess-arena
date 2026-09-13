@@ -20,7 +20,38 @@ function renderPlayers(white: PlayerSummaryData, black: PlayerSummaryData) {
   );
 }
 
-describe("shared arena participants", () => {
+describe("shared arena composition", () => {
+  it("places the entry introduction before play and preserves the board when it is removed", () => {
+    const props = {
+      players: {
+        white: { identity: { kind: "human", name: "Alice" } as const, activity },
+        black: { identity: { kind: "human", name: "Bob" } as const, activity },
+      },
+      playAreaLabel: "Play area",
+      detailsLabel: "Game details",
+      board: <p>Board content</p>,
+      details: <p>Game details content</p>,
+    };
+    const { rerender } = renderLocalized(
+      <ArenaLayout {...props} introduction={<button type="button">Start game</button>} />,
+    );
+    const introduction = screen.getByRole("button", { name: "Start game" });
+    const play = screen.getByRole("region", { name: "Play area" });
+    const details = screen.getByRole("complementary", { name: "Game details" });
+    const board = within(play).getByText("Board content");
+    expect(introduction.compareDocumentPosition(play) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(play.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    rerender(<ArenaLayout {...props} />);
+    expect(screen.queryByRole("button", { name: "Start game" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Play area" })).toBe(play);
+    expect(within(play).getByText("Board content")).toBe(board);
+  });
+
   it("renders two named humans without assuming a guest identity or model metadata", () => {
     renderPlayers(
       { identity: { kind: "human", name: "Alice" }, activity },

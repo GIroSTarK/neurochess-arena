@@ -144,7 +144,6 @@ function ReferenceMatch({
   return (
     <>
       <ArenaHeader
-        variant="live"
         title={
           snapshot.terminationReason
             ? t(`results.${snapshot.terminationReason}`, {
@@ -170,7 +169,6 @@ function ReferenceMatch({
         }
       />
       <ArenaLayout
-        variant="live"
         players={{ white: player("white"), black: player("black") }}
         playAreaLabel={t("sandbox.playArea")}
         detailsLabel={t("sandbox.gameDetails")}
@@ -251,7 +249,6 @@ function ReferenceMatch({
             }
             moves={
               <MoveHistory
-                variant="rail"
                 showHeading={!hasModels}
                 moves={snapshot.moves}
                 selectedPly={terminal ? ply : undefined}
