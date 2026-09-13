@@ -36,6 +36,7 @@ test("keeps live status above the board and game controls below it", async ({ pa
   const turn = page.getByRole("heading", { name: "Black to move", exact: true });
   await expect(turn).toBeVisible();
   await expect(board).toHaveAttribute("data-fen", snapshot.fen);
+  await page.evaluate(() => document.fonts.ready);
   const initial = await bounds(board);
   const beforeControls = await bounds(controls);
   const beforeHistory = await bounds(history);
@@ -56,10 +57,14 @@ test("keeps live status above the board and game controls below it", async ({ pa
       expect(Math.abs(firstGap - secondGap)).toBeLessThan(1);
       for (const button of [resignWhite, resignBlack, help]) {
         const label = await button.locator(":scope > span").evaluate((element) => ({
+          text: (element as HTMLElement).innerText,
           height: element.getBoundingClientRect().height,
           lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
         }));
-        expect(label.height).toBeLessThanOrEqual(label.lineHeight + 1);
+        expect(
+          label.height,
+          `Desktop toolbar label must fit on one line: ${label.text}`,
+        ).toBeLessThanOrEqual(label.lineHeight + 1);
       }
     }
   }

@@ -156,8 +156,8 @@ test("creates, recovers, completes, replays and exports a private game", async (
   await activate(page.getByRole("button", { name: "Download PGN", exact: true }), touch);
   const download = await downloading;
   expect(download.suggestedFilename()).toBe("neurochess-" + current.gameId + ".pgn");
-  const path = await download.path();
-  expect(path).not.toBeNull();
+  const path = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(path);
   expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(

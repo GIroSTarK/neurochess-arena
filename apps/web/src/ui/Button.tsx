@@ -47,10 +47,10 @@ export function Button({
     <button
       type={type}
       className={cx(
-        "inline-flex min-h-target max-w-full items-center justify-center gap-2 rounded-control border py-2 text-center text-label font-semibold",
+        "inline-flex min-h-target max-w-full items-center justify-center rounded-control border py-2 text-center text-label font-semibold",
         padding === "compact"
-          ? "px-2 max-sm:px-[min(0.5rem,8px)]"
-          : "px-4 max-sm:px-[min(1rem,16px)]",
+          ? "gap-1.5 px-2 max-sm:px-[min(0.5rem,8px)]"
+          : "gap-2 px-4 max-sm:px-[min(1rem,16px)]",
         "motion-safe:transition-[box-shadow,background-color] motion-safe:duration-120 motion-safe:ease-arena",
         quiet
           ? "disabled:text-text-muted aria-disabled:text-text-muted"
