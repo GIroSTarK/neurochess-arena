@@ -150,18 +150,126 @@ describe("sandbox transport boundary", () => {
     expect(await api.ready(new AbortController().signal)).toBe(false);
   });
 
+  describe.each([
+    {
+      path: "direct",
+      current: snapshot(["e2e4"]),
+      respond: (payload: unknown) => jsonResponse(payload),
+      invoke: (api: SandboxApi, signal: AbortSignal) => api.snapshot(GAME_ID, signal),
+    },
+    {
+      path: "conflict",
+      current: snapshot(["e2e4"]),
+      respond: (payload: unknown) =>
+        jsonResponse(
+          {
+            code: "GAME_CONFLICT",
+            message: "server-message-canary",
+            requestId: "test-request",
+            currentSnapshot: payload,
+          },
+          409,
+        ),
+      invoke: (api: SandboxApi, signal: AbortSignal) => api.snapshot(GAME_ID, signal),
+    },
+    {
+      path: "unfinished",
+      current: snapshot(["e2e4"]),
+      respond: (payload: unknown) => jsonResponse({ snapshot: payload }),
+      invoke: (api: SandboxApi, signal: AbortSignal) => api.unfinished(signal),
+    },
+    {
+      path: "replay",
+      current: snapshot(FOOLS_MATE),
+      respond: (payload: unknown) =>
+        jsonResponse({ snapshot: payload, initialFen: snapshot().fen }),
+      invoke: (api: SandboxApi, signal: AbortSignal) => api.replay(GAME_ID, signal),
+    },
+  ])("$path snapshot validation", ({ current, respond, invoke }) => {
+    it.each([
+      { issue: "malformed display FEN", patch: { fen: "unsafe-FEN-canary" } },
+      {
+        issue: "FEN/turn mismatch",
+        patch: { turn: current.turn === "white" ? "black" : "white" },
+      },
+      { issue: "invalid move syntax", patch: { legalMoves: ["e2e9"] } },
+      { issue: "negative revision", patch: { version: -1 } },
+      {
+        issue: "invalid nested history",
+        patch: { moves: current.moves.map((move) => ({ ...move, ply: 0 })) },
+      },
+      { issue: "unknown field", patch: { status: "surprise" } },
+    ])("rejects $issue without retaining response content", async ({ patch }) => {
+      const payload = { ...current, ...patch, pgn: "private-snapshot-canary" };
+      const api = createSandboxApi("http://localhost:3001", {
+        fetch: vi.fn().mockResolvedValue(respond(payload)),
+      });
+      const error: unknown = await invoke(api, new AbortController().signal).catch(
+        (error: unknown) => error,
+      );
+
+      expect(error).toBeInstanceOf(ApiFailure);
+      expect(error).toMatchObject({
+        kind: "malformed",
+        message: "malformed",
+        code: undefined,
+        currentSnapshot: undefined,
+      });
+      expect(JSON.stringify(error)).not.toContain("canary");
+      expect(String(error)).not.toContain("canary");
+    });
+  });
+
+  it("accepts discovery with no unfinished game", async () => {
+    const api = createSandboxApi("http://localhost:3001", {
+      fetch: vi.fn().mockResolvedValue(jsonResponse({ snapshot: null })),
+    });
+    await expect(api.unfinished(new AbortController().signal)).resolves.toBeNull();
+  });
+
   it.each([
-    { status: "surprise" },
-    { ...snapshot(), fen: "unsafe-FEN-canary" },
-    { ...snapshot(), legalMoves: ["e2e9"] },
-    { ...snapshot(), version: -1 },
-    { ...snapshot(), turn: "black" },
-  ])("rejects malformed snapshots without retaining their content", async (payload) => {
+    { issue: "missing snapshot", payload: {} },
+    { issue: "terminal snapshot", payload: { snapshot: snapshot(FOOLS_MATE) } },
+  ])("rejects unfinished discovery with $issue", async ({ payload }) => {
     const api = createSandboxApi("http://localhost:3001", {
       fetch: vi.fn().mockResolvedValue(jsonResponse(payload)),
     });
-    await expect(api.create(new AbortController().signal)).rejects.toMatchObject({
+    await expect(api.unfinished(new AbortController().signal)).rejects.toMatchObject({
       kind: "malformed",
+    });
+  });
+
+  describe("replay envelope validation", () => {
+    const terminal = snapshot(FOOLS_MATE);
+    const replay = { snapshot: terminal, initialFen: snapshot().fen };
+
+    it.each([
+      { issue: "missing initial FEN", payload: { snapshot: terminal } },
+      { issue: "unfinished snapshot", payload: { ...replay, snapshot: snapshot() } },
+      {
+        issue: "different game's snapshot",
+        payload: { ...replay, snapshot: { ...terminal, gameId: OTHER_GAME_ID } },
+      },
+      { issue: "malformed initial FEN", payload: { ...replay, initialFen: "invalid" } },
+      {
+        issue: "malformed historical FEN",
+        payload: {
+          ...replay,
+          snapshot: {
+            ...terminal,
+            moves: terminal.moves.map((move) =>
+              move.ply === 2 ? { ...move, fen: "invalid" } : move,
+            ),
+          },
+        },
+      },
+    ])("rejects $issue", async ({ payload }) => {
+      const api = createSandboxApi("http://localhost:3001", {
+        fetch: vi.fn().mockResolvedValue(jsonResponse(payload)),
+      });
+      await expect(api.replay(GAME_ID, new AbortController().signal)).rejects.toMatchObject({
+        kind: "malformed",
+      });
     });
   });
 

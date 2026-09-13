@@ -48,12 +48,10 @@ export interface SandboxApi {
   pgn(gameId: string, signal: AbortSignal): Promise<GamePgnResponse>;
 }
 
-export function validateSnapshot(input: unknown): GameSnapshot {
-  const parsed = gameSnapshotSchema.safeParse(input);
-  if (!parsed.success) throw new ApiFailure("malformed");
-  const position = parsePosition(parsed.data.fen);
-  if (position?.turn !== parsed.data.turn) throw new ApiFailure("malformed");
-  return parsed.data;
+function validateSnapshotPosition(snapshot: GameSnapshot): GameSnapshot {
+  const position = parsePosition(snapshot.fen);
+  if (position?.turn !== snapshot.turn) throw new ApiFailure("malformed");
+  return snapshot;
 }
 
 export function createSandboxApi(
@@ -101,7 +99,7 @@ export function createSandboxApi(
           "api",
           error.data.code,
           error.data.code === "GAME_CONFLICT"
-            ? validateSnapshot(error.data.currentSnapshot)
+            ? validateSnapshotPosition(error.data.currentSnapshot)
             : undefined,
         );
       }
@@ -133,7 +131,9 @@ export function createSandboxApi(
     body?: unknown,
   ): Promise<GameSnapshot> {
     try {
-      const snapshot = validateSnapshot(await request(path, gameSnapshotSchema, signal, body));
+      const snapshot = validateSnapshotPosition(
+        await request(path, gameSnapshotSchema, signal, body),
+      );
       return gameId === undefined ? snapshot : forGame(snapshot, gameId);
     } catch (error: unknown) {
       if (error instanceof ApiFailure && error.currentSnapshot && gameId !== undefined) {
@@ -188,7 +188,7 @@ export function createSandboxApi(
         unfinishedGameResponseSchema,
         signal,
       );
-      return response.snapshot ? validateSnapshot(response.snapshot) : null;
+      return response.snapshot ? validateSnapshotPosition(response.snapshot) : null;
     },
     async replay(gameId, signal) {
       if (!gameParamsSchema.safeParse({ gameId }).success) throw new ApiFailure("malformed");
@@ -197,7 +197,7 @@ export function createSandboxApi(
         gameReplayResponseSchema,
         signal,
       );
-      const snapshot = forGame(validateSnapshot(response.snapshot), gameId);
+      const snapshot = forGame(validateSnapshotPosition(response.snapshot), gameId);
       if (!parsePosition(response.initialFen)) throw new ApiFailure("malformed");
       for (const move of snapshot.moves) {
         if (!parsePosition(move.fen)) throw new ApiFailure("malformed");
