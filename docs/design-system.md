@@ -105,7 +105,7 @@ The development Sandbox uses the [selected live composition](design-system/conce
 
 With further text enlargement, stack live controls in one column and allow participant icons to wrap above their identity. Preserve equal seat widths and wrap short labels between words instead of forcing narrow fragments.
 
-On desktop, Sandbox move history fills the rail height available beside the play area after supporting content and spacing. Its rows scroll within that space rather than increasing the arena height. Supporting guidance, recovery messages, and New game retain their natural height below it. In the one-column layout, the move list remains bounded so later actions stay reachable.
+On desktop, Sandbox move history fills the rail height available beside the play area after supporting content and spacing. Preserve a text-scaled minimum reading area that shows the table header and complete move rows; allow the rail and arena to grow when supporting content needs more room. Long histories scroll within the list rather than increasing the arena height. Supporting guidance, recovery messages, and New game retain their natural height below it. In the one-column layout, the move list remains bounded so later actions stay reachable.
 
 The live information rail shows both models' latest commentary and compact per-move latency, total tokens, and estimated cost. Moves is the default detail tab; Analysis contains the graph and usage breakdown, and Events contains attempts and recovery events. On mobile these become successive sections after the board and controls. Show cumulative telemetry in Analysis and result summaries.
 

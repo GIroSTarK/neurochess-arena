@@ -2,8 +2,10 @@ import { gameSnapshotSchema } from "@neurochess/contracts";
 
 import type * as webI18n from "../../apps/web/src/i18n";
 
+import { expectArenaLayout } from "./arena-layout";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { acceptedMove, activate, expect, playMove, square, startSandbox, test } from "./fixtures";
+import { setPseudoLocalization } from "./text-layout";
 
 const longGameMoves = [
   "a2a3 a7a6 b2b3 b7b6 c2c3 c7c6 d2d3 d7d6 e2e3 e7e6 f2f3 f7f6 g2g3 g7g6 h2h3 h7h6",
@@ -105,6 +107,104 @@ test("scrolls the page over empty and short move histories", async ({ page }, te
   for (const move of ["e2e4", "e7e5", "g1f3"]) current = await playMove(page, current, move, touch);
   await scrollPageOverHistory();
 });
+
+for (const longHistory of [false, true]) {
+  test(`keeps ${longHistory ? "long" : "short"} history readable after an uncertain Resume with enlarged translations`, async ({
+    page,
+  }, testInfo) => {
+    const touch = testInfo.project.name === "mobile-touch";
+    let current = await startSandbox(page, touch);
+    // Populate through real commands; only the Resume acknowledgement is replaced below.
+    for (const move of longHistory ? longGameMoves : ["f2f3", "e7e5", "g2g4"]) {
+      const response = await page.request.post(API_ORIGIN + "/games/" + current.gameId + "/moves", {
+        headers: { Origin: WEB_ORIGIN },
+        data: {
+          gameId: current.gameId,
+          move,
+          expectedVersion: current.version,
+          commandId: crypto.randomUUID(),
+        },
+      });
+      expect(response.status()).toBe(200);
+      current = gameSnapshotSchema.parse(await response.json());
+    }
+    await page.reload();
+    const resume = page.getByRole("button", { name: /^Resume/ });
+    await expect(resume).toHaveAttribute("aria-disabled", "false");
+    await expect(page.getByRole("heading", { name: /^Game recovered/ })).toBeVisible();
+    await setPseudoLocalization(page, true);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+    });
+
+    const commandUrl = API_ORIGIN + "/games/" + current.gameId + "/lifecycle";
+    await page.route(commandUrl, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+    );
+    await activate(resume, touch);
+    const retry = page.getByRole("button", { name: /^Retry same command/ });
+    await expect(retry).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Game recovered/ })).toHaveCount(0);
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", current.fen);
+    await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+
+    const history = page.getByRole("region", { name: /^Move history/ });
+    for (const width of touch ? [390, 1024] : [1025, 1100, 1440]) {
+      await page.setViewportSize({ width, height: 1080 });
+      await page.evaluate(() => document.fonts.ready);
+      const layout = await history.evaluate((element) => ({
+        height: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        header: element.querySelector("thead")!.getBoundingClientRect().height,
+        row: element.querySelector("tbody tr")!.getBoundingClientRect().height,
+        bottom: element.getBoundingClientRect().bottom,
+        supportingTop: element.closest("aside")!.lastElementChild!.getBoundingClientRect().top,
+      }));
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: testInfo.outputPath(`uncertain-resume-${width}.png`),
+        fullPage: true,
+      });
+      expect(
+        layout.height,
+        "History must show the sticky header and a complete move row",
+      ).toBeGreaterThan(layout.header + layout.row);
+      expect(layout.bottom).toBeLessThan(layout.supportingTop);
+      await expectArenaLayout(page);
+      if (longHistory) {
+        expect(layout.scrollHeight).toBeGreaterThan(layout.height);
+        await history.focus();
+        for (const key of ["Home", "End"]) {
+          await page.keyboard.press(key);
+          const rows = history.locator("tbody tr");
+          const row = key === "Home" ? rows.first() : rows.last();
+          await expect
+            .poll(() =>
+              row.evaluate((element) => {
+                const panel = element.closest('[role="region"]')!;
+                const header = panel.querySelector("thead")!.getBoundingClientRect();
+                const bounds = element.getBoundingClientRect();
+                return (
+                  bounds.top >= header.bottom - 1 &&
+                  bounds.bottom <= panel.getBoundingClientRect().bottom + 1
+                );
+              }),
+            )
+            .toBe(true);
+          await expect(history).toBeFocused();
+        }
+      }
+    }
+    await page.unroute(commandUrl);
+    await activate(retry, touch);
+    await expect(page.getByRole("button", { name: /^Pause/ })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", current.fen);
+    await expect(retry).toHaveCount(0);
+  });
+}
 
 for (const enlarged of [false, true]) {
   test(`keeps move history in place while moves are submitted and accepted${enlarged ? " with enlarged translations" : ""}`, async ({
