@@ -247,9 +247,20 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   await expect(
     page.getByText("Sandbox · Game complete · 2... Qh4#", { exact: true }),
   ).toBeVisible();
-  await first.focus();
-  await expect(page.getByRole("tooltip", { name: "First", exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("tooltip", { name: "First", exact: true })).toHaveCount(0);
+  for (const name of ["First", "Previous", "Next", "Last"]) {
+    const control = replay.getByRole("button", { name, exact: true });
+    const tooltip = replay.getByRole("tooltip", { name, exact: true });
+    await expect(control).toHaveAccessibleName(name);
+    await expect(control).toHaveAccessibleDescription("");
+    await control.focus();
+    await expect(tooltip).toBeVisible();
+    await expect(control).toHaveAccessibleName(name);
+    await expect(control).toHaveAccessibleDescription("");
+    await page.keyboard.press("Escape");
+    await expect(tooltip).toHaveCount(0);
+    await expect(control).toBeFocused();
+    await expect(control).toHaveAccessibleName(name);
+    await expect(control).toHaveAccessibleDescription("");
+  }
   expect(await readSnapshot(page, current.gameId)).toEqual(current);
 });

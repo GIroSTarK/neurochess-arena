@@ -51,8 +51,7 @@ export function ReplayControls({
                 variant="secondary"
                 padding="compact"
                 className="size-target"
-                aria-label={t(`replay.${control.key}`)}
-                aria-describedby={`${tooltipId}-${control.key}`}
+                aria-labelledby={`${tooltipId}-${control.key}`}
                 aria-disabled={!available || control.disabled}
                 onClick={() => onSelect(control.target)}
                 onFocus={() => setDismissedTooltip(null)}

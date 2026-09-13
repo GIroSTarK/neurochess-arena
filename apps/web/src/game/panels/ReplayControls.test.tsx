@@ -23,6 +23,25 @@ function props(replayPly: number) {
 }
 
 describe("replay navigation focus", () => {
+  it.each(["First", "Previous", "Next", "Last"])(
+    "names %s without a redundant description before and after Escape",
+    async (name) => {
+      renderLocalized(<ReplayControls {...props(2)} />);
+      const user = userEvent.setup();
+      const control = screen.getByRole("button", { name });
+      expect(control).toHaveAccessibleName(name);
+      expect(control).not.toHaveAccessibleDescription();
+
+      act(() => control.focus());
+      expect(control).toHaveAccessibleName(name);
+      expect(control).not.toHaveAccessibleDescription();
+      await user.keyboard("{Escape}");
+      expect(control).toHaveFocus();
+      expect(control).toHaveAccessibleName(name);
+      expect(control).not.toHaveAccessibleDescription();
+    },
+  );
+
   it.each([
     { replay: null, replayPly: 0, replayPhase: "loading", replayNotice: null },
     { replay: null, replayPly: 0, replayPhase: "error", replayNotice: "network" },
