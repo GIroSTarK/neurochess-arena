@@ -9,6 +9,10 @@ function workspacePath(relativePath: string): string {
 }
 
 export default defineConfig({
+  define: {
+    __ARENA_REFERENCE_ENABLED__: "true",
+    "import.meta.env.SANDBOX_ENABLED": '"true"',
+  },
   plugins: [react()],
   resolve: {
     alias: {
@@ -26,7 +30,7 @@ export default defineConfig({
         test: {
           name: "web",
           environment: "jsdom",
-          include: ["apps/web/**/*.test.{ts,tsx}"],
+          include: ["apps/web/src/**/*.test.{ts,tsx}"],
           setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
         },
       },
@@ -35,7 +39,7 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["apps/api/**/*.test.ts", "packages/**/*.test.ts"],
+          include: ["apps/api/**/*.test.ts", "apps/web/*.test.ts", "packages/**/*.test.ts"],
         },
       },
     ],

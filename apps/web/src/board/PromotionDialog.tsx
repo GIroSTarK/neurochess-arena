@@ -29,19 +29,21 @@ export function PromotionDialog({
       description={t("promotion.description")}
       onCancel={onCancel}
     >
-      <div className="my-6 grid grid-cols-4 gap-3 max-sm:grid-cols-2">
-        {choices.map(({ kind, move }) => (
-          <button
-            type="button"
-            className="flex min-h-target min-w-0 flex-col items-center justify-center gap-2 rounded-control border border-control-border bg-surface p-3 text-text hover:shadow-[inset_0_0_0_1px_var(--color-accent)]"
-            key={kind}
-            aria-label={t("promotion.choice", { piece: t(`promotion.${kind}`) })}
-            onClick={() => onChoose(move)}
-          >
-            <PieceIcon color={color} kind={kind} className="size-12" />
-            <span>{t(`promotion.${kind}`)}</span>
-          </button>
-        ))}
+      <div className="@container my-6">
+        <div className="grid grid-cols-1 gap-3 @min-[14rem]:grid-cols-2 @min-[30rem]:grid-cols-4">
+          {choices.map(({ kind, move }) => (
+            <button
+              type="button"
+              className="flex min-h-target min-w-0 flex-col items-center justify-center gap-2 rounded-control border border-control-border bg-surface p-3 text-text hover:shadow-[inset_0_0_0_1px_var(--color-accent)]"
+              key={kind}
+              aria-label={t("promotion.choice", { piece: t(`promotion.${kind}`) })}
+              onClick={() => onChoose(move)}
+            >
+              <PieceIcon color={color} kind={kind} className="size-12" />
+              <span>{t(`promotion.${kind}`)}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <Button variant="secondary" onClick={onCancel}>
         {t("actions.cancel")}

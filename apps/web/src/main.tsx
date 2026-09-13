@@ -21,12 +21,18 @@ if (rootElement === null) {
 const root = createRoot(rootElement);
 
 try {
-  const environment = parseWebEnvironment(import.meta.env);
+  const environment = parseWebEnvironment({
+    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+    SANDBOX_ENABLED: import.meta.env.SANDBOX_ENABLED,
+  });
   root.render(
     <StrictMode>
       <I18nextProvider i18n={i18n}>
         <ErrorBoundary>
-          <App apiBaseUrl={environment.VITE_API_BASE_URL} />
+          <App
+            apiBaseUrl={environment.VITE_API_BASE_URL}
+            sandboxEnabled={environment.SANDBOX_ENABLED}
+          />
         </ErrorBoundary>
       </I18nextProvider>
     </StrictMode>,

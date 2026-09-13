@@ -12,17 +12,21 @@ import { squareLabel } from "./labels";
 import { PromotionDialog } from "./PromotionDialog";
 import { useBoardSelection } from "./useBoardSelection";
 
-interface ChessboardProps {
-  readonly snapshot: GameSnapshot;
+type ChessboardProps = {
   readonly orientation: ChessColor;
-  readonly canMove: boolean;
   readonly interactionEpoch: string;
   readonly onMove: (move: string) => void;
   readonly describedBy?: string | undefined;
-  /** A position to present instead of the accepted snapshot; it disables moves. */
-  readonly view?: BoardView | undefined;
+  readonly coordinates?: "inside" | "framed";
   readonly ref?: Ref<ChessboardHandle> | undefined;
-}
+} & (
+  | {
+      readonly snapshot: GameSnapshot;
+      readonly canMove: boolean;
+      readonly view?: BoardView | undefined;
+    }
+  | { readonly snapshot?: undefined; readonly canMove: false; readonly view: BoardView }
+);
 
 export interface ChessboardHandle {
   /** Moves focus to the square holding the board's tab stop, scrolling it into view. */
@@ -42,18 +46,19 @@ export function Chessboard({
   interactionEpoch,
   onMove,
   describedBy,
+  coordinates = "inside",
   view,
   ref,
 }: ChessboardProps) {
   const { t } = useTranslation();
-  const fen = view?.fen ?? snapshot.fen;
+  const fen = view?.fen ?? snapshot?.fen ?? "";
   const position = useMemo(() => parsePosition(fen), [fen]);
   const rows = useMemo(() => visualRows(orientation), [orientation]);
   const [buttons] = useState(() => new Map<Square, HTMLButtonElement>());
   const [focusedSquare, setFocusedSquare] = useState<Square>("e2");
   const enabled = !view && canMove && snapshot.state === "active" && position !== null;
   const selection = useBoardSelection({
-    legalMoves: snapshot.legalMoves,
+    legalMoves: snapshot?.legalMoves ?? [],
     epoch: interactionEpoch,
     enabled,
     onMove,
@@ -108,62 +113,85 @@ export function Chessboard({
 
   if (!position) return <p>{t("board.invalidPosition")}</p>;
 
-  const inCheck = view?.inCheck ?? snapshot.inCheck;
+  const inCheck = view?.inCheck ?? snapshot?.inCheck ?? false;
   const marks: BoardMarks = {
     position,
     source: selection.source,
     targets: selection.targets,
-    lastMove: view ? view.lastMove : snapshot.moves.at(-1)?.uci,
-    checkedColor: inCheck ? (view?.turn ?? snapshot.turn) : null,
+    lastMove: view ? view.lastMove : snapshot?.moves.at(-1)?.uci,
+    checkedColor: inCheck ? position.turn : null,
   };
   const { promotion } = selection;
 
   return (
     <>
-      <div
-        className="flex aspect-square w-full touch-manipulation flex-col outline-1 outline-control-border"
-        role="grid"
-        aria-label={t("board.label")}
-        aria-describedby={describedBy}
-        aria-readonly={!enabled}
-        aria-rowcount={8}
-        aria-colcount={8}
-        data-orientation={orientation}
-        data-fen={fen}
-      >
-        {rows.map((row, rowIndex) => (
-          <div
-            className="grid min-h-0 flex-1 grid-cols-8"
-            role="row"
-            key={row[0]?.[1]}
-            aria-rowindex={rowIndex + 1}
-          >
-            {row.map((square, columnIndex) => {
-              const state = squareState(marks, square);
-              return (
-                <BoardSquare
-                  key={square}
-                  state={state}
-                  label={squareLabel(state, t)}
-                  column={columnIndex + 1}
-                  focusable={focusedSquare === square}
-                  showRank={columnIndex === 0}
-                  showFile={rowIndex === 7}
-                  ref={(element) => {
-                    if (element) buttons.set(square, element);
-                    else buttons.delete(square);
-                  }}
-                  onFocus={() => setFocusedSquare(square)}
-                  onActivate={() => {
-                    focus(square);
-                    selection.activate(square);
-                  }}
-                  onKeyDown={(event) => navigate(event, rowIndex, columnIndex)}
-                />
-              );
-            })}
-          </div>
-        ))}
+      <div className="relative min-w-0">
+        <div
+          className="flex aspect-square w-full touch-manipulation flex-col outline-1 outline-control-border"
+          role="grid"
+          aria-label={t("board.label")}
+          aria-describedby={describedBy}
+          aria-readonly={!enabled}
+          aria-rowcount={8}
+          aria-colcount={8}
+          data-orientation={orientation}
+          data-fen={fen}
+        >
+          {rows.map((row, rowIndex) => (
+            <div
+              className="grid min-h-0 flex-1 grid-cols-8"
+              role="row"
+              key={row[0]?.[1]}
+              aria-rowindex={rowIndex + 1}
+            >
+              {row.map((square, columnIndex) => {
+                const state = squareState(marks, square);
+                return (
+                  <BoardSquare
+                    key={square}
+                    state={state}
+                    label={squareLabel(state, t)}
+                    column={columnIndex + 1}
+                    focusable={focusedSquare === square}
+                    showRank={columnIndex === 0}
+                    showFile={coordinates === "inside" && rowIndex === 7}
+                    hideRankOnDesktop={coordinates === "framed"}
+                    ref={(element) => {
+                      if (element) buttons.set(square, element);
+                      else buttons.delete(square);
+                    }}
+                    onFocus={() => setFocusedSquare(square)}
+                    onActivate={() => {
+                      focus(square);
+                      selection.activate(square);
+                    }}
+                    onKeyDown={(event) => navigate(event, rowIndex, columnIndex)}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {coordinates === "framed" ? (
+          <>
+            <div
+              className="pointer-events-none absolute top-0 right-full hidden aspect-[1/8] h-[calc(100%_-_1.5rem)] w-6 grid-rows-8 place-items-center font-mono text-caption text-text-muted lg:grid"
+              aria-hidden="true"
+            >
+              {rows.map((row) => (
+                <span key={row[0]?.[1]}>{row[0]?.[1]}</span>
+              ))}
+            </div>
+            <div
+              className="pointer-events-none grid h-6 grid-cols-8 items-end text-center font-mono text-caption text-text-muted"
+              aria-hidden="true"
+            >
+              {rows[0]?.map((square) => (
+                <span key={square}>{square[0]}</span>
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
       {promotion && enabled ? (
         <PromotionDialog

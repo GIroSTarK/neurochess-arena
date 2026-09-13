@@ -1,66 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Page } from "@playwright/test";
 
-import type * as webI18n from "../../apps/web/src/i18n";
-
+import { expectArenaLayout } from "./arena-layout";
 import { activate, expect, square, startSandbox, test } from "./fixtures";
-
-async function checkBounds(page: Page) {
-  const bounds = await page.evaluate(() => {
-    const board = document.querySelector("[role=grid]")?.getBoundingClientRect();
-    const summaries = [...document.querySelectorAll("[data-seat]")].map(
-      (element) => element.getBoundingClientRect().width,
-    );
-    const controls = [...document.querySelectorAll("button:not([data-square]), summary")].map(
-      (element) => element.getBoundingClientRect(),
-    );
-    return {
-      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      board: board
-        ? { width: board.width, height: board.height, left: board.left, right: board.right }
-        : null,
-      viewport: document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      textOverflow: [...document.querySelectorAll("body *")]
-        .filter(
-          (element) =>
-            element.scrollWidth > element.clientWidth &&
-            getComputedStyle(element).overflowX === "visible",
-        )
-        .map((element) => ({
-          tag: element.tagName,
-          class: typeof element.className === "string" ? element.className : "svg",
-          client: element.clientWidth,
-          scroll: element.scrollWidth,
-        })),
-      summaries,
-      controlsReachable: controls.every(
-        (rect) =>
-          rect.left >= 0 &&
-          rect.right <= document.documentElement.clientWidth + 1 &&
-          rect.height >= 44,
-      ),
-      overflowing: [...document.querySelectorAll("body *")]
-        .filter(
-          (element) =>
-            element.getBoundingClientRect().right > document.documentElement.clientWidth + 1,
-        )
-        .map((element) => ({
-          tag: element.tagName,
-          class: element.className,
-          right: element.getBoundingClientRect().right,
-        })),
-    };
-  });
-  expect(bounds.overflow, JSON.stringify(bounds)).toBe(false);
-  expect(bounds.board).not.toBeNull();
-  expect(bounds.board?.width).toBeLessThanOrEqual(640);
-  expect(Math.abs((bounds.board?.width ?? 0) - (bounds.board?.height ?? 0))).toBeLessThan(1);
-  expect(bounds.board?.left).toBeGreaterThanOrEqual(15);
-  expect(bounds.board?.right).toBeLessThanOrEqual(bounds.viewport - 15);
-  expect(Math.abs((bounds.summaries[0] ?? 0) - (bounds.summaries[1] ?? 0))).toBeLessThan(1);
-  expect(bounds.controlsReachable).toBe(true);
-}
+import { setPseudoLocalization } from "./text-layout";
 
 test("keeps keyboard-focused squares in view on short viewports in both orientations", async ({
   page,
@@ -126,6 +68,8 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   await page.keyboard.press("Control+End");
   await expect(square(page, "h1")).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Flip board" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("grid")).toHaveAttribute("data-orientation", "black");
@@ -158,7 +102,7 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   await activate(page.getByRole("button", { name: "Flip board" }), touch);
   for (const width of touch ? [320, 390] : [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    await checkBounds(page);
+    await expectArenaLayout(page);
     await page.screenshot({
       path: testInfo.outputPath("layout-" + width + ".png"),
       fullPage: true,
@@ -171,30 +115,10 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
   expect(animations).toBe("0s");
   await page.setViewportSize({ width: 320, height: 900 });
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-  await checkBounds(page);
+  await expectArenaLayout(page);
   await page.screenshot({ path: testInfo.outputPath("text-200-percent.png"), fullPage: true });
-  // Test-only resource expansion. No locale switcher, query flag, browser
-  // detection or fixture code is bundled into the application.
-  await page.evaluate(async () => {
-    const modulePath = "/src/i18n/index.ts";
-    const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
-    function expand(value: unknown): unknown {
-      if (typeof value === "string") return value + " extra".repeat(Math.ceil(value.length / 12));
-      if (value && typeof value === "object") {
-        return Object.fromEntries(
-          Object.entries(value).map(([key, entry]) => [key, expand(entry)]),
-        );
-      }
-      return value;
-    }
-    i18n.addResourceBundle(
-      "en-XA",
-      "translation",
-      expand(i18n.getResourceBundle("en", "translation")),
-    );
-    await i18n.changeLanguage("en-XA");
-  });
-  await checkBounds(page);
+  await setPseudoLocalization(page, true);
+  await expectArenaLayout(page);
   await page.screenshot({ path: testInfo.outputPath("expanded-translation.png"), fullPage: true });
   const accessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])

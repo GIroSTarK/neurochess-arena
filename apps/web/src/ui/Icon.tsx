@@ -1,10 +1,20 @@
 import { cx } from "./cx";
 
-export function Icon({ path, className }: { readonly path: string; readonly className?: string }) {
+const sizes = { xs: "size-3", sm: "size-4", md: "size-5" } as const;
+
+export function Icon({
+  path,
+  className,
+  size = "md",
+}: {
+  readonly path: string;
+  readonly className?: string;
+  readonly size?: keyof typeof sizes;
+}) {
   return (
     <svg
       viewBox="0 0 24 24"
-      className={cx("size-5 shrink-0 fill-none stroke-current stroke-2", className)}
+      className={cx("shrink-0 fill-none stroke-current stroke-2", sizes[size], className)}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

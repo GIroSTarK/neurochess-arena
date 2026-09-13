@@ -15,7 +15,7 @@ describe("localized configuration errors", () => {
     expect(
       screen.getByText(/Check the following configuration variables: VITE_API_BASE_URL/),
     ).toBeInTheDocument();
-    expect(document.title).toBe("Development sandbox · Neurochess Arena");
+    expect(document.title).toBe("Neurochess Arena");
     expect(document.documentElement.lang).toBe("en");
   });
 

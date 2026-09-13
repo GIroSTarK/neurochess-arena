@@ -5,6 +5,18 @@ const executable = resolve("node_modules", "dependency-cruiser", "bin", "depende
 const fixtures = [
   { path: "apps/web/forbidden-database-import.ts", rule: "web-no-server-infrastructure" },
   { path: "apps/web/forbidden-engine-import.ts", rule: "chess-engine-is-encapsulated" },
+  {
+    path: "apps/web/src/arena/forbidden-sandbox-import.ts",
+    rule: "arena-presentation-no-sandbox",
+  },
+  {
+    path: "apps/web/src/arena/forbidden-reference-import.ts",
+    rule: "arena-presentation-no-sandbox",
+  },
+  {
+    path: "apps/web/src/reference/forbidden-sandbox-import.ts",
+    rule: "reference-no-sandbox",
+  },
   { path: "apps/api/forbidden-chess-internal-import.ts", rule: "chess-public-entrypoint-only" },
   { path: "packages/chess/forbidden-fastify-import.ts", rule: "shared-leaves-no-infrastructure" },
   {

@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { cx } from "./cx";
 import { cancelHeldActivation } from "./keyboard";
 
-export type ButtonVariant = "primary" | "secondary" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "danger" | "quiet" | "quiet-danger";
 
 const variants: Record<ButtonVariant, string> = {
   primary: cx(
@@ -16,10 +16,15 @@ const variants: Record<ButtonVariant, string> = {
     "hover:not-disabled:not-aria-disabled:bg-surface-raised",
   ),
   danger: "border-danger bg-surface text-text",
+  quiet:
+    "border-transparent bg-transparent text-text-secondary hover:not-disabled:not-aria-disabled:bg-surface-raised",
+  "quiet-danger":
+    "border-transparent bg-transparent text-danger hover:not-disabled:not-aria-disabled:bg-surface-raised",
 };
 
 export interface ButtonProps extends ComponentProps<"button"> {
   readonly variant: ButtonVariant;
+  readonly padding?: "normal" | "compact";
 }
 
 /**
@@ -28,6 +33,7 @@ export interface ButtonProps extends ComponentProps<"button"> {
  */
 export function Button({
   variant,
+  padding = "normal",
   className,
   type = "button",
   "aria-disabled": ariaDisabled,
@@ -36,14 +42,19 @@ export function Button({
   ...props
 }: ButtonProps) {
   const unavailable = ariaDisabled === true || ariaDisabled === "true";
+  const quiet = variant === "quiet" || variant === "quiet-danger";
   return (
     <button
       type={type}
       className={cx(
-        "inline-flex min-h-target max-w-full items-center justify-center gap-2 rounded-control border px-4 py-2 text-center text-label font-semibold",
+        "inline-flex min-h-target max-w-full items-center justify-center rounded-control border py-2 text-center text-label font-semibold",
+        padding === "compact"
+          ? "gap-1.5 px-2 max-sm:px-[min(0.5rem,8px)]"
+          : "gap-2 px-4 max-sm:px-[min(1rem,16px)]",
         "motion-safe:transition-[box-shadow,background-color] motion-safe:duration-120 motion-safe:ease-arena",
-        "disabled:border-control-border disabled:bg-surface-raised disabled:text-text-secondary",
-        "aria-disabled:border-control-border aria-disabled:bg-surface-raised aria-disabled:text-text-secondary",
+        quiet
+          ? "disabled:text-text-muted aria-disabled:text-text-muted"
+          : "disabled:border-control-border disabled:bg-surface-raised disabled:text-text-secondary aria-disabled:border-control-border aria-disabled:bg-surface-raised aria-disabled:text-text-secondary",
         variants[variant],
         className,
       )}

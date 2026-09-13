@@ -5,23 +5,26 @@ import { describe, expect, it, vi } from "vitest";
 import { Button } from "./Button";
 
 describe("button primitive", () => {
-  it("stays in the tab order and rejects activation while unavailable", async () => {
-    const onClick = vi.fn();
-    render(
-      <Button variant="primary" aria-disabled onClick={onClick}>
-        Go
-      </Button>,
-    );
-    const button = screen.getByRole("button", { name: "Go" });
-    const user = userEvent.setup();
-    await user.tab();
-    expect(button).toHaveFocus();
-    expect(button).not.toBeDisabled();
-    await user.keyboard("{Enter} ");
-    await user.click(button);
-    expect(onClick).not.toHaveBeenCalled();
-    expect(button).toHaveFocus();
-  });
+  it.each(["primary", "secondary", "danger", "quiet", "quiet-danger"] as const)(
+    "keeps an unavailable %s button focusable and rejects activation",
+    async (variant) => {
+      const onClick = vi.fn();
+      render(
+        <Button variant={variant} aria-disabled onClick={onClick}>
+          Go
+        </Button>,
+      );
+      const button = screen.getByRole("button", { name: "Go" });
+      const user = userEvent.setup();
+      await user.tab();
+      expect(button).toHaveFocus();
+      expect(button).not.toBeDisabled();
+      await user.keyboard("{Enter} ");
+      await user.click(button);
+      expect(onClick).not.toHaveBeenCalled();
+      expect(button).toHaveFocus();
+    },
+  );
 
   it("activates once per press and ignores a held key", async () => {
     const onClick = vi.fn();

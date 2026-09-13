@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../../ui/Button";
-import { Icon } from "../../ui/Icon";
+import { StartButton as StartControl } from "../../arena/panels/StartButton";
 import type { SandboxController } from "../controller";
-import type { SandboxPhase, SandboxState } from "../state";
+import { isTerminal, type SandboxPhase, type SandboxState } from "../state";
 
 type StartLabel =
   "actions.start" | "actions.starting" | "actions.retryStart" | "actions.restartSession";
@@ -22,20 +21,20 @@ export function StartButton({
   readonly controller: Pick<SandboxController, "start">;
 }) {
   const { t } = useTranslation();
+  const terminal = state.snapshot !== null && isTerminal(state.snapshot);
   return (
-    <Button
-      variant="primary"
-      className="mt-8"
-      aria-disabled={
+    <StartControl
+      label={t(terminal ? "actions.newGame" : (phaseLabels[state.phase] ?? "actions.start"))}
+      variant={terminal ? "secondary" : "primary"}
+      disabled={
         state.readiness !== "ready" ||
-        !["entry", "access-error", "unavailable"].includes(state.phase)
+        (terminal
+          ? state.phase !== "ready"
+          : !["entry", "access-error", "unavailable"].includes(state.phase))
       }
-      onClick={() => {
+      onStart={() => {
         void controller.start();
       }}
-    >
-      {t(phaseLabels[state.phase] ?? "actions.start")}
-      <Icon path="M5 12h14m-6-6 6 6-6 6" />
-    </Button>
+    />
   );
 }

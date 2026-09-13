@@ -1,5 +1,5 @@
 import { moveCommandSchema } from "@neurochess/contracts";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,24 +49,31 @@ function mockApi(route: Route = () => undefined) {
 }
 
 async function start() {
-  const button = screen.getByRole("button", { name: "Start sandbox" });
+  const button = await screen.findByRole("button", { name: "Start sandbox" });
   await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
   await userEvent.click(button);
-  await screen.findByRole("grid", { name: "Chessboard" });
+  await waitFor(() => expect(button).not.toBeInTheDocument());
 }
 
 describe("localized sandbox application", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/"));
+  beforeEach(() => window.history.replaceState(null, "", "/sandbox"));
   it("boots only on action under Strict Mode and orders cookie bootstrap before creation", async () => {
     const bootstrap = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path === "/guest-session" ? bootstrap.promise : undefined));
     renderLocalized(
       <StrictMode>
-        <App apiBaseUrl="http://localhost:3001" />
+        <App sandboxEnabled apiBaseUrl="http://localhost:3001" />
       </StrictMode>,
     );
-    expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
-    const button = screen.getByRole("button", { name: "Start sandbox" });
+    expect(screen.getByRole("heading", { name: "Sandbox" })).toBeInTheDocument();
+    const preview = await screen.findByRole("grid", { name: "Chessboard" });
+    expect(preview).toHaveAttribute("aria-readonly", "true");
+    expect(preview).toHaveAttribute("data-fen", snapshot().fen);
+    expect(screen.queryByRole("region", { name: "Move history" })).not.toBeInTheDocument();
+    await userEvent.click(square("e2"));
+    await userEvent.click(square("e4"));
+    expect(preview).toHaveAttribute("data-fen", snapshot().fen);
+    const button = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     expect(
       fetch.mock.calls.every(([url]) =>
@@ -82,7 +89,7 @@ describe("localized sandbox application", () => {
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
     ).toHaveLength(0);
     await act(async () => bootstrap.resolve(jsonResponse({ status: "ready" })));
-    await screen.findByRole("grid");
+    await screen.findByRole("button", { name: "Pause" });
     expect(
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/sandbox/games")),
     ).toHaveLength(1);
@@ -93,7 +100,7 @@ describe("localized sandbox application", () => {
   it("keeps the accepted board, turn and history while submitting and announces confirmation once", async () => {
     const pending = Promise.withResolvers<Response>();
     mockApi((path) => (path.endsWith("/moves") ? pending.promise : undefined));
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     const live = screen.getByRole("status");
     const announcements: string[] = [];
@@ -123,7 +130,7 @@ describe("localized sandbox application", () => {
     mockApi((path) =>
       path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     const user = userEvent.setup();
     const control = screen.getByRole("button", { name: "Pause" });
@@ -154,7 +161,7 @@ describe("localized sandbox application", () => {
   it("blocks repeat lifecycle activation and destructive dialogs while a command is pending", async () => {
     const pending = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path.endsWith("/lifecycle") ? pending.promise : undefined));
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Pause" }));
@@ -183,7 +190,7 @@ describe("localized sandbox application", () => {
     mockApi((path) =>
       path.endsWith("/lifecycle") ? (++requests === 1 ? pause.promise : resume.promise) : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
 
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
@@ -208,7 +215,7 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path.endsWith("/moves") ? errorResponse("GAME_CONFLICT", 409, current) : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -228,7 +235,7 @@ describe("localized sandbox application", () => {
           ? read.promise
           : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -258,7 +265,7 @@ describe("localized sandbox application", () => {
         ? jsonResponse({ state: "broken", message: "exception-canary" })
         : errorResponse("GAME_CONFLICT", 409, snapshot(["e2e4"]));
     });
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
@@ -279,12 +286,14 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path.endsWith("/moves") ? errorResponse("UNAUTHORIZED", 401) : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     await userEvent.click(square("e2"));
     await userEvent.click(square("e4"));
     const restart = await screen.findByRole("button", { name: "Start sandbox again" });
-    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+    expect(screen.queryByRole("region", { name: "Move history" })).not.toBeInTheDocument();
     expect(
       fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/guest-session")),
     ).toHaveLength(1);
@@ -299,8 +308,8 @@ describe("localized sandbox application", () => {
     const fetch = mockApi((path) =>
       path === "/sandbox/games" ? errorResponse("NOT_FOUND", 404) : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
-    const button = screen.getByRole("button", { name: "Start sandbox" });
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
+    const button = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
     await userEvent.click(button);
     const retry = await screen.findByRole("button", { name: "Retry sandbox" });
@@ -325,7 +334,7 @@ describe("localized sandbox application", () => {
       if (path !== "/ready") return undefined;
       return jsonResponse({ status: ++checks === 1 ? "bad" : "ready" });
     });
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     const retry = await screen.findByRole("button", { name: "Retry connection" });
     expect(screen.getByRole("button", { name: "Start sandbox" })).toHaveAttribute(
       "aria-disabled",
@@ -352,7 +361,7 @@ describe("localized sandbox application", () => {
       played.push(moveCommandSchema.parse(JSON.parse(requestBody(options))).move);
       return jsonResponse(snapshot(played));
     });
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     for (const move of FOOLS_MATE) {
       await userEvent.click(square(move.slice(0, 2)));
@@ -363,12 +372,23 @@ describe("localized sandbox application", () => {
         ).toBeInTheDocument(),
       );
     }
-    expect(screen.getByRole("heading", { name: "Black wins" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Black wins by checkmate" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
       "Black played Qh4#. Black wins. Checkmate. Result: 0-1.",
     );
     expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
     expect(screen.getByRole("button", { name: "New game" })).toBeEnabled();
+    const playArea = within(screen.getByRole("region", { name: "Play area" }));
+    expect(playArea.getByRole("button", { name: "Copy PGN" })).toBeInTheDocument();
+    expect(playArea.getByRole("button", { name: "Download PGN" })).toBeInTheDocument();
+    await userEvent.click(playArea.getByRole("button", { name: "First" }));
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+    expect(
+      screen.getByRole("heading", { name: "Black wins by checkmate", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Result: 0-1")).toBeInTheDocument();
+    expect(screen.getByText("0–1")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText("Sandbox · Game complete · 2... Qh4#")).toBeInTheDocument();
   });
 
   it.each(["completed", "aborted"] as const)(
@@ -378,7 +398,7 @@ describe("localized sandbox application", () => {
         state === "completed"
           ? snapshot(FOOLS_MATE)
           : snapshot(["e2e4"], { state, terminationReason: "aborted", legalMoves: [], version: 2 });
-      window.history.replaceState(null, "", "/?game=" + terminal.gameId);
+      window.history.replaceState(null, "", "/sandbox?game=" + terminal.gameId);
       const fetch = mockApi((path) => {
         if (path === "/games/" + terminal.gameId) return jsonResponse(terminal);
         if (path.endsWith("/replay")) {
@@ -386,9 +406,9 @@ describe("localized sandbox application", () => {
         }
         return undefined;
       });
-      renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+      renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
       await screen.findByRole("heading", {
-        name: state === "completed" ? "Black wins" : "Game stopped",
+        name: state === "completed" ? "Black wins by checkmate" : "Game stopped",
       });
       expect(screen.queryByText("Your current game is open.")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("Your game is open.");
@@ -407,7 +427,7 @@ describe("localized sandbox application", () => {
         if (path.endsWith(operation === "replay" ? "/replay" : "/pgn")) return pending.promise;
         return undefined;
       });
-      renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+      renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
       await start();
       const control = screen.getByRole("button", {
         name: operation === "replay" ? "Flip board" : operation,
@@ -435,7 +455,9 @@ describe("localized sandbox application", () => {
     });
     await localization.changeLanguage("fr");
     mockApi();
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />, { i18n: localization });
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />, {
+      i18n: localization,
+    });
     await start();
     expect(square("e2")).toHaveAccessibleName("e2: pion blanc.");
     await userEvent.click(square("e2"));
@@ -443,15 +465,15 @@ describe("localized sandbox application", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent("Blanc joue e4. Au tour de Noir"),
     );
-    expect(screen.getByRole("heading", { name: "Development sandbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sandbox" })).toBeInTheDocument();
   });
 
   it("keeps focus on Start while creation is pending, then lands on the board", async () => {
     const creation = Promise.withResolvers<Response>();
     const fetch = mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     const user = userEvent.setup();
-    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    const startButton = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
     act(() => startButton.focus());
     await user.keyboard("{Enter}");
@@ -477,17 +499,17 @@ describe("localized sandbox application", () => {
   it("leaves focus on a control the user moved to while creation was pending", async () => {
     const creation = Promise.withResolvers<Response>();
     mockApi((path) => (path === "/sandbox/games" ? creation.promise : undefined));
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     const user = userEvent.setup();
-    const startButton = screen.getByRole("button", { name: "Start sandbox" });
+    const startButton = await screen.findByRole("button", { name: "Start sandbox" });
     await waitFor(() => expect(startButton).toHaveAttribute("aria-disabled", "false"));
     act(() => startButton.focus());
     await user.keyboard("{Enter}");
-    const history = screen.getByRole("region", { name: "Move history" });
-    act(() => history.focus());
+    const navigation = screen.getByRole("link", { name: "Arena" });
+    act(() => navigation.focus());
     await act(async () => creation.resolve(jsonResponse(snapshot(), 201)));
     await screen.findByRole("grid");
-    expect(history).toHaveFocus();
+    expect(navigation).toHaveFocus();
   });
 
   it("lands on the board after New game replaces a finished game", async () => {
@@ -498,7 +520,7 @@ describe("localized sandbox application", () => {
       creations += 1;
       return creations === 1 ? jsonResponse(snapshot(FOOLS_MATE), 201) : creation.promise;
     });
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
     await start();
     const user = userEvent.setup();
     const newGame = screen.getByRole("button", { name: "New game" });
@@ -522,8 +544,8 @@ describe("localized sandbox application", () => {
           ? jsonResponse(snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 }))
           : undefined,
     );
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" />);
-    await screen.findByRole("heading", { name: "Game paused" });
+    renderLocalized(<App sandboxEnabled apiBaseUrl="http://localhost:3001" />);
+    await screen.findByRole("heading", { name: /^Game paused ·/ });
     expect(screen.getByRole("grid").contains(document.activeElement)).toBe(false);
   });
 });

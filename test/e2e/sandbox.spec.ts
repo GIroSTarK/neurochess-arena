@@ -14,6 +14,7 @@ import {
   startSandbox,
   test,
 } from "./fixtures";
+import { expectUnbrokenWords } from "./text-layout";
 
 const promotionApproach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2"];
 
@@ -21,6 +22,18 @@ test("preserves lifecycle keyboard focus through pending commands without steali
   page,
 }, testInfo) => {
   await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const secondaryActions = page.getByRole("button", {
+    name: /^(Abort game|Resign White|Resign Black)$/,
+  });
+  await expect(secondaryActions).toHaveCount(3);
+  const actionFrames = () =>
+    secondaryActions.evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return { border: style.borderColor, background: style.backgroundColor };
+      }),
+    );
+  const initialFrames = await actionFrames();
   let release = Promise.withResolvers<void>();
   let requests = 0;
   await page.route(API_ORIGIN + "/games/*/lifecycle", async (route) => {
@@ -38,6 +51,15 @@ test("preserves lifecycle keyboard focus through pending commands without steali
       await expect.poll(() => requests).toBe(index + 1);
       await expect(control).toBeFocused();
       await expect(control).toHaveAttribute("aria-disabled", "true");
+      for (const action of await secondaryActions.all()) {
+        await expect(action).toHaveAttribute("aria-disabled", "true");
+      }
+      await expect.poll(actionFrames).toEqual(initialFrames);
+      if (index === 0) {
+        await page
+          .getByRole("group", { name: "Game controls" })
+          .screenshot({ path: testInfo.outputPath("controls-pending.png") });
+      }
       await page.keyboard.press("Enter");
       await page.keyboard.press("Space");
       expect(requests).toBe(index + 1);
@@ -52,6 +74,7 @@ test("preserves lifecycle keyboard focus through pending commands without steali
         exact: true,
       });
       await expect(next).toHaveAttribute("aria-disabled", "false");
+      await expect.poll(actionFrames).toEqual(initialFrames);
       if (index === 2) await expect(square(page, "e2")).toBeFocused();
       else await expect(next).toBeFocused();
     }
@@ -76,7 +99,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
     current = await playMove(page, current, move, touch);
   }
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   const paused = await readSnapshot(page, current.gameId);
   expect(paused).toEqual({
     ...current,
@@ -91,7 +114,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   current = gameSnapshotSchema.parse(await (await resume).json());
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   for (const move of ["g2g4", "d8h4"]) current = await playMove(page, current, move, touch);
-  await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
   await expect(square(page, "e1")).toHaveAttribute("data-check", "true");
   const restored = await readSnapshot(page, current.gameId);
@@ -133,8 +156,8 @@ test("creates, recovers, completes, replays and exports a private game", async (
   await activate(page.getByRole("button", { name: "Download PGN", exact: true }), touch);
   const download = await downloading;
   expect(download.suggestedFilename()).toBe("neurochess-" + current.gameId + ".pgn");
-  const path = await download.path();
-  expect(path).not.toBeNull();
+  const path = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(path);
   expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(
@@ -147,7 +170,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(next.moves).toEqual([]);
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "Black wins" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   await expect(page.getByText("Your current game is open.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("Your game is open.");
   expect(new URL(page.url()).searchParams.get("game")).toBe(restored.gameId);
@@ -160,8 +183,16 @@ test("promotes both colors from the standard position with modal cancellation an
   const touch = testInfo.project.name === "mobile-touch";
   let current = await startSandbox(page, touch);
   for (const move of promotionApproach) current = await playMove(page, current, move, touch);
-  await activate(square(page, "b7"), touch);
-  await activate(square(page, "a8"), touch);
+  if (touch) {
+    await activate(square(page, "b7"), true);
+    await activate(square(page, "a8"), true);
+  } else {
+    await square(page, "b7").focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Enter");
+  }
   const dialog = page.getByRole("dialog", { name: "Choose a piece for White on a8" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Promote to Queen" })).toBeFocused();
@@ -187,16 +218,61 @@ test("promotes both colors from the standard position with modal cancellation an
   expect(choices.every((choice) => choice.width >= 44 && choice.height >= 44)).toBe(true);
   if (touch) expect(new Set(choices.map((choice) => choice.top)).size).toBe(2);
   await page.screenshot({ path: testInfo.outputPath("promotion.png"), fullPage: true });
+  for (const enlarged of [false, true]) {
+    await page.evaluate((enlarged) => {
+      document.documentElement.style.fontSize = enlarged ? "200%" : "";
+    }, enlarged);
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      const layout = await dialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          fits:
+            rect.left >= 16 &&
+            rect.right <= window.innerWidth - 16 &&
+            element.scrollWidth <= element.clientWidth,
+          targets: [...element.querySelectorAll("button")].every((button) => {
+            const rect = button.getBoundingClientRect();
+            return rect.width >= 44 && rect.height >= 44;
+          }),
+        };
+      });
+      expect(layout).toEqual({ fits: true, targets: true });
+      await expectUnbrokenWords(dialog.getByRole("button"));
+      for (const choice of await dialog.getByRole("button").all()) {
+        await choice.focus();
+        await expect(choice).toBeInViewport();
+      }
+      if (width === 320 && enlarged) {
+        await page.screenshot({
+          path: testInfo.outputPath("promotion-320-enlarged.png"),
+          fullPage: true,
+        });
+      }
+    }
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "";
+  });
+  await page.setViewportSize(testInfo.project.use.viewport!);
+  const beforeCancel = await page.evaluate(() => window.scrollY);
   if (touch) await activate(dialog.getByRole("button", { name: "Cancel" }), true);
   else await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(square(page, "a8")).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(beforeCancel);
   await expect(square(page, "b7")).toHaveAttribute("data-selected", "true");
-  await activate(square(page, "a8"), touch);
+  if (touch) await activate(square(page, "a8"), true);
+  else await page.keyboard.press("Enter");
   const response = page.waitForResponse((response) =>
     response.url().endsWith("/games/" + current.gameId + "/moves"),
   );
-  await activate(dialog.getByRole("button", { name: "Promote to Knight" }), touch);
+  if (touch) await activate(dialog.getByRole("button", { name: "Promote to Knight" }), true);
+  else {
+    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Promote to Knight" })).toBeFocused();
+    await page.keyboard.press("Space");
+  }
   current = await acceptedMove(await response, current, "b7a8n", page);
   current = await playMove(page, current, "g2h1r", touch);
   await expect(square(page, "a8").locator("[data-piece=white-n]")).toHaveCount(1);
@@ -214,7 +290,10 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  expect(await readSnapshot(page, current.gameId)).toEqual(current);
+  await activate(page.getByRole("navigation").getByRole("link", { name: "Sandbox" }), touch);
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   const paused = await readSnapshot(page, current.gameId);
   expect(paused).toEqual({
     ...current,
@@ -223,7 +302,7 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
     legalMoves: [],
   });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Game paused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   expect(await readSnapshot(page, current.gameId)).toEqual(paused);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
 });
@@ -237,7 +316,7 @@ test("confirms both resignation colors and abortion with accessible cancellation
       action: "Resign White",
       title: "Resign White?",
       confirm: "Confirm resignation",
-      heading: "Black wins",
+      heading: "Black wins by resignation",
       result: "0-1",
       reason: "human_resignation",
     },
@@ -245,7 +324,7 @@ test("confirms both resignation colors and abortion with accessible cancellation
       action: "Resign Black",
       title: "Resign Black?",
       confirm: "Confirm resignation",
-      heading: "White wins",
+      heading: "White wins by resignation",
       result: "1-0",
       reason: "human_resignation",
     },
@@ -307,7 +386,12 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     const stranger = await isolated.newPage();
     await stranger.goto(page.url());
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
-    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    await expect(stranger.getByRole("grid")).toHaveAttribute(
+      "data-fen",
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    );
+    await expect(stranger.getByRole("region", { name: "Move history" })).toHaveCount(0);
     for (const suffix of ["replay", "pgn"]) {
       expect(
         (
@@ -325,7 +409,12 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
     ).toBe(200);
     await stranger.reload();
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
-    await expect(stranger.getByRole("grid")).toHaveCount(0);
+    await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+    await expect(stranger.getByRole("grid")).toHaveAttribute(
+      "data-fen",
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    );
+    await expect(stranger.getByRole("region", { name: "Move history" })).toHaveCount(0);
     for (const suffix of ["replay", "pgn"]) {
       expect(
         (

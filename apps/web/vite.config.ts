@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
+import { parseSandboxFlag } from "./src/app/env.ts";
 import { en } from "./src/i18n/en.ts";
 
 function escapeHtml(value: string): string {
@@ -35,7 +37,18 @@ const vendorChunks = [
   { name: "i18n", test: /node_modules[\\/](i18next|react-i18next)[\\/]/ },
 ];
 
-export default defineConfig({
+export default defineConfig(({ mode, command }) => ({
+  // Validate before injection so a misconfigured value never enters the browser bundle.
+  define: {
+    // NODE_ENV can make DEV true during a build; fixtures require the dev server itself.
+    __ARENA_REFERENCE_ENABLED__: JSON.stringify(command === "serve"),
+    "import.meta.env.SANDBOX_ENABLED": JSON.stringify(
+      parseSandboxFlag(
+        loadEnv(mode, fileURLToPath(new URL("../..", import.meta.url)), "SANDBOX_ENABLED")
+          .SANDBOX_ENABLED,
+      ),
+    ),
+  },
   build: {
     rolldownOptions: {
       output: {
@@ -62,4 +75,4 @@ export default defineConfig({
   ],
   preview: localServer,
   server: localServer,
-});
+}));

@@ -1,10 +1,10 @@
 # Neurochess Arena design system
 
-**Version:** 1.1
+**Version:** 1.2
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-13
 
 ## Purpose and authority
 
@@ -62,6 +62,7 @@ Orbitron and Inter are bundled locally by the sandbox app. The families map to `
 | `--text-caption`   | `0.75rem / 1rem`     | 400    | Secondary metadata, chart labels              |
 | `--text-label`     | `0.875rem / 1.25rem` | 500    | Control labels, tabs, compact metrics         |
 | `--text-body`      | `1rem / 1.5rem`      | 400    | Commentary, instructions, mobile inputs       |
+| `--text-wordmark`  | `1.125rem / 1.5rem`  | 600    | Arena wordmark; label size on compact phones  |
 | `--text-section`   | `1.25rem / 1.75rem`  | 600    | Section heading, result detail                |
 | `--text-title`     | `1.75rem / 2.25rem`  | 500    | Page title                                    |
 | `--text-display`   | `2.25rem / 2.75rem`  | 500    | Large display title; use title size on mobile |
@@ -97,6 +98,14 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adjustments, `md` (768px) widens the gutters, and `lg` (1025px) places the board beside the rail. The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
 
 The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest concepts show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
+
+The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. The Arena placeholder explains the upcoming AI experience without inactive game controls; it links to the development Sandbox only when enabled.
+
+The development Sandbox uses the [selected live composition](design-system/concepts/sandbox-v1/README.md): turn/lifecycle in the page header, both participants above the board, and game controls directly below it. Service readiness sits in the footer. The live rail begins with Moves; guidance and routine feedback share a reserved text area below it. Desktop toolbar rows use three equal-width columns. The primary pair fills its columns; compact lower actions share the column starts, with equal resignation widths and equal gaps between buttons. Each button centers its icon and label. The toolbar reflows to two columns when its own width or enlarged text makes the desktop row too narrow. Keep keyboard order consistent, with orientation and inspection before the final abort action.
+
+With further text enlargement, stack live controls in one column and allow participant icons to wrap above their identity. Preserve equal seat widths and wrap short labels between words instead of forcing narrow fragments.
+
+On desktop, Sandbox move history fills the rail height available beside the play area after supporting content and spacing. Preserve a text-scaled minimum reading area that shows the table header and complete move rows; allow the rail and arena to grow when supporting content needs more room. Long histories scroll within the list rather than increasing the arena height. Supporting guidance, recovery messages, and New game retain their natural height below it. In the one-column layout, the move list remains bounded so later actions stay reachable.
 
 The live information rail shows both models' latest commentary and compact per-move latency, total tokens, and estimated cost. Moves is the default detail tab; Analysis contains the graph and usage breakdown, and Events contains attempts and recovery events. On mobile these become successive sections after the board and controls. Show cumulative telemetry in Analysis and result summaries.
 
@@ -161,11 +170,11 @@ Replay navigation keeps the selected SAN visible below the move list's sticky he
 
 Use an accessible [grid interaction pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) with one square in the page tab order. Arrows move by the board's visible orientation; square labels always announce the actual algebraic coordinate, piece/color, and applicable selection/check state. Enter or Space selects a movable piece and confirms a legal destination; Escape cancels the selection. Home/End move within a row; Ctrl+Home/End move to the first/last visual square. Keyboard navigation scrolls its destination into view; restoring focus after the promotion dialog closes preserves the scroll position. Tab leaves the board.
 
-Support click/tap source then destination as well as optional dragging. A promotion opens a keyboard-operable choice of queen, rook, bishop, or knight; never silently force a queen. Use four labeled choices with 44px minimum targets, wrapping to a 2×2 arrangement on narrow screens. Name the destination and color, move focus into the choice, and keep the accepted board position visible. Cancel returns to the pending selection. Pending human submissions lock further move submission, preserve the accepted position, and announce confirmation or a safe rejection. In AI observation and replay, allow inspection without enabling human moves.
+Support click/tap source then destination as well as optional dragging. A promotion opens a keyboard-operable choice of queen, rook, bishop, or knight; never silently force a queen. Use four labeled choices with 44px minimum targets, wrapping to a 2×2 arrangement on narrow screens or one column when enlarged text needs more room. Name the destination and color, move focus into the choice, and keep the accepted board position visible. Cancel returns to the pending selection. Pending human submissions lock further move submission, preserve the accepted position, and announce confirmation or a safe rejection. In AI observation and replay, allow inspection without enabling human moves.
 
 Announce accepted moves, turn changes, check, and results through a concise polite live region. Do not steal focus on a move or announce every changing metric. A reconnect must restore an authorized snapshot before interaction resumes.
 
-Routine move/lifecycle feedback preserves the status panel's geometry and the positions of controls and move history. Reserve localized variants without fixed heights or duplicated interactive controls. Error details may expand for readability; the terminal result/replay view is a separate layout transition.
+Routine move/lifecycle feedback preserves the status summary and feedback geometry and the positions of controls and move history. Reserve localized variants, including state markers, without fixed heights or duplicated interactive controls. Error details may expand for readability; the terminal result/replay view is a separate layout transition.
 
 Pause and Resume preserve focus on the same control during pending and accepted commands. Unavailable actions, including lifecycle, replay navigation, PGN export, Start, and New game, remain focusable and visibly disabled through `aria-disabled`, but reject activation and a held activation key. Returning responses must not steal focus if the user has moved elsewhere. When an accepted Start or New game removes the activated control, focus lands on the board's current square; recovery on page load never moves focus. Updated game state invalidates destructive confirmations independently of control focus.
 

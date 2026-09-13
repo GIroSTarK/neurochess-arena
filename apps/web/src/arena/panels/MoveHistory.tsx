@@ -8,6 +8,8 @@ interface MoveHistoryProps {
   readonly moves: readonly MoveRecord[];
   readonly selectedPly?: number | undefined;
   readonly onSelect?: ((ply: number) => void) | undefined;
+  readonly variant?: "panel" | "rail";
+  readonly showHeading?: boolean;
 }
 
 const cellClassName = "border-b border-divider wrap-anywhere";
@@ -15,7 +17,13 @@ const cellClassName = "border-b border-divider wrap-anywhere";
 const currentMoveClassName =
   "aria-[current]:bg-surface-raised aria-[current]:font-semibold aria-[current]:text-accent aria-[current]:shadow-[inset_2px_0_0_var(--color-accent)]";
 
-export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) {
+export function MoveHistory({
+  moves,
+  selectedPly,
+  onSelect,
+  variant = "panel",
+  showHeading = true,
+}: MoveHistoryProps) {
   const { t, i18n } = useTranslation();
   const headingId = useId();
   const language = i18n.resolvedLanguage ?? "en";
@@ -57,7 +65,10 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   function notation(move: MoveRecord | undefined) {
     if (!move) {
       return (
-        <span className="block px-2 py-3 text-text-muted" aria-label={t("moves.pending")}>
+        <span
+          className={cx("block px-2 py-3 text-text-muted", variant === "rail" && "text-center")}
+          aria-label={t("moves.pending")}
+        >
           —
         </span>
       );
@@ -68,7 +79,10 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
           ref={move.ply === selectedPly ? selectedMove : undefined}
           type="button"
           className={cx(
-            "block min-h-target min-w-target rounded-control border border-transparent bg-transparent p-2 text-start aria-[current]:border-accent",
+            "block min-h-target min-w-target bg-transparent px-[min(0.5rem,8px)] py-2",
+            variant === "rail"
+              ? "w-full text-center hover:bg-surface-raised focus-visible:-outline-offset-2"
+              : "rounded-control border border-transparent text-start aria-[current]:border-accent",
             currentMoveClassName,
           )}
           aria-current={move.ply === selectedPly ? "step" : undefined}
@@ -81,7 +95,11 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
     }
     return (
       <span
-        className={cx("block px-2 py-3", currentMoveClassName)}
+        className={cx(
+          "block px-[min(0.5rem,8px)] py-3",
+          currentMoveClassName,
+          variant === "rail" && "text-center",
+        )}
         aria-current={move.ply === moves.length ? "true" : undefined}
       >
         {move.san}
@@ -91,9 +109,30 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
   }
 
   return (
-    <section className="min-w-0" aria-labelledby={headingId}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-accent pb-3">
-        <h2 id={headingId} className="text-section font-semibold">
+    <section
+      className={cx("min-w-0", variant === "rail" && "lg:flex lg:flex-1 lg:flex-col")}
+      aria-labelledby={headingId}
+    >
+      <div
+        className={
+          showHeading
+            ? cx(
+                "flex shrink-0 flex-wrap items-center justify-between gap-3",
+                variant === "rail"
+                  ? "border-b border-divider pb-2"
+                  : "border-b-2 border-accent pb-3",
+              )
+            : "sr-only"
+        }
+      >
+        <h2
+          id={headingId}
+          className={cx(
+            "text-section font-semibold",
+            variant === "rail" &&
+              "relative after:absolute after:-bottom-[9px] after:left-0 after:h-0.5 after:w-18 after:bg-accent",
+          )}
+        >
           {t("moves.title")}
         </h2>
         <span className="text-right text-label text-text-muted">
@@ -102,7 +141,11 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
       </div>
       <div
         ref={scroller}
-        className="mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto overscroll-contain"
+        className={cx(
+          "mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto",
+          // Contain long histories, but preserve a text-scaled reading area when feedback grows.
+          variant === "rail" && "lg:max-h-none lg:min-h-64 lg:flex-1 lg:contain-size",
+        )}
         role="region"
         aria-label={t("moves.scrollLabel")}
         tabIndex={0}
@@ -112,7 +155,12 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
             element.scrollHeight - element.scrollTop - element.clientHeight < 32;
         }}
       >
-        <table className="w-full table-fixed border-collapse text-left">
+        <table
+          className={cx(
+            "w-full table-fixed border-collapse text-left",
+            variant === "rail" && "text-label",
+          )}
+        >
           <caption className="sr-only">{t("moves.caption")}</caption>
           <thead ref={tableHead} className="sticky top-0 z-1 bg-canvas">
             <tr>
@@ -120,7 +168,8 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
                 scope="col"
                 className={cx(
                   cellClassName,
-                  "w-[30%] px-[min(0.5rem,8px)] py-3 text-label font-normal text-text-secondary",
+                  "px-[min(0.5rem,8px)] py-3 text-label font-normal text-text-secondary",
+                  variant === "rail" ? "w-[20%]" : "w-[30%]",
                 )}
               >
                 {t("moves.number")}
@@ -130,6 +179,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
                 className={cx(
                   cellClassName,
                   "px-[min(0.5rem,8px)] py-3 text-label font-normal text-text-secondary",
+                  variant === "rail" && "border-l border-divider text-center",
                 )}
               >
                 {t("players.white")}
@@ -139,6 +189,7 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
                 className={cx(
                   cellClassName,
                   "px-[min(0.5rem,8px)] py-3 text-label font-normal text-text-secondary",
+                  variant === "rail" && "border-l border-divider text-center",
                 )}
               >
                 {t("players.black")}
@@ -165,8 +216,24 @@ export function MoveHistory({ moves, selectedPly, onSelect }: MoveHistoryProps) 
                   >
                     {moveNumber.format(row.number)}.
                   </th>
-                  <td className={cx(cellClassName, "p-0 font-mono")}>{notation(row.white)}</td>
-                  <td className={cx(cellClassName, "p-0 font-mono")}>{notation(row.black)}</td>
+                  <td
+                    className={cx(
+                      cellClassName,
+                      "p-0 font-mono",
+                      variant === "rail" && "border-l border-divider",
+                    )}
+                  >
+                    {notation(row.white)}
+                  </td>
+                  <td
+                    className={cx(
+                      cellClassName,
+                      "p-0 font-mono",
+                      variant === "rail" && "border-l border-divider",
+                    )}
+                  >
+                    {notation(row.black)}
+                  </td>
                 </tr>
               ))
             )}
