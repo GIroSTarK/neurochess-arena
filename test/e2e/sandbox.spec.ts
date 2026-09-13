@@ -14,6 +14,7 @@ import {
   startSandbox,
   test,
 } from "./fixtures";
+import { expectUnbrokenWords } from "./text-layout";
 
 const promotionApproach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2"];
 
@@ -182,8 +183,16 @@ test("promotes both colors from the standard position with modal cancellation an
   const touch = testInfo.project.name === "mobile-touch";
   let current = await startSandbox(page, touch);
   for (const move of promotionApproach) current = await playMove(page, current, move, touch);
-  await activate(square(page, "b7"), touch);
-  await activate(square(page, "a8"), touch);
+  if (touch) {
+    await activate(square(page, "b7"), true);
+    await activate(square(page, "a8"), true);
+  } else {
+    await square(page, "b7").focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Enter");
+  }
   const dialog = page.getByRole("dialog", { name: "Choose a piece for White on a8" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Promote to Queen" })).toBeFocused();
@@ -209,16 +218,61 @@ test("promotes both colors from the standard position with modal cancellation an
   expect(choices.every((choice) => choice.width >= 44 && choice.height >= 44)).toBe(true);
   if (touch) expect(new Set(choices.map((choice) => choice.top)).size).toBe(2);
   await page.screenshot({ path: testInfo.outputPath("promotion.png"), fullPage: true });
+  for (const enlarged of [false, true]) {
+    await page.evaluate((enlarged) => {
+      document.documentElement.style.fontSize = enlarged ? "200%" : "";
+    }, enlarged);
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      const layout = await dialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          fits:
+            rect.left >= 16 &&
+            rect.right <= window.innerWidth - 16 &&
+            element.scrollWidth <= element.clientWidth,
+          targets: [...element.querySelectorAll("button")].every((button) => {
+            const rect = button.getBoundingClientRect();
+            return rect.width >= 44 && rect.height >= 44;
+          }),
+        };
+      });
+      expect(layout).toEqual({ fits: true, targets: true });
+      await expectUnbrokenWords(dialog.getByRole("button"));
+      for (const choice of await dialog.getByRole("button").all()) {
+        await choice.focus();
+        await expect(choice).toBeInViewport();
+      }
+      if (width === 320 && enlarged) {
+        await page.screenshot({
+          path: testInfo.outputPath("promotion-320-enlarged.png"),
+          fullPage: true,
+        });
+      }
+    }
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "";
+  });
+  await page.setViewportSize(testInfo.project.use.viewport!);
+  const beforeCancel = await page.evaluate(() => window.scrollY);
   if (touch) await activate(dialog.getByRole("button", { name: "Cancel" }), true);
   else await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(square(page, "a8")).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(beforeCancel);
   await expect(square(page, "b7")).toHaveAttribute("data-selected", "true");
-  await activate(square(page, "a8"), touch);
+  if (touch) await activate(square(page, "a8"), true);
+  else await page.keyboard.press("Enter");
   const response = page.waitForResponse((response) =>
     response.url().endsWith("/games/" + current.gameId + "/moves"),
   );
-  await activate(dialog.getByRole("button", { name: "Promote to Knight" }), touch);
+  if (touch) await activate(dialog.getByRole("button", { name: "Promote to Knight" }), true);
+  else {
+    for (let index = 0; index < 3; index += 1) await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Promote to Knight" })).toBeFocused();
+    await page.keyboard.press("Space");
+  }
   current = await acceptedMove(await response, current, "b7a8n", page);
   current = await playMove(page, current, "g2h1r", touch);
   await expect(square(page, "a8").locator("[data-piece=white-n]")).toHaveCount(1);

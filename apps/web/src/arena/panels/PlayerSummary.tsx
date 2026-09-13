@@ -30,7 +30,7 @@ export function PlayerSummary({
   return (
     <div
       className={cx(
-        "relative flex min-w-0 items-center gap-3 not-first:border-l not-first:border-divider max-sm:gap-[min(0.5rem,8px)] max-sm:px-[min(0.5rem,8px)] max-sm:py-[min(0.75rem,12px)]",
+        "relative flex min-w-0 flex-wrap items-center gap-3 not-first:border-l not-first:border-divider max-sm:gap-[min(0.5rem,8px)] max-sm:px-[min(0.5rem,8px)] max-sm:py-[min(0.75rem,12px)]",
         compact ? "p-3" : "p-4",
       )}
       data-seat={color}
@@ -43,7 +43,7 @@ export function PlayerSummary({
           compact ? "size-10 max-sm:size-[min(2rem,32px)]" : "size-8 max-sm:size-[min(1.5rem,24px)]"
         }
       />
-      <div className="flex min-w-0 flex-col wrap-anywhere">
+      <div className="flex min-w-0 flex-[1_1_5rem] flex-col wrap-anywhere">
         <span className={cx("text-text-secondary", compact ? "text-caption" : "text-label")}>
           {t(`players.${color}`)}
         </span>

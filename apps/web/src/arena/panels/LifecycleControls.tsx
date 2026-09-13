@@ -97,8 +97,10 @@ export function LifecycleControls({
     >
       <div
         className={cx(
-          "grid grid-cols-2",
-          boardTools ? "gap-2 lg:@lg:gap-y-3" : "gap-3",
+          "grid",
+          boardTools
+            ? "grid-cols-1 gap-2 @min-[18rem]:grid-cols-2 lg:@lg:gap-y-3"
+            : "grid-cols-2 gap-3",
           Boolean(boardTools) && threeColumns && "lg:@lg:grid-cols-3",
         )}
       >

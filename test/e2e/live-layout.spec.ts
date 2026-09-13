@@ -18,7 +18,7 @@ async function bounds(locator: Locator) {
 
 test("keeps live status above the board and game controls below it", async ({ page }, testInfo) => {
   const touch = testInfo.project.name === "mobile-touch";
-  await page.setViewportSize(touch ? { width: 390, height: 844 } : { width: 1430, height: 1100 });
+  await page.setViewportSize(touch ? { width: 390, height: 844 } : { width: 1440, height: 1100 });
   let snapshot = await startSandbox(page, touch);
   for (const move of ["f2f3", "e7e5", "g2g4"]) {
     snapshot = await playMove(page, snapshot, move, touch);

@@ -1,8 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
+
+import type * as webI18n from "../../apps/web/src/i18n";
 
 import { API_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, square, startSandbox, test } from "./fixtures";
+import { expectUnbrokenWords } from "./text-layout";
 
 const widths = [320, 390, 768, 1024, 1440];
 const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -31,16 +34,115 @@ async function checkViewport(page: Page) {
       overflow: document.documentElement.scrollWidth > width,
       square: Math.abs(board.width - board.height) < 1,
       boardWidth: board.width,
+      boardFits: board.left >= 15 && board.right <= width - 15,
+      seats: [...document.querySelectorAll("[data-seat]")].map(
+        (element) => element.getBoundingClientRect().width,
+      ),
       controlsFit: controls.every((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.left >= 0 && rect.right <= width && rect.height >= 44;
+        return rect.left >= 0 && rect.right <= width + 1 && rect.height >= 44 && rect.width >= 44;
       }),
     };
   });
   expect(layout.overflow).toBe(false);
   expect(layout.square).toBe(true);
   expect(layout.boardWidth).toBeLessThanOrEqual(640);
+  expect(layout.boardFits).toBe(true);
+  expect(layout.seats).toHaveLength(2);
+  expect(layout.seats[0]).toBeCloseTo(layout.seats[1]!, 0);
   expect(layout.controlsFit).toBe(true);
+  await expectUnbrokenWords(page.locator("button:not([data-square]), [data-seat]"));
+}
+
+async function checkLayouts(
+  page: Page,
+  testInfo: TestInfo,
+  state: "entry" | "live" | "recovery" | "replay",
+  checkComposition?: (width: number) => Promise<void>,
+) {
+  const viewport = page.viewportSize()!;
+  const board = page.getByRole("grid");
+  const fen = await board.getAttribute("data-fen");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  try {
+    for (const enlarged of [false, true]) {
+      if (enlarged) {
+        await page.evaluate(async () => {
+          const modulePath = "/src/i18n/index.ts";
+          const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
+          function expand(value: unknown): unknown {
+            if (typeof value === "string") {
+              return value + " extra".repeat(Math.ceil(value.length / 12));
+            }
+            if (value && typeof value === "object") {
+              return Object.fromEntries(
+                Object.entries(value).map(([key, entry]) => [key, expand(entry)]),
+              );
+            }
+            return value;
+          }
+          i18n.addResourceBundle(
+            "en-XA",
+            "translation",
+            expand(i18n.getResourceBundle("en", "translation")),
+          );
+          await i18n.changeLanguage("en-XA");
+          document.documentElement.style.fontSize = "200%";
+        });
+      }
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 1080 });
+        await page.evaluate(() => document.fonts.ready);
+        await checkViewport(page);
+        await expect(board).toHaveAttribute("data-fen", fen!);
+        await expect(board.getByRole("gridcell")).toHaveCount(64);
+        await expect(board.locator("[data-piece]")).toHaveCount(32);
+        if (!enlarged) await checkComposition?.(width);
+        const moving = await page.locator("body *").evaluateAll((elements) =>
+          elements
+            .filter((element) => element.checkVisibility())
+            .some((element) => {
+              const style = getComputedStyle(element);
+              return (
+                style.transitionDuration
+                  .split(",")
+                  .some((duration) => Number.parseFloat(duration) > 0) ||
+                (style.animationName !== "none" &&
+                  style.animationDuration
+                    .split(",")
+                    .some((duration) => Number.parseFloat(duration) > 0))
+              );
+            }),
+        );
+        expect(moving, "Reduced motion must suppress transitions and animations").toBe(false);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({
+          path: testInfo.outputPath(`${state}-${width}${enlarged ? "-enlarged" : ""}.png`),
+          fullPage: true,
+        });
+        if (state === "live" && width === 320 && enlarged) {
+          await page.getByRole("group", { name: /^Game controls/ }).screenshot({
+            path: testInfo.outputPath("controls-320-enlarged.png"),
+          });
+        }
+      }
+    }
+  } catch (error) {
+    await page.screenshot({
+      path: testInfo.outputPath(`${state}-reflow-failed.png`),
+      fullPage: true,
+    });
+    throw error;
+  } finally {
+    await page.evaluate(async () => {
+      const modulePath = "/src/i18n/index.ts";
+      const { i18n } = (await import(/* @vite-ignore */ modulePath)) as typeof webI18n;
+      await i18n.changeLanguage("en");
+      document.documentElement.style.fontSize = "";
+    });
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: null });
+  }
 }
 
 test("entry previews standard chess without creating a guest and places one Start before mobile play", async ({
@@ -66,15 +168,14 @@ test("entry previews standard chess without creating a guest and places one Star
   await expect(board).toHaveAttribute("data-fen", initialFen);
   await expect(page.getByRole("region", { name: "Move history" })).toHaveCount(0);
   expect(writes).toEqual([]);
-  for (const width of widths) {
-    await page.setViewportSize({ width, height: 1080 });
-    await checkViewport(page);
+  await checkLayouts(page, testInfo, "entry", async (width) => {
     const play = await bounds(page.getByRole("region", { name: "Play area" }));
     const action = await bounds(start);
     if (width <= 1024) expect(action.bottom).toBeLessThan(play.top);
     else expect(action.left).toBeGreaterThan(play.right);
     if (width === 320) expect((await bounds(board)).width).toBeCloseTo(288, 0);
-  }
+  });
+  expect(writes).toEqual([]);
   await page.setViewportSize(testInfo.project.use.viewport!);
   await page.getByRole("heading", { name: "Sandbox", exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -91,10 +192,22 @@ test("entry previews standard chess without creating a guest and places one Star
 test("recovery and result retain the arena composition, explicit Resume and final result during replay", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const touch = testInfo.project.name === "mobile-touch";
   let current = await startSandbox(page, touch);
   for (const move of ["f2f3", "e7e5", "g2g4"]) current = await playMove(page, current, move, touch);
+  await expect(page.getByRole("grid")).toHaveAttribute(
+    "data-fen",
+    "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+  );
+  await checkLayouts(page, testInfo, "live", async (width) => {
+    const board = await bounds(page.getByRole("grid"));
+    const controls = await bounds(page.getByRole("group", { name: "Game controls" }));
+    const moves = await bounds(page.getByRole("region", { name: "Moves", exact: true }));
+    expect(controls.top).toBeGreaterThan(board.bottom);
+    if (width <= 1024) expect(moves.top).toBeGreaterThan(controls.bottom);
+    else expect(moves.left).toBeGreaterThan(board.right);
+  });
   await page.reload();
   const resume = page.getByRole("button", { name: "Resume", exact: true });
   await expect(resume).toHaveAttribute("aria-disabled", "false");
@@ -104,15 +217,18 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   await expect(board).toHaveAttribute("aria-readonly", "true");
   const recovered = page.getByRole("heading", { name: "Game recovered", exact: true });
   await expect(recovered).toHaveCount(1);
-  const recovery = await bounds(recovered);
-  const history = await bounds(page.getByRole("region", { name: "Move history" }));
-  if (touch) {
-    expect(recovery.top).toBeGreaterThan((await bounds(board)).bottom);
-    expect(recovery.bottom).toBeLessThan((await bounds(resume)).top);
-  } else {
-    expect(recovery.left).toBeGreaterThan((await bounds(board)).right);
-    expect(recovery.top).toBeGreaterThan(history.bottom);
-  }
+  await expect(square(page, "e2")).not.toBeFocused();
+  await checkLayouts(page, testInfo, "recovery", async (width) => {
+    const recovery = await bounds(recovered);
+    const history = await bounds(page.getByRole("region", { name: "Move history" }));
+    if (width <= 1024) {
+      expect(recovery.top).toBeGreaterThan((await bounds(board)).bottom);
+      expect(recovery.bottom).toBeLessThan((await bounds(resume)).top);
+    } else {
+      expect(recovery.left).toBeGreaterThan((await bounds(board)).right);
+      expect(recovery.top).toBeGreaterThan(history.bottom);
+    }
+  });
   await page.getByRole("heading", { name: "Sandbox", exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("recovery.png"), fullPage: true });
@@ -151,20 +267,14 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   await expect(result).toBeVisible();
   const replay = page.getByRole("region", { name: "Replay", exact: true });
   const exports = page.getByRole("region", { name: "Private PGN" });
-  for (const width of widths) {
-    await page.setViewportSize({ width, height: 1080 });
-    await checkViewport(page);
+  await expect(board).toHaveAttribute(
+    "data-fen",
+    "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
+  );
+  await checkLayouts(page, testInfo, "replay", async () => {
     expect((await bounds(replay)).top).toBeGreaterThan((await bounds(board)).bottom);
     expect((await bounds(exports)).top).toBeGreaterThan((await bounds(replay)).bottom);
     await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveCount(0);
-  }
-  await page.setViewportSize({ width: 320, height: 844 });
-  await page.evaluate(() => {
-    document.documentElement.style.fontSize = "200%";
-  });
-  await checkViewport(page);
-  await page.evaluate(() => {
-    document.documentElement.style.fontSize = "";
   });
   await page.setViewportSize(testInfo.project.use.viewport!);
   await result.click();

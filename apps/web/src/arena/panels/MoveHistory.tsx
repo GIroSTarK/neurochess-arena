@@ -79,7 +79,7 @@ export function MoveHistory({
           ref={move.ply === selectedPly ? selectedMove : undefined}
           type="button"
           className={cx(
-            "block min-h-target min-w-target bg-transparent p-2",
+            "block min-h-target min-w-target bg-transparent px-[min(0.5rem,8px)] py-2",
             variant === "rail"
               ? "w-full text-center hover:bg-surface-raised focus-visible:-outline-offset-2"
               : "rounded-control border border-transparent text-start aria-[current]:border-accent",
@@ -95,7 +95,11 @@ export function MoveHistory({
     }
     return (
       <span
-        className={cx("block px-2 py-3", currentMoveClassName, variant === "rail" && "text-center")}
+        className={cx(
+          "block px-[min(0.5rem,8px)] py-3",
+          currentMoveClassName,
+          variant === "rail" && "text-center",
+        )}
         aria-current={move.ply === moves.length ? "true" : undefined}
       >
         {move.san}
