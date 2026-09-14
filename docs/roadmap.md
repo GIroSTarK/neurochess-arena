@@ -65,7 +65,7 @@ Exit condition: Sandbox uses the selected arena design, and the same presentatio
 
 Implementation sequence: [Phase 2 PR plan](phase-2-plan.md).
 
-Completed milestone: P2-01 establishes strict AI configuration/provider contracts, a server adapter interface and scripted test fixture, relational seat persistence with legacy migration coverage, and private service creation/restoration for both AI modes. Sandbox behavior and the shared unfinished-game slot are preserved. No AI HTTP creation, provider execution, or public AI flow is enabled. P2-02 follows with authoritative turn reservations and mock execution.
+Completed milestones: P2-01 establishes strict AI configuration/provider contracts, relational seat persistence, and private service creation/restoration. P2-02 adds authoritative single-turn execution with injected test adapters, database-backed reservations, accepted-command deduplication, and explicit crash recovery. PostgreSQL tests cover concurrent instances, late results, authorization rechecks, rollback, a killed executor, and natural match outcomes with full history. Sandbox behavior and the shared unfinished-game slot are preserved. No live provider, AI HTTP creation/turn route, or public AI flow is enabled. P2-03 follows with durable logical-turn retry budgets, failure policy, and invocation persistence; reservation recovery must not reset those budgets.
 
 Deliverables:
 

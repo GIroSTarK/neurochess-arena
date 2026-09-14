@@ -22,11 +22,17 @@ export interface AiChessContext {
 }
 
 export interface MoveRequest extends ListModelsInput {
+  readonly instructions: string;
   readonly modelId: string;
   readonly parameters: Readonly<AiParameters>;
   // Built from authoritative history; never includes identities or analysis.
   readonly context: AiChessContext;
 }
+
+export const AI_MOVE_INSTRUCTIONS =
+  "Choose exactly one move from the supplied legalMoves. Return a JSON object with a required " +
+  "move field containing that move in UCI notation. You may include a commentary field with " +
+  "a concise explanation for viewers. Do not resign or return any other fields.";
 
 export interface AiProviderAdapter {
   readonly provider: AiProvider;

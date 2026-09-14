@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { type ChessGame, type ChessSnapshot, createGame, restoreGame } from "@neurochess/chess";
+import { type ChessGame, createGame, restoreGame } from "@neurochess/chess";
 import {
   type AiGameConfiguration,
   aiGameConfigurationSchema,
+  type AiTurnCommand,
   type GameDetails,
   gameLifecycleSchema,
   type GamePgnResponse,
   type GameReplayResponse,
   type GameSnapshot,
-  gameSnapshotSchema,
   type LifecycleCommand,
   type MoveCommand,
   type UnfinishedGameDetails,
@@ -18,14 +18,18 @@ import {
 import type {
   GameReader,
   GameRepository,
+  GameTransaction,
   StoredGame,
   StoredMove,
   StoredParticipant,
 } from "@neurochess/database";
 
 import type { GuestPrincipal } from "../guests/service.js";
+import type { ListModelsInput } from "../providers/adapter.js";
 
+import { type AiAdapters, createAiTurnExecutor } from "./ai-turn.js";
 import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./authorization.js";
+import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
 import { configurationOf, participantsFor } from "./configuration.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 
@@ -37,6 +41,11 @@ export interface GameService {
   unfinishedGame(principal: GuestPrincipal): Promise<UnfinishedGameDetails>;
   snapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot>;
   move(principal: GuestPrincipal, command: MoveCommand): Promise<GameSnapshot>;
+  aiTurn(
+    principal: GuestPrincipal,
+    command: unknown,
+    access: ListModelsInput,
+  ): Promise<GameSnapshot>;
   lifecycle(principal: GuestPrincipal, command: LifecycleCommand): Promise<GameSnapshot>;
   unfinished(principal: GuestPrincipal): Promise<UnfinishedGameResponse>;
   replay(principal: GuestPrincipal, gameId: string): Promise<GameReplayResponse>;
@@ -56,6 +65,7 @@ export function createGameService(
   options: {
     readonly nodeEnv: "development" | "test" | "production";
     readonly sandboxEnabled: boolean;
+    readonly aiAdapters?: AiAdapters;
   },
 ): GameService {
   const sandboxEnabled = options.sandboxEnabled && options.nodeEnv !== "production";
@@ -129,19 +139,35 @@ export function createGameService(
     return snapshot;
   }
 
+  async function prepareCommand(
+    tx: GameTransaction,
+    principal: GuestPrincipal,
+    command: AiTurnCommand,
+  ) {
+    if (!(await tx.lockGuest(principal.guestSessionId))) {
+      throw new GameRequestError("UNAUTHORIZED");
+    }
+    const stored = await tx.lockGame(command.gameId);
+    if (!stored) throw new GameRequestError("NOT_FOUND");
+    const restored = await restoreAuthorized(tx, principal, stored);
+    // Accepted IDs span every command kind, including retries after completion.
+    if (
+      command.expectedVersion !== stored.version ||
+      (await tx.hasCommand(stored.id, command.commandId.toLowerCase()))
+    ) {
+      throw new GameConflictError(restored.snapshot);
+    }
+    return { ...restored, stored };
+  }
+
   function mutate(principal: GuestPrincipal, command: MoveCommand | LifecycleCommand) {
     return repository.write(async (tx) => {
-      if (!(await tx.lockGuest(principal.guestSessionId))) {
-        throw new GameRequestError("UNAUTHORIZED");
-      }
-      const stored = await tx.lockGame(command.gameId);
-      if (!stored) throw new GameRequestError("NOT_FOUND");
-      const restored = await restoreAuthorized(tx, principal, stored);
+      const restored = await prepareCommand(tx, principal, command);
+      const { stored } = restored;
       const commandId = command.commandId.toLowerCase();
-      // Accepted IDs span every command kind, including retries after completion.
       if (
-        command.expectedVersion !== stored.version ||
-        (await tx.hasCommand(stored.id, commandId))
+        stored.mode !== null &&
+        (await tx.getAiTurnReservation(stored.id))?.commandId === commandId
       ) {
         throw new GameConflictError(restored.snapshot);
       }
@@ -179,22 +205,13 @@ export function createGameService(
         }
         throw new GameIntegrityError();
       }
-      const snapshot = transportSnapshot(stored.id, stored.version + 1, accepted.value);
-      await tx.appendCommand({
-        gameId: stored.id,
+      return persistCommand(
+        tx,
+        stored,
         commandId,
-        version: snapshot.version,
-        kind: isMove ? "move" : command.action,
-      });
-      if (isMove) {
-        const move = snapshot.moves.at(-1);
-        if (!move) throw new GameIntegrityError();
-        await tx.appendMove({ ...move, gameId: stored.id, commandId, version: snapshot.version });
-      }
-      if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot)))) {
-        throw new GameIntegrityError();
-      }
-      return snapshot;
+        isMove ? "move" : command.action,
+        accepted.value,
+      );
     });
   }
 
@@ -253,6 +270,11 @@ export function createGameService(
       }),
     snapshot: readSnapshot,
     move: mutate,
+    aiTurn: createAiTurnExecutor({
+      repository,
+      adapters: options.aiAdapters ?? {},
+      prepareCommand,
+    }),
     lifecycle: mutate,
     async replay(principal, gameId) {
       return {
@@ -275,22 +297,5 @@ export function createGameService(
           snapshot: stored ? (await restoreAuthorized(reader, principal, stored)).snapshot : null,
         };
       }),
-  };
-}
-
-function transportSnapshot(gameId: string, version: number, snapshot: ChessSnapshot): GameSnapshot {
-  const result = gameSnapshotSchema.safeParse({ ...snapshot, gameId, version });
-  if (!result.success) throw new GameIntegrityError();
-  return result.data;
-}
-
-function positionOf(snapshot: GameSnapshot) {
-  return {
-    state: snapshot.state,
-    result: snapshot.result,
-    terminationReason: snapshot.terminationReason,
-    fen: snapshot.fen,
-    pgn: snapshot.pgn,
-    version: snapshot.version,
   };
 }

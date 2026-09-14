@@ -2,7 +2,7 @@ import { createGame } from "@neurochess/chess";
 import type { NormalizedMoveResponse } from "@neurochess/contracts";
 import { describe, expect, it } from "vitest";
 
-import type { MoveRequest } from "../../src/providers/adapter.js";
+import { AI_MOVE_INSTRUCTIONS, type MoveRequest } from "../../src/providers/adapter.js";
 
 import { createScriptedAdapter } from "./scripted-adapter.js";
 
@@ -11,6 +11,7 @@ function input(): MoveRequest {
   game.start();
   const { fen, pgn, turn, legalMoves } = game.snapshot();
   return {
+    instructions: AI_MOVE_INSTRUCTIONS,
     apiKey: "fixture-only",
     signal: new AbortController().signal,
     modelId: "fixture-model",
