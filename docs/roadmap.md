@@ -63,6 +63,8 @@ Exit condition: Sandbox uses the selected arena design, and the same presentatio
 
 ## Phase 2 — AI arena core
 
+Implementation sequence: [Phase 2 PR plan](phase-2-plan.md).
+
 Deliverables:
 
 - mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
