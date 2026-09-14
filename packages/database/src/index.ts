@@ -1,6 +1,13 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { runMigrations } from "./migrations.js";
-export { games, gameParticipants, guestSessions, moves, gameCommands } from "./schema/index.js";
+export {
+  games,
+  gameParticipants,
+  guestSessions,
+  moves,
+  gameCommands,
+  type StoredAiParameters,
+} from "./schema/index.js";
 export {
   createGameRepository,
   type GameRepository,

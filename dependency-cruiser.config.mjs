@@ -2,6 +2,14 @@
 export default {
   forbidden: [
     {
+      name: "api-production-no-test-adapters",
+      comment:
+        "Scripted providers are injected test fixtures, never production options or fallbacks.",
+      severity: "error",
+      from: { path: "(^|/)apps/api/src/", pathNot: "\\.test\\.ts$" },
+      to: { path: "(^|/)apps/api/test/providers/" },
+    },
+    {
       name: "no-circular-dependencies",
       comment: "Workspace modules must form an acyclic dependency graph.",
       severity: "error",

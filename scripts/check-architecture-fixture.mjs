@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const executable = resolve("node_modules", "dependency-cruiser", "bin", "dependency-cruise.mjs");
 const fixtures = [
+  { path: "apps/api/src/forbidden-scripted-adapter.ts", rule: "api-production-no-test-adapters" },
   { path: "apps/web/forbidden-database-import.ts", rule: "web-no-server-infrastructure" },
   { path: "apps/web/forbidden-engine-import.ts", rule: "chess-engine-is-encapsulated" },
   {

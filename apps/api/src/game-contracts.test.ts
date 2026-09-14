@@ -1,6 +1,12 @@
 import * as domain from "@neurochess/chess";
 import * as contracts from "@neurochess/contracts";
-import { gameParticipants, games, type StoredGame } from "@neurochess/database";
+import {
+  gameParticipants,
+  games,
+  type StoredAiParameters,
+  type StoredGame,
+  type StoredParticipant,
+} from "@neurochess/database";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 // Compatibility belongs at a consumer, never in either independent leaf package.
@@ -41,6 +47,13 @@ describe("chess/transport compatibility", () => {
     expect(gameParticipants.color.enumValues).toEqual(domain.CHESS_COLORS);
     expectTypeOf<StoredGame["state"]>().toEqualTypeOf<contracts.GameState>();
     expectTypeOf<StoredGame["result"]>().toEqualTypeOf<contracts.GameResult>();
+    expect(games.mode.enumValues).toEqual(contracts.aiGameModeSchema.options);
+    expect(gameParticipants.provider.enumValues).toEqual(contracts.aiProviderSchema.options);
+    expectTypeOf<NonNullable<StoredGame["mode"]>>().toEqualTypeOf<contracts.AiGameMode>();
+    expectTypeOf<
+      NonNullable<StoredParticipant["provider"]>
+    >().toEqualTypeOf<contracts.AiProvider>();
+    expectTypeOf<StoredAiParameters>().toEqualTypeOf<contracts.AiParameters>();
     expectTypeOf<
       NonNullable<StoredGame["terminationReason"]>
     >().toEqualTypeOf<contracts.TerminationReason>();

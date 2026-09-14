@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { type ChessGame, type ChessSnapshot, createGame, restoreGame } from "@neurochess/chess";
 import {
+  type AiGameConfiguration,
+  aiGameConfigurationSchema,
+  type GameDetails,
   gameLifecycleSchema,
   type GamePgnResponse,
   type GameReplayResponse,
@@ -9,6 +12,7 @@ import {
   gameSnapshotSchema,
   type LifecycleCommand,
   type MoveCommand,
+  type UnfinishedGameDetails,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import type {
@@ -22,11 +26,15 @@ import type {
 import type { GuestPrincipal } from "../guests/service.js";
 
 import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./authorization.js";
+import { configurationOf, participantsFor } from "./configuration.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 
 export interface GameService {
   readonly sandboxEnabled: boolean;
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
+  createAi(principal: GuestPrincipal, configuration: unknown): Promise<GameDetails>;
+  details(principal: GuestPrincipal, gameId: string): Promise<GameDetails>;
+  unfinishedGame(principal: GuestPrincipal): Promise<UnfinishedGameDetails>;
   snapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot>;
   move(principal: GuestPrincipal, command: MoveCommand): Promise<GameSnapshot>;
   lifecycle(principal: GuestPrincipal, command: LifecycleCommand): Promise<GameSnapshot>;
@@ -40,6 +48,7 @@ interface RestoredGame {
   readonly snapshot: GameSnapshot;
   readonly moves: StoredMove[];
   readonly participants: StoredParticipant[];
+  readonly configuration: AiGameConfiguration | null;
 }
 
 export function createGameService(
@@ -62,6 +71,7 @@ export function createGameService(
     if (participants.length !== 2 || new Set(participants.map((seat) => seat.color)).size !== 2) {
       throw new GameIntegrityError();
     }
+    const configuration = configurationOf(stored, participants);
     const moves = await reader.getMoves(stored.id);
     const lifecycle = gameLifecycleSchema.safeParse({
       state: stored.state,
@@ -92,18 +102,23 @@ export function createGameService(
       previousVersion = move.version;
     }
     const snapshot = transportSnapshot(stored.id, stored.version, domain);
-    return { game: restored.value, snapshot, moves, participants };
+    return { game: restored.value, snapshot, moves, participants, configuration };
   }
 
-  function readSnapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot> {
+  function readDetails(principal: GuestPrincipal, gameId: string): Promise<GameDetails> {
     return repository.read(async (reader) => {
       if (!(await reader.getGuest(principal.guestSessionId))) {
         throw new GameRequestError("UNAUTHORIZED");
       }
       const stored = await reader.getGame(gameId);
       if (!stored) throw new GameRequestError("NOT_FOUND");
-      return (await restoreAuthorized(reader, principal, stored)).snapshot;
+      const { snapshot, configuration } = await restoreAuthorized(reader, principal, stored);
+      return { snapshot, configuration };
     });
+  }
+
+  async function readSnapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot> {
+    return (await readDetails(principal, gameId)).snapshot;
   }
 
   async function terminalSnapshot(principal: GuestPrincipal, gameId: string) {
@@ -183,41 +198,58 @@ export function createGameService(
     });
   }
 
+  function createOwnedGame(
+    principal: GuestPrincipal,
+    configuration: AiGameConfiguration | null,
+  ): Promise<GameDetails> {
+    return repository.write(async (tx) => {
+      if (configuration === null && !sandboxEnabled) throw new GameRequestError("NOT_FOUND");
+      if (!(await tx.lockGuest(principal.guestSessionId))) {
+        throw new GameRequestError("UNAUTHORIZED");
+      }
+      const occupied = await tx.findUnfinishedGame(principal.guestSessionId);
+      if (occupied) {
+        const locked = await tx.lockGame(occupied.id);
+        if (!locked) throw new GameIntegrityError();
+        throw new GameConflictError((await restoreAuthorized(tx, principal, locked)).snapshot);
+      }
+      const started = createGame().start();
+      if (!started.ok) throw new GameIntegrityError();
+      const snapshot = transportSnapshot(randomUUID(), 0, started.value);
+      await tx.insertGame(
+        {
+          id: snapshot.gameId,
+          ownerGuestSessionId: principal.guestSessionId,
+          isSandbox: configuration === null,
+          mode: configuration?.mode ?? null,
+          ...positionOf(snapshot),
+        },
+        participantsFor(snapshot.gameId, principal.guestSessionId, configuration),
+      );
+      return { snapshot, configuration };
+    });
+  }
+
   return {
     sandboxEnabled,
-    createSandbox: (principal) =>
-      repository.write(async (tx) => {
-        if (!sandboxEnabled) throw new GameRequestError("NOT_FOUND");
-        if (!(await tx.lockGuest(principal.guestSessionId))) {
+    async createSandbox(principal) {
+      return (await createOwnedGame(principal, null)).snapshot;
+    },
+    async createAi(principal, input) {
+      const configuration = aiGameConfigurationSchema.safeParse(input);
+      if (!configuration.success) throw new GameRequestError("INVALID_REQUEST");
+      return createOwnedGame(principal, configuration.data);
+    },
+    details: readDetails,
+    unfinishedGame: (principal) =>
+      repository.read(async (reader) => {
+        if (!(await reader.getGuest(principal.guestSessionId))) {
           throw new GameRequestError("UNAUTHORIZED");
         }
-        const occupied = await tx.findUnfinishedGame(principal.guestSessionId);
-        if (occupied) {
-          const locked = await tx.lockGame(occupied.id);
-          if (!locked) throw new GameIntegrityError();
-          throw new GameConflictError((await restoreAuthorized(tx, principal, locked)).snapshot);
-        }
-        const started = createGame().start();
-        if (!started.ok) throw new GameIntegrityError();
-        const snapshot = transportSnapshot(randomUUID(), 0, started.value);
-        await tx.insertGame(
-          {
-            id: snapshot.gameId,
-            ownerGuestSessionId: principal.guestSessionId,
-            isSandbox: true,
-            ...positionOf(snapshot),
-          },
-          [
-            {
-              gameId: snapshot.gameId,
-              color: "white",
-              seatType: "human",
-              guestSessionId: principal.guestSessionId,
-            },
-            { gameId: snapshot.gameId, color: "black", seatType: "human", guestSessionId: null },
-          ],
-        );
-        return snapshot;
+        const stored = await reader.findUnfinishedGame(principal.guestSessionId);
+        if (!stored) return { game: null };
+        const { snapshot, configuration } = await restoreAuthorized(reader, principal, stored);
+        return { game: { snapshot, configuration } };
       }),
     snapshot: readSnapshot,
     move: mutate,

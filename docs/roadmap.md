@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0 and 1 and the Sandbox presentation remake completed
+**Status:** Phases 0 and 1 and the Sandbox presentation remake completed; Phase 2 in progress
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-09-14
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -64,6 +64,8 @@ Exit condition: Sandbox uses the selected arena design, and the same presentatio
 ## Phase 2 — AI arena core
 
 Implementation sequence: [Phase 2 PR plan](phase-2-plan.md).
+
+Completed milestone: P2-01 establishes strict AI configuration/provider contracts, a server adapter interface and scripted test fixture, relational seat persistence with legacy migration coverage, and private service creation/restoration for both AI modes. Sandbox behavior and the shared unfinished-game slot are preserved. No AI HTTP creation, provider execution, or public AI flow is enabled. P2-02 follows with authoritative turn reservations and mock execution.
 
 Deliverables:
 

@@ -382,7 +382,7 @@ describe("private discovery, replay and PGN", () => {
     const sandbox = await createSandbox(api, owner);
     await api.database.db
       .update(gameParticipants)
-      .set({ seatType: "ai" })
+      .set({ seatType: "ai", provider: "openai", modelId: "fixture-model", parameters: {} })
       .where(and(eq(gameParticipants.gameId, sandbox.gameId), eq(gameParticipants.color, "black")));
     expect(
       (await send(api, owner, control(sandbox, { action: "resign", losingColor: "black" })))
