@@ -5,6 +5,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -35,6 +36,14 @@ export const terminationReason = pgEnum("termination_reason", [
 ]);
 export const chessColor = pgEnum("chess_color", ["white", "black"]);
 export const seatType = pgEnum("seat_type", ["human", "ai"]);
+export const aiGameMode = pgEnum("ai_game_mode", ["ai_vs_ai", "ai_vs_human"]);
+export const aiProvider = pgEnum("ai_provider", ["openai", "anthropic", "google", "openrouter"]);
+
+export interface StoredAiParameters {
+  temperature?: number | undefined;
+  reasoningEffort?: string | undefined;
+  maxOutputTokens?: number | undefined;
+}
 export const gameCommandKind = pgEnum("game_command_kind", [
   "move",
   "pause",
@@ -68,6 +77,8 @@ export const games = pgTable(
       .notNull()
       .references(() => guestSessions.id),
     isSandbox: boolean("is_sandbox").notNull().default(false),
+    // Null preserves pre-AI records without assigning them a public AI mode.
+    mode: aiGameMode("mode"),
     state: gameState("state").notNull(),
     result: gameResult("result").notNull(),
     terminationReason: terminationReason("termination_reason"),
@@ -83,6 +94,7 @@ export const games = pgTable(
       .on(table.ownerGuestSessionId)
       .where(sql`${table.state} in ('active', 'paused')`),
     check("games_version_check", sql`${table.version} between 0 and 9007199254740991`),
+    check("games_sandbox_mode_check", sql`not ${table.isSandbox} or ${table.mode} is null`),
     check("games_position_check", sql`length(${table.fen}) > 0 and length(${table.pgn}) > 0`),
     check(
       "games_lifecycle_check",
@@ -109,6 +121,9 @@ export const gameParticipants = pgTable(
     color: chessColor("color").notNull(),
     seatType: seatType("seat_type").notNull(),
     guestSessionId: uuid("guest_session_id").references(() => guestSessions.id),
+    provider: aiProvider("provider"),
+    modelId: text("model_id"),
+    parameters: jsonb("parameters").$type<StoredAiParameters>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -118,6 +133,39 @@ export const gameParticipants = pgTable(
     check(
       "game_participants_identity_check",
       sql`${table.seatType} = 'human' or ${table.guestSessionId} is null`,
+    ),
+    check(
+      "game_participants_configuration_check",
+      sql`(${table.seatType} = 'human' and ${table.provider} is null
+        and ${table.modelId} is null and ${table.parameters} is null)
+      or (${table.seatType} = 'ai' and ${table.provider} is not null
+        and ${table.modelId} is not null and ${table.parameters} is not null)`,
+    ),
+    check(
+      "game_participants_model_id_check",
+      sql`${table.modelId} is null or (length(${table.modelId}) between 1 and 256
+        and ${table.modelId} ~ '^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$')`,
+    ),
+    check(
+      "game_participants_parameters_check",
+      sql`${table.parameters} is null or (
+        jsonb_typeof(${table.parameters}) = 'object'
+        and octet_length(${table.parameters}::text) <= 512
+        and ${table.parameters} - array['temperature', 'reasoningEffort', 'maxOutputTokens'] = '{}'::jsonb
+        and (not (${table.parameters} ? 'temperature') or case
+          when jsonb_typeof(${table.parameters}->'temperature') = 'number'
+          then (${table.parameters}->>'temperature')::numeric between 0 and 9007199254740991
+          else false end)
+        and (not (${table.parameters} ? 'reasoningEffort') or (
+          jsonb_typeof(${table.parameters}->'reasoningEffort') = 'string'
+          and length(${table.parameters}->>'reasoningEffort') between 1 and 64
+          and ${table.parameters}->>'reasoningEffort' ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]*$'))
+        and (not (${table.parameters} ? 'maxOutputTokens') or case
+          when jsonb_typeof(${table.parameters}->'maxOutputTokens') = 'number'
+          then (${table.parameters}->>'maxOutputTokens')::numeric between 1 and 9007199254740991
+            and mod((${table.parameters}->>'maxOutputTokens')::numeric, 1) = 0
+          else false end)
+      )`,
     ),
   ],
 );

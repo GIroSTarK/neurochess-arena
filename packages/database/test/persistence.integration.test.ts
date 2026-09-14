@@ -77,6 +77,156 @@ function moveValues(gameId: string): NewMove {
 }
 
 describe("reviewed PostgreSQL migration and structural constraints", () => {
+  it("migrates populated legacy games without inventing AI configuration or changing Sandbox authority", async () => {
+    const schemaName = "migration_" + randomUUID().replaceAll("-", "");
+    const migrationFiles = await Promise.all(
+      ["0001_guest_owned_games", "0002_game_command_receipts", "0003_ai_game_configuration"].map(
+        (name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8"),
+      ),
+    );
+    await database.db.transaction(async (tx) => {
+      await tx.execute(sql`create schema ${sql.identifier(schemaName)}`);
+      await tx.execute(sql`set local search_path to ${sql.identifier(schemaName)}`);
+      async function applyMigration(contents: string) {
+        for (const statement of contents
+          .split("--> statement-breakpoint")
+          .filter((part) => part.trim())) {
+          await tx.execute(sql.raw(statement.replaceAll('"public"', '"' + schemaName + '"')));
+        }
+      }
+      await applyMigration(migrationFiles[0]!);
+      for (const state of ["active", "paused", "completed", "aborted"] as const) {
+        const ownerId = randomUUID();
+        const gameId = randomUUID();
+        const result = state === "completed" ? "1-0" : "*";
+        const reason =
+          state === "completed" ? "human_resignation" : state === "aborted" ? "aborted" : null;
+        await tx.execute(
+          sql`insert into guest_sessions(id, token_hash, expires_at) values (${ownerId}, ${ownerId.replaceAll("-", "").repeat(2)}, clock_timestamp() + interval '1 hour')`,
+        );
+        await tx.execute(
+          sql`insert into games(id, owner_guest_session_id, is_sandbox, state, result, termination_reason, fen, pgn, version) values (${gameId}, ${ownerId}, true, ${state}, ${result}, ${reason}, 'accepted-position', 'accepted-history', 1)`,
+        );
+        await tx.execute(
+          sql`insert into game_participants(game_id, color, seat_type, guest_session_id) values (${gameId}, 'white', 'human', ${ownerId}), (${gameId}, 'black', 'human', null)`,
+        );
+        await tx.execute(
+          sql`insert into moves(game_id, ply, uci, san, fen, command_id, version) values (${gameId}, 1, 'e2e4', 'e4', 'accepted-position', ${randomUUID()}, 1)`,
+        );
+      }
+      // Legacy ordinary-human fixtures must not acquire the Sandbox exception either.
+      await tx.execute(sql`update games set is_sandbox = false where state = 'aborted'`);
+      await applyMigration(migrationFiles[1]!);
+      const beforeGames = await tx.execute(
+        sql`select to_jsonb(games) as value from games order by id`,
+      );
+      const beforeSeats = await tx.execute(
+        sql`select to_jsonb(game_participants) as value from game_participants order by id`,
+      );
+      const beforeMoves = await tx.execute(sql`select * from moves order by id`);
+      const beforeCommands = await tx.execute(sql`select * from game_commands order by game_id`);
+      await applyMigration(migrationFiles[2]!);
+      expect(
+        (await tx.execute(sql`select to_jsonb(games) - 'mode' as value from games order by id`))
+          .rows,
+      ).toEqual(beforeGames.rows);
+      expect(
+        (
+          await tx.execute(
+            sql`select to_jsonb(game_participants) - array['provider', 'model_id', 'parameters'] as value from game_participants order by id`,
+          )
+        ).rows,
+      ).toEqual(beforeSeats.rows);
+      expect((await tx.execute(sql`select * from moves order by id`)).rows).toEqual(
+        beforeMoves.rows,
+      );
+      expect((await tx.execute(sql`select * from game_commands order by game_id`)).rows).toEqual(
+        beforeCommands.rows,
+      );
+      expect(
+        (await tx.execute(sql`select count(*)::int as count from games where mode is not null`))
+          .rows,
+      ).toEqual([{ count: 0 }]);
+      expect(
+        (
+          await tx.execute(
+            sql`select count(*)::int as count from game_participants where provider is not null or model_id is not null or parameters is not null`,
+          )
+        ).rows,
+      ).toEqual([{ count: 0 }]);
+      await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
+    });
+  });
+
+  it("enforces typed AI selection, bounded parameter metadata and credential-free human seats in PostgreSQL", async () => {
+    const created = await game();
+    const seat = {
+      gameId: created.id,
+      color: "white" as const,
+      seatType: "ai" as const,
+      provider: "google" as const,
+      modelId: "models/fixture",
+      parameters: { temperature: 0, reasoningEffort: "high", maxOutputTokens: 1000 },
+    };
+    await database.db.insert(gameParticipants).values(seat);
+    const [stored] = await database.db
+      .select()
+      .from(gameParticipants)
+      .where(eq(gameParticipants.gameId, created.id));
+    expect(stored).toMatchObject({ ...seat, guestSessionId: null });
+    for (const parameters of [
+      null,
+      [],
+      { apiKey: "sentinel" },
+      { temperature: "1" },
+      { temperature: null },
+      { temperature: -1 },
+      { reasoningEffort: {} },
+      { reasoningEffort: "" },
+      { reasoningEffort: "x".repeat(65) },
+      { maxOutputTokens: 0 },
+      { maxOutputTokens: 1.5 },
+      { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 },
+      { nested: { key: "sentinel" } },
+    ]) {
+      await expect(
+        database.db.execute(
+          sql`update game_participants set parameters = ${JSON.stringify(parameters)}::jsonb where id = ${stored!.id}`,
+        ),
+      ).rejects.toThrow();
+    }
+    for (const patch of [
+      { provider: null },
+      { modelId: null },
+      { modelId: "" },
+      { modelId: "m".repeat(257) },
+      { modelId: "model\n" },
+      { parameters: null },
+      { guestSessionId: created.ownerGuestSessionId },
+      { seatType: "human" as const },
+    ]) {
+      await expect(
+        database.db.update(gameParticipants).set(patch).where(eq(gameParticipants.id, stored!.id)),
+      ).rejects.toThrow();
+    }
+    await expect(
+      database.db.execute(
+        sql`update game_participants set provider = 'mock' where id = ${stored!.id}`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      database.db
+        .update(games)
+        .set({ mode: "ai_vs_ai", isSandbox: true })
+        .where(eq(games.id, created.id)),
+    ).rejects.toThrow();
+    expect(
+      (
+        await database.db.select().from(gameParticipants).where(eq(gameParticipants.id, stored!.id))
+      )[0],
+    ).toEqual(stored);
+  });
+
   it("backfills pre-existing move identities with the actual forward migration", async () => {
     const schemaName = "migration_" + randomUUID().replaceAll("-", "");
     const oldSql = await readFile(
