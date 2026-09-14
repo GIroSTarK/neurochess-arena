@@ -7,12 +7,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import {
   aiTurnReservations,
+  aiTurns,
   createGameRepository,
   type DatabaseConnection,
   gameCommands,
   gameParticipants,
   games,
   guestSessions,
+  modelInvocations,
   moves,
   type NewGame,
   type NewMove,
@@ -78,6 +80,90 @@ function moveValues(gameId: string): NewMove {
 }
 
 describe("reviewed PostgreSQL migration and structural constraints", () => {
+  it("bounds AI budgets and normalized attempts, enforces dispatch uniqueness, and cascades private records", async () => {
+    const created = await game();
+    const [turn] = await database.db
+      .insert(aiTurns)
+      .values({ gameId: created.id, ply: 1, color: "white", attemptCount: 1 })
+      .returning();
+    const invocation = {
+      turnId: turn!.id,
+      attemptNumber: 1,
+      reservationId: randomUUID(),
+      commandId: randomUUID(),
+      expectedVersion: 0,
+      provider: "openai" as const,
+      modelId: "fixture",
+      effectiveParameters: { temperature: 0 },
+    };
+    const [attempt] = await database.db.insert(modelInvocations).values(invocation).returning();
+    for (const patch of [
+      { invalidOutputCount: -1 },
+      { invalidOutputCount: 4 },
+      { invalidOutputCount: 2 },
+      { attemptCount: -1 },
+      { acceptedMovePly: 2 },
+      { color: "black" as const },
+    ]) {
+      await expect(
+        database.db.update(aiTurns).set(patch).where(eq(aiTurns.id, turn!.id)),
+      ).rejects.toThrow();
+    }
+    await expect(
+      database.db.insert(aiTurns).values({ gameId: created.id, ply: 1, color: "white" }),
+    ).rejects.toThrow();
+    await expect(
+      database.db.insert(modelInvocations).values({ ...invocation, reservationId: randomUUID() }),
+    ).rejects.toThrow();
+    await expect(
+      database.db.insert(modelInvocations).values({ ...invocation, attemptNumber: 2 }),
+    ).rejects.toThrow();
+    await expect(
+      database.db.update(aiTurns).set({ acceptedMovePly: 1 }).where(eq(aiTurns.id, turn!.id)),
+    ).rejects.toThrow();
+    for (const patch of [
+      { durationMs: -1 },
+      { expectedVersion: -1 },
+      { attemptNumber: 0 },
+      { inputTokens: 0 },
+      { usageReported: true, inputTokens: -1 },
+      { usageReported: true, totalTokens: Number.MAX_SAFE_INTEGER + 1 },
+      { outcome: "provider_error" as const, durationMs: 1 },
+      { outcome: "discarded" as const, durationMs: 1, errorReason: "network" as const },
+      { outcome: "model_invalid" as const, durationMs: 1, errorCode: "provider_auth" as const },
+      {
+        outcome: "provider_error" as const,
+        durationMs: 1,
+        errorCode: "provider_auth" as const,
+        commentary: "unaccepted",
+      },
+      { outcome: "accepted" as const, durationMs: 1, commentary: "x".repeat(2001) },
+      { modelId: "model?key=secret" },
+    ]) {
+      await expect(
+        database.db.update(modelInvocations).set(patch).where(eq(modelInvocations.id, attempt!.id)),
+      ).rejects.toThrow();
+    }
+    for (const parameters of [
+      { apiKey: "secret" },
+      [],
+      { temperature: "0" },
+      { reasoningEffort: null },
+      { maxOutputTokens: 1.5 },
+    ]) {
+      await expect(
+        database.db.execute(
+          sql`update model_invocations set effective_parameters = ${JSON.stringify(parameters)}::jsonb where id = ${attempt!.id}`,
+        ),
+      ).rejects.toThrow();
+    }
+    await database.db.delete(games).where(eq(games.id, created.id));
+    expect(await database.db.$count(aiTurns, eq(aiTurns.gameId, created.id))).toBe(0);
+    expect(await database.db.$count(modelInvocations, eq(modelInvocations.turnId, turn!.id))).toBe(
+      0,
+    );
+  });
+
   it("migrates populated legacy games without inventing AI configuration or changing Sandbox authority", async () => {
     const schemaName = "migration_" + randomUUID().replaceAll("-", "");
     const migrationFiles = await Promise.all(
@@ -86,6 +172,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0002_game_command_receipts",
         "0003_ai_game_configuration",
         "0004_ai_turn_reservations",
+        "0005_ai_invocation_policy",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -186,6 +273,28 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         beforeReservations.map((result) => result.rows),
       );
       expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual([]);
+      await tx.execute(
+        sql`insert into ai_turn_reservations(game_id, reservation_id, command_id, expected_version) values (${aiGame}, ${randomUUID()}, ${randomUUID()}, 0)`,
+      );
+      const reservationRows = await tx.execute(sql`select * from ai_turn_reservations`);
+      await applyMigration(migrationFiles[4]!);
+      expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual(
+        reservationRows.rows,
+      );
+      expect((await tx.execute(sql`select * from ai_turns`)).rows).toEqual([]);
+      expect((await tx.execute(sql`select * from model_invocations`)).rows).toEqual([]);
+      expect((await tx.execute(sql`select * from games order by id`)).rows).toEqual(
+        afterReservations[0]!.rows,
+      );
+      expect((await tx.execute(sql`select * from game_participants order by id`)).rows).toEqual(
+        afterReservations[1]!.rows,
+      );
+      expect((await tx.execute(sql`select * from moves order by id`)).rows).toEqual(
+        afterReservations[2]!.rows,
+      );
+      expect((await tx.execute(sql`select * from game_commands order by game_id`)).rows).toEqual(
+        afterReservations[3]!.rows,
+      );
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

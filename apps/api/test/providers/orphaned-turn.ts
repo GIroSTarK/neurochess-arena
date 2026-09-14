@@ -1,4 +1,8 @@
-import { aiTurnCommandSchema, gameIdSchema } from "@neurochess/contracts";
+import {
+  aiTurnCommandSchema,
+  gameIdSchema,
+  type NormalizedMoveResponse,
+} from "@neurochess/contracts";
 import { createGameRepository } from "@neurochess/database";
 import { z } from "zod";
 
@@ -15,15 +19,27 @@ process.once("message", (message: unknown) => {
 async function execute(message: unknown) {
   const database = integrationDatabase();
   try {
-    const { command, guestSessionId } = z
+    const { command, guestSessionId, invalidFirst } = z
       .strictObject({
         command: aiTurnCommandSchema,
         guestSessionId: gameIdSchema,
+        invalidFirst: z.boolean().default(false),
       })
       .parse(message);
     const adapter = createScriptedAdapter({
       provider: "openai",
       moves: [
+        ...(invalidFirst
+          ? [
+              {
+                ok: false,
+                error: { code: "model_invalid", reason: "malformed_output" },
+                durationMs: 1,
+                usage: null,
+                providerRequestId: null,
+              } satisfies NormalizedMoveResponse,
+            ]
+          : []),
         () => {
           process.send?.("dispatched");
           return Promise.withResolvers<never>().promise;

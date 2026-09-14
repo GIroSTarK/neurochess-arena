@@ -4,17 +4,18 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 
 ## Index
 
-| ADR                                                   | Status   | Decision                                                     |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------ |
-| [0001](0001-typescript-monorepo-and-data-stack.md)    | Accepted | TypeScript monorepo, PostgreSQL, Drizzle, and Better Auth    |
-| [0002](0002-deterministic-chess-authority.md)         | Accepted | Deterministic chess engine is authoritative                  |
-| [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted | Normalize providers behind one move contract                 |
-| [0004](0004-bring-your-own-key-security.md)           | Accepted | Session-only by default, encrypted saved keys by opt-in      |
-| [0005](0005-zod-runtime-contracts.md)                 | Accepted | Zod 4 validates runtime boundaries and shared contracts      |
-| [0006](0006-guest-owned-game-commands.md)             | Accepted | Guest identity, sandbox authority, and atomic game commands  |
-| [0007](0007-lifecycle-recovery-and-private-replay.md) | Accepted | Shared command receipts, paused recovery, and private replay |
-| [0008](0008-tailwind-css-presentation.md)             | Accepted | Tailwind CSS utilities and a semantic theme for the web app  |
-| [0009](0009-ai-turn-reservations.md)                  | Accepted | Database-backed AI reservations and explicit crash recovery  |
+| ADR                                                   | Status     | Decision                                                     |
+| ----------------------------------------------------- | ---------- | ------------------------------------------------------------ |
+| [0001](0001-typescript-monorepo-and-data-stack.md)    | Accepted   | TypeScript monorepo, PostgreSQL, Drizzle, and Better Auth    |
+| [0002](0002-deterministic-chess-authority.md)         | Accepted   | Deterministic chess engine is authoritative                  |
+| [0003](0003-ai-provider-adapter-and-move-contract.md) | Accepted   | Normalize providers behind one move contract                 |
+| [0004](0004-bring-your-own-key-security.md)           | Accepted   | Session-only by default, encrypted saved keys by opt-in      |
+| [0005](0005-zod-runtime-contracts.md)                 | Accepted   | Zod 4 validates runtime boundaries and shared contracts      |
+| [0006](0006-guest-owned-game-commands.md)             | Accepted   | Guest identity, sandbox authority, and atomic game commands  |
+| [0007](0007-lifecycle-recovery-and-private-replay.md) | Accepted   | Shared command receipts, paused recovery, and private replay |
+| [0008](0008-tailwind-css-presentation.md)             | Accepted   | Tailwind CSS utilities and a semantic theme for the web app  |
+| [0009](0009-ai-turn-reservations.md)                  | Superseded | Database-backed AI reservations and explicit crash recovery  |
+| [0010](0010-ai-failure-policy-and-invocations.md)     | Accepted   | Durable logical-turn budgets and atomic invocation outcomes  |
 
 ## Status values
 

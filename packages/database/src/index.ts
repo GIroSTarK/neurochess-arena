@@ -7,6 +7,8 @@ export {
   moves,
   gameCommands,
   aiTurnReservations,
+  aiTurns,
+  modelInvocations,
   type StoredAiParameters,
 } from "./schema/index.js";
 export {
@@ -24,5 +26,9 @@ export {
   type NewGameCommand,
   type NewAiTurnReservation,
   type StoredAiTurnReservation,
+  type StoredAiTurn,
+  type StoredModelInvocation,
+  type NewModelInvocation,
+  type InvocationResult,
   type GamePositionUpdate,
 } from "./game-repository.js";

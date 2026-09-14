@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -50,6 +51,7 @@ export const gameCommandKind = pgEnum("game_command_kind", [
   "resume",
   "abort",
   "resign",
+  "technical_loss",
 ]);
 
 export const guestSessions = pgTable(
@@ -238,5 +240,167 @@ export const aiTurnReservations = pgTable(
       sql`${table.expectedVersion} between 0 and 9007199254740991`,
     ),
     check("ai_turn_reservations_state_check", sql`${table.state} in ('in_flight', 'blocked')`),
+  ],
+);
+
+export const aiTurns = pgTable(
+  "ai_turns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    ply: integer("ply").notNull(),
+    color: chessColor("color").notNull(),
+    invalidOutputCount: integer("invalid_output_count").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    acceptedMovePly: integer("accepted_move_ply"),
+  },
+  (table) => [
+    uniqueIndex("ai_turns_ply_unique").on(table.gameId, table.ply),
+    foreignKey({
+      columns: [table.gameId, table.acceptedMovePly],
+      foreignColumns: [moves.gameId, moves.ply],
+    }).onDelete("cascade"),
+    check(
+      "ai_turns_ply_check",
+      sql`${table.ply} > 0 and (${table.acceptedMovePly} is null or ${table.acceptedMovePly} = ${table.ply})`,
+    ),
+    check(
+      "ai_turns_budget_check",
+      sql`${table.invalidOutputCount} between 0 and 3 and ${table.attemptCount} >= ${table.invalidOutputCount}`,
+    ),
+    check(
+      "ai_turns_color_check",
+      sql`(${table.ply} % 2 = 1 and ${table.color} = 'white') or (${table.ply} % 2 = 0 and ${table.color} = 'black')`,
+    ),
+  ],
+);
+
+export const modelInvocations = pgTable(
+  "model_invocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    turnId: uuid("turn_id")
+      .notNull()
+      .references(() => aiTurns.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    reservationId: uuid("reservation_id").notNull(),
+    commandId: uuid("command_id").notNull(),
+    expectedVersion: bigint("expected_version", { mode: "number" }).notNull(),
+    provider: aiProvider("provider").notNull(),
+    modelId: text("model_id").notNull(),
+    effectiveParameters: jsonb("effective_parameters").$type<StoredAiParameters>().notNull(),
+    outcome: text("outcome", {
+      enum: [
+        "in_flight",
+        "accepted",
+        "model_invalid",
+        "provider_error",
+        "interrupted",
+        "discarded",
+      ],
+    })
+      .notNull()
+      .default("in_flight"),
+    errorCode: text("error_code", {
+      enum: [
+        "model_invalid",
+        "provider_auth",
+        "provider_quota",
+        "provider_timeout",
+        "provider_unavailable",
+      ],
+    }),
+    errorReason: text("error_reason", {
+      enum: [
+        "malformed_output",
+        "illegal_move",
+        "refusal",
+        "truncated_output",
+        "network",
+        "upstream",
+        "invalid_response",
+        "unsupported_model",
+        "cancelled",
+      ],
+    }),
+    durationMs: bigint("duration_ms", { mode: "number" }),
+    usageReported: boolean("usage_reported").notNull().default(false),
+    inputTokens: bigint("input_tokens", { mode: "number" }),
+    outputTokens: bigint("output_tokens", { mode: "number" }),
+    totalTokens: bigint("total_tokens", { mode: "number" }),
+    commentary: text("commentary"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("model_invocations_attempt_unique").on(table.turnId, table.attemptNumber),
+    index("model_invocations_reservation_idx").on(table.reservationId),
+    uniqueIndex("model_invocations_pending_unique")
+      .on(table.reservationId)
+      .where(sql`${table.outcome} = 'in_flight'`),
+    uniqueIndex("model_invocations_accepted_unique")
+      .on(table.turnId)
+      .where(sql`${table.outcome} = 'accepted'`),
+    check(
+      "model_invocations_sequence_check",
+      sql`${table.attemptNumber} > 0 and ${table.expectedVersion} between 0 and 9007199254740991`,
+    ),
+    check(
+      "model_invocations_outcome_check",
+      sql`${table.outcome} in ('in_flight', 'accepted', 'model_invalid', 'provider_error', 'interrupted', 'discarded')`,
+    ),
+    check(
+      "model_invocations_error_check",
+      sql`
+      ((${table.errorCode} is null and ${table.errorReason} is null)
+      or (${table.errorCode} = 'model_invalid' and ${table.errorReason} is not null and ${table.errorReason} in ('malformed_output', 'illegal_move', 'refusal', 'truncated_output'))
+      or (${table.errorCode} in ('provider_auth', 'provider_quota', 'provider_timeout') and ${table.errorReason} is null)
+      or (${table.errorCode} = 'provider_unavailable' and ${table.errorReason} is not null and ${table.errorReason} in ('network', 'upstream', 'invalid_response', 'unsupported_model', 'cancelled'))) is true`,
+    ),
+    check(
+      "model_invocations_result_check",
+      sql`
+      (${table.outcome} in ('in_flight', 'interrupted') and ${table.errorCode} is null and ${table.durationMs} is null and not ${table.usageReported} and ${table.commentary} is null)
+      or (${table.durationMs} is not null and (
+        (${table.outcome} = 'accepted' and ${table.errorCode} is null)
+        or (${table.commentary} is null and (
+          (${table.outcome} = 'model_invalid' and ${table.errorCode} is not null and ${table.errorCode} = 'model_invalid')
+          or (${table.outcome} = 'provider_error' and ${table.errorCode} is not null and ${table.errorCode} <> 'model_invalid')
+          or ${table.outcome} = 'discarded'))))`,
+    ),
+    check(
+      "model_invocations_usage_check",
+      sql`(${table.usageReported} or (${table.inputTokens} is null and ${table.outputTokens} is null and ${table.totalTokens} is null))
+      and (${table.durationMs} is null or ${table.durationMs} between 0 and 9007199254740991)
+      and (${table.inputTokens} is null or ${table.inputTokens} between 0 and 9007199254740991)
+      and (${table.outputTokens} is null or ${table.outputTokens} between 0 and 9007199254740991)
+      and (${table.totalTokens} is null or ${table.totalTokens} between 0 and 9007199254740991)`,
+    ),
+    check(
+      "model_invocations_commentary_check",
+      sql`${table.commentary} is null or length(${table.commentary}) <= 2000`,
+    ),
+    check(
+      "model_invocations_model_id_check",
+      sql`length(${table.modelId}) between 1 and 256 and ${table.modelId} ~ '^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$'`,
+    ),
+    check(
+      "model_invocations_parameters_check",
+      sql`jsonb_typeof(${table.effectiveParameters}) = 'object'
+      and octet_length(${table.effectiveParameters}::text) <= 512
+      and ${table.effectiveParameters} - array['temperature', 'reasoningEffort', 'maxOutputTokens'] = '{}'::jsonb
+      and (not (${table.effectiveParameters} ? 'temperature') or case
+        when jsonb_typeof(${table.effectiveParameters}->'temperature') = 'number'
+        then (${table.effectiveParameters}->>'temperature')::numeric between 0 and 9007199254740991 else false end)
+      and (not (${table.effectiveParameters} ? 'reasoningEffort') or (
+        jsonb_typeof(${table.effectiveParameters}->'reasoningEffort') = 'string'
+        and length(${table.effectiveParameters}->>'reasoningEffort') between 1 and 64
+        and ${table.effectiveParameters}->>'reasoningEffort' ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]*$'))
+      and (not (${table.effectiveParameters} ? 'maxOutputTokens') or case
+        when jsonb_typeof(${table.effectiveParameters}->'maxOutputTokens') = 'number'
+        then (${table.effectiveParameters}->>'maxOutputTokens')::numeric between 1 and 9007199254740991
+          and mod((${table.effectiveParameters}->>'maxOutputTokens')::numeric, 1) = 0 else false end)`,
+    ),
   ],
 );

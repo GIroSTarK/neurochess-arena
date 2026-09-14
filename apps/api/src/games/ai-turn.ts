@@ -8,11 +8,12 @@ import {
   type AiTurnCommand,
   aiTurnCommandSchema,
   type GameSnapshot,
-  normalizedMoveResponseSchema,
+  type NormalizedMoveResponse,
 } from "@neurochess/contracts";
 import type {
   GameRepository,
   GameTransaction,
+  InvocationResult,
   StoredGame,
   StoredParticipant,
 } from "@neurochess/database";
@@ -22,8 +23,8 @@ import {
   AI_MOVE_INSTRUCTIONS,
   type AiProviderAdapter,
   type ListModelsInput,
-  type MoveRequest,
 } from "../providers/adapter.js";
+import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
 import { authorizeGameControl } from "./authorization.js";
 import { persistCommand } from "./command-persistence.js";
@@ -45,8 +46,6 @@ export class AiTurnError extends Error {
       | "AI_TURN_IN_PROGRESS"
       | "AI_TURN_RECOVERY_REQUIRED"
       | "AI_TURN_CANCELLED"
-      | "AI_OUTPUT_INVALID"
-      | "AI_PROVIDER_FAILED"
       | "AI_ADAPTER_UNAVAILABLE",
   ) {
     super(code);
@@ -66,29 +65,25 @@ function aiSeat(principal: GuestPrincipal, prepared: PreparedCommand) {
   return { seat, participantId: participant.id, color: snapshot.turn };
 }
 
-function checkCancellation(signal: AbortSignal) {
-  if (signal.aborted) throw new AiTurnError("AI_TURN_CANCELLED");
-}
-
-async function requestMove(adapter: AiProviderAdapter, input: MoveRequest): Promise<unknown> {
-  checkCancellation(input.signal);
-  const cancelled = Promise.withResolvers<never>();
-  const onAbort = () => cancelled.reject(new AiTurnError("AI_TURN_CANCELLED"));
-  input.signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    return await Promise.race([
-      Promise.resolve().then(() => {
-        checkCancellation(input.signal);
-        return adapter.requestMove(input);
-      }),
-      cancelled.promise,
-    ]);
-  } catch {
-    // Neither adapter exceptions nor AbortSignal.reason may escape with request secrets.
-    throw new AiTurnError(input.signal.aborted ? "AI_TURN_CANCELLED" : "AI_PROVIDER_FAILED");
-  } finally {
-    input.signal.removeEventListener("abort", onAbort);
-  }
+function invocationResult(response: NormalizedMoveResponse, discarded = false): InvocationResult {
+  const error = response.ok ? null : response.error;
+  return {
+    outcome: discarded
+      ? "discarded"
+      : response.ok
+        ? "accepted"
+        : error?.code === "model_invalid"
+          ? "model_invalid"
+          : "provider_error",
+    errorCode: error?.code ?? null,
+    errorReason: error && "reason" in error ? error.reason : null,
+    durationMs: response.durationMs,
+    usageReported: response.usage !== null,
+    inputTokens: response.usage?.inputTokens ?? null,
+    outputTokens: response.usage?.outputTokens ?? null,
+    totalTokens: response.usage?.totalTokens ?? null,
+    commentary: response.ok && !discarded ? (response.output.commentary ?? null) : null,
+  };
 }
 
 export function createAiTurnExecutor(options: {
@@ -128,19 +123,43 @@ export function createAiTurnExecutor(options: {
       if (adapter?.provider !== selected.seat.provider) {
         throw new AiTurnError("AI_ADAPTER_UNAVAILABLE");
       }
-      checkCancellation(access.signal);
+      if (access.signal.aborted) throw new AiTurnError("AI_TURN_CANCELLED");
       const reservationId = randomUUID();
-      const { snapshot } = prepared;
       await tx.reserveAiTurn({
         gameId: command.gameId,
         commandId: command.commandId,
         expectedVersion: command.expectedVersion,
         reservationId,
       });
+      const turn = await tx.getOrCreateAiTurn({
+        gameId: command.gameId,
+        ply: prepared.snapshot.moves.length + 1,
+        color: selected.color,
+      });
+      if (
+        turn.invalidOutputCount >= 3 ||
+        turn.acceptedMovePly !== null ||
+        turn.color !== selected.color
+      ) {
+        throw new GameIntegrityError();
+      }
+      const invocation = {
+        turnId: turn.id,
+        reservationId,
+        commandId: command.commandId,
+        expectedVersion: command.expectedVersion,
+        provider: selected.seat.provider,
+        modelId: selected.seat.modelId,
+        effectiveParameters: { ...selected.seat.parameters },
+      };
+      const attempt = await tx.beginModelInvocation(invocation);
+      const { snapshot } = prepared;
       return {
-        ...selected,
+        selected,
         adapter,
         reservationId,
+        invocation,
+        attempt,
         context: {
           fen: snapshot.fen,
           pgn: snapshot.pgn,
@@ -151,67 +170,134 @@ export function createAiTurnExecutor(options: {
       };
     });
 
+    async function recheck(tx: GameTransaction) {
+      const prepared = await prepareCommand(tx, principal, command);
+      const selected = aiSeat(principal, prepared);
+      const pending = await tx.getAiTurnReservation(command.gameId);
+      if (
+        pending?.reservationId !== reserved.reservationId ||
+        pending.state !== "in_flight" ||
+        pending.commandId !== command.commandId ||
+        pending.expectedVersion !== command.expectedVersion ||
+        !isDeepStrictEqual(selected, reserved.selected)
+      ) {
+        throw new GameConflictError(prepared.snapshot);
+      }
+      return prepared;
+    }
+
+    let attempt = reserved.attempt;
+    let response: NormalizedMoveResponse | undefined;
     try {
-      const response = normalizedMoveResponseSchema.safeParse(
-        await requestMove(reserved.adapter, {
+      for (;;) {
+        response = await invokeMove(reserved.adapter, {
           apiKey: access.apiKey,
           signal: access.signal,
           instructions: AI_MOVE_INSTRUCTIONS,
-          modelId: reserved.seat.modelId,
-          parameters: { ...reserved.seat.parameters },
-          context: reserved.context,
-        }),
-      );
-      if (!response.success) throw new AiTurnError("AI_OUTPUT_INVALID");
-      if (!response.data.ok) {
-        throw new AiTurnError(
-          response.data.error.code === "model_invalid" ? "AI_OUTPUT_INVALID" : "AI_PROVIDER_FAILED",
-        );
+          modelId: reserved.selected.seat.modelId,
+          parameters: { ...reserved.invocation.effectiveParameters },
+          context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+        });
+        const received = response;
+        const snapshot = await repository.write(async (tx) => {
+          const prepared = await recheck(tx);
+          let classified = received;
+          if (classified.ok && !prepared.snapshot.legalMoves.includes(classified.output.move)) {
+            classified = {
+              ...classified,
+              ok: false,
+              error: { code: "model_invalid", reason: "illegal_move" },
+            };
+          }
+          if (classified.ok && access.signal.aborted) {
+            classified = { ...classified, ok: false, error: cancellationFailure(access.signal) };
+          }
+          if (
+            !(await tx.finishModelInvocation(
+              attempt.id,
+              reserved.reservationId,
+              invocationResult(classified),
+            ))
+          ) {
+            throw new GameIntegrityError();
+          }
+          if (!classified.ok && classified.error.code === "model_invalid") {
+            if ((await tx.incrementAiInvalidCount(attempt.turnId)) < 3) {
+              if (!access.signal.aborted) return null;
+              // Cancellation may stop retries, but cannot erase an already-observed invalid output.
+              const paused = prepared.game.pause();
+              if (!paused.ok) throw new GameIntegrityError();
+              return persistCommand(tx, prepared.stored, command.commandId, "pause", paused.value);
+            }
+            const lost = prepared.game.recordTechnicalLoss(reserved.selected.color);
+            if (!lost.ok) throw new GameIntegrityError();
+            return persistCommand(
+              tx,
+              prepared.stored,
+              command.commandId,
+              "technical_loss",
+              lost.value,
+            );
+          }
+          const accepted = classified.ok
+            ? prepared.game.playMove(classified.output.move)
+            : prepared.game.pause();
+          if (!accepted.ok) throw new GameIntegrityError();
+          const result = await persistCommand(
+            tx,
+            prepared.stored,
+            command.commandId,
+            classified.ok ? "move" : "pause",
+            accepted.value,
+          );
+          if (classified.ok) {
+            await tx.linkAiTurnMove(attempt.turnId, prepared.snapshot.moves.length + 1);
+          }
+          return result;
+        });
+        if (snapshot) return snapshot;
+        response = undefined;
+        const next = await repository.write(async (tx) => {
+          const prepared = await recheck(tx);
+          if (access.signal.aborted) {
+            const paused = prepared.game.pause();
+            if (!paused.ok) throw new GameIntegrityError();
+            return {
+              snapshot: await persistCommand(
+                tx,
+                prepared.stored,
+                command.commandId,
+                "pause",
+                paused.value,
+              ),
+            };
+          }
+          return { attempt: await tx.beginModelInvocation(reserved.invocation) };
+        });
+        if (next.snapshot) return next.snapshot;
+        attempt = next.attempt;
       }
-      const { move } = response.data.output;
-      return await repository.write(async (tx) => {
-        const prepared = await prepareCommand(tx, principal, command);
-        const selected = aiSeat(principal, prepared);
-        const pending = await tx.getAiTurnReservation(command.gameId);
-        if (
-          pending?.reservationId !== reserved.reservationId ||
-          pending.state !== "in_flight" ||
-          pending.commandId !== command.commandId ||
-          pending.expectedVersion !== command.expectedVersion ||
-          !isDeepStrictEqual(selected, {
-            seat: reserved.seat,
-            participantId: reserved.participantId,
-            color: reserved.color,
-          })
-        ) {
-          throw new GameConflictError(prepared.snapshot);
-        }
-        checkCancellation(access.signal);
-        if (!prepared.snapshot.legalMoves.includes(move)) {
-          throw new AiTurnError("AI_OUTPUT_INVALID");
-        }
-        const accepted = prepared.game.playMove(move);
-        if (!accepted.ok) throw new GameIntegrityError();
-        const snapshot = await persistCommand(
-          tx,
-          prepared.stored,
-          command.commandId,
-          "move",
-          accepted.value,
-        );
-        checkCancellation(access.signal);
-        return snapshot;
-      });
     } catch (error: unknown) {
       try {
         await repository.write(async (tx) => {
-          // Cleanup cannot require a still-valid principal: expiry may have caused the failure.
+          // Cleanup uses the server's attempt/fence identity, even if the principal has expired.
           await tx.lockGuest(principal.guestSessionId);
           await tx.lockGame(command.gameId);
+          if (
+            response &&
+            (error instanceof GameConflictError || error instanceof GameRequestError)
+          ) {
+            await tx.finishModelInvocation(
+              attempt.id,
+              reserved.reservationId,
+              invocationResult(response, true),
+              true,
+            );
+          }
           await tx.blockAiTurn(command.gameId, reserved.reservationId);
         });
       } catch {
-        // An uncleared reservation is intentionally non-retryable until explicit recovery.
+        // A surviving reservation remains blocked from redispatch until explicit recovery.
       }
       throw error;
     }

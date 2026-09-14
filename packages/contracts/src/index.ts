@@ -1,4 +1,13 @@
 export {
+  invocationOutcomeSchema,
+  modelInvocationSchema,
+  aiTurnRecordSchema,
+  gameInvocationsSchema,
+  type ModelInvocation,
+  type AiTurnRecord,
+  type GameInvocations,
+} from "./invocation.js";
+export {
   aiProviderSchema,
   modelIdSchema,
   reasoningEffortSchema,
