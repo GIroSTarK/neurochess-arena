@@ -217,3 +217,26 @@ export const gameCommands = pgTable(
     check("game_commands_version_check", sql`${table.version} between 1 and 9007199254740991`),
   ],
 );
+
+export const aiTurnReservations = pgTable(
+  "ai_turn_reservations",
+  {
+    gameId: uuid("game_id")
+      .primaryKey()
+      .references(() => games.id, { onDelete: "cascade" }),
+    reservationId: uuid("reservation_id").notNull(),
+    commandId: uuid("command_id").notNull(),
+    expectedVersion: bigint("expected_version", { mode: "number" }).notNull(),
+    state: text("state", { enum: ["in_flight", "blocked"] })
+      .notNull()
+      .default("in_flight"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "ai_turn_reservations_version_check",
+      sql`${table.expectedVersion} between 0 and 9007199254740991`,
+    ),
+    check("ai_turn_reservations_state_check", sql`${table.state} in ('in_flight', 'blocked')`),
+  ],
+);

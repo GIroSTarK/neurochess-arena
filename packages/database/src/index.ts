@@ -6,6 +6,7 @@ export {
   guestSessions,
   moves,
   gameCommands,
+  aiTurnReservations,
   type StoredAiParameters,
 } from "./schema/index.js";
 export {
@@ -21,5 +22,7 @@ export {
   type NewParticipant,
   type NewMove,
   type NewGameCommand,
+  type NewAiTurnReservation,
+  type StoredAiTurnReservation,
   type GamePositionUpdate,
 } from "./game-repository.js";

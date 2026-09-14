@@ -12,6 +12,7 @@
   "include": [
     "apps/**/*.test.ts",
     "apps/**/*.test.tsx",
+    "apps/api/test/providers/orphaned-turn.ts",
     "packages/**/*.test.ts",
     "vitest.config.ts",
     "vitest.integration.config.ts",

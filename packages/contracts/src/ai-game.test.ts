@@ -1,10 +1,48 @@
 import { describe, expect, it } from "vitest";
 
-import { aiGameConfigurationSchema, aiProviderSchema, type AiSeat } from "./index.js";
+import {
+  aiGameConfigurationSchema,
+  aiProviderSchema,
+  type AiSeat,
+  aiTurnCommandSchema,
+} from "./index.js";
 
 const ai: AiSeat = { type: "ai", provider: "openai", modelId: "fixture-model", parameters: {} };
 const human = { type: "human" } as const;
 const configuration = { mode: "ai_vs_ai", seats: { white: ai, black: ai } };
+
+describe("AI turn command boundary", () => {
+  const command = {
+    gameId: "00000000-0000-4000-8000-000000000001",
+    commandId: "00000000-0000-4000-8000-000000000002",
+    expectedVersion: 0,
+  };
+
+  it("accepts only the resource, revision and command identity", () => {
+    expect(aiTurnCommandSchema.parse(command)).toEqual(command);
+    for (const invalid of [
+      {},
+      { ...command, expectedVersion: -1 },
+      { ...command, expectedVersion: 0.5 },
+      { ...command, expectedVersion: Number.MAX_SAFE_INTEGER + 1 },
+      { ...command, commandId: "not-a-uuid" },
+      { ...command, gameId: "not-a-uuid" },
+      ...[
+        "fen",
+        "pgn",
+        "legalMoves",
+        "context",
+        "instructions",
+        "opponent",
+        "apiKey",
+        "move",
+        "color",
+      ].map((field) => ({ ...command, [field]: "untrusted" })),
+    ]) {
+      expect(aiTurnCommandSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+});
 
 describe("ordinary AI game configuration", () => {
   it("round trips independent seats, identical models, all providers and either human color", () => {

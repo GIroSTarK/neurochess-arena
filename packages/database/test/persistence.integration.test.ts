@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
 import {
+  aiTurnReservations,
   createGameRepository,
   type DatabaseConnection,
   gameCommands,
@@ -80,9 +81,12 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
   it("migrates populated legacy games without inventing AI configuration or changing Sandbox authority", async () => {
     const schemaName = "migration_" + randomUUID().replaceAll("-", "");
     const migrationFiles = await Promise.all(
-      ["0001_guest_owned_games", "0002_game_command_receipts", "0003_ai_game_configuration"].map(
-        (name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8"),
-      ),
+      [
+        "0001_guest_owned_games",
+        "0002_game_command_receipts",
+        "0003_ai_game_configuration",
+        "0004_ai_turn_reservations",
+      ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
       await tx.execute(sql`create schema ${sql.identifier(schemaName)}`);
@@ -154,8 +158,73 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
           )
         ).rows,
       ).toEqual([{ count: 0 }]);
+      const aiOwner = randomUUID();
+      const aiGame = randomUUID();
+      await tx.execute(
+        sql`insert into guest_sessions(id, token_hash, expires_at) values (${aiOwner}, ${aiOwner.replaceAll("-", "").repeat(2)}, clock_timestamp() + interval '1 hour')`,
+      );
+      await tx.execute(
+        sql`insert into games(id, owner_guest_session_id, mode, state, result, fen, pgn, version) values (${aiGame}, ${aiOwner}, 'ai_vs_ai', 'active', '*', 'ai-position', 'ai-history', 0)`,
+      );
+      await tx.execute(
+        sql`insert into game_participants(game_id, color, seat_type, provider, model_id, parameters) values (${aiGame}, 'white', 'ai', 'openai', 'fixture-white', '{}'), (${aiGame}, 'black', 'ai', 'anthropic', 'fixture-black', '{}')`,
+      );
+      const beforeReservations = [
+        await tx.execute(sql`select * from games order by id`),
+        await tx.execute(sql`select * from game_participants order by id`),
+        await tx.execute(sql`select * from moves order by id`),
+        await tx.execute(sql`select * from game_commands order by game_id`),
+      ];
+      await applyMigration(migrationFiles[3]!);
+      const afterReservations = [
+        await tx.execute(sql`select * from games order by id`),
+        await tx.execute(sql`select * from game_participants order by id`),
+        await tx.execute(sql`select * from moves order by id`),
+        await tx.execute(sql`select * from game_commands order by game_id`),
+      ];
+      expect(afterReservations.map((result) => result.rows)).toEqual(
+        beforeReservations.map((result) => result.rows),
+      );
+      expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual([]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
+  });
+
+  it("enforces one bounded reservation per game, separate from accepted receipts, and cascades deletion", async () => {
+    const created = await game();
+    const reservation = {
+      gameId: created.id,
+      reservationId: randomUUID(),
+      commandId: randomUUID(),
+      expectedVersion: 0,
+    };
+    await database.db.insert(aiTurnReservations).values(reservation);
+    expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, created.id))).toBe(0);
+    await expect(
+      database.db
+        .insert(aiTurnReservations)
+        .values({ ...reservation, reservationId: randomUUID(), commandId: randomUUID() }),
+    ).rejects.toThrow();
+    for (const expectedVersion of [-1, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(
+        database.db
+          .update(aiTurnReservations)
+          .set({ expectedVersion })
+          .where(eq(aiTurnReservations.gameId, created.id)),
+      ).rejects.toThrow();
+    }
+    await expect(
+      database.db.execute(
+        sql`update ai_turn_reservations set state = 'accepted' where game_id = ${created.id}`,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      database.db.insert(aiTurnReservations).values({ ...reservation, gameId: randomUUID() }),
+    ).rejects.toThrow();
+    await database.db.delete(games).where(eq(games.id, created.id));
+    expect(
+      await database.db.$count(aiTurnReservations, eq(aiTurnReservations.gameId, created.id)),
+    ).toBe(0);
   });
 
   it("enforces typed AI selection, bounded parameter metadata and credential-free human seats in PostgreSQL", async () => {

@@ -1,7 +1,14 @@
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
-import { gameCommands, gameParticipants, games, guestSessions, moves } from "./schema/index.js";
+import {
+  aiTurnReservations,
+  gameCommands,
+  gameParticipants,
+  games,
+  guestSessions,
+  moves,
+} from "./schema/index.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type StoredGame = typeof games.$inferSelect;
@@ -11,6 +18,11 @@ export type NewGame = typeof games.$inferInsert;
 export type NewParticipant = typeof gameParticipants.$inferInsert;
 export type NewMove = typeof moves.$inferInsert;
 export type NewGameCommand = typeof gameCommands.$inferInsert;
+export type StoredAiTurnReservation = typeof aiTurnReservations.$inferSelect;
+export type NewAiTurnReservation = Pick<
+  StoredAiTurnReservation,
+  "gameId" | "reservationId" | "commandId" | "expectedVersion"
+>;
 export type GamePositionUpdate = Pick<
   StoredGame,
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
@@ -31,6 +43,10 @@ export interface GameTransaction extends GameReader {
   appendCommand(command: NewGameCommand): Promise<void>;
   insertGame(game: NewGame, participants: NewParticipant[]): Promise<void>;
   appendMove(move: NewMove): Promise<void>;
+  getAiTurnReservation(gameId: string): Promise<StoredAiTurnReservation | undefined>;
+  reserveAiTurn(reservation: NewAiTurnReservation): Promise<void>;
+  blockAiTurn(gameId: string, reservationId: string): Promise<void>;
+  clearAiTurn(gameId: string): Promise<void>;
   updatePosition(
     gameId: string,
     expectedVersion: number,
@@ -154,6 +170,30 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
             },
             async appendMove(move) {
               await tx.insert(moves).values(move);
+            },
+            async getAiTurnReservation(gameId) {
+              const [reservation] = await tx
+                .select()
+                .from(aiTurnReservations)
+                .where(eq(aiTurnReservations.gameId, gameId));
+              return reservation;
+            },
+            async reserveAiTurn(reservation) {
+              await tx.insert(aiTurnReservations).values(reservation);
+            },
+            async blockAiTurn(gameId, reservationId) {
+              await tx
+                .update(aiTurnReservations)
+                .set({ state: "blocked" })
+                .where(
+                  and(
+                    eq(aiTurnReservations.gameId, gameId),
+                    eq(aiTurnReservations.reservationId, reservationId),
+                  ),
+                );
+            },
+            async clearAiTurn(gameId) {
+              await tx.delete(aiTurnReservations).where(eq(aiTurnReservations.gameId, gameId));
             },
             async updatePosition(gameId, expectedVersion, position) {
               const updated = await tx

@@ -28,12 +28,14 @@ export {
   aiGameConfigurationSchema,
   gameDetailsSchema,
   unfinishedGameDetailsSchema,
+  aiTurnCommandSchema,
   type AiGameMode,
   type AiSeat,
   type GameSeat,
   type AiGameConfiguration,
   type GameDetails,
   type UnfinishedGameDetails,
+  type AiTurnCommand,
 } from "./ai-game.js";
 export {
   healthResponseSchema,

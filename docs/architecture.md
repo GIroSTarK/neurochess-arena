@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-14
 
 ## Architectural drivers
 
@@ -203,6 +203,10 @@ The browser requests one AI turn at a time. The API:
 8. returns the new state and normalized telemetry.
 
 The reservation must be idempotent so multiple clicks, retries, or network duplicates cannot cause multiple moves. If the controlling tab disconnects, automatic turn requests stop and the game becomes paused.
+
+The game service's `aiTurn` accepts only a game ID, expected revision, command ID, and request-scoped adapter access. It builds the standard response instruction and chess context from verified server history. A separate `ai_turn_reservations` row fences execution; `game_commands` records only accepted moves/lifecycle changes. Inference holds no database transaction. Acceptance rechecks authority, seat/configuration, reservation identity, and revision, then uses the same deterministic move and atomic persistence path as human commands.
+
+Failed or interrupted executions retain a blocked reservation. A process crash can leave an apparently in-flight reservation; it never expires into automatic redispatch. Explicit owner-authorized Pause advances the revision and invalidates the reservation before Resume and another turn can authorize a new call. Accepted ordinary-game commands clear reservations atomically; reads do not. See [ADR-0009](decisions/0009-ai-turn-reservations.md) for receipt identity, cancellation, rollback, crash recovery, and the limits of provider billing guarantees. Failure-policy and public-flow implementation status remains in the [roadmap](roadmap.md#phase-2--ai-arena-core).
 
 ### Human turns
 
