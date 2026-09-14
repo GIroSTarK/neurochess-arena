@@ -380,8 +380,8 @@ describe("authoritative AI turns through injected adapters", () => {
     { name: "non-UCI move", response: { ...output("e2e4"), output: { move: "e4" } } },
     { name: "extra fields", response: { ...output("e2e4"), apiKey: "sentinel" } },
   ])(
-    "never commits $name from the adapter, retains a recovery block and drops raw data",
-    async ({ response }) => {
+    "never commits $name from the adapter, applies the failure policy and drops raw data",
+    async ({ name, response }) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
       const principal = { guestSessionId: owner.id };
@@ -392,25 +392,28 @@ describe("authoritative AI turns through injected adapters", () => {
       const gamesService = service(api, { openai: adapter });
       const { snapshot } = await gamesService.createAi(principal, aiMatch);
       const cmd = turnCommand(snapshot);
-      await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
-        code: "AI_OUTPUT_INVALID",
-        message: "AI_OUTPUT_INVALID",
+      const accepted = await gamesService.aiTurn(principal, cmd, access());
+      expect(accepted).toMatchObject({
+        version: 1,
+        moves: [],
+        state: name === "extra fields" ? "paused" : "completed",
       });
-      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(accepted);
       await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
-        code: "AI_TURN_RECOVERY_REQUIRED",
+        code: "GAME_CONFLICT",
+        currentSnapshot: accepted,
       });
       expect(
         await api.database.db.$count(gameCommands, eq(gameCommands.gameId, snapshot.gameId)),
-      ).toBe(0);
+      ).toBe(1);
       const rows = await api.database.db
         .select()
         .from(aiTurnReservations)
         .where(eq(aiTurnReservations.gameId, snapshot.gameId));
-      expect(rows).toMatchObject([
-        { state: "blocked", commandId: cmd.commandId, expectedVersion: 0 },
-      ]);
-      expect(JSON.stringify(rows)).not.toContain("sentinel");
+      expect(rows).toEqual([]);
+      const attempts = await gamesService.invocations(principal, snapshot.gameId);
+      expect(attempts.turns[0]?.attempts).toHaveLength(name === "extra fields" ? 1 : 3);
+      expect(JSON.stringify(attempts)).not.toContain("sentinel");
     },
   );
 });

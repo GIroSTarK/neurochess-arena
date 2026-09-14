@@ -1,6 +1,7 @@
 # ADR-0009: AI turn reservations and explicit crash recovery
 
-**Status:** Accepted  
+**Status:** Superseded by [ADR-0010](0010-ai-failure-policy-and-invocations.md)
+
 **Date:** 2026-09-14
 
 ## Context

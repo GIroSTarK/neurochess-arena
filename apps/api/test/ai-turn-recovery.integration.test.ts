@@ -95,7 +95,7 @@ describe("AI reservation invalidation and crash recovery", () => {
       const newPending = newService.aiTurn(principal, newCommand, access());
       await newGate.entered;
       const rejected = expect(oldPending).rejects.toMatchObject({
-        code: outcome === "success" ? "GAME_CONFLICT" : "AI_PROVIDER_FAILED",
+        code: "GAME_CONFLICT",
       });
       if (outcome === "success") oldGate.resolve(output("e2e4"));
       else oldGate.reject(new Error("secret-upstream-sentinel"));
@@ -158,22 +158,33 @@ describe("AI reservation invalidation and crash recovery", () => {
     ).toBe(0);
     const pending = gamesService.aiTurn(principal, cmd, access(controller.signal));
     await gate.entered;
-    const rejected = expect(pending).rejects.toMatchObject({
-      code: "AI_TURN_CANCELLED",
-      message: "AI_TURN_CANCELLED",
-    });
     controller.abort("abort-secret-sentinel");
-    await rejected;
+    const paused = await pending;
+    expect(paused).toMatchObject({ state: "paused", version: 1, moves: [] });
     gate.resolve(output("e2e4"));
     await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
-      code: "AI_TURN_RECOVERY_REQUIRED",
+      code: "GAME_CONFLICT",
+      currentSnapshot: paused,
     });
-    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(paused);
+    expect(await gamesService.invocations(principal, snapshot.gameId)).toMatchObject({
+      turns: [
+        {
+          invalidOutputCount: 0,
+          attempts: [
+            {
+              outcome: "provider_error",
+              error: { code: "provider_unavailable", reason: "cancelled" },
+            },
+          ],
+        },
+      ],
+    });
     expect(gate.adapter.moveCalls).toBe(1);
   });
 
   it.each(["exception", "normalized failure"] as const)(
-    "blocks a failed execution after %s and drops provider data",
+    "pauses a failed execution after %s and drops provider data",
     async (failure) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
@@ -198,17 +209,13 @@ describe("AI reservation invalidation and crash recovery", () => {
       const gamesService = service(api, { openai: adapter });
       const { snapshot } = await gamesService.createAi(principal, aiMatch);
       const cmd = turnCommand(snapshot);
-      const failed = gamesService.aiTurn(principal, cmd, access());
-      await expect(failed).rejects.toMatchObject({
-        code: "AI_PROVIDER_FAILED",
-        message: "AI_PROVIDER_FAILED",
-      });
-      await expect(failed).rejects.not.toHaveProperty("cause");
+      const paused = await gamesService.aiTurn(principal, cmd, access());
+      expect(paused).toMatchObject({ state: "paused", version: 1, moves: [] });
       await expect(
         gamesService.aiTurn(principal, turnCommand(snapshot), access()),
-      ).rejects.toMatchObject({ code: "AI_TURN_RECOVERY_REQUIRED" });
+      ).rejects.toMatchObject({ code: "GAME_CONFLICT", currentSnapshot: paused });
       expect(adapter.moveCalls).toBe(1);
-      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(paused);
       const persisted = await Promise.all([
         api.database.db.select().from(games).where(eq(games.id, snapshot.gameId)),
         api.database.db
@@ -221,6 +228,8 @@ describe("AI reservation invalidation and crash recovery", () => {
           .select()
           .from(aiTurnReservations)
           .where(eq(aiTurnReservations.gameId, snapshot.gameId)),
+        api.repository.read((reader) => reader.getModelInvocations(snapshot.gameId)),
+        gamesService.invocations(principal, snapshot.gameId),
       ]);
       expect(JSON.stringify(persisted)).not.toContain("sentinel");
       expect(JSON.stringify(adapter)).not.toContain("sentinel");
@@ -322,6 +331,15 @@ describe("AI reservation invalidation and crash recovery", () => {
           .from(aiTurnReservations)
           .where(eq(aiTurnReservations.gameId, snapshot.gameId)),
       ).toMatchObject([{ state: "blocked" }]);
+      expect(await service(api).invocations(principal, snapshot.gameId)).toMatchObject({
+        turns: [
+          {
+            invalidOutputCount: 0,
+            acceptedMovePly: null,
+            attempts: [{ outcome: "in_flight", commentary: null }],
+          },
+        ],
+      });
       await expect(
         service(api, { openai: adapter }).aiTurn(principal, cmd, access()),
       ).rejects.toMatchObject({ code: "AI_TURN_RECOVERY_REQUIRED" });
@@ -365,6 +383,9 @@ describe("AI reservation invalidation and crash recovery", () => {
     const gamesService = service(restarted, { openai: adapter });
     const accepted = await gamesService.snapshot(principal, snapshot.gameId);
     expect(accepted).toMatchObject({ version: 1, moves: [{ uci: "e2e4" }] });
+    expect(await gamesService.invocations(principal, snapshot.gameId)).toMatchObject({
+      turns: [{ acceptedMovePly: 1, attempts: [{ outcome: "accepted" }] }],
+    });
     await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
       code: "GAME_CONFLICT",
       currentSnapshot: accepted,
@@ -399,6 +420,9 @@ describe("AI reservation invalidation and crash recovery", () => {
           api.repository.write((tx) =>
             action({
               ...tx,
+              async finishModelInvocation() {
+                throw new Error("Injected outcome failure");
+              },
               async blockAiTurn() {
                 throw new Error("cleanup-secret-sentinel");
               },
@@ -408,10 +432,9 @@ describe("AI reservation invalidation and crash recovery", () => {
     );
     const { snapshot } = await failing.createAi(principal, aiMatch);
     const cmd = turnCommand(snapshot);
-    await expect(failing.aiTurn(principal, cmd, access())).rejects.toMatchObject({
-      code: "AI_PROVIDER_FAILED",
-      message: "AI_PROVIDER_FAILED",
-    });
+    await expect(failing.aiTurn(principal, cmd, access())).rejects.toThrow(
+      "Injected outcome failure",
+    );
     const recovered = service(await harness.createApi(), { openai: adapter });
     await expect(recovered.aiTurn(principal, cmd, access())).rejects.toMatchObject({
       code: "AI_TURN_IN_PROGRESS",
@@ -427,59 +450,76 @@ describe("AI reservation invalidation and crash recovery", () => {
     expect(adapter.moveCalls).toBe(1);
   });
 
-  it("survives a killed executor process and never takes over an orphan automatically, even after time has passed", async () => {
-    const api = await harness.createApi();
-    const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
-    const { snapshot } = await service(api).createAi(principal, aiMatch);
-    const cmd = turnCommand(snapshot);
-    const child = fork(
-      fileURLToPath(new URL("./providers/orphaned-turn.ts", import.meta.url)),
-      [],
-      {
-        execArgv: ["--conditions=development", "--import", "tsx"],
-        stdio: ["ignore", "ignore", "ignore", "ipc"],
-      },
-    );
-    const exited = once(child, "exit");
-    try {
-      const dispatched = Promise.race([
-        once(child, "message", { signal: AbortSignal.timeout(5000) }),
-        exited.then(() => {
-          throw new Error("Executor exited before dispatch");
-        }),
-      ]);
-      child.send({ command: cmd, guestSessionId: owner.id });
-      expect(await dispatched).toEqual(["dispatched", undefined]);
-    } finally {
-      child.kill("SIGKILL");
-      await exited;
-    }
-    await harness.close(api);
-    const restarted = await harness.createApi();
-    const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
-    const gamesService = service(restarted, { openai: adapter });
-    await restarted.database.db
-      .update(aiTurnReservations)
-      .set({ createdAt: sql`clock_timestamp() - interval '1 day'` })
-      .where(eq(aiTurnReservations.gameId, snapshot.gameId));
-    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
-    expect((await gamesService.unfinishedGame(principal)).game?.snapshot).toEqual(snapshot);
-    for (const attempted of [cmd, turnCommand(snapshot)]) {
-      await expect(gamesService.aiTurn(principal, attempted, access())).rejects.toMatchObject({
-        code: "AI_TURN_IN_PROGRESS",
+  it.each([false, true])(
+    "survives a killed executor process without resetting a prior invalid-output budget (invalid first: %s)",
+    async (invalidFirst) => {
+      const api = await harness.createApi();
+      const owner = await harness.guest(api);
+      const principal = { guestSessionId: owner.id };
+      const { snapshot } = await service(api).createAi(principal, aiMatch);
+      const cmd = turnCommand(snapshot);
+      const child = fork(
+        fileURLToPath(new URL("./providers/orphaned-turn.ts", import.meta.url)),
+        [],
+        {
+          execArgv: ["--conditions=development", "--import", "tsx"],
+          stdio: ["ignore", "ignore", "ignore", "ipc"],
+        },
+      );
+      const exited = once(child, "exit");
+      try {
+        const dispatched = Promise.race([
+          once(child, "message", { signal: AbortSignal.timeout(5000) }),
+          exited.then(() => {
+            throw new Error("Executor exited before dispatch");
+          }),
+        ]);
+        child.send({ command: cmd, guestSessionId: owner.id, invalidFirst });
+        expect(await dispatched).toEqual(["dispatched", undefined]);
+      } finally {
+        child.kill("SIGKILL");
+        await exited;
+      }
+      await harness.close(api);
+      const restarted = await harness.createApi();
+      const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
+      const gamesService = service(restarted, { openai: adapter });
+      await restarted.database.db
+        .update(aiTurnReservations)
+        .set({ createdAt: sql`clock_timestamp() - interval '1 day'` })
+        .where(eq(aiTurnReservations.gameId, snapshot.gameId));
+      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+      expect((await gamesService.unfinishedGame(principal)).game?.snapshot).toEqual(snapshot);
+      for (const attempted of [cmd, turnCommand(snapshot)]) {
+        await expect(gamesService.aiTurn(principal, attempted, access())).rejects.toMatchObject({
+          code: "AI_TURN_IN_PROGRESS",
+        });
+      }
+      expect(adapter.moveCalls).toBe(0);
+      const before = await gamesService.invocations(principal, snapshot.gameId);
+      expect(before.turns[0]?.invalidOutputCount).toBe(invalidFirst ? 1 : 0);
+      expect(before.turns[0]?.attempts.at(-1)?.outcome).toBe("in_flight");
+      const paused = await gamesService.lifecycle(principal, control(snapshot, "pause"));
+      expect(
+        (await gamesService.invocations(principal, snapshot.gameId)).turns[0]?.attempts.at(-1)
+          ?.outcome,
+      ).toBe("interrupted");
+      const resumed = await gamesService.lifecycle(principal, control(paused, "resume"));
+      await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
+        code: "GAME_CONFLICT",
       });
-    }
-    expect(adapter.moveCalls).toBe(0);
-    const paused = await gamesService.lifecycle(principal, control(snapshot, "pause"));
-    const resumed = await gamesService.lifecycle(principal, control(paused, "resume"));
-    await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
-      code: "GAME_CONFLICT",
-    });
-    expect(await gamesService.aiTurn(principal, turnCommand(resumed), access())).toMatchObject({
-      version: 3,
-      moves: [{ uci: "e2e4" }],
-    });
-    expect(adapter.moveCalls).toBe(1);
-  });
+      expect(await gamesService.aiTurn(principal, turnCommand(resumed), access())).toMatchObject({
+        version: 3,
+        moves: [{ uci: "e2e4" }],
+      });
+      expect(adapter.moveCalls).toBe(1);
+      const after = await gamesService.invocations(principal, snapshot.gameId);
+      expect(after.turns[0]).toMatchObject({
+        id: before.turns[0]?.id,
+        invalidOutputCount: invalidFirst ? 1 : 0,
+        acceptedMovePly: 1,
+      });
+      expect(after.turns[0]?.attempts).toHaveLength(invalidFirst ? 3 : 2);
+    },
+  );
 });

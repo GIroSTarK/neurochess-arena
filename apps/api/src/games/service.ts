@@ -6,6 +6,7 @@ import {
   aiGameConfigurationSchema,
   type AiTurnCommand,
   type GameDetails,
+  type GameInvocations,
   gameLifecycleSchema,
   type GamePgnResponse,
   type GameReplayResponse,
@@ -32,12 +33,14 @@ import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./a
 import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
 import { configurationOf, participantsFor } from "./configuration.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+import { readInvocations } from "./invocations.js";
 
 export interface GameService {
   readonly sandboxEnabled: boolean;
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
   createAi(principal: GuestPrincipal, configuration: unknown): Promise<GameDetails>;
   details(principal: GuestPrincipal, gameId: string): Promise<GameDetails>;
+  invocations(principal: GuestPrincipal, gameId: string): Promise<GameInvocations>;
   unfinishedGame(principal: GuestPrincipal): Promise<UnfinishedGameDetails>;
   snapshot(principal: GuestPrincipal, gameId: string): Promise<GameSnapshot>;
   move(principal: GuestPrincipal, command: MoveCommand): Promise<GameSnapshot>;
@@ -269,6 +272,16 @@ export function createGameService(
         return { game: { snapshot, configuration } };
       }),
     snapshot: readSnapshot,
+    invocations: (principal, gameId) =>
+      repository.read(async (reader) => {
+        if (!(await reader.getGuest(principal.guestSessionId))) {
+          throw new GameRequestError("UNAUTHORIZED");
+        }
+        const stored = await reader.getGame(gameId);
+        if (!stored) throw new GameRequestError("NOT_FOUND");
+        const { snapshot } = await restoreAuthorized(reader, principal, stored);
+        return readInvocations(reader, snapshot);
+      }),
     move: mutate,
     aiTurn: createAiTurnExecutor({
       repository,
