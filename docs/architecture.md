@@ -259,12 +259,13 @@ The normalized move response contains:
 - provider request identifier when safe to retain;
 - latency;
 - normalized token usage when available;
-- raw provider usage fields in bounded, non-secret metadata;
 - retry and error classification.
 
 Model lists come from the selected provider through the API. Discovery is currently uncached and scoped to the supplied request credential; another account's catalog is never reused. Malformed, mismatched-provider, or credential-echoing descriptors become safe provider failures. A missing or explicitly unsupported selected model pauses a turn without inference. Unknown move-generation capability permits a runtime attempt with no optional parameters. For supported models, unknown/unsupported parameter fields are omitted; values outside an advertised range or enumeration pause the game and return `AI_PARAMETERS_INVALID` before inference, without consuming an invalid-output attempt. Seat configuration is immutable, so a changed range that invalidates a selection requires a new configuration/game. Invocation records contain the parameters actually supplied to inference. Discovery failures retain a safe failure attempt with no effective parameters or token usage.
 
 A model being listed does not guarantee it supports the required chess response contract; adapters must surface capability or runtime errors clearly. Registration is explicit through `aiAdapters`; production has no fixture adapter or fallback.
+
+The [OpenAI adapter](development.md#openai-adapter) uses stateless Responses API requests and annotates live model discovery with conservative documented capabilities. It discards raw usage metadata after extracting reported counts and performs no implicit transport retries. The common executor retains all legality, retry-budget, lifecycle, and persistence authority.
 
 ## Error taxonomy
 
