@@ -1,8 +1,13 @@
 import {
+  aiErrorResponseSchema,
+  aiGameConfigurationSchema,
+  aiTurnRequestSchema,
   createGameRequestSchema,
   emptyQuerySchema,
+  gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameInvocationsSchema,
   gameParamsSchema,
   gamePgnResponseSchema,
   gameReplayResponseSchema,
@@ -10,7 +15,10 @@ import {
   guestSessionRequestSchema,
   guestSessionResponseSchema,
   lifecycleCommandSchema,
+  modelDiscoveryRequestSchema,
+  modelDiscoveryResultSchema,
   moveCommandSchema,
+  unfinishedGameDetailsSchema,
   unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -18,7 +26,13 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { GUEST_COOKIE_NAME, type GuestIdentity, type GuestService } from "../guests/service.js";
 import { gameErrorMessages } from "../locales/en.js";
+import {
+  AI_TURN_TIMEOUT_MS,
+  DISCOVERY_TIMEOUT_MS,
+  providerRequestScope,
+} from "../providers/request-scope.js";
 
+import { AiTurnError } from "./ai-turn.js";
 import { GameConflictError, GameRequestError } from "./errors.js";
 import type { GameService } from "./service.js";
 
@@ -26,6 +40,7 @@ export interface GameApiOptions {
   readonly games: GameService;
   readonly guests: GuestService;
   readonly webOrigin: string;
+  readonly providerTimeouts?: { readonly discoveryMs?: number; readonly turnMs?: number };
 }
 
 const errorStatuses = {
@@ -62,6 +77,11 @@ export async function registerGameRoutes(
     }
   });
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof AiTurnError) {
+      return reply
+        .code(error.code === "AI_PARAMETERS_INVALID" ? 422 : 409)
+        .send(aiErrorResponseSchema.parse({ code: error.code, requestId: request.id }));
+    }
     const code: GameErrorCode =
       error instanceof GameRequestError || error instanceof GameConflictError
         ? error.code
@@ -93,6 +113,125 @@ export async function registerGameRoutes(
     setGuestCookie(reply, identity);
     return identity.principal;
   }
+
+  const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
+
+  routes.post(
+    "/providers/models",
+    {
+      schema: {
+        body: modelDiscoveryRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: modelDiscoveryResultSchema, ...aiErrors },
+      },
+    },
+    async (request, reply) => {
+      const principal = await principalFor(request, reply);
+      const scope = providerRequestScope(
+        request,
+        reply,
+        options.providerTimeouts?.discoveryMs ?? DISCOVERY_TIMEOUT_MS,
+      );
+      try {
+        return await options.games.models(principal, request.body.provider, {
+          apiKey: request.body.apiKey,
+          signal: scope.signal,
+        });
+      } finally {
+        request.body.apiKey = "";
+        scope.dispose();
+      }
+    },
+  );
+
+  routes.post(
+    "/games",
+    {
+      schema: {
+        body: aiGameConfigurationSchema,
+        querystring: emptyQuerySchema,
+        response: { 201: gameDetailsSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const game = await options.games.createAi(await principalFor(request, reply), request.body);
+      return reply.code(201).send(game);
+    },
+  );
+
+  routes.get(
+    "/games/unfinished",
+    {
+      schema: {
+        querystring: emptyQuerySchema,
+        response: { 200: unfinishedGameDetailsSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => options.games.unfinishedGame(await principalFor(request, reply)),
+  );
+
+  routes.get(
+    "/games/:gameId/details",
+    {
+      schema: {
+        params: gameParamsSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameDetailsSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.details(await principalFor(request, reply), request.params.gameId),
+  );
+
+  routes.get(
+    "/games/:gameId/invocations",
+    {
+      schema: {
+        params: gameParamsSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameInvocationsSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.invocations(await principalFor(request, reply), request.params.gameId),
+  );
+
+  routes.post(
+    "/games/:gameId/ai-turn",
+    {
+      schema: {
+        params: gameParamsSchema,
+        body: aiTurnRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameSnapshotSchema, ...aiErrors },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      const principal = await principalFor(request, reply);
+      const scope = providerRequestScope(
+        request,
+        reply,
+        options.providerTimeouts?.turnMs ?? AI_TURN_TIMEOUT_MS,
+      );
+      try {
+        const { gameId, expectedVersion, commandId } = request.body;
+        return await options.games.aiTurn(
+          principal,
+          { gameId, expectedVersion, commandId },
+          {
+            apiKey: request.body.apiKey,
+            signal: scope.signal,
+          },
+        );
+      } finally {
+        request.body.apiKey = "";
+        scope.dispose();
+      }
+    },
+  );
 
   routes.post(
     "/guest-session",

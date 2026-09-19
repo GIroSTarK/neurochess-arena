@@ -4,6 +4,7 @@ import { type ChessGame, createGame, restoreGame } from "@neurochess/chess";
 import {
   type AiGameConfiguration,
   aiGameConfigurationSchema,
+  type AiProvider,
   type AiTurnCommand,
   type GameDetails,
   type GameInvocations,
@@ -12,6 +13,7 @@ import {
   type GameReplayResponse,
   type GameSnapshot,
   type LifecycleCommand,
+  type ModelDiscoveryResult,
   type MoveCommand,
   type UnfinishedGameDetails,
   type UnfinishedGameResponse,
@@ -27,6 +29,7 @@ import type {
 
 import type { GuestPrincipal } from "../guests/service.js";
 import type { ListModelsInput } from "../providers/adapter.js";
+import { discoverModels } from "../providers/discovery.js";
 
 import { type AiAdapters, createAiTurnExecutor } from "./ai-turn.js";
 import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./authorization.js";
@@ -37,6 +40,11 @@ import { readInvocations } from "./invocations.js";
 
 export interface GameService {
   readonly sandboxEnabled: boolean;
+  models(
+    principal: GuestPrincipal,
+    provider: AiProvider,
+    access: ListModelsInput,
+  ): Promise<ModelDiscoveryResult>;
   createSandbox(principal: GuestPrincipal): Promise<GameSnapshot>;
   createAi(principal: GuestPrincipal, configuration: unknown): Promise<GameDetails>;
   details(principal: GuestPrincipal, gameId: string): Promise<GameDetails>;
@@ -72,6 +80,7 @@ export function createGameService(
   },
 ): GameService {
   const sandboxEnabled = options.sandboxEnabled && options.nodeEnv !== "production";
+  const adapters = { ...options.aiAdapters };
 
   async function restoreAuthorized(
     reader: GameReader,
@@ -252,6 +261,15 @@ export function createGameService(
 
   return {
     sandboxEnabled,
+    async models(principal, provider, access) {
+      await repository.read(async (reader) => {
+        if (!(await reader.getGuest(principal.guestSessionId))) {
+          throw new GameRequestError("UNAUTHORIZED");
+        }
+      });
+      const adapter = adapters[provider];
+      return discoverModels(adapter?.provider === provider ? adapter : undefined, access);
+    },
     async createSandbox(principal) {
       return (await createOwnedGame(principal, null)).snapshot;
     },
@@ -285,7 +303,7 @@ export function createGameService(
     move: mutate,
     aiTurn: createAiTurnExecutor({
       repository,
-      adapters: options.aiAdapters ?? {},
+      adapters,
       prepareCommand,
     }),
     lifecycle: mutate,

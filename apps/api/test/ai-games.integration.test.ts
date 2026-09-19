@@ -227,7 +227,7 @@ describe("ordinary AI configuration through the real game service", () => {
     }
   });
 
-  it("rejects untrusted configuration without reserving a slot, persisting secrets or adding HTTP creation", async () => {
+  it("rejects untrusted configuration through service and HTTP without reserving a slot or persisting secrets", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const principal = { guestSessionId: owner.id };
@@ -250,20 +250,16 @@ describe("ordinary AI configuration through the real game service", () => {
         code: "INVALID_REQUEST",
         message: "INVALID_REQUEST",
       });
+      const response = await api.app.inject({
+        method: "POST",
+        url: "/games",
+        payload: input,
+        headers: { cookie: owner.cookie, origin: WEB_ORIGIN },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.body).not.toContain("sentinel-key");
     }
     expect(await api.database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(0);
-    for (const url of ["/games", "/ai/games", "/providers/openai/models"]) {
-      expect(
-        (
-          await api.app.inject({
-            method: "POST",
-            url,
-            payload: aiMatch,
-            headers: { cookie: owner.cookie, origin: WEB_ORIGIN },
-          })
-        ).statusCode,
-      ).toBe(404);
-    }
     expect((await gamesService.createAi(principal, aiMatch)).configuration).toEqual(aiMatch);
     expect(await gamesService.unfinished(principal)).toEqual({ snapshot: null });
   });

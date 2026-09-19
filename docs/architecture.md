@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-14
+**Last updated:** 2026-09-19
 
 ## Architectural drivers
 
@@ -214,7 +214,9 @@ The browser requests one AI turn at a time. The API:
 
 The reservation must be idempotent so multiple clicks, retries, or network duplicates cannot cause multiple moves. If the controlling tab disconnects, automatic turn requests stop and the game becomes paused.
 
-The game service's `aiTurn` accepts only a game ID, expected revision, command ID, and request-scoped adapter access. It builds the standard response instruction and chess context from verified server history. A separate `ai_turn_reservations` row fences execution; `game_commands` records only accepted moves/lifecycle changes. Inference holds no database transaction. Acceptance rechecks authority, seat/configuration, reservation identity, and revision, then uses the same deterministic move and atomic persistence path as human commands.
+The game service's `aiTurn` accepts only a game ID, expected revision, command ID, and request-scoped adapter access. It builds the standard response instruction and chess context from verified server history. A separate `ai_turn_reservations` row fences execution; `game_commands` records only accepted moves/lifecycle changes. Discovery and inference hold no database transaction. After reservation, live discovery validates the current model and resolves effective parameters before an invocation is recorded. Authority, seat/configuration, reservation identity, and revision are rechecked before inference and before acceptance, which uses the same deterministic move and atomic persistence path as human commands.
+
+AI HTTP requests cancel provider work when the response connection closes. Discovery has a 30-second operational deadline; a turn, including discovery and automatic invalid-output retries, has a 180-second deadline. A dispatched turn's cancellation or timeout follows the provider-pause policy, never a chess loss. The AI client allows 35/190 seconds respectively so the API can persist and acknowledge an operational failure, propagates its owner's cancellation, and never retries transport failures automatically. An uncertain response still requires authorized synchronization and explicit recovery; a lost response cannot prove that no move committed. These deadlines are transport safeguards, not chess clocks.
 
 Failed or interrupted executions retain a blocked reservation. A process crash can leave an apparently in-flight reservation; it never expires into automatic redispatch. Explicit owner-authorized Pause advances the revision and invalidates the reservation before Resume and another turn can authorize a new call. Accepted ordinary-game commands clear reservations atomically; reads do not. See [ADR-0009](decisions/0009-ai-turn-reservations.md) for receipt identity, cancellation, rollback, crash recovery, and the limits of provider billing guarantees. Failure-policy and public-flow implementation status remains in the [roadmap](roadmap.md#phase-2--ai-arena-core).
 
@@ -260,7 +262,9 @@ The normalized move response contains:
 - raw provider usage fields in bounded, non-secret metadata;
 - retry and error classification.
 
-Model lists come from the selected provider through the API and may be cached briefly. A model being listed does not guarantee it supports the required chess response contract; adapters must surface capability or runtime errors clearly.
+Model lists come from the selected provider through the API. Discovery is currently uncached and scoped to the supplied request credential; another account's catalog is never reused. Malformed, mismatched-provider, or credential-echoing descriptors become safe provider failures. A missing or explicitly unsupported selected model pauses a turn without inference. Unknown move-generation capability permits a runtime attempt with no optional parameters. For supported models, unknown/unsupported parameter fields are omitted; values outside an advertised range or enumeration pause the game and return `AI_PARAMETERS_INVALID` before inference, without consuming an invalid-output attempt. Seat configuration is immutable, so a changed range that invalidates a selection requires a new configuration/game. Invocation records contain the parameters actually supplied to inference. Discovery failures retain a safe failure attempt with no effective parameters or token usage.
+
+A model being listed does not guarantee it supports the required chess response contract; adapters must surface capability or runtime errors clearly. Registration is explicit through `aiAdapters`; production has no fixture adapter or fallback.
 
 ## Error taxonomy
 
@@ -298,6 +302,8 @@ After refresh, an AI game is restored as paused and requires explicit resume. Se
 2. It sends the key over HTTPS only to provider-related API operations that require it.
 3. The API uses it within that request and does not persist or log it.
 4. Refreshing or closing the tab removes it; a restored game remains paused until re-entry.
+
+The AI client's credential store is a page-owned closure with independent color/provider entries. Replacement, explicit clearing, owner cancellation, and `pagehide` remove entries; even a page restored from the browser's back/forward cache requires re-entry. It exposes no serializable credential state and uses no browser persistence. Configuration and command receipts never contain credentials; the HTTP turn body adds a key only for that operation. Client destinations require HTTPS except for local development on `localhost`. Loading or constructing the client never bootstraps a guest.
 
 ### Saved credential
 

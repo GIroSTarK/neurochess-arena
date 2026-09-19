@@ -103,3 +103,13 @@ export {
   type UciMove,
   type WinReason,
 } from "./game.js";
+export {
+  sessionApiKeySchema,
+  modelDiscoveryRequestSchema,
+  aiTurnRequestSchema,
+  aiRequestErrorCodeSchema,
+  aiErrorResponseSchema,
+  type ModelDiscoveryRequest,
+  type AiTurnRequest,
+  type AiRequestErrorCode,
+} from "./ai-http.js";

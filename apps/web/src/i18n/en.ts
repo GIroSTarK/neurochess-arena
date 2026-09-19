@@ -1,4 +1,21 @@
 export const en = {
+  provider: {
+    authError: "This key was rejected. Update it and retry.",
+    quotaError:
+      "The provider reported a quota or rate limit. Check your provider account, then retry.",
+    timeoutError: "The provider took too long to respond. Retry when ready.",
+    unavailableError: "The provider is unavailable. Retry when ready.",
+    invalidOutput: "The model returned an invalid move response.",
+    unsupportedModel:
+      "This model is no longer available or does not support move generation. Choose another model.",
+    inProgress: "A turn is already in progress. Check the game before retrying.",
+    recoveryRequired: "This turn needs recovery. Pause the game before resuming.",
+    cancelled: "The request was cancelled. Check the game before retrying.",
+    adapterUnavailable: "This provider is not available yet.",
+    invalidParameters:
+      "The model's supported settings changed. The game is paused. Start a new game with valid settings.",
+    keyRequired: "Re-enter the API key for this seat to continue.",
+  },
   app: {
     brand: "Neurochess",
     arena: "Arena",
