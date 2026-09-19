@@ -253,7 +253,7 @@ describe("authoritative AI turns through injected adapters", () => {
           await api.app.inject({
             method: "POST",
             url,
-            payload: cmd,
+            payload: { ...cmd, apiKey: "http-fixture-only" },
             headers: { origin: WEB_ORIGIN, cookie: stranger.cookie },
           })
         ).statusCode,

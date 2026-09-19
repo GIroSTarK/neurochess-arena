@@ -2,7 +2,7 @@
 
 **Status:** Phases 0 and 1 and the Sandbox presentation remake completed; Phase 2 in progress
 
-**Last updated:** 2026-09-14
+**Last updated:** 2026-09-19
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -65,7 +65,7 @@ Exit condition: Sandbox uses the selected arena design, and the same presentatio
 
 Implementation sequence: [Phase 2 PR plan](phase-2-plan.md).
 
-Completed milestones: P2-01 establishes strict AI configuration/provider contracts, relational seat persistence, and private service creation/restoration. P2-02 adds authoritative execution with injected adapters, database-backed reservations, accepted-command deduplication, and explicit crash recovery. P2-03 adds durable logical-turn retry budgets, automatic invalid-output retries and technical losses, provider-error pauses, and private normalized invocation records linked to accepted moves. PostgreSQL tests cover concurrent instances, late outcomes, authorization, atomic rollback, killed executors, recovery without budget resets, and natural match outcomes with full history. Sandbox behavior and the shared unfinished-game slot are preserved. No live provider, AI HTTP creation/turn route, or public AI flow is enabled. P2-04 follows with request-scoped HTTP credentials, model discovery, capability filtering, and boundary redaction tests.
+Completed milestones: P2-01 establishes strict AI configuration/provider contracts, relational seat persistence, and private service creation/restoration. P2-02 adds authoritative execution with injected adapters, database-backed reservations, accepted-command deduplication, and explicit crash recovery. P2-03 adds durable logical-turn retry budgets, automatic invalid-output retries and technical losses, provider-error pauses, and private normalized invocation records linked to accepted moves. P2-04 adds protected discovery/create/turn/read routes, uncached request-scoped discovery, capability filtering, operational cancellation/deadlines, and a page-memory credential/client boundary. PostgreSQL tests cover concurrent instances, late outcomes, authorization, atomic rollback, killed executors, recovery without budget resets, natural match outcomes, HTTP disconnects, and credential redaction. Sandbox behavior and the shared unfinished-game slot are preserved. No live provider or public AI controller is enabled. P2-05 follows with the OpenAI adapter, registered explicitly through the existing provider interface and verified against mocked upstream transport.
 
 Deliverables:
 

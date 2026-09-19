@@ -10,6 +10,7 @@ import { integrationDatabase } from "../../../../test/database.js";
 import { createGameService } from "../../src/games/service.js";
 
 import { createScriptedAdapter } from "./scripted-adapter.js";
+import { withTurnCatalog } from "./turn-catalog.js";
 
 // A separate process lets the parent kill an executor after dispatch, without running cleanup.
 process.once("message", (message: unknown) => {
@@ -49,7 +50,7 @@ async function execute(message: unknown) {
     const service = createGameService(createGameRepository(database), {
       nodeEnv: "test",
       sandboxEnabled: false,
-      aiAdapters: { openai: adapter },
+      aiAdapters: { openai: withTurnCatalog(adapter) },
     });
     await service.aiTurn({ guestSessionId }, command, {
       apiKey: "child-fixture-only",

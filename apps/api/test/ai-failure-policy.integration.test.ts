@@ -62,7 +62,9 @@ describe("durable AI failure policy and private invocation records", () => {
               ...tx,
               async lockGame(gameId) {
                 const game = await tx.lockGame(gameId);
-                if (++locks === 2 * invalidNumber) controller.abort("transport-secret-sentinel");
+                if (++locks === 2 * invalidNumber + 1) {
+                  controller.abort("transport-secret-sentinel");
+                }
                 return game;
               },
             }),

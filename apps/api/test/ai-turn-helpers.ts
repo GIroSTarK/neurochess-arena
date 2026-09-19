@@ -15,6 +15,7 @@ import type { MoveRequest } from "../src/providers/adapter.js";
 
 import type { TestApi } from "./helpers.js";
 import { createScriptedAdapter } from "./providers/scripted-adapter.js";
+import { withTurnCatalog } from "./providers/turn-catalog.js";
 
 export const whiteAi: AiSeat = {
   type: "ai",
@@ -38,7 +39,13 @@ export const humanMatch: AiGameConfiguration = {
 };
 
 export function service(api: TestApi, aiAdapters: AiAdapters = {}, repository = api.repository) {
-  return createGameService(repository, { nodeEnv: "test", sandboxEnabled: true, aiAdapters });
+  return createGameService(repository, {
+    nodeEnv: "test",
+    sandboxEnabled: true,
+    aiAdapters: Object.fromEntries(
+      Object.entries(aiAdapters).map(([provider, adapter]) => [provider, withTurnCatalog(adapter)]),
+    ),
+  });
 }
 
 export function turnCommand(snapshot: GameSnapshot): AiTurnCommand {

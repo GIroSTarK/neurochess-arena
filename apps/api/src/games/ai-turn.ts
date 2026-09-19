@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { isDeepStrictEqual } from "node:util";
 
 import type { ChessGame } from "@neurochess/chess";
 import {
   type AiGameConfiguration,
   type AiProvider,
+  type AiRequestErrorCode,
   type AiTurnCommand,
   aiTurnCommandSchema,
   type GameSnapshot,
@@ -24,6 +26,7 @@ import {
   type AiProviderAdapter,
   type ListModelsInput,
 } from "../providers/adapter.js";
+import { discoverModels, effectiveParameters } from "../providers/discovery.js";
 import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
 import { authorizeGameControl } from "./authorization.js";
@@ -41,13 +44,7 @@ interface PreparedCommand {
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;
 
 export class AiTurnError extends Error {
-  constructor(
-    readonly code:
-      | "AI_TURN_IN_PROGRESS"
-      | "AI_TURN_RECOVERY_REQUIRED"
-      | "AI_TURN_CANCELLED"
-      | "AI_ADAPTER_UNAVAILABLE",
-  ) {
+  constructor(readonly code: AiRequestErrorCode) {
     super(code);
     this.name = "AiTurnError";
   }
@@ -150,16 +147,13 @@ export function createAiTurnExecutor(options: {
         expectedVersion: command.expectedVersion,
         provider: selected.seat.provider,
         modelId: selected.seat.modelId,
-        effectiveParameters: { ...selected.seat.parameters },
       };
-      const attempt = await tx.beginModelInvocation(invocation);
       const { snapshot } = prepared;
       return {
         selected,
         adapter,
         reservationId,
         invocation,
-        attempt,
         context: {
           fen: snapshot.fen,
           pgn: snapshot.pgn,
@@ -186,18 +180,56 @@ export function createAiTurnExecutor(options: {
       return prepared;
     }
 
-    let attempt = reserved.attempt;
+    let attempt: Awaited<ReturnType<GameTransaction["beginModelInvocation"]>> | undefined;
     let response: NormalizedMoveResponse | undefined;
     try {
-      for (;;) {
-        response = await invokeMove(reserved.adapter, {
-          apiKey: access.apiKey,
-          signal: access.signal,
-          instructions: AI_MOVE_INSTRUCTIONS,
-          modelId: reserved.selected.seat.modelId,
-          parameters: { ...reserved.invocation.effectiveParameters },
-          context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+      // Discovery shares the reservation fence with inference, but never holds database locks.
+      const discoveryStarted = performance.now();
+      const discovery = await discoverModels(reserved.adapter, access);
+      const discoveryDurationMs = Math.max(0, Math.round(performance.now() - discoveryStarted));
+      const model = discovery.ok
+        ? discovery.models.find((entry) => entry.id === reserved.selected.seat.modelId)
+        : undefined;
+      const parameters = model
+        ? effectiveParameters(reserved.selected.seat.parameters, model.capabilities)
+        : {};
+      if (parameters === null) {
+        await repository.write(async (tx) => {
+          const prepared = await recheck(tx);
+          const paused = prepared.game.pause();
+          if (!paused.ok) throw new GameIntegrityError();
+          await persistCommand(tx, prepared.stored, command.commandId, "pause", paused.value);
         });
+        throw new AiTurnError("AI_PARAMETERS_INVALID");
+      }
+      const invocation = { ...reserved.invocation, effectiveParameters: parameters };
+      attempt = await repository.write(async (tx) => {
+        await recheck(tx);
+        return tx.beginModelInvocation(invocation);
+      });
+      const preparationError = !discovery.ok
+        ? discovery.error
+        : !model || model.capabilities.moveGeneration === "unsupported"
+          ? ({ code: "provider_unavailable", reason: "unsupported_model" } as const)
+          : null;
+      for (;;) {
+        response = preparationError
+          ? {
+              ok: false,
+              error: preparationError,
+              durationMs: discoveryDurationMs,
+              usage: null,
+              providerRequestId: null,
+            }
+          : await invokeMove(reserved.adapter, {
+              apiKey: access.apiKey,
+              signal: access.signal,
+              instructions: AI_MOVE_INSTRUCTIONS,
+              modelId: reserved.selected.seat.modelId,
+              parameters: { ...invocation.effectiveParameters },
+              context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+            });
+        const currentAttempt = attempt;
         const received = response;
         const snapshot = await repository.write(async (tx) => {
           const prepared = await recheck(tx);
@@ -214,7 +246,7 @@ export function createAiTurnExecutor(options: {
           }
           if (
             !(await tx.finishModelInvocation(
-              attempt.id,
+              currentAttempt.id,
               reserved.reservationId,
               invocationResult(classified),
             ))
@@ -222,7 +254,7 @@ export function createAiTurnExecutor(options: {
             throw new GameIntegrityError();
           }
           if (!classified.ok && classified.error.code === "model_invalid") {
-            if ((await tx.incrementAiInvalidCount(attempt.turnId)) < 3) {
+            if ((await tx.incrementAiInvalidCount(currentAttempt.turnId)) < 3) {
               if (!access.signal.aborted) return null;
               // Cancellation may stop retries, but cannot erase an already-observed invalid output.
               const paused = prepared.game.pause();
@@ -251,7 +283,7 @@ export function createAiTurnExecutor(options: {
             accepted.value,
           );
           if (classified.ok) {
-            await tx.linkAiTurnMove(attempt.turnId, prepared.snapshot.moves.length + 1);
+            await tx.linkAiTurnMove(currentAttempt.turnId, prepared.snapshot.moves.length + 1);
           }
           return result;
         });
@@ -272,7 +304,7 @@ export function createAiTurnExecutor(options: {
               ),
             };
           }
-          return { attempt: await tx.beginModelInvocation(reserved.invocation) };
+          return { attempt: await tx.beginModelInvocation(invocation) };
         });
         if (next.snapshot) return next.snapshot;
         attempt = next.attempt;
@@ -285,6 +317,7 @@ export function createAiTurnExecutor(options: {
           await tx.lockGame(command.gameId);
           if (
             response &&
+            attempt &&
             (error instanceof GameConflictError || error instanceof GameRequestError)
           ) {
             await tx.finishModelInvocation(
