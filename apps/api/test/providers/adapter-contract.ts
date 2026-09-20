@@ -38,6 +38,7 @@ export interface AdapterContractFixture {
   readonly modelId: string;
   readonly parameters: AiParameters;
   readonly capabilities: ModelCapabilities;
+  readonly reportedUsage: TokenUsage;
   readonly createAdapter: (transport: typeof fetch) => AiProviderAdapter;
   readonly credential: (request: Request) => string | null;
   // Arrays let paginated providers exercise their entire discovery boundary.
@@ -50,7 +51,7 @@ export interface AdapterContractFixture {
 }
 
 export function contractInput(
-  fixture: Pick<AdapterContractFixture, "modelId" | "parameters">,
+  fixture: Pick<AdapterContractFixture, "modelId" | "parameters" | "capabilities">,
 ): MoveRequest {
   const game = createGame();
   game.start();
@@ -62,6 +63,7 @@ export function contractInput(
     instructions: AI_MOVE_INSTRUCTIONS,
     modelId: fixture.modelId,
     parameters: fixture.parameters,
+    capabilities: fixture.capabilities,
     context: { fen, pgn, turn, color: turn, legalMoves },
   };
 }
@@ -138,7 +140,7 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       "accepts a legal UCI move with optional commentary: %s",
       async (commentary) => {
         const output = { move: "e7e5", ...(commentary === undefined ? {} : { commentary }) };
-        const usage = { inputTokens: 70, outputTokens: 15, totalTokens: 85 };
+        const usage = fixture.reportedUsage;
         const http = mockHttp([fixture.completion(JSON.stringify(output), usage)]);
         const input = contractInput(fixture);
         const result = normalizedMoveResponseSchema.parse(

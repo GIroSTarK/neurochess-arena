@@ -193,6 +193,16 @@ The [Responses reference](https://developers.openai.com/api/reference/resources/
 
 Adapter tests run `apps/api/test/providers/adapter-contract.ts` through deterministic HTTP fixtures, with provider-specific cases alongside it and PostgreSQL orchestration in `apps/api/test/openai.integration.test.ts`. Future adapters reuse that contract suite with their own wire fixtures. Live calls require separate authorization; mocked coverage does not establish current account access, availability, or model response quality.
 
+### Anthropic adapter
+
+Anthropic uses the fixed `https://api.anthropic.com` origin with request-scoped `x-api-key` and `anthropic-version: 2023-06-01` headers. [Model discovery](https://platform.claude.com/docs/en/api/models/list) follows validated `after_id` cursors, rejecting duplicate IDs, inconsistent cursors, partial failures, credential echoes, and catalogs exceeding 10,000 models or 100 pages. The live `max_tokens` and `capabilities.effort` fields supply output limits and supported effort values; unfamiliar IDs are retained. Missing metadata leaves controls unknown. Temperature is omitted: discovery does not advertise sampling support, and the [Messages API](https://platform.claude.com/docs/en/api/messages/create) deprecates it on newer models.
+
+Messages requests contain the common system instruction and one user message with the fair chess context. Supported effort maps to `output_config.effort`; no thinking configuration, tools, prompt caching, or previous assistant content is sent. The required `max_tokens` defaults to 1,024, capped by a smaller discovered maximum. The adapter's pure parameter resolver supplies this default before invocation persistence, including for unknown models, so records match the wire request. Discovered capabilities travel only within the current turn request. HTTP calls use native fetch without retries or redirects, honor cancellation, and bound response bodies to 4 MiB.
+
+Only text blocks become move JSON; thinking, signatures, request IDs, and unused metadata are discarded. [Refusal and output/context truncation](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons) are invalid model output. Unexpected tool/continuation stops and malformed envelopes or usage are provider failures. Usage preserves reported `input_tokens` and `output_tokens`, with missing counts null and no synthesized total or cache-token sum. [Authentication, billing/rate-limit, timeout, and upstream errors](https://platform.claude.com/docs/en/api/errors) follow the common pause policy. Ambiguous `400 invalid_request_error` responses, including spend-limit errors without a distinct type, become `provider_unavailable/upstream`; raw error prose is never used or returned.
+
+`apps/api/test/providers/anthropic.test.ts` runs the same HTTP adapter contract with paginated fixtures; `apps/api/test/anthropic.integration.test.ts` verifies real orchestration and persistence with mocked transport. No live-provider availability or response-quality claim follows from these tests.
+
 ## PostgreSQL integration tests
 
 Add `TEST_DATABASE_URL` from `.env.example` if updating an existing `.env`, then run:

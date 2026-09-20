@@ -2,6 +2,7 @@ import type {
   AiParameters,
   AiProvider,
   ChessColor,
+  ModelCapabilities,
   ModelDiscoveryResult,
   NormalizedMoveResponse,
   UciMove,
@@ -25,6 +26,8 @@ export interface MoveRequest extends ListModelsInput {
   readonly instructions: string;
   readonly modelId: string;
   readonly parameters: Readonly<AiParameters>;
+  // Resolved by this request's discovery, never cached on an adapter instance.
+  readonly capabilities?: ModelCapabilities;
   // Built from authoritative history; never includes identities or analysis.
   readonly context: AiChessContext;
 }
@@ -36,6 +39,11 @@ export const AI_MOVE_INSTRUCTIONS =
 
 export interface AiProviderAdapter {
   readonly provider: AiProvider;
+  // Pure parameter resolution includes required wire defaults before persistence.
+  readonly resolveParameters?: (
+    requested: Readonly<AiParameters>,
+    capabilities: ModelCapabilities,
+  ) => AiParameters | null;
   listModels(input: ListModelsInput): Promise<ModelDiscoveryResult>;
   requestMove(input: MoveRequest): Promise<NormalizedMoveResponse>;
 }

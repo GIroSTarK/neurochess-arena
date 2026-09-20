@@ -59,6 +59,7 @@ export const openAiFixture: AdapterContractFixture = {
   provider: "openai",
   modelId: "gpt-4.1",
   parameters: { temperature: 0.2, maxOutputTokens: 128 },
+  reportedUsage: { inputTokens: 70, outputTokens: 15, totalTokens: 85 },
   capabilities: {
     moveGeneration: "supported",
     parameters: {

@@ -191,7 +191,10 @@ export function createAiTurnExecutor(options: {
         ? discovery.models.find((entry) => entry.id === reserved.selected.seat.modelId)
         : undefined;
       const parameters = model
-        ? effectiveParameters(reserved.selected.seat.parameters, model.capabilities)
+        ? (reserved.adapter.resolveParameters ?? effectiveParameters)(
+            reserved.selected.seat.parameters,
+            model.capabilities,
+          )
         : {};
       if (parameters === null) {
         await repository.write(async (tx) => {
@@ -227,6 +230,7 @@ export function createAiTurnExecutor(options: {
               instructions: AI_MOVE_INSTRUCTIONS,
               modelId: reserved.selected.seat.modelId,
               parameters: { ...invocation.effectiveParameters },
+              ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
               context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
             });
         const currentAttempt = attempt;

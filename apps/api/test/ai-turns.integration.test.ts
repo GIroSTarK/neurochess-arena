@@ -34,6 +34,7 @@ import {
   WEB_ORIGIN,
 } from "./helpers.js";
 import { createScriptedAdapter } from "./providers/scripted-adapter.js";
+import { turnCatalog } from "./providers/turn-catalog.js";
 
 const harness = new ApiHarness();
 afterEach(() => harness.dispose());
@@ -106,6 +107,8 @@ describe("authoritative AI turns through injected adapters", () => {
             instructions: AI_MOVE_INSTRUCTIONS,
             modelId: selected.modelId,
             parameters: selected.parameters,
+            capabilities: turnCatalog(provider).find(({ id }) => id === selected.modelId)!
+              .capabilities,
             context: {
               fen: before.fen,
               pgn: before.pgn,
