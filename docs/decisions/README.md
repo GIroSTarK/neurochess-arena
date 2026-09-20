@@ -16,6 +16,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0008](0008-tailwind-css-presentation.md)             | Accepted   | Tailwind CSS utilities and a semantic theme for the web app  |
 | [0009](0009-ai-turn-reservations.md)                  | Superseded | Database-backed AI reservations and explicit crash recovery  |
 | [0010](0010-ai-failure-policy-and-invocations.md)     | Accepted   | Durable logical-turn budgets and atomic invocation outcomes  |
+| [0011](0011-ai-controller-presence-and-step.md)       | Accepted   | Controller presence fencing and atomic paused AI steps       |
 
 ## Status values
 

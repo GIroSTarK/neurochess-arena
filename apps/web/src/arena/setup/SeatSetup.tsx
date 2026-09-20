@@ -10,6 +10,8 @@ import { useTranslation } from "react-i18next";
 
 import { PieceIcon } from "../../board/PieceIcon";
 import { Button } from "../../ui/Button";
+import { Select } from "../../ui/Select";
+import { StableText } from "../../ui/StableText";
 
 import { ModelPicker, setupFieldClass } from "./ModelPicker";
 
@@ -48,9 +50,8 @@ export function SeatSetup(props: SeatSetupProps) {
       </legend>
       <div className="grid min-w-0 gap-2 text-label">
         <label htmlFor={`${id}-provider`}>{t("setup.provider")}</label>
-        <select
+        <Select
           id={`${id}-provider`}
-          className={setupFieldClass}
           value={props.provider}
           aria-disabled={props.disabled}
           onChange={(event) => {
@@ -63,7 +64,7 @@ export function SeatSetup(props: SeatSetupProps) {
               {t(`setup.providers.${provider}`)}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <SecretField key={props.keyEpoch} {...props} descriptionId={`${id}-status`} />
       <div className="grid gap-2">
@@ -108,6 +109,7 @@ function SecretField(props: SeatSetupProps & { readonly descriptionId: string })
   const { t } = useTranslation();
   const id = useId();
   const [revealed, setRevealed] = useState(false);
+  const [hasValue, setHasValue] = useState(false);
   return (
     <div className="grid gap-2">
       <label htmlFor={id} className="text-label">
@@ -126,17 +128,26 @@ function SecretField(props: SeatSetupProps & { readonly descriptionId: string })
           aria-disabled={props.disabled}
           aria-invalid={props.keyInvalid}
           aria-describedby={`${id}-hint ${props.descriptionId}`}
-          onChange={(event) => props.onKey(event.target.value)}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setHasValue(value.length > 0);
+            if (value.length === 0) setRevealed(false);
+            props.onKey(value);
+          }}
           onBlur={props.onKeyBlur}
         />
         <Button
           variant="secondary"
           aria-controls={id}
           aria-pressed={revealed}
-          aria-disabled={props.disabled}
+          aria-disabled={props.disabled || !hasValue}
           onClick={() => setRevealed((value) => !value)}
         >
-          {t(revealed ? "setup.hideKey" : "setup.showKey")}
+          <StableText
+            value={t(revealed ? "setup.hideKey" : "setup.showKey")}
+            variants={[t("setup.showKey"), t("setup.hideKey")]}
+            align="center"
+          />
         </Button>
       </div>
       <div id={`${id}-hint`} className="text-label text-text-secondary">
@@ -169,9 +180,8 @@ function Parameters(props: SeatSetupProps & { readonly model: ModelDescriptor | 
               {t(`setup.parameters.${name}`)}
             </label>
             {"values" in capability ? (
-              <select
+              <Select
                 id={fieldId}
-                className={setupFieldClass}
                 value={props.parameters[name]}
                 aria-disabled={props.disabled}
                 onChange={(event) => {
@@ -184,7 +194,7 @@ function Parameters(props: SeatSetupProps & { readonly model: ModelDescriptor | 
                     {value}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : (
               <>
                 <input

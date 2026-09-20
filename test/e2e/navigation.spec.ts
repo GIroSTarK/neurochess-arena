@@ -3,16 +3,18 @@ import AxeBuilder from "@axe-core/playwright";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, startSandbox, test } from "./fixtures";
 
-test("Arena opens without API requests and links to Sandbox on desktop and mobile", async ({
+test("Arena checks unfinished games without bootstrapping and links to Sandbox on desktop and mobile", async ({
   page,
 }, testInfo) => {
   const apiRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
+  const unfinishedRequest = page.waitForRequest(API_ORIGIN + "/games/unfinished");
   await page.goto("/");
+  await unfinishedRequest;
   await expect(page).toHaveTitle("Neurochess Arena");
-  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   const arena = navigation.getByRole("link", { name: "Arena", exact: true });
@@ -34,7 +36,8 @@ test("Arena opens without API requests and links to Sandbox on desktop and mobil
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
       .violations,
   ).toEqual([]);
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests).toContain("/games/unfinished");
+  expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
   await sandbox.focus();
   await expect(sandbox).toBeFocused();
   await page.keyboard.press("Enter");
@@ -59,15 +62,17 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
+  await page.route("**/games/unfinished", (route) => route.fulfill({ json: { game: null } }));
   await page.goto(DISABLED_WEB_ORIGIN);
   await expect(page).toHaveTitle("Neurochess Arena");
-  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation").getByRole("link")).toHaveCount(1);
   await expect(page.getByRole("link", { name: "Open development sandbox" })).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("arena-sandbox-disabled.png"),
     fullPage: true,
   });
+  apiRequests.length = 0;
   for (const path of ["/sandbox", "/sandbox/", "/sandbox?game=invalid"]) {
     await page.goto(DISABLED_WEB_ORIGIN + path);
     await expect(page).toHaveTitle("Page unavailable · Neurochess Arena");
@@ -100,8 +105,10 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
     await route.continue();
   });
 
+  const unfinishedRequest = page.waitForRequest(API_ORIGIN + "/games/unfinished");
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  await unfinishedRequest;
+  await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   expect(sandboxRequested).toBe(false);
   await page.getByRole("link", { name: "Sandbox", exact: true }).click();
   await expect(page).toHaveURL(/\/sandbox$/);
@@ -110,7 +117,8 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
   expect(sandboxRequested).toBe(true);
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests).toContain("/games/unfinished");
+  expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("sandbox-loading.png"), fullPage: true });
 
   loading.resolve();
@@ -123,7 +131,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   );
 });
 
-test("private game URLs belong to Sandbox while Arena ignores game parameters", async ({
+test("Arena resolves a Sandbox game URL and links to its authorized recovery", async ({
   page,
 }, testInfo) => {
   const touch = testInfo.project.name === "mobile-touch";
@@ -135,10 +143,13 @@ test("private game URLs belong to Sandbox while Arena ignores game parameters", 
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
   await page.goto("/?game=" + current.gameId);
-  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  const recoveryLink = page.getByRole("link", { name: "Return to Sandbox" });
+  await expect(recoveryLink).toBeVisible();
+  await expect(recoveryLink).toHaveAttribute("href", `/sandbox?game=${current.gameId}`);
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(page.getByRole("grid")).toHaveCount(0);
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests.length).toBeGreaterThan(0);
+  expect(apiRequests.every((path) => path === `/games/${current.gameId}/details`)).toBe(true);
   await page.goto(gameUrl);
   await expect(page).toHaveURL(new RegExp("/sandbox\\?game=" + current.gameId + "$"));
   await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();

@@ -97,7 +97,7 @@ Special-position fixtures live in `packages/chess/test`, outside the production 
 
 ## Sandbox UI
 
-Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` shows the upcoming AI experience and makes no game or readiness requests. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.
+Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` provides the separate [AI-versus-AI flow](#arena-controller-api); loading setup reads unfinished-game discovery without creating a guest. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.
 
 One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.
 
@@ -166,22 +166,30 @@ Requests cannot select FEN, history, owner, seat, public mode, or sandbox author
 
 ## AI provider and game API
 
-These routes reuse explicit guest bootstrap, exact-Origin POST checks, private ownership, strict schemas, and `Cache-Control: no-store`. Keys are accepted only in discovery and turn JSON bodies. Use HTTPS outside localhost development. They are backend/client plumbing; the public Arena remains a placeholder until its controller and setup PRs. Provider registration is explicit in `apps/api/src/server.ts`; tests inject mocked upstream transport without paid calls.
+These routes reuse explicit guest bootstrap, exact-Origin POST checks, private ownership, strict schemas, and `Cache-Control: no-store`. Keys are accepted only in discovery and turn JSON bodies. Use HTTPS outside localhost development. The public Arena at `/` uses these boundaries for AI-versus-AI setup and observation. Provider registration is explicit in `apps/api/src/server.ts`; tests inject mocked upstream transport without paid calls.
 
-| Endpoint                         | Request                                                              | Success                                                       |
-| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `POST /providers/models`         | `{ provider, apiKey }`                                               | `200 { ok: true, models }` or `{ ok: false, error }`          |
-| `POST /games`                    | Strict `{ mode, seats: { white, black } }` AI configuration, no keys | `201 { snapshot, configuration }`                             |
-| `GET /games/unfinished`          | No query fields                                                      | `200 { game }`, private details or `null`                     |
-| `GET /games/:gameId/details`     | UUID, no query fields                                                | `200 { snapshot, configuration }`                             |
-| `GET /games/:gameId/invocations` | UUID, no query fields                                                | `200 { gameId, version, turns }`                              |
-| `POST /games/:gameId/ai-turn`    | `{ gameId, expectedVersion, commandId, apiKey }`                     | `200` authoritative snapshot, including provider-error pauses |
+| Endpoint                         | Request                                                               | Success                                                       |
+| -------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /providers/models`         | `{ provider, apiKey }`                                                | `200 { ok: true, models }` or `{ ok: false, error }`          |
+| `POST /games`                    | Strict `{ mode, seats: { white, black } }` AI configuration, no keys  | `201 { snapshot, configuration }`                             |
+| `GET /games/unfinished`          | No query fields                                                       | `200 { game }`, private details or `null`                     |
+| `GET /games/:gameId/details`     | UUID, no query fields                                                 | `200 { snapshot, configuration }`                             |
+| `GET /games/:gameId/invocations` | UUID, no query fields                                                 | `200 { gameId, version, turns }`                              |
+| `POST /games/:gameId/ai-turn`    | `{ gameId, expectedVersion, commandId, controllerId, step?, apiKey }` | `200` authoritative snapshot, including provider-error pauses |
 
 Ordinary AI games reuse the existing snapshot, human-move, lifecycle, replay, and PGN routes; owning a game does not authorize a human move on an AI seat. A turn's provider/model/settings always come from persisted seat configuration. Its key is used for fresh discovery and inference and never enters a receipt, reservation, or stored record. Invocation reads expose normalized provider failure codes for localization; discovery returns the same safe codes without upstream prose. Empty catalogs are successful discovery results.
 
 `409` AI errors include `AI_TURN_IN_PROGRESS`, `AI_TURN_RECOVERY_REQUIRED`, `AI_TURN_CANCELLED`, and `AI_ADAPTER_UNAVAILABLE`. `422 AI_PARAMETERS_INVALID` means the game was paused because an advertised range or enumeration no longer accepts the saved settings; no inference attempt was dispatched. AI-specific errors contain only `code` and `requestId`. Ordinary game errors retain their existing envelopes. Missing keys fail strict body validation before dispatch. Reads never pause or resume a game.
 
-See the [AI turn transport policy](architecture.md#ai-turns) for cancellation, deadlines, and uncertain outcomes, and the [provider boundary](architecture.md#ai-provider-boundary) for capability filtering. The page-memory client modules are intentionally separate from the Sandbox controller. Their owner must cancel outstanding requests, clear credentials on access loss, and perform explicit paused recovery before enabling later public controls.
+See the [AI turn transport policy](architecture.md#ai-turns) for cancellation, deadlines, and uncertain outcomes, and the [provider boundary](architecture.md#ai-provider-boundary) for capability filtering. The page-memory client modules are intentionally separate from the Sandbox controller. Their owner must cancel outstanding requests, clear credentials on access loss, and perform explicit paused recovery before enabling continuation controls.
+
+### Arena controller API
+
+`POST /games/:gameId/controller` accepts either `{ gameId, controllerId, action: "acquire", expectedVersion }` or `{ gameId, controllerId, action: "heartbeat" }` and returns the current authorized snapshot. It requires the same cookie, exact Origin, strict schema, and no-store protections as other commands. Claims and heartbeats carry no provider keys. `AI_CONTROLLER_BUSY` identifies another live controller; `AI_CONTROLLER_LOST` requires explicit paused recovery. Ordinary AI Resume requires a live `controllerId` on its lifecycle command. Recovery Pause omits that field to revoke any previous controller; it is valid even while already paused and advances the revision to fence uncertain steps.
+
+The Arena mounts AI-versus-AI setup at `/`. Start acquires control and requests one move at a time; `/?game=<uuid>` restores configuration and full history through private reads, then pauses explicitly. Re-enter both missing keys before Resume or Next move. Next move sends `step: true` to the turn route; speed selects the delay between acknowledged turns. Stop requires confirmation and persists `aborted`. Completed/stopped games reuse private replay and PGN. A Sandbox conflict links to `/sandbox?game=<uuid>` only when that development flow is enabled. AI-versus-human UI is the next PR.
+
+Presence timing and restart/competing-tab behavior are defined in [ADR-0011](decisions/0011-ai-controller-presence-and-step.md). Session-only keys disappear on refresh, close, and navigation; recovering an uncertain provider call does not guarantee that the first request was unbilled.
 
 ### OpenAI adapter
 
@@ -241,7 +249,9 @@ CI uses its own ephemeral `neurochess_test` database and runs integration tests 
 
 ## Browser tests
 
-The isolated browser-test server also serves `/__test__/setup`, mounting the Arena setup adapter with injected discovery fixtures and the real guest/game API and disposable database. It stops at a creation/return handoff and rejects AI turn execution. Run `npm run test:e2e -- test/e2e/ai-setup.spec.ts` for setup behavior and layout checks. For interactive review, run `node --conditions=development --import tsx test/e2e/server.ts` and open `http://localhost:5174/__test__/setup`; use non-secret placeholder keys only. `rejected-fixture` and `empty-fixture` exercise discovery error/empty states. Stop this server before running Playwright, which owns the same ports. This test entry is absent from normal Vite servers and production bundles; `/` retains its Arena placeholder.
+The isolated browser-test server also serves `/__test__/setup`, mounting the Arena setup adapter with injected discovery fixtures and the real guest/game API and disposable database. This isolated entry stops at a creation/return handoff; the public `/` entry exercises the complete match controller using the same test-only provider fixtures. Run `npm run test:e2e -- test/e2e/ai-setup.spec.ts` for setup behavior and layout checks. For interactive review, run `node --conditions=development --import tsx test/e2e/server.ts` and open `http://localhost:5174/__test__/setup`; use non-secret placeholder keys only. `rejected-fixture` and `empty-fixture` exercise discovery error/empty states. Stop this server before running Playwright, which owns the same ports. This test entry and all provider fixtures are absent from normal Vite servers and production bundles.
+
+On that disposable test server, `/` plays Fool's Mate with ordinary placeholder keys. `slow-fixture` delays inference, `quota-fixture` produces a provider pause, and `invalid-fixture` exhausts the three-invalid-output budget. These injected fixtures never call an external provider. Run `npm run test:e2e -- test/e2e/ai-match.spec.ts` for public controls, controller loss, competing tabs, uncertain acknowledgements, refresh/key recovery, private replay, and responsive layout.
 
 After installing dependencies, prepare Chromium and the disposable database:
 
@@ -265,6 +275,8 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 ## Migrations
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
+
+Migration `0006_ai_controller_presence.sql` adds the per-game controller UUID/expiry table and cascading foreign key. It does not rewrite existing games or Sandbox data. Stop old API writers, apply it, and restart the updated API; active ordinary AI games without a lease are then paused by the presence worker. Never expire a reservation into another provider dispatch. The [controller ADR](decisions/0011-ai-controller-presence-and-step.md) defines recovery and deployment behavior.
 
 Never edit an applied migration or use schema push as a substitute for reviewed SQL. Better Auth schema generation will feed this same migration history when authentication is implemented.
 

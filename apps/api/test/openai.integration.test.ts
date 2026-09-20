@@ -21,7 +21,13 @@ import { AI_MOVE_INSTRUCTIONS } from "../src/providers/adapter.js";
 import { createOpenAiAdapter } from "../src/providers/openai.js";
 
 import { control, turnCommand } from "./ai-turn-helpers.js";
-import { ApiHarness, type TestApi, type TestGuest, WEB_ORIGIN } from "./helpers.js";
+import {
+  ApiHarness,
+  claimController,
+  type TestApi,
+  type TestGuest,
+  WEB_ORIGIN,
+} from "./helpers.js";
 import { PROVIDER_KEY } from "./providers/adapter-contract.js";
 import { mockHttp } from "./providers/mock-http.js";
 import { openAiCatalog, openAiFixture, openAiResponse } from "./providers/openai-fixtures.js";
@@ -56,7 +62,9 @@ async function create(api: TestApi, guest: TestGuest) {
     },
   });
   expect(response.statusCode, response.body).toBe(201);
-  return gameDetailsSchema.parse(response.json()).snapshot;
+  const snapshot = gameDetailsSchema.parse(response.json()).snapshot;
+  await claimController(api, guest, snapshot);
+  return snapshot;
 }
 function turn(api: TestApi, guest: TestGuest, snapshot: GameSnapshot) {
   return post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {

@@ -1,6 +1,5 @@
 import {
   createGameRequestSchema,
-  type GameErrorCode,
   gameErrorResponseSchema,
   gameParamsSchema,
   type GamePgnResponse,
@@ -22,19 +21,8 @@ import type { z } from "zod";
 
 import { parsePosition } from "../position/position";
 
-export type ApiFailureKind = "api" | "network" | "timeout" | "malformed" | "cancelled";
-
-/** Only safe codes and validated snapshots survive the transport boundary. */
-export class ApiFailure extends Error {
-  constructor(
-    readonly kind: ApiFailureKind,
-    readonly code?: GameErrorCode,
-    readonly currentSnapshot?: GameSnapshot,
-  ) {
-    super(kind);
-    this.name = "ApiFailure";
-  }
-}
+import { ApiFailure } from "./failures";
+export { ApiFailure, type ApiFailureKind } from "./failures";
 
 export interface SandboxApi {
   ready(signal: AbortSignal): Promise<boolean>;

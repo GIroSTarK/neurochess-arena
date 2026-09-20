@@ -1,4 +1,5 @@
 import {
+  aiControllerRequestSchema,
   aiErrorResponseSchema,
   aiGameConfigurationSchema,
   aiTurnRequestSchema,
@@ -70,6 +71,27 @@ export async function registerGameRoutes(
   options: GameApiOptions,
 ): Promise<void> {
   const routes = app.withTypeProvider<ZodTypeProvider>();
+  let sweeping: Promise<void> | undefined;
+  const sweep = () => {
+    sweeping ??= options.games
+      .expireControllers()
+      .catch((error: unknown) => {
+        app.log.error({ err: error }, "Controller presence cleanup failed");
+      })
+      .finally(() => {
+        sweeping = undefined;
+      });
+  };
+  const presenceTimer = setInterval(sweep, 2_000);
+  presenceTimer.unref();
+  app.addHook("onReady", async () => {
+    sweep();
+    await sweeping;
+  });
+  app.addHook("onClose", async () => {
+    clearInterval(presenceTimer);
+    await sweeping;
+  });
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     if (request.method === "POST" && request.headers.origin !== options.webOrigin) {
@@ -115,6 +137,24 @@ export async function registerGameRoutes(
   }
 
   const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
+
+  routes.post(
+    "/games/:gameId/controller",
+    {
+      schema: {
+        params: gameParamsSchema,
+        body: aiControllerRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameSnapshotSchema, ...aiErrors },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      return options.games.controller(await principalFor(request, reply), request.body);
+    },
+  );
 
   routes.post(
     "/providers/models",
@@ -217,10 +257,16 @@ export async function registerGameRoutes(
         options.providerTimeouts?.turnMs ?? AI_TURN_TIMEOUT_MS,
       );
       try {
-        const { gameId, expectedVersion, commandId } = request.body;
+        const { gameId, expectedVersion, commandId, controllerId, step } = request.body;
         return await options.games.aiTurn(
           principal,
-          { gameId, expectedVersion, commandId },
+          {
+            gameId,
+            expectedVersion,
+            commandId,
+            controllerId,
+            ...(step === undefined ? {} : { step }),
+          },
           {
             apiKey: request.body.apiKey,
             signal: scope.signal,
@@ -289,7 +335,7 @@ export async function registerGameRoutes(
         params: gameParamsSchema,
         body: lifecycleCommandSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameSnapshotSchema, ...errorResponses },
+        response: { 200: gameSnapshotSchema, ...aiErrors },
       },
     },
     async (request, reply) => {

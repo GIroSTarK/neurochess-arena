@@ -1,5 +1,5 @@
 import {
-  aiTurnCommandSchema,
+  aiControlledTurnCommandSchema,
   gameIdSchema,
   type NormalizedMoveResponse,
 } from "@neurochess/contracts";
@@ -22,7 +22,7 @@ async function execute(message: unknown) {
   try {
     const { command, guestSessionId, invalidFirst } = z
       .strictObject({
-        command: aiTurnCommandSchema,
+        command: aiControlledTurnCommandSchema,
         guestSessionId: gameIdSchema,
         invalidFirst: z.boolean().default(false),
       })

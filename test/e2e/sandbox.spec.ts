@@ -290,7 +290,7 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Arena", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   expect(await readSnapshot(page, current.gameId)).toEqual(current);
   await activate(page.getByRole("navigation").getByRole("link", { name: "Sandbox" }), touch);
   await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();

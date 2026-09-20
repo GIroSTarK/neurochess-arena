@@ -147,6 +147,21 @@ export async function createSandbox(api: TestApi, guest: TestGuest): Promise<Gam
   return gameSnapshotSchema.parse(response.json());
 }
 
+export async function claimController(api: TestApi, guest: TestGuest, snapshot: GameSnapshot) {
+  const response = await api.app.inject({
+    method: "POST",
+    url: `/games/${snapshot.gameId}/controller`,
+    payload: {
+      gameId: snapshot.gameId,
+      controllerId: snapshot.gameId,
+      expectedVersion: snapshot.version,
+      action: "acquire",
+    },
+    headers: { origin: WEB_ORIGIN, cookie: guest.cookie },
+  });
+  expect(response.statusCode, response.body).toBe(200);
+}
+
 export async function snapshot(
   api: TestApi,
   guest: TestGuest,

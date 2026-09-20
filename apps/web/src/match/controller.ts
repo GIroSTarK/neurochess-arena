@@ -1,0 +1,613 @@
+import {
+  type AiControlledTurnCommand,
+  type ChessColor,
+  type GameDetails,
+  gameParamsSchema,
+  type GameReplayResponse,
+  type GameSnapshot,
+  type LifecycleCommand,
+  type ProviderFailure,
+  sessionApiKeySchema,
+} from "@neurochess/contracts";
+
+import { type AiApi, AiRequestFailure } from "../api/ai-client";
+import { ApiFailure } from "../api/failures";
+import { createSessionCredentials } from "../api/session-credentials";
+import { browserPgnDelivery, type PgnDelivery } from "../position/pgn";
+
+export type MatchIssue =
+  | { kind: "notice"; code: "recovered" | "uncertain" | "unavailable" | "access" }
+  | { kind: "request"; code: AiRequestFailure["code"] }
+  | { kind: "provider"; color: ChessColor; error: ProviderFailure };
+
+export interface MatchState {
+  phase: "loading" | "setup" | "ready" | "recovering" | "uncertain" | "unavailable";
+  details: GameDetails | null;
+  thinking: boolean;
+  busy: boolean;
+  keys: Record<ChessColor, boolean>;
+  keyEpoch: number;
+  speed: number;
+  issue: MatchIssue | null;
+  startedGameId: string | null;
+  replay: GameReplayResponse | null;
+  replayPly: number;
+  replayLoading: boolean;
+  replayError: boolean;
+  exportBusy: boolean;
+  exportResult: "copied" | "downloaded" | "manual" | "error" | null;
+  exportText: string | null;
+}
+
+const terminal = (snapshot: GameSnapshot) =>
+  snapshot.state === "completed" || snapshot.state === "aborted";
+const colors = ["white", "black"] as const;
+
+export class MatchController {
+  credentials: ReturnType<typeof createSessionCredentials> | null = null;
+  private lifetime: AbortController | null = null;
+  private controllerId = "";
+  private lease = false;
+  private running = false;
+  private nextTimer: ReturnType<typeof setTimeout> | undefined;
+  private heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
+  private turn: { command: AiControlledTurnCommand; abort: AbortController } | null = null;
+  private control: LifecycleCommand | null = null;
+  private readonly listeners = new Set<() => void>();
+  private state: MatchState = {
+    phase: "loading",
+    details: null,
+    thinking: false,
+    busy: false,
+    keys: { white: false, black: false },
+    keyEpoch: 0,
+    speed: 1500,
+    issue: null,
+    startedGameId: null,
+    replay: null,
+    replayPly: 0,
+    replayLoading: false,
+    replayError: false,
+    exportBusy: false,
+    exportResult: null,
+    exportText: null,
+  };
+
+  constructor(
+    readonly api: AiApi,
+    private readonly delivery: PgnDelivery = browserPgnDelivery,
+  ) {}
+  readonly getSnapshot = () => this.state;
+  readonly subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  private publish(update: Partial<MatchState>) {
+    this.state = { ...this.state, ...update };
+    this.listeners.forEach((listener) => listener());
+  }
+
+  connect() {
+    this.openLifetime();
+    window.addEventListener("pagehide", this.pagehide);
+    window.addEventListener("pageshow", this.pageshow);
+    window.addEventListener("popstate", this.navigate);
+    void this.loadUrl();
+    return () => {
+      window.removeEventListener("pagehide", this.pagehide);
+      window.removeEventListener("pageshow", this.pageshow);
+      window.removeEventListener("popstate", this.navigate);
+      this.closeLifetime();
+    };
+  }
+  private openLifetime() {
+    this.lifetime = new AbortController();
+    this.credentials = createSessionCredentials(this.lifetime.signal);
+    this.controllerId = crypto.randomUUID();
+  }
+  private stopRunning() {
+    this.running = false;
+    clearTimeout(this.nextTimer);
+  }
+  private closeLifetime() {
+    this.stopRunning();
+    clearTimeout(this.heartbeatTimer);
+    this.lease = false;
+    this.turn?.abort.abort();
+    this.turn = null;
+    this.control = null;
+    this.lifetime?.abort();
+    this.lifetime = null;
+    this.credentials = null;
+    this.publish({
+      keys: { white: false, black: false },
+      keyEpoch: this.state.keyEpoch + 1,
+      thinking: false,
+      busy: false,
+      replay: null,
+      replayLoading: false,
+      replayError: false,
+      exportText: null,
+      exportBusy: false,
+      exportResult: null,
+      startedGameId: null,
+    });
+  }
+  private readonly pagehide = () => {
+    this.closeLifetime();
+    this.publish({ phase: "loading", details: null });
+  };
+  private readonly pageshow = (event: PageTransitionEvent) => {
+    if (event.persisted) this.navigate();
+  };
+  private readonly navigate = () => {
+    this.closeLifetime();
+    this.openLifetime();
+    void this.loadUrl();
+  };
+  private live(signal: AbortSignal) {
+    return !signal.aborted && this.lifetime !== null;
+  }
+  private remember(gameId: string) {
+    window.history.replaceState(null, "", "/?game=" + gameId);
+  }
+  private async loadUrl() {
+    const id = new URL(window.location.href).searchParams.get("game");
+    if (!id) {
+      this.publish({ phase: "setup", details: null, issue: null });
+      return;
+    }
+    if (!gameParamsSchema.safeParse({ gameId: id }).success) {
+      this.publish({
+        phase: "unavailable",
+        details: null,
+        issue: { kind: "notice", code: "access" },
+      });
+      return;
+    }
+    await this.load(id);
+  }
+  async load(gameId: string) {
+    const signal = this.lifetime?.signal;
+    if (!signal || this.state.busy) return;
+    this.stopRunning();
+    this.publish({ phase: "loading", details: null, issue: null, replay: null });
+    try {
+      const details = await this.api.details(gameId, signal);
+      if (!this.live(signal)) return;
+      this.remember(details.snapshot.gameId);
+      this.publish({ details, phase: "ready" });
+      if (terminal(details.snapshot)) await this.loadReplay();
+      else if (details.configuration?.mode === "ai_vs_ai") await this.recover();
+    } catch (error) {
+      if (this.live(signal)) this.fail(error, "unavailable");
+    }
+  }
+
+  async created(details: GameDetails) {
+    if (!this.lifetime || this.state.busy) return;
+    this.remember(details.snapshot.gameId);
+    this.publish({ details, phase: "ready", startedGameId: details.snapshot.gameId, issue: null });
+    this.refreshKeys();
+    await this.continue(false, true);
+  }
+  private refreshKeys() {
+    const keys = { white: false, black: false };
+    for (const color of colors) {
+      const seat = this.state.details?.configuration?.seats[color];
+      if (seat?.type !== "ai") continue;
+      try {
+        keys[color] = Boolean(this.credentials?.require(color, seat.provider));
+      } catch {
+        /* Missing keys are expected after recovery. */
+      }
+    }
+    this.publish({ keys });
+  }
+  setKey(color: ChessColor, value: string) {
+    const seat = this.state.details?.configuration?.seats[color];
+    if (seat?.type !== "ai" || !this.credentials || this.state.thinking || this.state.busy) return;
+    this.credentials.remove(color);
+    if (sessionApiKeySchema.safeParse(value).success) {
+      this.credentials.set(color, seat.provider, value);
+    }
+    this.refreshKeys();
+  }
+  setSpeed(speed: number) {
+    if (![500, 1500, 5000].includes(speed)) return;
+    this.publish({ speed });
+    if (this.running && !this.turn) this.schedule();
+  }
+
+  private adopt(snapshot: GameSnapshot) {
+    const previous = this.state.details;
+    if (
+      snapshot.gameId !== previous?.snapshot.gameId ||
+      snapshot.version < previous.snapshot.version
+    ) {
+      return;
+    }
+    this.publish({ details: { ...previous, snapshot } });
+    if (snapshot.state !== "active") this.stopRunning();
+    if (terminal(snapshot)) {
+      clearTimeout(this.heartbeatTimer);
+      this.lease = false;
+      this.publish({ phase: "ready", issue: null });
+      void this.loadReplay();
+    }
+  }
+  private async acquire(signal: AbortSignal) {
+    const snapshot = this.snapshot();
+    const accepted = await this.api.controller(
+      {
+        gameId: snapshot.gameId,
+        controllerId: this.controllerId,
+        expectedVersion: snapshot.version,
+        action: "acquire",
+      },
+      signal,
+    );
+    if (!this.live(signal)) return false;
+    this.adopt(accepted);
+    this.lease = true;
+    this.heartbeat();
+    return true;
+  }
+  private heartbeat() {
+    clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = setTimeout(() => {
+      void this.beat();
+    }, 3000);
+  }
+  private async beat() {
+    const signal = this.lifetime?.signal;
+    const snapshot = this.state.details?.snapshot;
+    if (!signal || !snapshot || !this.lease || terminal(snapshot)) return;
+    try {
+      const accepted = await this.api.controller(
+        { gameId: snapshot.gameId, controllerId: this.controllerId, action: "heartbeat" },
+        signal,
+      );
+      if (!this.live(signal) || !this.hasLease()) return;
+      this.adopt(accepted);
+      if (this.hasLease()) this.heartbeat();
+    } catch (error) {
+      if (!this.live(signal)) return;
+      this.lease = false;
+      this.stopRunning();
+      this.fail(error);
+    }
+  }
+  async continue(step: boolean, created = false) {
+    const signal = this.lifetime?.signal;
+    const snapshot = this.state.details?.snapshot;
+    if (
+      !signal ||
+      !snapshot ||
+      this.state.busy ||
+      this.turn ||
+      this.state.phase !== "ready" ||
+      !this.state.keys.white ||
+      !this.state.keys.black ||
+      (created ? snapshot.state !== "active" : snapshot.state !== "paused")
+    ) {
+      return;
+    }
+    this.publish({ busy: true, issue: null });
+    let dispatch = false;
+    try {
+      if (!(await this.acquire(signal))) return;
+      if (!created && !step) {
+        const command: LifecycleCommand = {
+          ...this.command(),
+          action: "resume",
+          controllerId: this.controllerId,
+        };
+        this.control = command;
+        const snapshot = await this.api.lifecycle(command, signal);
+        if (!this.live(signal)) return;
+        this.adopt(snapshot);
+        this.control = null;
+      }
+      if (!this.live(signal)) return;
+      this.running = !step;
+      dispatch = true;
+    } catch (error) {
+      if (this.live(signal)) this.fail(error);
+    } finally {
+      if (this.live(signal)) this.publish({ busy: false });
+    }
+    if (dispatch && this.live(signal)) await this.executeTurn(step);
+  }
+  private command() {
+    const snapshot = this.snapshot();
+    return {
+      gameId: snapshot.gameId,
+      expectedVersion: snapshot.version,
+      commandId: crypto.randomUUID(),
+    };
+  }
+  private snapshot() {
+    const snapshot = this.state.details?.snapshot;
+    if (!snapshot) throw new ApiFailure("malformed");
+    return snapshot;
+  }
+  private hasLease() {
+    return this.lease;
+  }
+  private schedule() {
+    clearTimeout(this.nextTimer);
+    if (this.running && !this.turn && !this.state.busy && this.state.phase === "ready") {
+      this.nextTimer = setTimeout(() => {
+        void this.executeTurn(false);
+      }, this.state.speed);
+    }
+  }
+  private async executeTurn(step: boolean) {
+    const signal = this.lifetime?.signal;
+    const details = this.state.details;
+    if (
+      !signal ||
+      !details ||
+      !this.lease ||
+      this.turn ||
+      this.state.busy ||
+      this.state.phase !== "ready"
+    ) {
+      return;
+    }
+    if (details.snapshot.state !== (step ? "paused" : "active")) return;
+    const seat = details.configuration?.seats[details.snapshot.turn];
+    if (seat?.type !== "ai" || !this.credentials) return;
+    const request = {
+      command: { ...this.command(), controllerId: this.controllerId, step },
+      abort: new AbortController(),
+    };
+    this.turn = request;
+    this.publish({ thinking: true, issue: null });
+    try {
+      const accepted = await this.api.turn(
+        request.command,
+        this.credentials.require(details.snapshot.turn, seat.provider),
+        AbortSignal.any([signal, request.abort.signal]),
+      );
+      if (!this.live(signal) || this.turn !== request) return;
+      this.adopt(accepted);
+      this.turn = null;
+      this.publish({ thinking: false });
+      if (accepted.state === "paused") await this.readProviderFailure(signal);
+      this.schedule();
+    } catch (error) {
+      if (!this.live(signal) || this.turn !== request) return;
+      this.stopRunning();
+      this.publish({ thinking: false });
+      // Keep the original identity until a newer revision or a versioned pause fences it.
+      this.fail(error);
+    }
+  }
+  private async readProviderFailure(signal: AbortSignal) {
+    const snapshot = this.snapshot();
+    try {
+      const records = await this.api.invocations(snapshot.gameId, signal);
+      if (!this.live(signal) || this.state.details?.snapshot.version !== snapshot.version) return;
+      const turn = records.turns.at(-1);
+      const error = turn?.attempts.at(-1)?.error;
+      if (turn && error && error.code !== "model_invalid") {
+        this.publish({ issue: { kind: "provider", color: turn.color, error } });
+      }
+    } catch (error) {
+      if (this.live(signal)) this.accessLost(error);
+    }
+  }
+
+  async lifecycle(action: "pause" | "abort") {
+    const snapshot = this.state.details?.snapshot;
+    if (!this.lifetime || !snapshot || terminal(snapshot) || this.state.busy) return;
+    this.stopRunning();
+    this.control = {
+      ...this.command(),
+      action,
+      ...(this.lease ? { controllerId: this.controllerId } : {}),
+    };
+    await this.sendControl(false);
+  }
+  async recover() {
+    const signal = this.lifetime?.signal;
+    if (!signal || this.state.busy || !this.state.details) return;
+    this.stopRunning();
+    this.lease = false;
+    clearTimeout(this.heartbeatTimer);
+    this.publish({ phase: "recovering", busy: true });
+    try {
+      const snapshot = await this.api.snapshot(this.state.details.snapshot.gameId, signal);
+      if (!this.live(signal)) return;
+      this.adopt(snapshot);
+      if (terminal(snapshot)) {
+        this.control = null;
+        this.turn?.abort.abort();
+        this.turn = null;
+        return;
+      }
+      // An uncertain pause is retried verbatim. A conflict proves its old revision cannot commit.
+      if (this.control?.action !== "pause") this.control = { ...this.command(), action: "pause" };
+      this.publish({ busy: false });
+      await this.sendControl(true);
+    } catch (error) {
+      if (this.live(signal)) this.fail(error);
+    } finally {
+      if (this.live(signal)) this.publish({ busy: false });
+    }
+  }
+  async retryControl() {
+    if (!this.control || this.state.busy || !this.lifetime) return;
+    await this.sendControl(this.control.action === "pause" && !("controllerId" in this.control));
+  }
+  hasPendingControl() {
+    return this.control !== null;
+  }
+  private async sendControl(recovery: boolean) {
+    const signal = this.lifetime?.signal;
+    if (!signal) return;
+    this.publish({ busy: true });
+    try {
+      for (let tries = 0; tries < 3 && this.control; tries++) {
+        const command = this.control;
+        try {
+          const snapshot = await this.api.lifecycle(command, signal);
+          if (!this.live(signal)) return;
+          this.adopt(snapshot);
+          this.control =
+            recovery && "controllerId" in command && !terminal(snapshot)
+              ? { ...this.command(), action: "pause" }
+              : null;
+        } catch (error) {
+          if (!this.live(signal)) return;
+          if (!(error instanceof ApiFailure) || !error.currentSnapshot) throw error;
+          this.adopt(error.currentSnapshot);
+          if (
+            terminal(error.currentSnapshot) ||
+            (error.currentSnapshot.state === "paused" && !recovery && command.action === "pause")
+          ) {
+            this.control = null;
+          } else {
+            this.control = recovery
+              ? { ...this.command(), action: "pause" }
+              : { ...command, ...this.command() };
+          }
+        }
+      }
+      if (this.control) throw new ApiFailure("network");
+      this.turn?.abort.abort();
+      this.turn = null;
+      if (recovery) this.controllerId = crypto.randomUUID();
+      this.publish({
+        phase: "ready",
+        thinking: false,
+        issue:
+          recovery && !terminal(this.snapshot()) ? { kind: "notice", code: "recovered" } : null,
+      });
+      if (this.state.details?.snapshot.state === "paused") await this.readProviderFailure(signal);
+    } catch (error) {
+      if (this.live(signal)) this.fail(error);
+    } finally {
+      if (this.live(signal)) this.publish({ busy: false });
+    }
+  }
+  private accessLost(error: unknown) {
+    if (
+      error instanceof ApiFailure &&
+      ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "")
+    ) {
+      this.closeLifetime();
+      this.publish({
+        phase: "unavailable",
+        details: null,
+        issue: { kind: "notice", code: "access" },
+      });
+      return true;
+    }
+    return false;
+  }
+  private fail(error: unknown, phase: "uncertain" | "unavailable" = "uncertain") {
+    this.stopRunning();
+    this.lease = false;
+    clearTimeout(this.heartbeatTimer);
+    if (this.accessLost(error)) return;
+    if (error instanceof ApiFailure && error.currentSnapshot) {
+      this.adopt(error.currentSnapshot);
+      if (terminal(error.currentSnapshot)) {
+        this.turn?.abort.abort();
+        this.turn = null;
+        this.control = null;
+        this.publish({ phase: "ready", thinking: false, issue: null });
+        return;
+      }
+    }
+    this.publish({
+      phase,
+      issue:
+        error instanceof AiRequestFailure
+          ? { kind: "request", code: error.code }
+          : { kind: "notice", code: phase },
+    });
+  }
+
+  async loadReplay() {
+    const signal = this.lifetime?.signal;
+    const snapshot = this.state.details?.snapshot;
+    if (
+      !signal ||
+      !snapshot ||
+      !terminal(snapshot) ||
+      this.state.replayLoading ||
+      this.state.replay
+    ) {
+      return;
+    }
+    this.publish({ replayLoading: true, replayError: false });
+    try {
+      const replay = await this.api.replay(snapshot.gameId, signal);
+      if (
+        !this.live(signal) ||
+        this.state.details?.snapshot.gameId !== snapshot.gameId ||
+        this.state.details.snapshot.version !== snapshot.version
+      ) {
+        return;
+      }
+      if (replay.snapshot.version !== snapshot.version || replay.snapshot.pgn !== snapshot.pgn) {
+        throw new ApiFailure("malformed");
+      }
+      this.publish({ replay, replayPly: snapshot.moves.length });
+    } catch (error) {
+      if (this.live(signal) && !this.accessLost(error)) this.publish({ replayError: true });
+    } finally {
+      if (this.live(signal)) this.publish({ replayLoading: false });
+    }
+  }
+  selectPly(ply: number) {
+    if (
+      this.state.replay &&
+      Number.isInteger(ply) &&
+      ply >= 0 &&
+      ply <= this.state.replay.snapshot.moves.length
+    ) {
+      this.publish({ replayPly: ply });
+    }
+  }
+  async exportPgn(kind: "copy" | "download") {
+    const signal = this.lifetime?.signal;
+    const snapshot = this.state.details?.snapshot;
+    if (!signal || !snapshot || !terminal(snapshot) || this.state.exportBusy) return;
+    this.publish({ exportBusy: true, exportResult: null, exportText: null });
+    try {
+      const response = await this.api.pgn(snapshot.gameId, signal);
+      if (!this.live(signal)) return;
+      if (response.version !== snapshot.version || response.pgn !== snapshot.pgn) {
+        throw new ApiFailure("malformed");
+      }
+      const result =
+        kind === "copy"
+          ? (await this.delivery.copy(response.pgn))
+            ? "copied"
+            : "manual"
+          : "downloaded";
+      if (!this.live(signal)) return;
+      if (kind === "download") this.delivery.download(response.pgn, snapshot.gameId);
+      this.publish({ exportResult: result, exportText: result === "manual" ? response.pgn : null });
+    } catch (error) {
+      if (this.live(signal) && !this.accessLost(error)) this.publish({ exportResult: "error" });
+    } finally {
+      if (this.live(signal)) this.publish({ exportBusy: false });
+    }
+  }
+  newGame() {
+    if (this.state.details && !terminal(this.state.details.snapshot)) return;
+    window.history.replaceState(null, "", "/");
+    this.navigate();
+  }
+  retryLoad() {
+    this.navigate();
+  }
+}

@@ -91,7 +91,7 @@ If a participant disconnects, the game remains available for reconnection withou
 
 The [local development sandbox](architecture.md#local-development-sandbox) is a development/test-only flow outside the three public game modes. One guest controls both colors; only explicit Start bootstraps a guest.
 
-Arena is the default page at `/`, showing an explanatory placeholder until the AI modes are available. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox?game=<uuid>`.
+Arena is the default page at `/`, with AI-versus-AI setup, observation, and private game recovery at `/?game=<uuid>`. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox?game=<uuid>`.
 
 - Pause and Resume preserve the position and history. Abort stops play without awarding a win or loss. Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.

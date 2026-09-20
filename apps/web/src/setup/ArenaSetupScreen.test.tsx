@@ -79,6 +79,52 @@ async function selectModel(color: "White" | "Black") {
 }
 
 describe("Arena setup presentation and validated API handoff", () => {
+  it("disables empty key reveal independently of key validity and resets masking when cleared", async () => {
+    const { fetch } = fixture();
+    const user = userEvent.setup();
+    const white = within(screen.getByRole("group", { name: "White" }));
+    const black = within(screen.getByRole("group", { name: "Black" }));
+    await waitFor(() =>
+      expect(white.getByLabelText("Provider")).toHaveAttribute("aria-disabled", "false"),
+    );
+    const input = white.getByLabelText("API key");
+    const show = white.getByRole("button", { name: "Show key" });
+    expect(show).toHaveAttribute("aria-disabled", "true");
+    await user.click(input);
+    await user.tab();
+    expect(show).toHaveFocus();
+    await user.keyboard("{Enter} ");
+    expect(input).toHaveAttribute("type", "password");
+    expect(show).toHaveAttribute("aria-pressed", "false");
+    await user.type(input, "invalid key with spaces");
+    expect(show).toHaveAttribute("aria-disabled", "false");
+    expect(white.getByRole("button", { name: "Load models" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(black.getByRole("button", { name: "Show key" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.click(show);
+    expect(input).toHaveAttribute("type", "text");
+    await user.clear(input);
+    expect(input).toHaveAttribute("type", "password");
+    expect(white.getByRole("button", { name: "Show key" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.type(input, "replacement-key");
+    expect(input).toHaveAttribute("type", "password");
+    expect(show).toHaveAttribute("aria-disabled", "false");
+    await user.selectOptions(white.getByLabelText("Provider"), "google");
+    expect(white.getByRole("button", { name: "Show key" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(fetch.mock.calls.every(([url]) => requestPath(url) === "/games/unfinished")).toBe(true);
+  });
+
   it("supports independent keyboard selection, bounded parameters, and key-free creation", async () => {
     const { onCreated, fetch, credentials } = fixture();
     expect(fetch.mock.calls.every(([url]) => requestPath(url) === "/games/unfinished")).toBe(true);

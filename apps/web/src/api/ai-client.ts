@@ -1,28 +1,36 @@
 import {
+  type AiControlledTurnCommand,
+  type AiControllerRequest,
+  aiControllerRequestSchema,
   aiErrorResponseSchema,
   type AiGameConfiguration,
   aiGameConfigurationSchema,
   type AiRequestErrorCode,
-  type AiTurnCommand,
   aiTurnRequestSchema,
   type GameDetails,
   gameDetailsSchema,
   type GameInvocations,
   gameInvocationsSchema,
   gameParamsSchema,
+  gamePgnResponseSchema,
+  gameReplayResponseSchema,
   type GameSnapshot,
   gameSnapshotSchema,
+  guestSessionResponseSchema,
+  lifecycleCommandSchema,
   type ModelDiscoveryRequest,
   modelDiscoveryRequestSchema,
   type ModelDiscoveryResult,
   modelDiscoveryResultSchema,
+  moveCommandSchema,
   unfinishedGameDetailsSchema,
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
 import { parsePosition } from "../position/position";
 
-import { ApiFailure, createSandboxApi, type SandboxApi } from "./client";
+import type { SandboxApi } from "./client";
+import { ApiFailure } from "./failures";
 
 export class AiRequestFailure extends Error {
   constructor(readonly code: AiRequestErrorCode | "AI_KEY_REQUIRED") {
@@ -40,7 +48,12 @@ export interface AiApi extends Pick<
   details(gameId: string, signal: AbortSignal): Promise<GameDetails>;
   unfinished(signal: AbortSignal): Promise<GameDetails | null>;
   invocations(gameId: string, signal: AbortSignal): Promise<GameInvocations>;
-  turn(command: AiTurnCommand, apiKey: string, signal: AbortSignal): Promise<GameSnapshot>;
+  controller(command: AiControllerRequest, signal: AbortSignal): Promise<GameSnapshot>;
+  turn(
+    command: AiControlledTurnCommand,
+    apiKey: string,
+    signal: AbortSignal,
+  ): Promise<GameSnapshot>;
 }
 
 function validated<T>(schema: z.ZodType<T>, input: unknown): T {
@@ -77,7 +90,6 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
     throw new ApiFailure("malformed");
   }
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-  const common = createSandboxApi(apiBaseUrl, options);
 
   async function request<T>(
     path: string,
@@ -142,12 +154,84 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
   }
 
   return {
-    bootstrap: (signal) => common.bootstrap(signal),
-    snapshot: (gameId, signal) => common.snapshot(gameId, signal),
-    move: (command, signal) => common.move(command, signal),
-    lifecycle: (command, signal) => common.lifecycle(command, signal),
-    replay: (gameId, signal) => common.replay(gameId, signal),
-    pgn: (gameId, signal) => common.pgn(gameId, signal),
+    async bootstrap(signal) {
+      await request("/guest-session", guestSessionResponseSchema, signal, {});
+    },
+    async snapshot(gameId, signal) {
+      return snapshotFor(
+        await request(gamePath(gameId), gameSnapshotSchema, signal, undefined, 10_000, gameId),
+        gameId,
+      );
+    },
+    async move(command, signal) {
+      return snapshotFor(
+        await request(
+          gamePath(command.gameId) + "/moves",
+          gameSnapshotSchema,
+          signal,
+          validated(moveCommandSchema, command),
+          10_000,
+          command.gameId,
+        ),
+        command.gameId,
+      );
+    },
+    async lifecycle(command, signal) {
+      return snapshotFor(
+        await request(
+          gamePath(command.gameId) + "/lifecycle",
+          gameSnapshotSchema,
+          signal,
+          validated(lifecycleCommandSchema, command),
+          10_000,
+          command.gameId,
+        ),
+        command.gameId,
+      );
+    },
+    async controller(command, signal) {
+      return snapshotFor(
+        await request(
+          gamePath(command.gameId) + "/controller",
+          gameSnapshotSchema,
+          signal,
+          validated(aiControllerRequestSchema, command),
+          10_000,
+          command.gameId,
+        ),
+        command.gameId,
+      );
+    },
+    async replay(gameId, signal) {
+      const replay = await request(
+        gamePath(gameId) + "/replay",
+        gameReplayResponseSchema,
+        signal,
+        undefined,
+        10_000,
+        gameId,
+      );
+      snapshotFor(replay.snapshot, gameId);
+      if (
+        !parsePosition(replay.initialFen) ||
+        replay.snapshot.moves.some((move) => !parsePosition(move.fen))
+      ) {
+        throw new ApiFailure("malformed");
+      }
+      return replay;
+    },
+    async pgn(gameId, signal) {
+      const result = await request(
+        gamePath(gameId) + "/pgn",
+        gamePgnResponseSchema,
+        signal,
+        undefined,
+        10_000,
+        gameId,
+      );
+      if (result.gameId !== gameId.toLowerCase()) throw new ApiFailure("malformed");
+      return result;
+    },
     discover: async (input, signal) =>
       request(
         "/providers/models",

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  AiControlledTurnCommand,
   AiGameConfiguration,
   AiProvider,
   AiSeat,
-  AiTurnCommand,
   GameSnapshot,
   NormalizedMoveResponse,
 } from "@neurochess/contracts";
@@ -39,21 +39,45 @@ export const humanMatch: AiGameConfiguration = {
 };
 
 export function service(api: TestApi, aiAdapters: AiAdapters = {}, repository = api.repository) {
-  return createGameService(repository, {
+  const games = createGameService(repository, {
     nodeEnv: "test",
     sandboxEnabled: true,
     aiAdapters: Object.fromEntries(
       Object.entries(aiAdapters).map(([provider, adapter]) => [provider, withTurnCatalog(adapter)]),
     ),
   });
+  return {
+    ...games,
+    async createAi(...args: Parameters<typeof games.createAi>) {
+      const details = await games.createAi(...args);
+      await games.controller(args[0], {
+        gameId: details.snapshot.gameId,
+        controllerId: details.snapshot.gameId,
+        expectedVersion: details.snapshot.version,
+        action: "acquire",
+      });
+      return details;
+    },
+  };
 }
 
-export function turnCommand(snapshot: GameSnapshot): AiTurnCommand {
-  return { gameId: snapshot.gameId, expectedVersion: snapshot.version, commandId: randomUUID() };
+export function turnCommand(snapshot: GameSnapshot): AiControlledTurnCommand {
+  return {
+    gameId: snapshot.gameId,
+    expectedVersion: snapshot.version,
+    commandId: randomUUID(),
+    controllerId: snapshot.gameId,
+  };
 }
 
 export function control(snapshot: GameSnapshot, action: "pause" | "resume" | "abort") {
-  return { ...turnCommand(snapshot), action };
+  return {
+    gameId: snapshot.gameId,
+    expectedVersion: snapshot.version,
+    commandId: randomUUID(),
+    controllerId: snapshot.gameId,
+    action,
+  };
 }
 
 export function access(signal = new AbortController().signal) {

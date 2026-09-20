@@ -17,6 +17,7 @@ const configuration: AiGameConfiguration = {
   },
 };
 const command = {
+  controllerId: GAME_ID,
   gameId: GAME_ID,
   expectedVersion: 0,
   commandId: "303387c5-ff88-4f4c-89ae-db748b55b04a",

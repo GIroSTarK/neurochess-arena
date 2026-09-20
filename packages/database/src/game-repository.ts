@@ -1,7 +1,8 @@
-import { and, asc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
 import {
+  aiControllers,
   aiTurnReservations,
   aiTurns,
   gameCommands,
@@ -65,6 +66,12 @@ export interface GameReader {
 }
 
 export interface GameTransaction extends GameReader {
+  getAiController(
+    gameId: string,
+  ): Promise<{ controllerId: string | null; expired: boolean } | undefined>;
+  setAiController(gameId: string, controllerId: string | null, leaseMs: number): Promise<void>;
+  renewAiController(gameId: string, controllerId: string, leaseMs: number): Promise<boolean>;
+  clearAiController(gameId: string): Promise<void>;
   lockGuest(id: string): Promise<StoredGuestSession | undefined>;
   lockGame(id: string): Promise<StoredGame | undefined>;
   hasCommand(gameId: string, commandId: string): Promise<boolean>;
@@ -93,6 +100,7 @@ export interface GameTransaction extends GameReader {
 }
 
 export interface GameRepository {
+  expiredAiControllers(): Promise<{ gameId: string; guestId: string }[]>;
   createGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession>;
   renewGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession | undefined>;
   read<T>(action: (reader: GameReader) => Promise<T>): Promise<T>;
@@ -154,6 +162,22 @@ function readerFor(db: Executor): GameReader {
 export function createGameRepository(connection: DatabaseConnection): GameRepository {
   const { db } = connection;
   return {
+    expiredAiControllers: () =>
+      db
+        .select({ gameId: games.id, guestId: games.ownerGuestSessionId })
+        .from(games)
+        .leftJoin(aiControllers, eq(aiControllers.gameId, games.id))
+        .where(
+          and(
+            inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
+            or(
+              lte(aiControllers.expiresAt, sql`clock_timestamp()`),
+              and(eq(games.state, "active"), isNull(aiControllers.gameId)),
+            ),
+          ),
+        )
+        .orderBy(asc(games.updatedAt))
+        .limit(100),
     async createGuest(tokenHash, ttlSeconds) {
       const [guest] = await db
         .insert(guestSessions)
@@ -192,6 +216,45 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            async getAiController(gameId) {
+              const [lease] = await tx
+                .select({
+                  controllerId: aiControllers.controllerId,
+                  expired: sql<boolean>`${aiControllers.expiresAt} <= clock_timestamp()`,
+                })
+                .from(aiControllers)
+                .where(eq(aiControllers.gameId, gameId));
+              return lease;
+            },
+            async setAiController(gameId, controllerId, leaseMs) {
+              const expiresAt = sql`clock_timestamp() + ${leaseMs} * interval '1 millisecond'`;
+              await tx
+                .insert(aiControllers)
+                .values({ gameId, controllerId, expiresAt })
+                .onConflictDoUpdate({
+                  target: aiControllers.gameId,
+                  set: { controllerId, expiresAt },
+                });
+            },
+            async renewAiController(gameId, controllerId, leaseMs) {
+              const rows = await tx
+                .update(aiControllers)
+                .set({
+                  expiresAt: sql`clock_timestamp() + ${leaseMs} * interval '1 millisecond'`,
+                })
+                .where(
+                  and(
+                    eq(aiControllers.gameId, gameId),
+                    eq(aiControllers.controllerId, controllerId),
+                    gt(aiControllers.expiresAt, sql`clock_timestamp()`),
+                  ),
+                )
+                .returning({ gameId: aiControllers.gameId });
+              return rows.length === 1;
+            },
+            async clearAiController(gameId) {
+              await tx.delete(aiControllers).where(eq(aiControllers.gameId, gameId));
+            },
             async lockGuest(id) {
               await tx
                 .select({ id: guestSessions.id })

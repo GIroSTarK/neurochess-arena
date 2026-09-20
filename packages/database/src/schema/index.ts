@@ -220,6 +220,18 @@ export const gameCommands = pgTable(
   ],
 );
 
+export const aiControllers = pgTable(
+  "ai_controllers",
+  {
+    gameId: uuid("game_id")
+      .primaryKey()
+      .references(() => games.id, { onDelete: "cascade" }),
+    controllerId: uuid("controller_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("ai_controllers_expiry_idx").on(table.expiresAt)],
+);
+
 export const aiTurnReservations = pgTable(
   "ai_turn_reservations",
   {

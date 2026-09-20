@@ -22,7 +22,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createLoggerOptions } from "../src/logger.js";
 
 import { aiMatch, control, output, turnCommand } from "./ai-turn-helpers.js";
-import { ApiHarness, createSandbox, type TestApi, type TestGuest, WEB_ORIGIN } from "./helpers.js";
+import {
+  ApiHarness,
+  claimController,
+  command,
+  createSandbox,
+  type TestApi,
+  type TestGuest,
+  WEB_ORIGIN,
+} from "./helpers.js";
 import { createScriptedAdapter } from "./providers/scripted-adapter.js";
 import { turnCatalog } from "./providers/turn-catalog.js";
 
@@ -49,7 +57,9 @@ function get(api: TestApi, guest: TestGuest, url: string) {
 async function create(api: TestApi, guest: TestGuest, config = configuration) {
   const response = await post(api, guest, "/games", config);
   expect(response.statusCode, response.body).toBe(201);
-  return gameDetailsSchema.parse(response.json());
+  const details = gameDetailsSchema.parse(response.json());
+  await claimController(api, guest, details.snapshot);
+  return details;
 }
 
 describe("protected discovery and ordinary AI HTTP operations", () => {
@@ -599,16 +609,14 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
       seats: { white: { type: "human" }, black: aiMatch.seats.black },
     });
     const moved = await post(api, guest, `/games/${game.snapshot.gameId}/moves`, {
-      ...turnCommand(game.snapshot),
-      move: "e2e4",
+      ...command(game.snapshot, "e2e4"),
     });
     expect(moved.statusCode).toBe(200);
     const next = gameSnapshotSchema.parse(moved.json());
     expect(
       (
         await post(api, guest, `/games/${next.gameId}/moves`, {
-          ...turnCommand(next),
-          move: "e7e5",
+          ...command(next, "e7e5"),
         })
       ).statusCode,
     ).toBe(403);

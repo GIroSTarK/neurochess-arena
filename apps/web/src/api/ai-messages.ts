@@ -10,6 +10,8 @@ const requestKeys = {
   AI_ADAPTER_UNAVAILABLE: "provider.adapterUnavailable",
   AI_PARAMETERS_INVALID: "provider.invalidParameters",
   AI_KEY_REQUIRED: "provider.keyRequired",
+  AI_CONTROLLER_LOST: "match.controllerLost",
+  AI_CONTROLLER_BUSY: "match.controllerBusy",
 } as const;
 
 const providerKeys = {

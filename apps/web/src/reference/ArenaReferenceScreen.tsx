@@ -16,6 +16,7 @@ import { ReplayControls } from "../arena/panels/ReplayControls";
 import { Chessboard } from "../board/Chessboard";
 import { standardPositionPreview } from "../position/preview";
 import { replayView } from "../position/replay";
+import { Select } from "../ui/Select";
 
 import { ReferencePanels } from "./ReferencePanels";
 import { createReferenceGame, type ReferenceScenario, referenceScenarios } from "./scenarios";
@@ -27,8 +28,6 @@ export function ArenaReferenceScreen() {
   const [replay, setReplay] = useState(false);
   const scenario = scenarios.find((scenario) => scenario.id === scenarioId);
   if (!scenario) return null;
-  const selectClass =
-    "min-h-target min-w-0 w-full rounded-control border border-control-border bg-surface px-3 py-2 text-body text-text";
 
   return (
     <AppShell
@@ -48,8 +47,7 @@ export function ArenaReferenceScreen() {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="grid min-w-0 gap-2 text-label">
             {t("reference.scenario")}
-            <select
-              className={selectClass}
+            <Select
               value={scenario.id}
               onChange={(event) => {
                 const selected = scenarios.find((scenario) => scenario.id === event.target.value);
@@ -61,18 +59,17 @@ export function ArenaReferenceScreen() {
                   {scenario.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="grid min-w-0 gap-2 text-label">
             {t("reference.state")}
-            <select
-              className={selectClass}
+            <Select
               value={replay ? "replay" : "live"}
               onChange={(event) => setReplay(event.target.value === "replay")}
             >
               <option value="live">{t("reference.live")}</option>
               <option value="replay">{t("reference.replay")}</option>
-            </select>
+            </Select>
           </label>
         </div>
       </section>

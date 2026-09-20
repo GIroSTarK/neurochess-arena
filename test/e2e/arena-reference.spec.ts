@@ -4,6 +4,7 @@ import { createReferenceGame } from "../../apps/web/src/reference/scenarios";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { activate, expect, startSandbox, test } from "./fixtures";
+import { expectSelectArrowSpacing } from "./select-controls";
 
 for (const scenario of [
   { id: "humanHuman", models: 0, human: "White" },
@@ -21,6 +22,8 @@ for (const scenario of [
     await page.goto("/dev/arena");
     await expect(page).toHaveTitle("Arena test scenarios · Neurochess Arena");
     await expect(page.getByRole("region", { name: "Test data" })).toBeVisible();
+    await expectSelectArrowSpacing(page.getByLabel("Test scenario"));
+    await expectSelectArrowSpacing(page.getByLabel("Reference state"));
     await page.getByLabel("Test scenario").selectOption(scenario.id);
     await expect(page.locator("vite-error-overlay")).toHaveCount(0);
     const board = page.getByRole("grid", { name: "Chessboard" });

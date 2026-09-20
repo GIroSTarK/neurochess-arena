@@ -7,6 +7,7 @@ export {
   moves,
   gameCommands,
   aiTurnReservations,
+  aiControllers,
   aiTurns,
   modelInvocations,
   type StoredAiParameters,

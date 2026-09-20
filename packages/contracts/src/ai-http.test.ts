@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aiControllerRequestSchema,
   aiGameConfigurationSchema,
   aiTurnCommandSchema,
   aiTurnRequestSchema,
@@ -8,12 +9,32 @@ import {
 } from "./index.js";
 
 const command = {
+  controllerId: "4096aa18-cec3-4fb5-bbb0-fb8ac82970ff",
   gameId: "4096aa18-cec3-4fb5-bbb0-fb8ac82970ff",
   commandId: "978ecc09-1ae0-4d7b-b3f5-b0a35a3ad6da",
   expectedVersion: 0,
 };
 
 describe("session-only HTTP credential contracts", () => {
+  it("validates controller actions without accepting credentials or client-defined expiry", () => {
+    const acquire = {
+      gameId: command.gameId,
+      controllerId: command.controllerId,
+      expectedVersion: 0,
+      action: "acquire",
+    };
+    expect(aiControllerRequestSchema.parse(acquire)).toEqual(acquire);
+    for (const extra of [{ apiKey: "sentinel" }, { expiresAt: "2099-01-01" }, { takeover: true }]) {
+      expect(aiControllerRequestSchema.safeParse({ ...acquire, ...extra }).success).toBe(false);
+    }
+    expect(
+      aiTurnRequestSchema.safeParse({ ...command, controllerId: undefined, apiKey: "sentinel" })
+        .success,
+    ).toBe(false);
+    expect(
+      aiTurnRequestSchema.safeParse({ ...command, step: "true", apiKey: "sentinel" }).success,
+    ).toBe(false);
+  });
   it("keeps the credential outside the durable command", () => {
     expect(aiTurnRequestSchema.parse({ ...command, apiKey: "key-sentinel" })).toMatchObject(
       command,

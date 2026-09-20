@@ -43,6 +43,13 @@
       "when": 1789391258540,
       "tag": "0005_ai_invocation_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789916288133,
+      "tag": "0006_ai_controller_presence",
+      "breakpoints": true
     }
   ]
 }
