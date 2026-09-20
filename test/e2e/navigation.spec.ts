@@ -105,7 +105,9 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
     await route.continue();
   });
 
+  const unfinishedRequest = page.waitForRequest(API_ORIGIN + "/games/unfinished");
   await page.goto("/");
+  await unfinishedRequest;
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   expect(sandboxRequested).toBe(false);
   await page.getByRole("link", { name: "Sandbox", exact: true }).click();
