@@ -306,6 +306,8 @@ After refresh, an AI game is restored as paused and requires explicit resume. Se
 
 The AI client's credential store is a page-owned closure with independent color/provider entries. Replacement, explicit clearing, owner cancellation, and `pagehide` remove entries; even a page restored from the browser's back/forward cache requires re-entry. It exposes no serializable credential state and uses no browser persistence. Configuration and command receipts never contain credentials; the HTTP turn body adds a key only for that operation. Client destinations require HTTPS except for local development on `localhost`. Loading or constructing the client never bootstraps a guest.
 
+The independent setup adapter in `apps/web/src/setup` consumes that client and a page-owned credential store. It reads unfinished-game discovery on mount; only explicit Load models or Start actions may bootstrap a guest. Each seat cancels and discards obsolete discovery on key/provider changes, clears model/parameter selections before refreshing capabilities, and submits only supported, valid parameters. Reusable `arena/setup` controls receive data and callbacks, without importing API clients or mode controllers. Creation hands private game details to the page owner, which retains the credential lifetime; Return to game hands over only the authorized game ID. Neither callback starts turns or performs recovery. An uncertain creation response requires explicit unfinished-game discovery before another creation attempt. Public routing and controller integration remain gated by the [Phase 2 plan](phase-2-plan.md#p2-10--ai-versus-ai-controller-controls-and-recovery).
+
 ### Saved credential
 
 1. Only an authenticated user may opt in to saving a key.
