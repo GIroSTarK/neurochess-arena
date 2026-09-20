@@ -241,6 +241,8 @@ CI uses its own ephemeral `neurochess_test` database and runs integration tests 
 
 ## Browser tests
 
+The isolated browser-test server also serves `/__test__/setup`, mounting the Arena setup adapter with injected discovery fixtures and the real guest/game API and disposable database. It stops at a creation/return handoff and rejects AI turn execution. Run `npm run test:e2e -- test/e2e/ai-setup.spec.ts` for setup behavior and layout checks. For interactive review, run `node --conditions=development --import tsx test/e2e/server.ts` and open `http://localhost:5174/__test__/setup`; use non-secret placeholder keys only. `rejected-fixture` and `empty-fixture` exercise discovery error/empty states. Stop this server before running Playwright, which owns the same ports. This test entry is absent from normal Vite servers and production bundles; `/` retains its Arena placeholder.
+
 After installing dependencies, prepare Chromium and the disposable database:
 
 ```text

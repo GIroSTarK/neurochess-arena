@@ -1,0 +1,241 @@
+import { aiGameConfigurationSchema, modelDiscoveryRequestSchema } from "@neurochess/contracts";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { createAiApi } from "../api/ai-client";
+import { createSessionCredentials } from "../api/session-credentials";
+import { deferred, setupModels } from "../test/ai-setup";
+import {
+  errorResponse,
+  GAME_ID,
+  jsonResponse,
+  requestBody,
+  requestPath,
+  snapshot,
+} from "../test/fixtures";
+import { renderLocalized } from "../test/render";
+
+import { ArenaSetupScreen } from "./ArenaSetupScreen";
+
+const cleanup: (() => void)[] = [];
+afterEach(() => cleanup.splice(0).forEach((dispose) => dispose()));
+
+function fixture() {
+  const lifetime = new AbortController();
+  const credentials = createSessionCredentials(lifetime.signal);
+  cleanup.push(() => lifetime.abort());
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input, init) => {
+    const path = requestPath(input);
+    if (path === "/games/unfinished") return jsonResponse({ game: null });
+    if (path === "/guest-session") return jsonResponse({ status: "ready" });
+    if (path === "/providers/models") {
+      const body = modelDiscoveryRequestSchema.parse(JSON.parse(requestBody(init)));
+      return jsonResponse({ ok: true, models: setupModels(body.provider) });
+    }
+    if (path === "/games") {
+      return jsonResponse(
+        {
+          snapshot: snapshot(),
+          configuration: aiGameConfigurationSchema.parse(JSON.parse(requestBody(init))),
+        },
+        201,
+      );
+    }
+    throw new Error("Unexpected test request");
+  });
+  const onCreated = vi.fn();
+  const onReturnToGame = vi.fn();
+  const view = renderLocalized(
+    <StrictMode>
+      <ArenaSetupScreen
+        api={createAiApi("https://api.example.test", { fetch })}
+        credentials={credentials}
+        sandboxEnabled
+        onCreated={onCreated}
+        onReturnToGame={onReturnToGame}
+      />
+    </StrictMode>,
+  );
+  return { ...view, credentials, fetch, onCreated, onReturnToGame };
+}
+
+async function selectModel(color: "White" | "Black") {
+  const user = userEvent.setup();
+  const seat = within(screen.getByRole("group", { name: color }));
+  await waitFor(() =>
+    expect(seat.getByLabelText("Provider")).toHaveAttribute("aria-disabled", "false"),
+  );
+  await user.selectOptions(seat.getByLabelText("Provider"), "openai");
+  await user.type(seat.getByLabelText("API key"), `${color}-key-sentinel`);
+  await user.click(seat.getByRole("button", { name: "Load models" }));
+  await seat.findByText("Models loaded. Choose a model to continue.");
+  const model = seat.getByRole("combobox", { name: "Model" });
+  await user.click(model);
+  await user.type(model, "model-a");
+  await user.keyboard("{ArrowDown}{Enter}");
+  return { user, seat, model };
+}
+
+describe("Arena setup presentation and validated API handoff", () => {
+  it("supports independent keyboard selection, bounded parameters, and key-free creation", async () => {
+    const { onCreated, fetch, credentials } = fixture();
+    expect(fetch.mock.calls.every(([url]) => requestPath(url) === "/games/unfinished")).toBe(true);
+    const { user, seat: white } = await selectModel("White");
+    await user.click(white.getByText("Advanced parameters"));
+    await user.type(white.getByLabelText("Temperature"), "0.3");
+    const { seat: black } = await selectModel("Black");
+    await user.click(black.getByText("Advanced parameters"));
+    await user.selectOptions(black.getByLabelText("Reasoning effort"), "high");
+    expect(black.getByLabelText("Temperature")).toHaveValue("");
+    const start = screen.getByRole("button", { name: "Start game" });
+    expect(start).toHaveAttribute("aria-disabled", "false");
+    await user.click(start);
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(onCreated.mock.calls[0]?.[0]).toMatchObject({
+      configuration: {
+        mode: "ai_vs_ai",
+        seats: {
+          white: { parameters: { temperature: 0.3 } },
+          black: { parameters: { reasoningEffort: "high" } },
+        },
+      },
+    });
+    expect(JSON.stringify(onCreated.mock.calls)).not.toContain("sentinel");
+    expect(credentials.require("white", "openai")).toBe("White-key-sentinel");
+    expect(credentials.require("black", "openai")).toBe("Black-key-sentinel");
+    for (const [input, init] of fetch.mock.calls) {
+      expect(input instanceof Request ? input.url : input.toString()).not.toContain("sentinel");
+      if (requestPath(input) !== "/providers/models") {
+        expect(requestBody(init)).not.toContain("sentinel");
+      }
+    }
+    expect(
+      JSON.stringify({ local: localStorage, session: sessionStorage, name: window.name }),
+    ).not.toContain("sentinel");
+  });
+
+  it("keeps parameter errors accessible, filters unsupported controls, and gates Start", async () => {
+    fixture();
+    const { user, seat, model } = await selectModel("White");
+    await selectModel("Black");
+    await user.click(seat.getByText("Advanced parameters"));
+    const tokens = seat.getByLabelText("Maximum output tokens");
+    await user.type(tokens, "3");
+    await user.tab();
+    expect(tokens).toHaveAttribute("aria-invalid", "true");
+    expect(tokens).toHaveAccessibleDescription("Enter a valid value from 16 to 4096.");
+    expect(screen.getByRole("button", { name: "Start game" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.click(model);
+    await user.type(model, "unknown");
+    await user.keyboard("{Enter}");
+    expect(seat.queryByLabelText("Temperature")).not.toBeInTheDocument();
+    expect(seat.getByText(/Move support is unknown/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start game" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await user.click(model);
+    await user.type(model, "unsupported");
+    await user.keyboard("{Escape}");
+    expect(model).toHaveValue("Unknown model (test fixture)");
+    expect(model).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    await user.type(model, "unsupported");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Start game" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("masks keys and clears DOM values, catalogs and readiness on provider change and pagehide", async () => {
+    const { credentials } = fixture();
+    const { user, seat } = await selectModel("White");
+    expect(seat.getByLabelText("API key")).toHaveAttribute("type", "password");
+    await user.click(seat.getByRole("button", { name: "Show key" }));
+    expect(seat.getByLabelText("API key")).toHaveAttribute("type", "text");
+    await user.selectOptions(seat.getByLabelText("Provider"), "google");
+    expect(seat.getByLabelText("API key")).toHaveValue("");
+    expect(seat.getByLabelText("API key")).toHaveAttribute("type", "password");
+    expect(() => credentials.require("white", "openai")).toThrow();
+    await user.type(seat.getByLabelText("API key"), "replacement-key");
+    fireEvent(window, new Event("pagehide"));
+    expect(seat.getByLabelText("API key")).toHaveValue("");
+    expect(() => credentials.require("white", "google")).toThrow();
+  });
+
+  it("shows loading, empty, invalid-key, unavailable and no-match guidance without raw errors", async () => {
+    const { fetch } = fixture();
+    const { user, seat, model } = await selectModel("White");
+    await user.click(model);
+    await user.type(model, "no-such-model");
+    expect(seat.getByText(/No matching models/)).toBeVisible();
+    await user.keyboard("{Escape}");
+    const pending = deferred<Response>();
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
+      .mockReturnValueOnce(pending.promise);
+    await user.click(seat.getByRole("button", { name: "Refresh models" }));
+    expect(seat.getByRole("button", { name: "Loading models…" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    pending.resolve(jsonResponse({ ok: true, models: [] }));
+    await seat.findByText(/No models are available/);
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: { code: "provider_auth" } }));
+    await user.click(seat.getByRole("button", { name: "Refresh models" }));
+    await seat.findByText(/This key was rejected/);
+    expect(seat.getByLabelText("API key")).toHaveAttribute("aria-invalid", "true");
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: false, rawError: "never-show-this" }));
+    await user.click(seat.getByRole("button", { name: "Load models" }));
+    await seat.findByText(/Setup could not be loaded/);
+    expect(screen.queryByText(/never-show-this/)).not.toBeInTheDocument();
+  });
+
+  it("hands an authorized creation conflict to its owner without navigating or playing", async () => {
+    const { fetch, onReturnToGame, onCreated } = fixture();
+    await selectModel("White");
+    await selectModel("Black");
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
+      .mockResolvedValueOnce(errorResponse("GAME_CONFLICT", 409, snapshot()));
+    await userEvent.click(screen.getByRole("button", { name: "Start game" }));
+    const back = await screen.findByRole("button", { name: "Return to game" });
+    expect(
+      screen.getByText(
+        "You already have a game in progress. Return to it before starting another.",
+      ),
+    ).toBeVisible();
+    await userEvent.click(back);
+    expect(onReturnToGame).toHaveBeenCalledWith(GAME_ID);
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  it("renders discovered model names as text, including after selection", async () => {
+    const { fetch } = fixture();
+    const { user, seat, model } = await selectModel("White");
+    const models = setupModels("openai");
+    const untrusted = '<img src=x onerror="alert(1)">';
+    models[0]!.name = untrusted;
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, models }));
+    await user.click(seat.getByRole("button", { name: "Refresh models" }));
+    await seat.findByText("Models loaded. Choose a model to continue.");
+    await user.click(model);
+    expect(seat.getByRole("option", { name: /<img src=x/ })).toBeVisible();
+    await user.keyboard("{Enter}");
+    expect(seat.getByText(untrusted)).toBeVisible();
+    expect(model).toHaveValue(untrusted);
+    expect(seat.queryByRole("img")).not.toBeInTheDocument();
+  });
+});

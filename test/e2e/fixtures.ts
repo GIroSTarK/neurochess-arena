@@ -1,4 +1,9 @@
-import { type GameSnapshot, gameSnapshotSchema, moveCommandSchema } from "@neurochess/contracts";
+import {
+  gameDetailsSchema,
+  type GameSnapshot,
+  gameSnapshotSchema,
+  moveCommandSchema,
+} from "@neurochess/contracts";
 import { games, guestSessions } from "@neurochess/database";
 import { expect, type Locator, type Page, type Response, test as base } from "@playwright/test";
 import { inArray } from "drizzle-orm";
@@ -23,6 +28,14 @@ export const test = base.extend({
           }),
         );
       }
+      if (response.url() === API_ORIGIN + "/games" && response.status() === 201) {
+        reads.push(
+          response.json().then((value: unknown) => {
+            const game = gameDetailsSchema.safeParse(value);
+            if (game.success) createdGames.add(game.data.snapshot.gameId);
+          }),
+        );
+      }
     };
     page.on("response", record);
     page.on("pageerror", () => errors.push("Uncaught application error"));
@@ -31,8 +44,9 @@ export const test = base.extend({
         // HTTP error statuses are expected during creation conflicts. Never
         // copy arbitrary console text or request/cookie headers into reports.
         const anonymousDiscovery =
-          message.location().url === API_ORIGIN + "/sandbox/games/unfinished" &&
-          message.text().includes("401 (Unauthorized)");
+          ["/sandbox/games/unfinished", "/games/unfinished"].some(
+            (path) => message.location().url === API_ORIGIN + path,
+          ) && message.text().includes("401 (Unauthorized)");
         if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery) {
           errors.push("Application console " + message.type());
         }

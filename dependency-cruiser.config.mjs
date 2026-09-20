@@ -33,7 +33,14 @@ export default {
         path: "(^|/)apps/web/src/(arena|board|ui)/",
         pathNot: "\\.test\\.tsx?$",
       },
-      to: { path: "(^|/)apps/web/src/(api|game|reference)/" },
+      to: { path: "(^|/)apps/web/src/(api|game|reference|setup)/" },
+    },
+    {
+      name: "ai-setup-no-sandbox",
+      comment: "AI setup uses its own API and credential boundary, never Sandbox controllers.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/setup/", pathNot: "\\.test\\.tsx?$" },
+      to: { path: "(^|/)apps/web/src/game/" },
     },
     {
       name: "reference-no-sandbox",

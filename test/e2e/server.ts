@@ -18,6 +18,8 @@ import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { integrationDatabase } from "../database.js";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { setupHarness } from "./setup-harness.js";
+import { setupProviders } from "./setup-providers.js";
 
 async function main() {
   // This guard runs before creating a pool, applying migrations or listening.
@@ -38,7 +40,11 @@ async function main() {
     webOrigin: WEB_ORIGIN,
     gameApi: {
       guests: createGuestService(repository, 86_400),
-      games: createGameService(repository, { nodeEnv: "test", sandboxEnabled: true }),
+      games: createGameService(repository, {
+        nodeEnv: "test",
+        sandboxEnabled: true,
+        aiAdapters: setupProviders(),
+      }),
     },
   });
   process.env.VITE_API_BASE_URL = API_ORIGIN;
@@ -57,6 +63,7 @@ async function main() {
   });
   process.env.SANDBOX_ENABLED = "true";
   const web = await createServer({
+    plugins: [setupHarness()],
     root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
     configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
     mode: "test",

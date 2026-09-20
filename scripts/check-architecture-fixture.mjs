@@ -18,6 +18,14 @@ const fixtures = [
     path: "apps/web/src/reference/forbidden-sandbox-import.ts",
     rule: "reference-no-sandbox",
   },
+  {
+    path: "apps/web/src/arena/forbidden-setup-import.ts",
+    rule: "arena-presentation-no-sandbox",
+  },
+  {
+    path: "apps/web/src/setup/forbidden-sandbox-import.ts",
+    rule: "ai-setup-no-sandbox",
+  },
   { path: "apps/api/forbidden-chess-internal-import.ts", rule: "chess-public-entrypoint-only" },
   { path: "packages/chess/forbidden-fastify-import.ts", rule: "shared-leaves-no-infrastructure" },
   {
