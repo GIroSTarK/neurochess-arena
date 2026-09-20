@@ -9,6 +9,7 @@ import { createLoggerOptions } from "./logger.js";
 import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
+import { createOpenRouterAdapter } from "./providers/openrouter.js";
 
 async function main(): Promise<void> {
   loadRootEnvironment();
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
           openai: createOpenAiAdapter(),
           anthropic: createAnthropicAdapter(),
           google: createGoogleAdapter(),
+          openrouter: createOpenRouterAdapter(),
         },
       }),
       guests: createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS),
