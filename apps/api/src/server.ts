@@ -7,6 +7,7 @@ import { createGuestService } from "./guests/service.js";
 import { loadRootEnvironment } from "./load-root-environment.js";
 import { createLoggerOptions } from "./logger.js";
 import { createAnthropicAdapter } from "./providers/anthropic.js";
+import { createGoogleAdapter } from "./providers/google.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
 
 async function main(): Promise<void> {
@@ -22,7 +23,11 @@ async function main(): Promise<void> {
       games: createGameService(repository, {
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
-        aiAdapters: { openai: createOpenAiAdapter(), anthropic: createAnthropicAdapter() },
+        aiAdapters: {
+          openai: createOpenAiAdapter(),
+          anthropic: createAnthropicAdapter(),
+          google: createGoogleAdapter(),
+        },
       }),
       guests: createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS),
     },
