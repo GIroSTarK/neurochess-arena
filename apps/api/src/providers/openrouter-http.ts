@@ -9,9 +9,9 @@ const errorSchema = z.object({
     code: z.number().int().min(400).max(599),
     metadata: z
       .object({
-        error_type: z.string().min(1).max(128).optional(),
-        provider_name: z.string().min(1).max(256).optional(),
-        provider_code: z.string().max(128).optional(),
+        error_type: z.string().min(1).max(128).nullish(),
+        provider_name: z.string().min(1).max(256).nullish(),
+        provider_code: z.string().max(128).nullish(),
       })
       .nullish(),
   }),
@@ -85,11 +85,11 @@ function httpFailure(
     case "provider_unavailable":
       return invalidResponse;
   }
-  if (type !== undefined) return { code: "provider_unavailable", reason: "upstream" };
+  if (type != null) return { code: "provider_unavailable", reason: "upstream" };
   if (code === 401) {
     // An upstream credential failure does not mean the user's OpenRouter key is invalid.
-    return error?.metadata?.provider_name !== undefined ||
-      error?.metadata?.provider_code !== undefined ||
+    return error?.metadata?.provider_name != null ||
+      error?.metadata?.provider_code != null ||
       status === 200
       ? { code: "provider_unavailable", reason: "upstream" }
       : { code: "provider_auth" };

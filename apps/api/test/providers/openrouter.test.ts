@@ -349,6 +349,33 @@ describe("OpenRouter move requests and responses", () => {
 describe("OpenRouter router and upstream failures", () => {
   it.each([
     [401, 401, undefined, { code: "provider_auth" }],
+    [401, 401, { error_type: null }, { code: "provider_auth" }],
+    [401, 401, { provider_name: null, provider_code: null }, { code: "provider_auth" }],
+    [
+      200,
+      429,
+      { error_type: null, provider_name: null, provider_code: null },
+      { code: "provider_quota" },
+    ],
+    [401, 401, { error_type: null, provider_name: "Upstream", provider_code: null }, upstream],
+    [
+      401,
+      401,
+      { error_type: null, provider_name: null, provider_code: "invalid_api_key" },
+      upstream,
+    ],
+    [
+      200,
+      502,
+      { error_type: "provider_unavailable", provider_name: null, provider_code: null },
+      invalidResponse,
+    ],
+    [
+      200,
+      502,
+      { error_type: "rate_limit_exceeded", provider_name: null, provider_code: null },
+      { code: "provider_quota" },
+    ],
     [403, 403, undefined, upstream],
     [200, 401, { provider_name: "Upstream" }, upstream],
     [502, 401, { provider_name: "Upstream" }, upstream],
