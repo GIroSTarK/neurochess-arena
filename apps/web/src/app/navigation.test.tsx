@@ -17,22 +17,37 @@ function visit(path: string, sandboxEnabled: boolean) {
 describe("Arena and Sandbox routes", () => {
   let http: ReturnType<typeof createHttpMock>;
   beforeEach(() => {
-    http = createHttpMock();
+    http = createHttpMock({
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({ snapshot: snapshot(), configuration: null }),
+    });
     vi.stubGlobal("fetch", http.fetch);
   });
   afterEach(() => http.assertNoUnexpectedRequests());
 
-  it.each([true, false])("keeps Arena independent of the API (sandbox enabled: %s)", (enabled) => {
-    visit("/?unrelated=value", enabled);
-    expect(screen.getByRole("heading", { name: "Arena", level: 1 })).toBeInTheDocument();
-    expect(document.title).toBe("Neurochess Arena");
-    const navigation = within(screen.getByRole("navigation", { name: "Main navigation" }));
-    expect(navigation.getByRole("link", { name: "Arena" })).toHaveAttribute("aria-current", "page");
-    expect(navigation.queryByRole("link", { name: "Sandbox" }) !== null).toBe(enabled);
-    expect(screen.queryByRole("link", { name: "Open development sandbox" }) !== null).toBe(enabled);
-    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-    expect(http.fetch).not.toHaveBeenCalled();
-  });
+  it.each([true, false])(
+    "opens Arena setup without creating a guest (sandbox enabled: %s)",
+    async (enabled) => {
+      visit("/?unrelated=value", enabled);
+      expect(
+        await screen.findByRole("heading", { name: "Set up a game", level: 1 }),
+      ).toBeInTheDocument();
+      expect(document.title).toBe("Neurochess Arena");
+      const navigation = within(screen.getByRole("navigation", { name: "Main navigation" }));
+      expect(navigation.getByRole("link", { name: "Arena" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(navigation.queryByRole("link", { name: "Sandbox" }) !== null).toBe(enabled);
+      expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+      expect(
+        http.fetch.mock.calls.every(
+          ([url, options]) => requestPath(url) === "/games/unfinished" && options?.method === "GET",
+        ),
+      ).toBe(true);
+    },
+  );
 
   it.each(["/sandbox", "/sandbox/", "/sandbox?game=" + GAME_ID])(
     "blocks %s without mounting or requesting the disabled sandbox",
@@ -100,11 +115,21 @@ describe("Arena and Sandbox routes", () => {
     expect(http.fetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
   });
 
-  it.each([true, false])("keeps game parameters scoped to Sandbox (enabled: %s)", (enabled) => {
-    visit("/?game=" + GAME_ID, enabled);
-    expect(screen.getByRole("heading", { name: "Arena", level: 1 })).toBeInTheDocument();
-    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-    expect(window.location.pathname).toBe("/");
-    expect(http.fetch).not.toHaveBeenCalled();
-  });
+  it.each([true, false])(
+    "resolves Arena game URLs through authorized details (enabled: %s)",
+    async (enabled) => {
+      visit("/?game=" + GAME_ID, enabled);
+      expect(
+        await screen.findByText("This game belongs to the development Sandbox."),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Return to Sandbox" }) !== null).toBe(enabled);
+      expect(
+        http.fetch.mock.calls.every(
+          ([url, options]) =>
+            requestPath(url) === "/games/" + GAME_ID + "/details" && options?.method === "GET",
+        ),
+      ).toBe(true);
+    },
+  );
 });

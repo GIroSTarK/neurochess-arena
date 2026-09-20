@@ -7,7 +7,7 @@ import {
 } from "@neurochess/contracts";
 
 import type { AiApi } from "../api/ai-client";
-import { ApiFailure } from "../api/client";
+import { ApiFailure } from "../api/failures";
 import type { createSessionCredentials } from "../api/session-credentials";
 
 import {

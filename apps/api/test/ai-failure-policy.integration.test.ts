@@ -76,6 +76,7 @@ describe("durable AI failure policy and private invocation records", () => {
       });
       const gamesService = service(api, { openai: adapter }, repository);
       const { snapshot } = await gamesService.createAi(principal, aiMatch);
+      locks = 0;
       const result = await gamesService.aiTurn(
         principal,
         turnCommand(snapshot),

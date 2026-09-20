@@ -4,11 +4,10 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { ChessGame } from "@neurochess/chess";
 import {
+  aiControlledTurnCommandSchema,
   type AiGameConfiguration,
   type AiProvider,
-  type AiRequestErrorCode,
   type AiTurnCommand,
-  aiTurnCommandSchema,
   type GameSnapshot,
   type NormalizedMoveResponse,
 } from "@neurochess/contracts";
@@ -31,7 +30,9 @@ import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
 import { authorizeGameControl } from "./authorization.js";
 import { persistCommand } from "./command-persistence.js";
-import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+import { requireController } from "./controller-presence.js";
+import { AiTurnError, GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+export { AiTurnError } from "./errors.js";
 
 interface PreparedCommand {
   readonly stored: StoredGame;
@@ -43,22 +44,18 @@ interface PreparedCommand {
 
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;
 
-export class AiTurnError extends Error {
-  constructor(readonly code: AiRequestErrorCode) {
-    super(code);
-    this.name = "AiTurnError";
-  }
-}
-
-function aiSeat(principal: GuestPrincipal, prepared: PreparedCommand) {
+function aiSeat(principal: GuestPrincipal, prepared: PreparedCommand, step = false) {
   const { stored, snapshot, configuration, participants } = prepared;
   authorizeGameControl(principal, stored);
-  if (stored.state !== "active") throw new GameRequestError("INVALID_GAME_STATE");
+  if (stored.state !== (step ? "paused" : "active")) {
+    throw new GameRequestError("INVALID_GAME_STATE");
+  }
   const seat = configuration?.seats[snapshot.turn];
   const participant = participants.find((entry) => entry.color === snapshot.turn);
   if (stored.isSandbox || seat?.type !== "ai" || participant?.seatType !== "ai") {
     throw new GameRequestError("FORBIDDEN");
   }
+  if (step && !prepared.game.resume().ok) throw new GameIntegrityError();
   return { seat, participantId: participant.id, color: snapshot.turn };
 }
 
@@ -100,7 +97,7 @@ export function createAiTurnExecutor(options: {
     input: unknown,
     access: ListModelsInput,
   ): Promise<GameSnapshot> => {
-    const parsed = aiTurnCommandSchema.safeParse(input);
+    const parsed = aiControlledTurnCommandSchema.safeParse(input);
     if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
     const command = {
       ...parsed.data,
@@ -109,7 +106,8 @@ export function createAiTurnExecutor(options: {
     };
     const reserved = await repository.write(async (tx) => {
       const prepared = await prepareCommand(tx, principal, command);
-      const selected = aiSeat(principal, prepared);
+      const selected = aiSeat(principal, prepared, command.step);
+      await requireController(tx, command.gameId, command.controllerId);
       const pending = await tx.getAiTurnReservation(command.gameId);
       if (pending) {
         throw new AiTurnError(
@@ -148,7 +146,7 @@ export function createAiTurnExecutor(options: {
         provider: selected.seat.provider,
         modelId: selected.seat.modelId,
       };
-      const { snapshot } = prepared;
+      const snapshot = prepared.game.snapshot();
       return {
         selected,
         adapter,
@@ -166,7 +164,8 @@ export function createAiTurnExecutor(options: {
 
     async function recheck(tx: GameTransaction) {
       const prepared = await prepareCommand(tx, principal, command);
-      const selected = aiSeat(principal, prepared);
+      const selected = aiSeat(principal, prepared, command.step);
+      await requireController(tx, command.gameId, command.controllerId);
       const pending = await tx.getAiTurnReservation(command.gameId);
       if (
         pending?.reservationId !== reserved.reservationId ||
@@ -238,7 +237,10 @@ export function createAiTurnExecutor(options: {
         const snapshot = await repository.write(async (tx) => {
           const prepared = await recheck(tx);
           let classified = received;
-          if (classified.ok && !prepared.snapshot.legalMoves.includes(classified.output.move)) {
+          if (
+            classified.ok &&
+            !prepared.game.snapshot().legalMoves.includes(classified.output.move)
+          ) {
             classified = {
               ...classified,
               ok: false,
@@ -275,9 +277,11 @@ export function createAiTurnExecutor(options: {
               lost.value,
             );
           }
-          const accepted = classified.ok
+          let accepted = classified.ok
             ? prepared.game.playMove(classified.output.move)
             : prepared.game.pause();
+          if (!accepted.ok) throw new GameIntegrityError();
+          if (command.step && accepted.value.state === "active") accepted = prepared.game.pause();
           if (!accepted.ok) throw new GameIntegrityError();
           const result = await persistCommand(
             tx,
@@ -322,7 +326,9 @@ export function createAiTurnExecutor(options: {
           if (
             response &&
             attempt &&
-            (error instanceof GameConflictError || error instanceof GameRequestError)
+            (error instanceof GameConflictError ||
+              error instanceof GameRequestError ||
+              (error instanceof AiTurnError && error.code === "AI_CONTROLLER_LOST"))
           ) {
             await tx.finishModelInvocation(
               attempt.id,

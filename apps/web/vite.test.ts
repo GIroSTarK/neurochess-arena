@@ -20,7 +20,7 @@ async function productionChunks(sandboxEnabled: boolean, nodeEnv: "production" |
   return result.output.filter((item) => item.type === "chunk");
 }
 
-const sandboxModules = /\/apps\/web\/src\/(game|api|board)\//;
+const sandboxModules = /\/apps\/web\/src\/(game\/|api\/client\.ts$)/;
 
 describe.each(["production", "development"] as const)(
   "production bundles with NODE_ENV=%s",
@@ -30,9 +30,9 @@ describe.each(["production", "development"] as const)(
       const modules = chunks.flatMap((chunk) => chunk.moduleIds);
       expect(modules.filter((id) => sandboxModules.test(id))).toEqual([]);
       expect(modules.filter((id) => id.includes("/apps/web/src/reference/"))).toEqual([]);
-      expect(modules.filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id))).toEqual(
-        [],
-      );
+      expect(
+        modules.filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
+      ).not.toEqual([]);
       expect(modules.some((id) => id.endsWith("/app/env.ts"))).toBe(true);
       expect(modules.some((id) => id.includes("/node_modules/zod/"))).toBe(true);
     });
@@ -49,7 +49,7 @@ describe.each(["production", "development"] as const)(
         chunks
           .flatMap((chunk) => chunk.moduleIds)
           .filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
-      ).toEqual([]);
+      ).not.toEqual([]);
       const sandbox = chunks.find((chunk) =>
         chunk.facadeModuleId?.endsWith("/game/SandboxScreen.tsx"),
       )!;

@@ -1,0 +1,346 @@
+import { text as streamText } from "node:stream/consumers";
+
+import AxeBuilder from "@axe-core/playwright";
+import { gameDetailsSchema, type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import type { Page } from "@playwright/test";
+
+import { API_ORIGIN } from "./environment";
+import { expect, test } from "./fixtures";
+import { expectSelectArrowSpacing } from "./select-controls";
+import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
+
+async function configure(page: Page, color: "White" | "Black", key: string) {
+  const seat = page.getByRole("group", { name: color, exact: true });
+  await expect(seat.getByLabel("Provider", { exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  await seat.getByLabel("API key", { exact: true }).fill(key);
+  await seat.getByRole("button", { name: "Load models", exact: true }).click();
+  const model = seat.getByRole("combobox", { name: "Model", exact: true });
+  await expect(model).toHaveAttribute("aria-disabled", "false");
+  await model.fill("model-a");
+  await model.press("ArrowDown");
+  await model.press("Enter");
+}
+async function start(page: Page, white = "match-fixture", black = "match-fixture") {
+  await page.goto("/");
+  await configure(page, "White", white);
+  await configure(page, "Black", black);
+  const creation = page.waitForResponse(
+    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
+  );
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  const details = gameDetailsSchema.parse(await (await creation).json());
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  return details.snapshot;
+}
+async function read(page: Page, gameId: string) {
+  const response = await page.request.get(`${API_ORIGIN}/games/${gameId}`);
+  expect(response.status()).toBe(200);
+  return gameSnapshotSchema.parse(await response.json());
+}
+async function fillRecovery(page: Page) {
+  await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("match-fixture");
+  await page.getByLabel("Black · Anthropic · API key", { exact: true }).fill("match-fixture");
+}
+async function stop(page: Page) {
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Stop game", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
+}
+
+test("public Arena completes a match, exposes private replay and PGN, and keeps the previous URL", async ({
+  page,
+  context,
+}, testInfo) => {
+  const game = await start(page);
+  const url = page.url();
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  const final = await read(page, game.gameId);
+  expect(final.moves.map(({ uci }) => uci)).toEqual(["f2f3", "e7e5", "g2g4", "d8h4"]);
+  expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
+  await page.getByRole("button", { name: "First", exact: true }).click();
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", game.fen);
+  await page.getByRole("button", { name: "Last", exact: true }).click();
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.fen);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download PGN" }).click();
+  const stream = await (await download).createReadStream();
+  expect(await streamText(stream)).toBe(final.pgn);
+  await page.screenshot({ path: testInfo.outputPath("ai-replay.png"), fullPage: true });
+  expect(
+    await page.evaluate(() => JSON.stringify({ localStorage, sessionStorage, name: window.name })),
+  ).not.toContain("match-fixture");
+  await page.getByRole("button", { name: "New game", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  await page.goto(url);
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  const stranger = await context.browser()!.newContext();
+  try {
+    expect((await stranger.request.get(`${API_ORIGIN}/games/${game.gameId}/replay`)).status()).toBe(
+      401,
+    );
+  } finally {
+    await stranger.close();
+  }
+});
+
+test("Pause, speed, duplicate Next move and Resume use complete server snapshots", async ({
+  page,
+}, testInfo) => {
+  const game = await start(page, "slow-fixture");
+  await expectSelectArrowSpacing(page.getByLabel("Delay between moves"));
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  const pause = page.getByRole("button", { name: "Pause", exact: true });
+  await pause.focus();
+  await pause.press("Enter");
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await fillRecovery(page);
+  const before = await read(page, game.gameId);
+  const step = page.getByRole("button", { name: "Next move", exact: true });
+  await step.dblclick();
+  await expect
+    .poll(async () => (await read(page, game.gameId)).moves.length)
+    .toBe(before.moves.length + 1);
+  const after = await read(page, game.gameId);
+  expect(after.state).toBe("paused");
+  expect(after.legalMoves).toEqual([]);
+  expect(after.version).toBe(before.version + 1);
+  expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("ai-paused.png"), fullPage: true });
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(2);
+  await stop(page);
+  expect((await read(page, game.gameId)).state).toBe("aborted");
+});
+
+test("single steps can complete checkmate and every paused position remains read-only", async ({
+  page,
+}) => {
+  const game = await start(page, "slow-fixture");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await fillRecovery(page);
+  for (let ply = 1; ply <= 4; ply++) {
+    const step = page.getByRole("button", { name: "Next move", exact: true });
+    await expect(step).toHaveAttribute("aria-disabled", "false");
+    await step.click();
+    await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(ply);
+  }
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+});
+
+test("recovery fields and match controls reflow with expanded text and keyboard focus", async ({
+  page,
+}, testInfo) => {
+  await start(page, "slow-fixture");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await setPseudoLocalization(page, true);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "200%";
+  });
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expectSelectArrowSpacing(page.getByLabel(/^Delay between moves/));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await expectUnbrokenWords(page.getByRole("region", { name: /^Game controls/ }));
+    const resume = page.getByRole("button", { name: /^Resume/ });
+    await resume.focus();
+    await expect(resume).toBeFocused();
+  }
+  await page.screenshot({ path: testInfo.outputPath("ai-expanded.png"), fullPage: true });
+  await setPseudoLocalization(page, false);
+  await stop(page);
+});
+
+test("an uncertain Pause retries the identical command before any continuation", async ({
+  page,
+}) => {
+  const commands: unknown[] = [];
+  await page.route("**/lifecycle", async (route) => {
+    const command = route.request().postDataJSON() as { action: string };
+    if (command.action !== "pause") {
+      await route.continue();
+      return;
+    }
+    commands.push(command);
+    const response = await route.fetch();
+    await route.fulfill(commands.length === 1 ? { json: {} } : { response });
+  });
+  const game = await start(page, "slow-fixture");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Retry control", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Retry control", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  expect(commands).toHaveLength(2);
+  expect(commands[1]).toEqual(commands[0]);
+  expect((await read(page, game.gameId)).moves).toEqual([]);
+  await stop(page);
+});
+
+test("invalid outputs cause a technical loss while provider failures pause for key update and explicit retry", async ({
+  page,
+}) => {
+  const invalid = await start(page, "invalid-fixture");
+  await expect(page.getByRole("heading", { name: /technical loss/i })).toBeVisible();
+  expect((await read(page, invalid.gameId)).terminationReason).toBe("model_technical_loss");
+  await page.getByRole("button", { name: "New game", exact: true }).click();
+  await configure(page, "White", "quota-fixture");
+  await configure(page, "Black", "match-fixture");
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  await expect(
+    page.getByText(/White · The provider reported a quota/, { exact: false }).first(),
+  ).toBeVisible();
+  await fillRecovery(page);
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
+for (const during of ["inference", "delay"] as const) {
+  test(`refresh during ${during} recovers full configuration and requires both keys plus explicit action`, async ({
+    page,
+  }) => {
+    const turns: unknown[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith("/ai-turn")) turns.push(request.postDataJSON());
+    });
+    const game = await start(page, during === "inference" ? "slow-fixture" : "match-fixture");
+    if (during === "delay") {
+      await page.getByLabel("Delay between moves").selectOption("5000");
+      await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+    }
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+    const count = turns.length;
+    const recovered = await read(page, game.gameId);
+    expect(recovered.state).toBe("paused");
+    await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await expect(page.getByLabel("White · OpenAI · API key", { exact: true })).toHaveValue("");
+    await fillRecovery(page);
+    expect(turns).toHaveLength(count);
+    await page.getByRole("button", { name: "Next move", exact: true }).click();
+    await expect
+      .poll(async () => (await read(page, game.gameId)).moves.length)
+      .toBe(recovered.moves.length + 1);
+    await stop(page);
+  });
+}
+
+test("a competing tab fences the old controller and an absent tab pauses between calls", async ({
+  page,
+  context,
+}) => {
+  const game = await start(page);
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+  const other = await context.newPage();
+  try {
+    await other.goto(page.url());
+    await expect(other.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+    await expect(page.getByText(/This tab lost control/).first()).toBeVisible();
+    await fillRecovery(other);
+    await other.getByLabel("Delay between moves").selectOption("5000");
+    await other.getByRole("button", { name: "Resume", exact: true }).click();
+    await expect.poll(async () => (await read(other, game.gameId)).moves.length).toBe(2);
+    await other.close();
+    await expect
+      .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
+      .toBe("paused");
+    expect((await read(page, game.gameId)).moves).toHaveLength(2);
+  } finally {
+    if (!other.isClosed()) await other.close();
+  }
+});
+
+test("lost turn acknowledgement blocks automatic dispatch until explicit synchronization", async ({
+  page,
+}) => {
+  let calls = 0;
+  let committed: GameSnapshot | undefined;
+  await page.route("**/ai-turn", async (route) => {
+    calls++;
+    const response = await route.fetch();
+    committed = gameSnapshotSchema.parse(await response.json());
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  const game = await start(page);
+  await expect(page.getByRole("button", { name: "Synchronize and pause" })).toBeVisible();
+  expect(calls).toBe(1);
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", game.fen);
+  await page.getByRole("button", { name: "Synchronize and pause" }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  expect((await read(page, game.gameId)).moves).toEqual(committed?.moves);
+  expect(calls).toBe(1);
+  await page.unroute("**/ai-turn");
+  await stop(page);
+});
+
+test("network loss between calls expires presence without a snapshot read performing recovery", async ({
+  page,
+}) => {
+  await page.route("**/controller", async (route) => {
+    const body = route.request().postDataJSON() as { action: string };
+    if (body.action === "heartbeat") await route.fulfill({ json: {} });
+    else await route.continue();
+  });
+  const game = await start(page);
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  await expect(page.getByRole("button", { name: "Synchronize and pause" })).toBeVisible();
+  await expect
+    .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
+    .toBe("paused");
+  expect((await read(page, game.gameId)).moves).toHaveLength(1);
+});
+
+test("closing the controlling tab during inference pauses without accepting its late move", async ({
+  page,
+  context,
+}) => {
+  const game = await start(page, "slow-fixture");
+  await expect
+    .poll(async () => {
+      const records = await page.request.get(`${API_ORIGIN}/games/${game.gameId}/invocations`);
+      const payload = (await records.json()) as { turns: { attempts: unknown[] }[] };
+      return payload.turns[0]?.attempts.length;
+    })
+    .toBe(1);
+  await page.close();
+  const state = async () =>
+    gameSnapshotSchema.parse(
+      await (await context.request.get(`${API_ORIGIN}/games/${game.gameId}`)).json(),
+    );
+  await expect.poll(async () => (await state()).state, { timeout: 20_000 }).toBe("paused");
+  expect((await state()).moves).toEqual([]);
+});
+
+test("Stop remains usable during inference and late acknowledgements cannot revive the game", async ({
+  page,
+}) => {
+  const released = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  await page.route("**/ai-turn", async (route) => {
+    const response = await route.fetch();
+    entered.resolve();
+    await released.promise;
+    await route.fulfill({ response }).catch(() => undefined);
+  });
+  const game = await start(page);
+  await entered.promise;
+  await stop(page);
+  released.resolve();
+  const final = await read(page, game.gameId);
+  expect(final.state).toBe("aborted");
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.fen);
+});

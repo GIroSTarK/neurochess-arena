@@ -49,6 +49,6 @@ test("AI credentials stay in page memory and require re-entry after refresh", as
     }
   });
   expect(restored).toBe("AI_KEY_REQUIRED");
-  expect(apiRequests).toEqual([]);
+  expect(apiRequests.every((url) => url === API_ORIGIN + "/games/unfinished")).toBe(true);
   expect(await context.cookies(API_ORIGIN)).toEqual([]);
 });

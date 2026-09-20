@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { aiTurnCommandSchema } from "./ai-game.js";
+import { aiControlledTurnCommandSchema } from "./ai-game.js";
 import { gameErrorResponseSchema } from "./game.js";
 import { aiProviderSchema } from "./provider.js";
 
@@ -13,13 +13,17 @@ export const modelDiscoveryRequestSchema = z.strictObject({
   provider: aiProviderSchema,
   apiKey: sessionApiKeySchema,
 });
-export const aiTurnRequestSchema = aiTurnCommandSchema.extend({ apiKey: sessionApiKeySchema });
+export const aiTurnRequestSchema = aiControlledTurnCommandSchema.extend({
+  apiKey: sessionApiKeySchema,
+});
 export const aiRequestErrorCodeSchema = z.enum([
   "AI_TURN_IN_PROGRESS",
   "AI_TURN_RECOVERY_REQUIRED",
   "AI_TURN_CANCELLED",
   "AI_ADAPTER_UNAVAILABLE",
   "AI_PARAMETERS_INVALID",
+  "AI_CONTROLLER_LOST",
+  "AI_CONTROLLER_BUSY",
 ]);
 export const aiErrorResponseSchema = z.union([
   gameErrorResponseSchema,

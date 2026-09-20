@@ -1,4 +1,11 @@
-import type { GameErrorCode, GameSnapshot } from "@neurochess/contracts";
+import type { AiRequestErrorCode, GameErrorCode, GameSnapshot } from "@neurochess/contracts";
+
+export class AiTurnError extends Error {
+  constructor(readonly code: AiRequestErrorCode) {
+    super(code);
+    this.name = "AiTurnError";
+  }
+}
 
 export class GameRequestError extends Error {
   constructor(readonly code: Exclude<GameErrorCode, "GAME_CONFLICT">) {

@@ -7,7 +7,7 @@ import {
 } from "@neurochess/contracts";
 
 import { AiRequestFailure } from "./ai-client";
-import { ApiFailure } from "./client";
+import { ApiFailure } from "./failures";
 
 export function createSessionCredentials(lifetime: AbortSignal) {
   const keys = new Map<ChessColor, { provider: AiProvider; apiKey: string }>();

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { type ChessGame, createGame, restoreGame } from "@neurochess/chess";
 import {
+  aiControllerRequestSchema,
   type AiGameConfiguration,
   aiGameConfigurationSchema,
   type AiProvider,
@@ -31,14 +32,17 @@ import type { GuestPrincipal } from "../guests/service.js";
 import type { ListModelsInput } from "../providers/adapter.js";
 import { discoverModels } from "../providers/discovery.js";
 
-import { type AiAdapters, createAiTurnExecutor } from "./ai-turn.js";
+import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
 import { authorizeGameControl, authorizeGameRead, authorizeHumanSeat } from "./authorization.js";
 import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
 import { configurationOf, participantsFor } from "./configuration.js";
+import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  controller(principal: GuestPrincipal, input: unknown): Promise<GameSnapshot>;
+  expireControllers(): Promise<void>;
   readonly sandboxEnabled: boolean;
   models(
     principal: GuestPrincipal,
@@ -77,10 +81,12 @@ export function createGameService(
     readonly nodeEnv: "development" | "test" | "production";
     readonly sandboxEnabled: boolean;
     readonly aiAdapters?: AiAdapters;
+    readonly controllerLeaseMs?: number;
   },
 ): GameService {
   const sandboxEnabled = options.sandboxEnabled && options.nodeEnv !== "production";
   const adapters = { ...options.aiAdapters };
+  const leaseMs = options.controllerLeaseMs ?? CONTROLLER_LEASE_MS;
 
   async function restoreAuthorized(
     reader: GameReader,
@@ -204,11 +210,20 @@ export function createGameService(
       } else {
         authorizeGameControl(principal, stored);
       }
+      if (!isMove && stored.mode !== null && command.action !== "resign") {
+        if (command.action === "resume") {
+          await requireController(tx, stored.id, command.controllerId);
+        } else if (command.action === "pause" && !command.controllerId) {
+          await tx.clearAiController(stored.id);
+        }
+      }
       const accepted = isMove
         ? restored.game.playMove(command.move)
         : command.action === "resign"
           ? restored.game.resignHuman(command.losingColor)
-          : restored.game[command.action]();
+          : command.action === "pause" && stored.mode !== null && stored.state === "paused"
+            ? { ok: true as const, value: restored.game.snapshot() }
+            : restored.game[command.action]();
       if (!accepted.ok) {
         if (["ILLEGAL_MOVE", "INVALID_UCI", "INVALID_GAME_STATE"].includes(accepted.error.code)) {
           throw new GameRequestError(
@@ -255,11 +270,87 @@ export function createGameService(
         },
         participantsFor(snapshot.gameId, principal.guestSessionId, configuration),
       );
+      if (configuration) await tx.setAiController(snapshot.gameId, null, leaseMs);
       return { snapshot, configuration };
     });
   }
 
   return {
+    async controller(principal, input) {
+      const parsed = aiControllerRequestSchema.safeParse(input);
+      if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
+      const command = parsed.data;
+      return repository.write(async (tx) => {
+        if (!(await tx.lockGuest(principal.guestSessionId))) {
+          throw new GameRequestError("UNAUTHORIZED");
+        }
+        const stored = await tx.lockGame(command.gameId);
+        if (!stored) throw new GameRequestError("NOT_FOUND");
+        const { snapshot } = await restoreAuthorized(tx, principal, stored);
+        authorizeGameControl(principal, stored);
+        if (stored.mode === null) throw new GameRequestError("FORBIDDEN");
+        if (stored.state !== "active" && stored.state !== "paused") {
+          throw new GameConflictError(snapshot);
+        }
+        const controllerId = command.controllerId.toLowerCase();
+        if (command.action === "heartbeat") {
+          if (!(await tx.renewAiController(stored.id, controllerId, leaseMs))) {
+            throw new AiTurnError("AI_CONTROLLER_LOST");
+          }
+        } else {
+          if (command.expectedVersion !== stored.version) throw new GameConflictError(snapshot);
+          const lease = await tx.getAiController(stored.id);
+          if (
+            lease &&
+            !lease.expired &&
+            lease.controllerId &&
+            lease.controllerId !== controllerId
+          ) {
+            throw new AiTurnError("AI_CONTROLLER_BUSY");
+          }
+          const initial = stored.version === 0 && lease?.controllerId === null && !lease.expired;
+          const current = lease?.controllerId === controllerId && !lease.expired;
+          if (stored.state === "active" && !initial && !current) {
+            throw new AiTurnError("AI_CONTROLLER_LOST");
+          }
+          // Reclaiming a paused expired lease must first invalidate any uncertain step.
+          if (!current && (await tx.getAiTurnReservation(stored.id))) {
+            throw new AiTurnError("AI_TURN_RECOVERY_REQUIRED");
+          }
+          await tx.setAiController(stored.id, controllerId, leaseMs);
+        }
+        return snapshot;
+      });
+    },
+    async expireControllers() {
+      for (const candidate of await repository.expiredAiControllers()) {
+        await repository.write(async (tx) => {
+          // Lock even expired guests: presence cleanup must not depend on session renewal.
+          await tx.lockGuest(candidate.guestId);
+          const stored = await tx.lockGame(candidate.gameId);
+          if (!stored?.mode) return;
+          const lease = await tx.getAiController(stored.id);
+          if (lease?.expired === false) return;
+          if (
+            stored.state === "active" ||
+            (stored.state === "paused" && (await tx.getAiTurnReservation(stored.id)))
+          ) {
+            const { game } = await restoreAuthorized(
+              tx,
+              { guestSessionId: candidate.guestId },
+              stored,
+            );
+            const paused =
+              stored.state === "active"
+                ? game.pause()
+                : { ok: true as const, value: game.snapshot() };
+            if (!paused.ok) throw new GameIntegrityError();
+            await persistCommand(tx, stored, randomUUID(), "pause", paused.value);
+          }
+          await tx.clearAiController(stored.id);
+        });
+      }
+    },
     sandboxEnabled,
     async models(principal, provider, access) {
       await repository.read(async (reader) => {

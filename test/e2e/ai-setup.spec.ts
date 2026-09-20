@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { expect, startSandbox, test } from "./fixtures";
+import { expectSelectArrowSpacing } from "./select-controls";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
 async function configure(page: Page, color: "White" | "Black", search = "model-a") {
@@ -27,6 +28,163 @@ async function configure(page: Page, color: "White" | "Black", search = "model-a
   );
   return seat;
 }
+
+// Headless Chromium otherwise hides the native scrollbar used by the regression test.
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
+test("key visibility is disabled for empty fields and resets after clearing", async ({ page }) => {
+  await page.goto("/__test__/setup");
+  const white = page.getByRole("group", { name: "White", exact: true });
+  const black = page.getByRole("group", { name: "Black", exact: true });
+  await expect(white.getByLabel("Provider", { exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  const input = white.getByLabel("API key", { exact: true });
+  const show = white.getByRole("button", { name: "Show key", exact: true });
+  await expect(show).toHaveAttribute("aria-disabled", "true");
+  await show.focus();
+  await show.press("Enter");
+  await expect(input).toHaveAttribute("type", "password");
+  await input.fill("visibility-fixture");
+  await expect(show).toHaveAttribute("aria-disabled", "false");
+  await expect(black.getByRole("button", { name: "Show key", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await show.click();
+  await expect(input).toHaveAttribute("type", "text");
+  await input.clear();
+  await expect(show).toHaveAttribute("aria-disabled", "true");
+  await expect(input).toHaveAttribute("type", "password");
+  await input.fill("replacement-fixture");
+  await expect(show).toHaveAttribute("aria-disabled", "false");
+  await expect(input).toHaveAttribute("type", "password");
+});
+
+test("setup selects share arrow spacing and revealing a key preserves field widths", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/__test__/setup");
+  const white = await configure(page, "White");
+  const black = await configure(page, "Black");
+  for (const seat of [white, black]) {
+    await seat.getByText("Advanced parameters", { exact: true }).click();
+    await expectSelectArrowSpacing(seat.getByLabel("Provider", { exact: true }));
+    await expectSelectArrowSpacing(seat.getByLabel("Reasoning effort", { exact: true }));
+  }
+  await expect(page.locator("select")).toHaveCount(4);
+  const input = white.getByLabel("API key", { exact: true });
+  const reveal = white.getByRole("button", { name: "Show key", exact: true });
+  const inputBefore = await input.boundingBox();
+  const revealBefore = await reveal.boundingBox();
+  await reveal.focus();
+  await reveal.press("Space");
+  const hide = white.getByRole("button", { name: "Hide key", exact: true });
+  await expect(hide).toBeFocused();
+  await expect(input).toHaveAttribute("type", "text");
+  expect((await input.boundingBox())!.width).toBeCloseTo(inputBefore!.width, 1);
+  expect((await hide.boundingBox())!.width).toBeCloseTo(revealBefore!.width, 1);
+  await page.screenshot({ path: testInfo.outputPath("setup-revealed-key.png"), fullPage: true });
+  await hide.press("Space");
+  await expect(input).toHaveAttribute("type", "password");
+  expect((await input.boundingBox())!.width).toBeCloseTo(inputBefore!.width, 1);
+});
+
+test("model scrollbar dragging keeps the list open and allows selection", async ({ page }) => {
+  await page.goto("/__test__/setup");
+  const white = await configure(page, "White");
+  const input = white.getByRole("combobox", { name: "Model", exact: true });
+  await input.click();
+  const list = white.getByRole("listbox", { name: "Model", exact: true });
+  await expect(list).toBeVisible();
+  // Reserve a real scrollbar gutter in touch emulation too, so both projects exercise it.
+  await page.addStyleTag({ content: '[role="listbox"]::-webkit-scrollbar { width: 16px; }' });
+  await list.scrollIntoViewIfNeeded();
+  const geometry = await list.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      x: box.right - 8,
+      y: box.top + 30,
+      height: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      gutter: box.width - element.clientWidth,
+    };
+  });
+  expect(geometry.scrollHeight).toBeGreaterThan(geometry.height);
+  expect(geometry.gutter).toBeGreaterThan(2);
+  await page.mouse.move(geometry.x, geometry.y);
+  await page.mouse.down();
+  await page.mouse.move(geometry.x, geometry.y + geometry.height * 0.65, { steps: 8 });
+  await page.mouse.up();
+  await expect(input).toHaveAttribute("aria-expanded", "true");
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await list.getByRole("option", { name: /Long test model/ }).click();
+  await expect(input).toHaveValue(/Long test model/);
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await input.click();
+  await input.press("Tab");
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await input.click();
+  await page.getByRole("heading", { name: "Set up a game" }).click();
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+});
+
+test("model results overlay the form without moving the selection, parameters or page", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/__test__/setup");
+  await configure(page, "White");
+  const white = page.getByRole("group", { name: /^White\b/ });
+  const input = white.getByRole("combobox", { name: /^Model\b/ });
+  const selection = white.locator('[id$="-selection"]');
+  const parameters = white.getByText(/^Advanced parameters/);
+  const list = white.getByRole("listbox", { name: /^Model\b/ });
+  for (const enlarged of [false, true]) {
+    await setPseudoLocalization(page, enlarged);
+    await page.evaluate((large) => {
+      document.documentElement.style.fontSize = large ? "200%" : "100%";
+    }, enlarged);
+    for (const placement of ["center", "end"] as const) {
+      await input.evaluate((element, block) => element.scrollIntoView({ block }), placement);
+      const before = {
+        selection: await selection.boundingBox(),
+        parameters: await parameters.boundingBox(),
+        scroll: await page.evaluate(() => scrollY),
+      };
+      await input.click();
+      await expect(list).toBeVisible();
+      expect((await selection.boundingBox())!.y).toBeCloseTo(before.selection!.y, 1);
+      expect((await parameters.boundingBox())!.y).toBeCloseTo(before.parameters!.y, 1);
+      expect(await page.evaluate(() => scrollY)).toBeCloseTo(before.scroll, 1);
+      const popup = await list.boundingBox();
+      const field = await input.boundingBox();
+      expect(popup!.x).toBeGreaterThanOrEqual(field!.x);
+      expect(popup!.x + popup!.width).toBeLessThanOrEqual(field!.x + field!.width);
+      expect(popup!.y).toBeGreaterThanOrEqual(8);
+      expect(popup!.y + popup!.height).toBeLessThanOrEqual(
+        (await page.evaluate(() => innerHeight)) - 8,
+      );
+      for (let index = 0; index < 3; index++) await input.press("ArrowDown");
+      expect(await page.evaluate(() => scrollY)).toBeCloseTo(before.scroll, 1);
+      await input.fill("no-such-model");
+      await expect(white.getByText(/No matching models/)).toBeVisible();
+      expect((await parameters.boundingBox())!.y).toBeCloseTo(before.parameters!.y, 1);
+      await input.press("Escape");
+      await expect(input).toHaveValue("Model A (test fixture)");
+      await expect(input).toBeFocused();
+      expect((await selection.boundingBox())!.y).toBeCloseTo(before.selection!.y, 1);
+      expect((await parameters.boundingBox())!.y).toBeCloseTo(before.parameters!.y, 1);
+    }
+  }
+  await setPseudoLocalization(page, false);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "100%";
+  });
+  await input.click();
+  await page.screenshot({ path: testInfo.outputPath("model-overlay.png"), fullPage: true });
+});
 
 test("setup uses protected discovery and hands off an independently configured game", async ({
   page,
@@ -137,7 +295,7 @@ test("setup keeps key rejection and empty discovery recoverable and clears page-
   );
 });
 
-test("setup handles an existing Sandbox while public and disabled entry points stay unchanged", async ({
+test("setup handles an existing Sandbox and public Arena preserves the return path", async ({
   page,
 }) => {
   const game = await startSandbox(page, false);
@@ -145,8 +303,12 @@ test("setup handles an existing Sandbox while public and disabled entry points s
   await page.getByRole("button", { name: "Return to game" }).click();
   await expect(page.getByRole("status")).toContainText(game.gameId);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Watch models make their moves." })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start game" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  await page.getByRole("button", { name: "Return to game" }).click();
+  await expect(page.getByRole("link", { name: "Return to Sandbox" })).toHaveAttribute(
+    "href",
+    `/sandbox?game=${game.gameId}`,
+  );
   await page.goto(DISABLED_WEB_ORIGIN + "/__test__/setup");
   await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
 });
@@ -171,6 +333,9 @@ test("setup reflows at all reference widths with expanded text, long names and v
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
         .toBeLessThanOrEqual(1);
+      for (const select of await page.locator("select").all()) {
+        await expectSelectArrowSpacing(select);
+      }
       await expectUnbrokenWords(page.locator("button, summary, legend"));
       const start = page.getByRole("button", { name: /^Start game/ });
       await start.focus();

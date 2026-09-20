@@ -118,9 +118,21 @@ const commandFields = {
 };
 
 export const lifecycleCommandSchema = z.discriminatedUnion("action", [
-  z.strictObject({ ...commandFields, action: z.literal("pause") }),
-  z.strictObject({ ...commandFields, action: z.literal("resume") }),
-  z.strictObject({ ...commandFields, action: z.literal("abort") }),
+  z.strictObject({
+    ...commandFields,
+    action: z.literal("pause"),
+    controllerId: z.uuid().optional(),
+  }),
+  z.strictObject({
+    ...commandFields,
+    action: z.literal("resume"),
+    controllerId: z.uuid().optional(),
+  }),
+  z.strictObject({
+    ...commandFields,
+    action: z.literal("abort"),
+    controllerId: z.uuid().optional(),
+  }),
   z.strictObject({ ...commandFields, action: z.literal("resign"), losingColor: chessColorSchema }),
 ]);
 

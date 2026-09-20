@@ -45,6 +45,25 @@ export const aiTurnCommandSchema = z.strictObject({
   commandId: commandIdSchema,
 });
 
+export const aiControlledTurnCommandSchema = aiTurnCommandSchema.extend({
+  controllerId: z.uuid(),
+  step: z.boolean().optional(),
+});
+
+export const aiControllerRequestSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    gameId: gameIdSchema,
+    controllerId: z.uuid(),
+    action: z.literal("acquire"),
+    expectedVersion: gameVersionSchema,
+  }),
+  z.strictObject({
+    gameId: gameIdSchema,
+    controllerId: z.uuid(),
+    action: z.literal("heartbeat"),
+  }),
+]);
+
 export type AiGameMode = z.infer<typeof aiGameModeSchema>;
 export type AiSeat = z.infer<typeof aiSeatSchema>;
 export type GameSeat = z.infer<typeof gameSeatSchema>;
@@ -52,3 +71,5 @@ export type AiGameConfiguration = z.infer<typeof aiGameConfigurationSchema>;
 export type GameDetails = z.infer<typeof gameDetailsSchema>;
 export type UnfinishedGameDetails = z.infer<typeof unfinishedGameDetailsSchema>;
 export type AiTurnCommand = z.infer<typeof aiTurnCommandSchema>;
+export type AiControlledTurnCommand = z.infer<typeof aiControlledTurnCommandSchema>;
+export type AiControllerRequest = z.infer<typeof aiControllerRequestSchema>;

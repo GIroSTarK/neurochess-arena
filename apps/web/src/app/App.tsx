@@ -1,5 +1,7 @@
 import { lazy, Suspense, useSyncExternalStore } from "react";
 
+import { MatchScreen } from "../match/MatchScreen";
+
 import { DocumentMetadata } from "./DocumentMetadata";
 import { readAppPage, subscribeToNavigation } from "./navigation";
 import { SandboxLoadingScreen } from "./SandboxLoadingScreen";
@@ -63,7 +65,14 @@ export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
   return (
     <>
       <DocumentMetadata page={page} />
-      <StaticScreen page={page} sandboxEnabled={sandboxEnabled && SandboxScreen !== null} />
+      {page === "arena" ? (
+        <MatchScreen
+          apiBaseUrl={apiBaseUrl}
+          sandboxEnabled={sandboxEnabled && SandboxScreen !== null}
+        />
+      ) : (
+        <StaticScreen page={page} sandboxEnabled={sandboxEnabled && SandboxScreen !== null} />
+      )}
     </>
   );
 }
