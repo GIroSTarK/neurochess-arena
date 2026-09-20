@@ -10,7 +10,9 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
+  const unfinishedRequest = page.waitForRequest(API_ORIGIN + "/games/unfinished");
   await page.goto("/");
+  await unfinishedRequest;
   await expect(page).toHaveTitle("Neurochess Arena");
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   await expect(page.locator("vite-error-overlay")).toHaveCount(0);
@@ -70,6 +72,7 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
     path: testInfo.outputPath("arena-sandbox-disabled.png"),
     fullPage: true,
   });
+  apiRequests.length = 0;
   for (const path of ["/sandbox", "/sandbox/", "/sandbox?game=invalid"]) {
     await page.goto(DISABLED_WEB_ORIGIN + path);
     await expect(page).toHaveTitle("Page unavailable · Neurochess Arena");
@@ -79,7 +82,7 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
     await expect(page.locator("vite-error-overlay")).toHaveCount(0);
   }
   await page.screenshot({ path: testInfo.outputPath("sandbox-unavailable.png"), fullPage: true });
-  expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
+  expect(apiRequests).toEqual([]);
   await activate(
     page.getByRole("link", { name: "Back to Arena" }),
     testInfo.project.name === "mobile-touch",
@@ -137,7 +140,9 @@ test("Arena resolves a Sandbox game URL and links to its authorized recovery", a
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
   await page.goto("/?game=" + current.gameId);
-  await expect(page.getByRole("link", { name: "Return to Sandbox" })).toBeVisible();
+  const recoveryLink = page.getByRole("link", { name: "Return to Sandbox" });
+  await expect(recoveryLink).toBeVisible();
+  await expect(recoveryLink).toHaveAttribute("href", `/sandbox?game=${current.gameId}`);
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(page.getByRole("grid")).toHaveCount(0);
   expect(apiRequests.length).toBeGreaterThan(0);
