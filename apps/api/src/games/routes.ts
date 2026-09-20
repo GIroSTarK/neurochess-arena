@@ -75,8 +75,8 @@ export async function registerGameRoutes(
   const sweep = () => {
     sweeping ??= options.games
       .expireControllers()
-      .catch(() => {
-        app.log.error("Controller presence cleanup failed");
+      .catch((error: unknown) => {
+        app.log.error({ err: error }, "Controller presence cleanup failed");
       })
       .finally(() => {
         sweeping = undefined;

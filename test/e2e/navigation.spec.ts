@@ -34,6 +34,7 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
       .violations,
   ).toEqual([]);
+  expect(apiRequests).toContain("/games/unfinished");
   expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
   await sandbox.focus();
   await expect(sandbox).toBeFocused();
