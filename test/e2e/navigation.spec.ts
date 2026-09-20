@@ -115,6 +115,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
   expect(sandboxRequested).toBe(true);
+  expect(apiRequests).toContain("/games/unfinished");
   expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("sandbox-loading.png"), fullPage: true });
 
