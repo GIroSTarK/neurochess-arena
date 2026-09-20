@@ -203,6 +203,18 @@ Only text blocks become move JSON; thinking, signatures, request IDs, and unused
 
 `apps/api/test/providers/anthropic.test.ts` runs the same HTTP adapter contract with paginated fixtures; `apps/api/test/anthropic.integration.test.ts` verifies real orchestration and persistence with mocked transport. No live-provider availability or response-quality claim follows from these tests.
 
+### Google adapter
+
+Google uses the fixed `https://generativelanguage.googleapis.com/v1beta` origin with request-scoped `x-goog-api-key` headers. [Model discovery](https://ai.google.dev/api/models) follows bounded, encoded `pageToken` cursors, rejecting duplicate IDs, cursor cycles, credential echoes, partial failures, and catalogs exceeding 10,000 models or 100 pages. Discovery strips the `models/` resource prefix from configuration IDs and restores it only in generation URLs. `supportedGenerationMethods` determines whether `generateContent` is available; absent metadata stays unknown. Live `maxTemperature` and `outputTokenLimit` supply optional parameter bounds. Discovery does not advertise thinking levels, so reasoning-effort controls remain unavailable. No model allowlist is used.
+
+[GenerateContent](https://ai.google.dev/api/generate-content) receives the common system instruction and one user content containing the fair chess context. Only advertised temperature and output-limit selections enter `generationConfig`; omitted settings use provider defaults. Requests set `store: false` and omit tools, cached context, and thinking controls. Native fetch honors cancellation, disables redirects, bounds bodies to 4 MiB, and performs no application retries. The runner owns invalid-output retries and chess legality.
+
+The adapter expects one candidate and parses only visible text, discarding thoughts, signatures, identifiers, and unused metadata. Blocking is a refusal; output truncation and malformed model JSON follow the common invalid-output policy. Unknown finish reasons, malformed envelopes, and malformed usage pause as provider failures. Usage maps reported prompt, candidate, and total counts independently; the total may include thinking tokens and is never recomputed. Missing counts stay null.
+
+[Google's GenerateContent errors](https://ai.google.dev/gemini-api/docs/generate-content/api-errors) map to the common pause policy. Structured `API_KEY_INVALID` details distinguish invalid-key HTTP 400 responses from other invalid requests. Ambiguous `INVALID_ARGUMENT` and `FAILED_PRECONDITION` errors remain `provider_unavailable/upstream`; raw error prose never determines classification. Generation-only 404/501 failures identify unavailable models/methods.
+
+`apps/api/test/providers/google.test.ts` runs the shared HTTP adapter contract; `apps/api/test/google.integration.test.ts` covers protected routes, real PostgreSQL orchestration, persisted parameters, retry/recovery, cancellation, and redaction using mocked transport. Live account access and response quality remain unverified.
+
 ## PostgreSQL integration tests
 
 Add `TEST_DATABASE_URL` from `.env.example` if updating an existing `.env`, then run:
