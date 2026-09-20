@@ -87,6 +87,133 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  function humanGame(color: "white" | "black"): GameDetails {
+    return {
+      ...details,
+      configuration: {
+        mode: "ai_vs_human",
+        seats:
+          color === "white"
+            ? { white: { type: "human" }, black: seat }
+            : { white: seat, black: { type: "human" } },
+      },
+    };
+  }
+
+  it.each(["white", "black"] as const)(
+    "coordinates the %s human, blocks duplicate commands, and waits on human turns",
+    async (color) => {
+      const game = humanGame(color);
+      const h = harness(game);
+      h.controller.credentials?.set(color === "white" ? "black" : "white", "openai", "only-ai-key");
+      const moves = color === "white" ? [] : ["f2f3"];
+      h.api.turn.mockImplementation(async () => {
+        const next = snapshot([...moves]);
+        h.store(next);
+        return next;
+      });
+      await h.controller.created(game);
+      expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 0 : 1);
+      expect(h.controller.canMove()).toBe(true);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 0 : 1);
+      const humanMove = color === "white" ? "f2f3" : "e7e5";
+      const pending = Promise.withResolvers<GameSnapshot>();
+      h.api.move.mockReturnValueOnce(pending.promise);
+      const sending = h.controller.move(humanMove);
+      await h.controller.move(humanMove);
+      expect(h.api.move).toHaveBeenCalledTimes(1);
+      expect(h.controller.canMove()).toBe(false);
+      expect(h.controller.getSnapshot().details?.snapshot.moves).toHaveLength(moves.length);
+      moves.push(humanMove);
+      h.store(snapshot(moves));
+      pending.resolve(snapshot(moves));
+      await sending;
+      moves.push(color === "white" ? "e7e5" : "g2g4");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 1 : 2);
+      expect(h.controller.canMove()).toBe(true);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 1 : 2);
+    },
+  );
+
+  it("keeps an uncertain human command and retries its exact identity before paused recovery", async () => {
+    const game = humanGame("white");
+    const h = harness(game);
+    h.keys();
+    await h.controller.created(game);
+    h.api.move.mockRejectedValueOnce(new ApiFailure("network"));
+    await h.controller.move("e2e4");
+    expect(h.api.snapshot).toHaveBeenCalled();
+    expect(h.controller.hasPendingMove()).toBe(true);
+    expect(h.controller.canMove()).toBe(false);
+    await h.controller.move("d2d4");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(h.api.turn).not.toHaveBeenCalled();
+    h.api.move.mockImplementationOnce(async () => {
+      const accepted = snapshot(["e2e4"]);
+      h.store(accepted);
+      return accepted;
+    });
+    await h.controller.retryMove();
+    expect(h.api.move.mock.calls[1]?.[0]).toEqual(h.api.move.mock.calls[0]?.[0]);
+    expect(h.controller.hasPendingMove()).toBe(false);
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
+
+  it("adopts a committed human move after a lost acknowledgement without repeating or dispatching AI", async () => {
+    const game = humanGame("white");
+    const h = harness(game);
+    h.keys();
+    await h.controller.created(game);
+    h.api.move.mockImplementationOnce(async () => {
+      h.store(snapshot(["e2e4"]));
+      throw new ApiFailure("malformed");
+    });
+    await h.controller.move("e2e4");
+    expect(h.controller.getSnapshot().details?.snapshot.moves).toHaveLength(1);
+    expect(h.controller.hasPendingMove()).toBe(false);
+    expect(h.controller.canMove()).toBe(false);
+    expect(h.api.turn).not.toHaveBeenCalled();
+    await h.controller.recover();
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+  });
+
+  it("requires only the AI key after human-turn recovery and never steps a human seat", async () => {
+    window.history.replaceState(null, "", "/?game=" + GAME_ID);
+    const h = harness(humanGame("white"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    await h.controller.continue(false);
+    expect(h.api.controller).not.toHaveBeenCalled();
+    h.controller.setKey("black", "ai-key");
+    await h.controller.continue(true);
+    expect(h.api.controller).not.toHaveBeenCalled();
+    await h.controller.continue(false);
+    expect(h.controller.canMove()).toBe(true);
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
+
+  it("derives resignation from the human seat and does not repeat it after a conflicting revision", async () => {
+    const h = harness(humanGame("black"));
+    h.keys();
+    h.api.turn.mockReturnValue(new Promise(() => undefined));
+    void h.controller.created(humanGame("black"));
+    await vi.advanceTimersByTimeAsync(0);
+    h.api.lifecycle.mockRejectedValueOnce(
+      new ApiFailure("api", "GAME_CONFLICT", snapshot(["e2e4"])),
+    );
+    await h.controller.lifecycle("resign");
+    expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
+    expect(h.api.lifecycle.mock.calls[0]?.[0]).toMatchObject({
+      action: "resign",
+      losingColor: "black",
+    });
+    expect(h.controller.getSnapshot().phase).toBe("uncertain");
+  });
+
   it("serializes turns and measures speed from the complete accepted response", async () => {
     const h = harness();
     h.keys();

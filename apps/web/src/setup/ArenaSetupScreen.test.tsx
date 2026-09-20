@@ -79,6 +79,30 @@ async function selectModel(color: "White" | "Black") {
 }
 
 describe("Arena setup presentation and validated API handoff", () => {
+  it.each(["white", "black"] as const)(
+    "selects a %s human and renders only the AI credential controls",
+    async (color) => {
+      const { onCreated } = fixture();
+      const user = userEvent.setup();
+      await waitFor(() =>
+        expect(screen.getByLabelText("Game mode")).toHaveAttribute("aria-disabled", "false"),
+      );
+      await user.selectOptions(screen.getByLabelText("Game mode"), "ai_vs_human");
+      await user.selectOptions(screen.getByLabelText("Your color"), color);
+      expect(screen.getAllByLabelText("API key")).toHaveLength(1);
+      expect(screen.getByText("You · Human player")).toBeVisible();
+      await selectModel(color === "white" ? "Black" : "White");
+      await user.click(screen.getByRole("button", { name: "Start game" }));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+      expect(onCreated.mock.calls[0]?.[0]).toMatchObject({
+        configuration: {
+          mode: "ai_vs_human",
+          seats: { [color]: { type: "human" } },
+        },
+      });
+    },
+  );
+
   it("disables empty key reveal independently of key validity and resets masking when cleared", async () => {
     const { fetch } = fixture();
     const user = userEvent.setup();

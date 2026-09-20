@@ -31,6 +31,8 @@ export interface SeatSetupState {
 }
 
 export interface SetupState {
+  readonly mode: AiGameConfiguration["mode"];
+  readonly humanColor: ChessColor;
   readonly seats: Readonly<Record<ChessColor, SeatSetupState>>;
   readonly phase: "checking" | "editing" | "creating" | "conflict" | "unavailable" | "handed-off";
   readonly existingGameId: string | null;
@@ -104,6 +106,19 @@ function configuredSeat(seat: SeatSetupState): AiSeat | null {
 }
 
 export function setupConfiguration(state: SetupState): AiGameConfiguration | null {
+  if (state.mode === "ai_vs_human") {
+    const aiColor = state.humanColor === "white" ? "black" : "white";
+    const ai = configuredSeat(state.seats[aiColor]);
+    return ai
+      ? {
+          mode: "ai_vs_human",
+          seats:
+            state.humanColor === "white"
+              ? { white: { type: "human" }, black: ai }
+              : { white: ai, black: { type: "human" } },
+        }
+      : null;
+  }
   const white = configuredSeat(state.seats.white);
   const black = configuredSeat(state.seats.black);
   return white && black ? { mode: "ai_vs_ai", seats: { white, black } } : null;

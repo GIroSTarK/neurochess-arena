@@ -28,6 +28,8 @@ const accessLost = (error: unknown) =>
 
 export class SetupController {
   private state: SetupState = {
+    mode: "ai_vs_ai",
+    humanColor: "white",
     seats: { white: emptySeat("openai"), black: emptySeat("anthropic") },
     phase: "checking",
     existingGameId: null,
@@ -106,19 +108,45 @@ export class SetupController {
     this.publish({ ...this.state, phase: "unavailable", issue: { code: "unavailable" } });
   };
 
-  private canEdit() {
-    return this.lifetime !== null && this.state.phase === "editing";
+  private canEdit(color?: ChessColor) {
+    return (
+      this.lifetime !== null &&
+      this.state.phase === "editing" &&
+      (color === undefined || this.state.mode === "ai_vs_ai" || this.state.humanColor !== color)
+    );
+  }
+
+  setMode(mode: SetupState["mode"]) {
+    if (!this.canEdit() || mode === this.state.mode) return;
+    this.publish({ ...this.state, mode });
+    if (mode === "ai_vs_human") this.clearHumanSeat();
+  }
+
+  setHumanColor(humanColor: ChessColor) {
+    if (!this.canEdit() || humanColor === this.state.humanColor) return;
+    this.publish({ ...this.state, humanColor });
+    if (this.state.mode === "ai_vs_human") this.clearHumanSeat();
+  }
+
+  private clearHumanSeat() {
+    const color = this.state.humanColor;
+    this.discovery[color]?.abort();
+    this.credentials.remove(color);
+    this.seat(
+      color,
+      emptySeat(this.state.seats[color].provider, this.state.seats[color].keyEpoch + 1),
+    );
   }
 
   setProvider(color: ChessColor, provider: AiProvider) {
-    if (!this.canEdit() || provider === this.state.seats[color].provider) return;
+    if (!this.canEdit(color) || provider === this.state.seats[color].provider) return;
     this.discovery[color]?.abort();
     this.credentials.remove(color);
     this.seat(color, emptySeat(provider, this.state.seats[color].keyEpoch + 1));
   }
 
   setKey(color: ChessColor, value: string) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit(color)) return;
     this.discovery[color]?.abort();
     const seat = this.state.seats[color];
     const parsed = sessionApiKeySchema.safeParse(value);
@@ -131,12 +159,12 @@ export class SetupController {
   }
 
   validateKey(color: ChessColor) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit(color)) return;
     if (!this.state.seats[color].keyReady) this.seat(color, { issue: { code: "key_format" } });
   }
 
   setModel(color: ChessColor, modelId: string) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit(color)) return;
     const seat = this.state.seats[color];
     if (modelId === seat.modelId) return;
     if (seat.discovery !== "loaded" || !seat.models.some((model) => model.id === modelId)) return;
@@ -144,7 +172,7 @@ export class SetupController {
   }
 
   setParameter(color: ChessColor, name: keyof AiParameters, value: string) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit(color)) return;
     const seat = this.state.seats[color];
     if (!selectedModel(seat)?.capabilities.parameters[name]) return;
     this.seat(color, { parameters: { ...seat.parameters, [name]: value } });
@@ -165,7 +193,7 @@ export class SetupController {
 
   async discover(color: ChessColor): Promise<void> {
     const seat = this.state.seats[color];
-    if (!this.canEdit() || seat.discovery === "loading") return;
+    if (!this.canEdit(color) || seat.discovery === "loading") return;
     if (!seat.keyReady) {
       this.validateKey(color);
       return;
@@ -254,7 +282,10 @@ export class SetupController {
     this.publish({ ...this.state, phase: "creating", issue: null });
     try {
       // Recheck key ownership before creating. Keys never enter the configuration or handoff.
-      for (const color of colors) this.credentials.require(color, this.state.seats[color].provider);
+      for (const color of colors) {
+        const seat = configuration.seats[color];
+        if (seat.type === "ai") this.credentials.require(color, seat.provider);
+      }
       await this.ensureGuest();
       if (isCancelled()) return null;
       const game = await this.api.create(configuration, request.signal);

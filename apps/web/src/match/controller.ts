@@ -6,6 +6,7 @@ import {
   type GameReplayResponse,
   type GameSnapshot,
   type LifecycleCommand,
+  type MoveCommand,
   type ProviderFailure,
   sessionApiKeySchema,
 } from "@neurochess/contracts";
@@ -43,6 +44,24 @@ const terminal = (snapshot: GameSnapshot) =>
   snapshot.state === "completed" || snapshot.state === "aborted";
 const colors = ["white", "black"] as const;
 
+export function humanColor(details: GameDetails | null): ChessColor | null {
+  const configuration = details?.configuration;
+  return configuration?.mode === "ai_vs_human"
+    ? configuration.seats.white.type === "human"
+      ? "white"
+      : "black"
+    : null;
+}
+
+export function matchKeysReady(state: MatchState): boolean {
+  const configuration = state.details?.configuration;
+  return (
+    configuration !== null &&
+    configuration !== undefined &&
+    colors.every((color) => configuration.seats[color].type === "human" || state.keys[color])
+  );
+}
+
 export class MatchController {
   credentials: ReturnType<typeof createSessionCredentials> | null = null;
   private lifetime: AbortController | null = null;
@@ -53,6 +72,7 @@ export class MatchController {
   private heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
   private turn: { command: AiControlledTurnCommand; abort: AbortController } | null = null;
   private control: LifecycleCommand | null = null;
+  private humanCommand: MoveCommand | null = null;
   private readonly listeners = new Set<() => void>();
   private state: MatchState = {
     phase: "loading",
@@ -118,6 +138,7 @@ export class MatchController {
     this.turn?.abort.abort();
     this.turn = null;
     this.control = null;
+    this.humanCommand = null;
     this.lifetime?.abort();
     this.lifetime = null;
     this.credentials = null;
@@ -180,7 +201,7 @@ export class MatchController {
       this.remember(details.snapshot.gameId);
       this.publish({ details, phase: "ready" });
       if (terminal(details.snapshot)) await this.loadReplay();
-      else if (details.configuration?.mode === "ai_vs_ai") await this.recover();
+      else if (details.configuration) await this.recover();
     } catch (error) {
       if (this.live(signal)) this.fail(error, "unavailable");
     }
@@ -288,9 +309,10 @@ export class MatchController {
       !snapshot ||
       this.state.busy ||
       this.turn ||
+      this.humanCommand ||
       this.state.phase !== "ready" ||
-      !this.state.keys.white ||
-      !this.state.keys.black ||
+      !matchKeysReady(this.state) ||
+      (step && this.state.details?.configuration?.seats[snapshot.turn].type !== "ai") ||
       (created ? snapshot.state !== "active" : snapshot.state !== "paused")
     ) {
       return;
@@ -339,7 +361,15 @@ export class MatchController {
   }
   private schedule() {
     clearTimeout(this.nextTimer);
-    if (this.running && !this.turn && !this.state.busy && this.state.phase === "ready") {
+    const details = this.state.details;
+    if (
+      this.running &&
+      !this.turn &&
+      !this.humanCommand &&
+      !this.state.busy &&
+      this.state.phase === "ready" &&
+      details?.configuration?.seats[details.snapshot.turn].type === "ai"
+    ) {
       this.nextTimer = setTimeout(() => {
         void this.executeTurn(false);
       }, this.state.speed);
@@ -353,6 +383,7 @@ export class MatchController {
       !details ||
       !this.lease ||
       this.turn ||
+      this.humanCommand ||
       this.state.busy ||
       this.state.phase !== "ready"
     ) {
@@ -402,15 +433,81 @@ export class MatchController {
     }
   }
 
-  async lifecycle(action: "pause" | "abort") {
+  canMove() {
+    const snapshot = this.state.details?.snapshot;
+    return (
+      this.state.phase === "ready" &&
+      this.lease &&
+      this.running &&
+      !this.state.busy &&
+      !this.turn &&
+      !this.control &&
+      !this.humanCommand &&
+      snapshot?.state === "active" &&
+      snapshot.turn === humanColor(this.state.details)
+    );
+  }
+  async move(move: string) {
+    if (!this.canMove() || !this.snapshot().legalMoves.includes(move)) return;
+    this.humanCommand = { ...this.command(), move };
+    await this.sendHumanMove(false);
+  }
+  hasPendingMove() {
+    return this.humanCommand !== null;
+  }
+  async retryMove() {
+    if (!this.humanCommand || this.state.busy || this.state.phase !== "uncertain") return;
+    await this.sendHumanMove(true);
+  }
+  private async sendHumanMove(retry: boolean) {
+    const signal = this.lifetime?.signal;
+    const command = this.humanCommand;
+    if (!signal || !command) return;
+    this.publish({ busy: true, issue: null });
+    try {
+      const accepted = await this.api.move(command, signal);
+      if (!this.live(signal) || this.humanCommand !== command) return;
+      this.adopt(accepted);
+      this.humanCommand = null;
+    } catch (error) {
+      if (!this.live(signal) || this.humanCommand !== command) return;
+      this.fail(error);
+      if (!this.live(signal)) return;
+      try {
+        const current = await this.api.snapshot(command.gameId, signal);
+        if (!this.live(signal)) return;
+        this.adopt(current);
+        // Only a newer revision fences an unacknowledged human command.
+        if (current.version > command.expectedVersion) this.humanCommand = null;
+      } catch (readError) {
+        if (this.live(signal)) this.accessLost(readError);
+      }
+    } finally {
+      if (this.live(signal)) this.publish({ busy: false });
+    }
+    if (!this.live(signal)) return;
+    if (retry && !this.humanCommand && !terminal(this.snapshot())) await this.recover();
+    else this.schedule();
+  }
+
+  async lifecycle(action: "pause" | "abort" | "resign") {
     const snapshot = this.state.details?.snapshot;
     if (!this.lifetime || !snapshot || terminal(snapshot) || this.state.busy) return;
+    const losingColor = humanColor(this.state.details);
+    if (action === "resign" && (!losingColor || this.state.phase !== "ready")) return;
     this.stopRunning();
-    this.control = {
-      ...this.command(),
-      action,
-      ...(this.lease ? { controllerId: this.controllerId } : {}),
-    };
+    this.control =
+      action === "resign" && losingColor
+        ? {
+            ...this.command(),
+            action: "resign",
+            losingColor,
+          }
+        : {
+            ...this.command(),
+            action: action === "abort" ? "abort" : "pause",
+            ...(this.lease ? { controllerId: this.controllerId } : {}),
+          };
     await this.sendControl(false);
   }
   async recover() {
@@ -426,6 +523,7 @@ export class MatchController {
       this.adopt(snapshot);
       if (terminal(snapshot)) {
         this.control = null;
+        this.humanCommand = null;
         this.turn?.abort.abort();
         this.turn = null;
         return;
@@ -466,6 +564,11 @@ export class MatchController {
           if (!this.live(signal)) return;
           if (!(error instanceof ApiFailure) || !error.currentSnapshot) throw error;
           this.adopt(error.currentSnapshot);
+          if (command.action === "resign") {
+            this.control = null;
+            this.fail(error);
+            return;
+          }
           if (
             terminal(error.currentSnapshot) ||
             (error.currentSnapshot.state === "paused" && !recovery && command.action === "pause")
@@ -481,6 +584,7 @@ export class MatchController {
       if (this.control) throw new ApiFailure("network");
       this.turn?.abort.abort();
       this.turn = null;
+      this.humanCommand = null;
       if (recovery) this.controllerId = crypto.randomUUID();
       this.publish({
         phase: "ready",
@@ -521,6 +625,7 @@ export class MatchController {
         this.turn?.abort.abort();
         this.turn = null;
         this.control = null;
+        this.humanCommand = null;
         this.publish({ phase: "ready", thinking: false, issue: null });
         return;
       }

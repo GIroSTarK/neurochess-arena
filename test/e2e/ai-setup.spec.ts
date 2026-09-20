@@ -73,7 +73,8 @@ test("setup selects share arrow spacing and revealing a key preserves field widt
     await expectSelectArrowSpacing(seat.getByLabel("Provider", { exact: true }));
     await expectSelectArrowSpacing(seat.getByLabel("Reasoning effort", { exact: true }));
   }
-  await expect(page.locator("select")).toHaveCount(4);
+  await expect(page.locator("select")).toHaveCount(5);
+  await expectSelectArrowSpacing(page.getByRole("combobox", { name: "Game mode", exact: true }));
   const input = white.getByLabel("API key", { exact: true });
   const reveal = white.getByRole("button", { name: "Show key", exact: true });
   const inputBefore = await input.boundingBox();
