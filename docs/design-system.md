@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-09-21
 
 ## Purpose and authority
 
@@ -99,7 +99,7 @@ Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adj
 
 The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest concepts show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
 
-The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. The Arena placeholder explains the upcoming AI experience without inactive game controls; it links to the development Sandbox only when enabled.
+The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. Arena hosts independent AI seat setup and the live/replay views for both AI modes; it links to the development Sandbox only when enabled.
 
 The development Sandbox uses the [selected live composition](design-system/concepts/sandbox-v1/README.md): turn/lifecycle in the page header, both participants above the board, and game controls directly below it. Service readiness sits in the footer. The live rail begins with Moves; guidance and routine feedback share a reserved text area below it. Desktop toolbar rows use three equal-width columns. The primary pair fills its columns; compact lower actions share the column starts, with equal resignation widths and equal gaps between buttons. Each button centers its icon and label. The toolbar reflows to two columns when its own width or enlarged text makes the desktop row too narrow. Keep keyboard order consistent, with orientation and inspection before the final abort action.
 

@@ -190,6 +190,11 @@ test("invalid outputs cause a technical loss while provider failures pause for k
   const invalid = await start(page, "invalid-fixture");
   await expect(page.getByRole("heading", { name: /technical loss/i })).toBeVisible();
   expect((await read(page, invalid.gameId)).terminationReason).toBe("model_technical_loss");
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await expect(events.getByText("Invalid responses: 3 of 3", { exact: true })).toBeVisible();
+  await expect(events.getByText("Attempt 3 · Invalid response", { exact: true })).toBeVisible();
+  await expect(events.getByText(/Attempt 4/)).toHaveCount(0);
   await page.getByRole("button", { name: "New game", exact: true }).click();
   await configure(page, "White", "quota-fixture");
   await configure(page, "Black", "match-fixture");

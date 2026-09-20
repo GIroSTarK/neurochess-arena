@@ -100,6 +100,27 @@ for (const human of ["white", "black"] as const) {
     expect(final.moves.map((move) => move.uci)).toEqual(line);
     await page.getByRole("button", { name: "First", exact: true }).click();
     await expect(page.getByRole("grid")).toHaveAttribute("data-fen", game.fen);
+    const commentary = page.getByRole("region", { name: "Commentary & move details" });
+    await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(
+      commentary.getByText(
+        human === "white" ? "Human move · no model invocation." : "No commentary provided",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(
+      commentary.getByText(
+        human === "black" ? "Human move · no model invocation." : "No commentary provided",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Operational totals" })
+        .getByText("Recorded attempts: 2", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Last", exact: true }).click();
     await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.fen);
     expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual(
@@ -162,7 +183,11 @@ for (const human of ["white", "black"] as const) {
       await playMove(page, game, "f2f3", testInfo.project.name === "mobile-touch");
     }
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-    await expect(page.getByText(/The provider reported a quota/).first()).toBeVisible();
+    await expect(
+      page.getByText(
+        new RegExp(`^${human === "white" ? "Black" : "White"} · The provider reported a quota`),
+      ),
+    ).toBeVisible();
     await square(page, "e4").focus();
     await page.keyboard.press("ArrowRight");
     await expect(square(page, human === "white" ? "f4" : "d4")).toBeFocused();

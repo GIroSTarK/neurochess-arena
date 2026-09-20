@@ -2,6 +2,7 @@ import {
   type AiControlledTurnCommand,
   type ChessColor,
   type GameDetails,
+  type GameInvocations,
   gameParamsSchema,
   type GameReplayResponse,
   type GameSnapshot,
@@ -38,6 +39,9 @@ export interface MatchState {
   exportBusy: boolean;
   exportResult: "copied" | "downloaded" | "manual" | "error" | null;
   exportText: string | null;
+  invocations: GameInvocations | null;
+  invocationsLoading: boolean;
+  invocationsError: boolean;
 }
 
 const terminal = (snapshot: GameSnapshot) =>
@@ -70,6 +74,8 @@ export class MatchController {
   private running = false;
   private nextTimer: ReturnType<typeof setTimeout> | undefined;
   private heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
+  private invocationTimer: ReturnType<typeof setTimeout> | undefined;
+  private invocationRequest: AbortController | null = null;
   private turn: { command: AiControlledTurnCommand; abort: AbortController } | null = null;
   private control: LifecycleCommand | null = null;
   private humanCommand: MoveCommand | null = null;
@@ -91,6 +97,9 @@ export class MatchController {
     exportBusy: false,
     exportResult: null,
     exportText: null,
+    invocations: null,
+    invocationsLoading: false,
+    invocationsError: false,
   };
 
   constructor(
@@ -133,6 +142,7 @@ export class MatchController {
   }
   private closeLifetime() {
     this.stopRunning();
+    this.clearInvocations();
     clearTimeout(this.heartbeatTimer);
     this.lease = false;
     this.turn?.abort.abort();
@@ -194,12 +204,14 @@ export class MatchController {
     const signal = this.lifetime?.signal;
     if (!signal || this.state.busy) return;
     this.stopRunning();
+    this.clearInvocations();
     this.publish({ phase: "loading", details: null, issue: null, replay: null });
     try {
       const details = await this.api.details(gameId, signal);
       if (!this.live(signal)) return;
       this.remember(details.snapshot.gameId);
       this.publish({ details, phase: "ready" });
+      void this.loadInvocations();
       if (terminal(details.snapshot)) await this.loadReplay();
       else if (details.configuration) await this.recover();
     } catch (error) {
@@ -209,9 +221,11 @@ export class MatchController {
 
   async created(details: GameDetails) {
     if (!this.lifetime || this.state.busy) return;
+    this.clearInvocations();
     this.remember(details.snapshot.gameId);
     this.publish({ details, phase: "ready", startedGameId: details.snapshot.gameId, issue: null });
     this.refreshKeys();
+    void this.loadInvocations();
     await this.continue(false, true);
   }
   private refreshKeys() {
@@ -250,7 +264,10 @@ export class MatchController {
     ) {
       return;
     }
+    const changed = snapshot.version !== previous.snapshot.version;
+    if (changed) this.clearInvocations();
     this.publish({ details: { ...previous, snapshot } });
+    if (changed) void this.loadInvocations();
     if (snapshot.state !== "active") this.stopRunning();
     if (terminal(snapshot)) {
       clearTimeout(this.heartbeatTimer);
@@ -408,7 +425,7 @@ export class MatchController {
       this.adopt(accepted);
       this.turn = null;
       this.publish({ thinking: false });
-      if (accepted.state === "paused") await this.readProviderFailure(signal);
+      void this.loadInvocations();
       this.schedule();
     } catch (error) {
       if (!this.live(signal) || this.turn !== request) return;
@@ -418,18 +435,64 @@ export class MatchController {
       this.fail(error);
     }
   }
-  private async readProviderFailure(signal: AbortSignal) {
-    const snapshot = this.snapshot();
+  private clearInvocations() {
+    clearTimeout(this.invocationTimer);
+    this.invocationRequest?.abort();
+    this.invocationRequest = null;
+    this.publish({ invocations: null, invocationsLoading: false, invocationsError: false });
+  }
+  async loadInvocations() {
+    const lifetime = this.lifetime?.signal;
+    const details = this.state.details;
+    if (!lifetime || !details?.configuration || this.invocationRequest) return;
+    const snapshot = details.snapshot;
+    clearTimeout(this.invocationTimer);
+    const request = new AbortController();
+    this.invocationRequest = request;
+    const signal = AbortSignal.any([lifetime, request.signal]);
+    const current = () =>
+      this.live(signal) &&
+      this.invocationRequest === request &&
+      this.state.details?.snapshot.gameId === snapshot.gameId &&
+      this.state.details.snapshot.version === snapshot.version;
+    this.publish({ invocationsLoading: true, invocationsError: false });
     try {
       const records = await this.api.invocations(snapshot.gameId, signal);
-      if (!this.live(signal) || this.state.details?.snapshot.version !== snapshot.version) return;
+      if (!current()) return;
+      if (records.gameId !== snapshot.gameId || records.version !== snapshot.version) {
+        throw new ApiFailure("malformed");
+      }
+      this.publish({ invocations: records });
       const turn = records.turns.at(-1);
-      const error = turn?.attempts.at(-1)?.error;
-      if (turn && error && error.code !== "model_invalid") {
+      const attempt = turn?.attempts.at(-1);
+      const error = attempt?.error;
+      if (
+        snapshot.state === "paused" &&
+        this.state.phase === "ready" &&
+        !this.state.busy &&
+        !this.state.thinking &&
+        turn?.ply === snapshot.moves.length + 1 &&
+        attempt?.outcome === "provider_error" &&
+        error &&
+        error.code !== "model_invalid"
+      ) {
         this.publish({ issue: { kind: "provider", color: turn.color, error } });
       }
     } catch (error) {
-      if (this.live(signal)) this.accessLost(error);
+      if (current() && !this.accessLost(error)) {
+        this.publish({ invocations: null, invocationsError: true });
+      }
+    } finally {
+      if (current()) {
+        this.invocationRequest = null;
+        this.publish({ invocationsLoading: false });
+        // Attempts can finish without a chess revision; reads never authorize another turn.
+        if (!terminal(snapshot)) {
+          this.invocationTimer = setTimeout(() => {
+            void this.loadInvocations();
+          }, 3000);
+        }
+      }
     }
   }
 
@@ -592,7 +655,7 @@ export class MatchController {
         issue:
           recovery && !terminal(this.snapshot()) ? { kind: "notice", code: "recovered" } : null,
       });
-      if (this.state.details?.snapshot.state === "paused") await this.readProviderFailure(signal);
+      void this.loadInvocations();
     } catch (error) {
       if (this.live(signal)) this.fail(error);
     } finally {

@@ -22,7 +22,10 @@ import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
 
+import { CommentaryPanel } from "./CommentaryPanel";
 import { humanColor, MatchController, matchKeysReady } from "./controller";
+import { InvocationEvents } from "./InvocationEvents";
+import { TelemetryPanel } from "./TelemetryPanel";
 
 export function MatchScreen({
   apiBaseUrl,
@@ -306,6 +309,25 @@ export function MatchScreen({
           }
           details={
             <ArenaDetails
+              commentary={
+                <CommentaryPanel
+                  details={details}
+                  records={state.invocations}
+                  selectedPly={terminal ? state.replayPly : null}
+                />
+              }
+              telemetry={
+                <TelemetryPanel
+                  details={details}
+                  records={state.invocations}
+                  loading={state.invocationsLoading}
+                  error={state.invocationsError}
+                  onRefresh={() => {
+                    void controller.loadInvocations();
+                  }}
+                />
+              }
+              events={<InvocationEvents records={state.invocations} snapshot={snapshot} />}
               moves={
                 <MoveHistory
                   moves={snapshot.moves}
