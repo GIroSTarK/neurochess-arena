@@ -46,6 +46,48 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it.each(["white", "black"] as const)(
+    "creates a %s human with only the opponent's key",
+    async (humanColor) => {
+      const { controller, api, credentials, ready } = await fixture();
+      await ready();
+      controller.setHumanColor(humanColor);
+      controller.setMode("ai_vs_human");
+      expect(() => credentials.require(humanColor, "openai")).toThrow();
+      controller.setKey(humanColor, "ignored-key");
+      await controller.discover(humanColor);
+      expect(api.discover).toHaveBeenCalledTimes(2);
+      const game = await controller.start();
+      expect(game?.configuration).toMatchObject({
+        mode: "ai_vs_human",
+        seats: {
+          [humanColor]: { type: "human" },
+          [humanColor === "white" ? "black" : "white"]: { type: "ai" },
+        },
+      });
+      expect(JSON.stringify(api.create.mock.calls)).not.toContain("sentinel-key");
+    },
+  );
+
+  it("cancels stale discovery when a seat becomes human and requires fresh AI configuration when switched back", async () => {
+    const { controller, api, credentials, ready } = await fixture();
+    await ready();
+    const old = deferred<ModelDiscoveryResult>();
+    api.discover.mockReturnValueOnce(old.promise);
+    const pending = controller.discover("white");
+    await vi.waitFor(() => expect(api.discover).toHaveBeenCalledTimes(3));
+    controller.setMode("ai_vs_human");
+    expect(api.discover.mock.calls[2]?.[1].aborted).toBe(true);
+    old.resolve({ ok: true, models: setupModels("openai") });
+    await pending;
+    expect(controller.getSnapshot().seats.white.models).toEqual([]);
+    controller.setHumanColor("black");
+    expect(() => credentials.require("black", "openai")).toThrow();
+    expect(setupConfiguration(controller.getSnapshot())).toBeNull();
+    controller.setMode("ai_vs_ai");
+    expect(setupConfiguration(controller.getSnapshot())).toBeNull();
+  });
+
   it("mounts read-only, then creates identical models with independent settings and keys", async () => {
     const { controller, api, credentials, ready, disconnect } = await fixture();
     expect(api.bootstrap).not.toHaveBeenCalled();

@@ -7,7 +7,9 @@ import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { SeatSetup } from "../arena/setup/SeatSetup";
+import { PieceIcon } from "../board/PieceIcon";
 import { Button } from "../ui/Button";
+import { Select } from "../ui/Select";
 
 import { type SetupApi, SetupController, type SetupCredentials } from "./controller";
 import { parameterErrors, setupConfiguration, type SetupIssue } from "./state";
@@ -47,6 +49,7 @@ export function ArenaSetupScreen({
     }
   }
   const seatMessage = (color: "white" | "black") => {
+    if (state.mode === "ai_vs_human" && state.humanColor === color) return t("setup.humanSeat");
     const seat = state.seats[color];
     if (seat.issue) return issueMessage(seat.issue);
     if (seat.discovery === "loading") return t("setup.loading");
@@ -80,10 +83,10 @@ export function ArenaSetupScreen({
       footer={t("setup.footer")}
       announcement={announcement}
     >
-      <ArenaHeader title={t("setup.title")} description={t("setup.description")} />
-      <div className="mx-auto mb-6 max-w-[1120px] border-b border-divider pb-4 text-label font-semibold text-accent">
-        {t("setup.mode")}
-      </div>
+      <ArenaHeader
+        title={t("setup.title")}
+        description={t(state.mode === "ai_vs_ai" ? "setup.description" : "setup.humanDescription")}
+      />
       <form
         className="mx-auto grid max-w-[1120px] min-w-0 gap-6 lg:chamfer-frame lg:p-6"
         noValidate
@@ -94,9 +97,56 @@ export function ArenaSetupScreen({
           });
         }}
       >
+        <div className="grid gap-4 border-b border-divider pb-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-label">
+            {t("setup.gameMode")}
+            <Select
+              value={state.mode}
+              aria-disabled={state.phase !== "editing"}
+              onChange={(event) =>
+                controller.setMode(
+                  event.target.value === "ai_vs_human" ? "ai_vs_human" : "ai_vs_ai",
+                )
+              }
+            >
+              <option value="ai_vs_ai">{t("setup.mode")}</option>
+              <option value="ai_vs_human">{t("setup.humanMode")}</option>
+            </Select>
+          </label>
+          {state.mode === "ai_vs_human" ? (
+            <label className="grid gap-2 text-label">
+              {t("setup.yourColor")}
+              <Select
+                value={state.humanColor}
+                aria-disabled={state.phase !== "editing"}
+                onChange={(event) =>
+                  controller.setHumanColor(event.target.value === "black" ? "black" : "white")
+                }
+              >
+                <option value="white">{t("players.white")}</option>
+                <option value="black">{t("players.black")}</option>
+              </Select>
+            </label>
+          ) : null}
+        </div>
         <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:gap-8">
           {(["white", "black"] as const).map((color) => {
             const seat = state.seats[color];
+            if (state.mode === "ai_vs_human" && state.humanColor === color) {
+              return (
+                <fieldset
+                  key={color}
+                  className="grid min-w-0 content-start gap-6 rounded-panel border border-divider bg-surface p-4 md:p-6 lg:border-0 lg:bg-transparent"
+                >
+                  <legend className="float-left mb-2 flex w-full items-center gap-3 border-b border-divider pb-4 text-section font-semibold">
+                    <PieceIcon color={color} kind="k" className="size-8 shrink-0" />
+                    {t(`players.${color}`)}
+                  </legend>
+                  <p>{t("setup.humanSeat")}</p>
+                  <p className="text-body text-text-secondary">{t("setup.humanHint")}</p>
+                </fieldset>
+              );
+            }
             return (
               <SeatSetup
                 key={color}

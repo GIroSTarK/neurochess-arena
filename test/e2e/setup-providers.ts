@@ -40,6 +40,10 @@ export function setupProviders(): AiAdapters {
           const moveIndex =
             (Number(input.context.fen.split(" ")[5]) - 1) * 2 +
             (input.context.turn === "black" ? 1 : 0);
+          const line =
+            input.apiKey === "promotion-fixture"
+              ? ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2", "b7a8n", "g2h1r"]
+              : ["f2f3", "e7e5", "g2g4", "d8h4"];
           return {
             ...base,
             ok: true as const,
@@ -47,9 +51,7 @@ export function setupProviders(): AiAdapters {
               move:
                 input.apiKey === "invalid-fixture"
                   ? "a1a8"
-                  : (["f2f3", "e7e5", "g2g4", "d8h4"][moveIndex] ??
-                    input.context.legalMoves[0] ??
-                    "a1a8"),
+                  : (line[moveIndex] ?? input.context.legalMoves[0] ?? "a1a8"),
             },
           };
         },

@@ -1,3 +1,4 @@
+import type { ChessColor } from "@neurochess/contracts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +19,7 @@ export function AiControls({
   onStep,
   onStop,
   onSpeed,
+  resignation,
 }: {
   readonly paused: boolean;
   readonly busy: boolean;
@@ -30,10 +32,18 @@ export function AiControls({
   readonly onStep: () => void;
   readonly onStop: () => void;
   readonly onSpeed: (speed: number) => void;
+  readonly resignation?: { color: ChessColor; disabled: boolean; onResign: () => void } | undefined;
 }) {
   const { t } = useTranslation();
-  const [confirmation, setConfirmation] = useState<string | null>(null);
-  const confirming = confirmation === epoch && !busy;
+  const [confirmation, setConfirmation] = useState<{
+    epoch: string;
+    action: "stop" | "resign";
+  } | null>(null);
+  const resigning = confirmation?.action === "resign";
+  const confirming =
+    confirmation?.epoch === epoch &&
+    !busy &&
+    (!resigning || (resignation && !resignation.disabled));
   if (confirmation !== null && !confirming) setConfirmation(null);
   return (
     <section aria-label={t("lifecycle.controls")} className="mt-4 grid gap-3">
@@ -52,7 +62,20 @@ export function AiControls({
         <Button variant="secondary" aria-disabled={!canStep || busy} onClick={onStep}>
           {t("match.next")}
         </Button>
-        <Button variant="quiet-danger" aria-disabled={busy} onClick={() => setConfirmation(epoch)}>
+        {resignation ? (
+          <Button
+            variant="quiet"
+            aria-disabled={busy || resignation.disabled}
+            onClick={() => setConfirmation({ epoch, action: "resign" })}
+          >
+            {t(resignation.color === "white" ? "lifecycle.resignWhite" : "lifecycle.resignBlack")}
+          </Button>
+        ) : null}
+        <Button
+          variant="quiet-danger"
+          aria-disabled={busy}
+          onClick={() => setConfirmation({ epoch, action: "stop" })}
+        >
           {t("match.stop")}
         </Button>
       </div>
@@ -66,8 +89,18 @@ export function AiControls({
       </label>
       {confirming ? (
         <Dialog
-          title={t("match.stopTitle")}
-          description={t("match.stopDescription")}
+          title={
+            resigning && resignation
+              ? t("lifecycle.resignTitle", { color: t(`players.${resignation.color}`) })
+              : t("match.stopTitle")
+          }
+          description={
+            resigning && resignation
+              ? t("lifecycle.resignDescription", {
+                  winner: t(resignation.color === "white" ? "players.black" : "players.white"),
+                })
+              : t("match.stopDescription")
+          }
           onCancel={() => setConfirmation(null)}
         >
           <div className="my-4 flex flex-wrap gap-3">
@@ -78,10 +111,11 @@ export function AiControls({
               variant="danger"
               onClick={() => {
                 setConfirmation(null);
-                onStop();
+                if (resigning) resignation?.onResign();
+                else onStop();
               }}
             >
-              {t("match.confirmStop")}
+              {t(resigning ? "lifecycle.confirmResign" : "match.confirmStop")}
             </Button>
           </div>
         </Dialog>

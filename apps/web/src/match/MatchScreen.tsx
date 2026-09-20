@@ -22,7 +22,7 @@ import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
 
-import { MatchController } from "./controller";
+import { humanColor, MatchController, matchKeysReady } from "./controller";
 
 export function MatchScreen({
   apiBaseUrl,
@@ -37,7 +37,12 @@ export function MatchScreen({
   useEffect(() => controller.connect(), [controller]);
   const helpId = useId();
   const board = useRef<ChessboardHandle>(null);
-  const [orientation, setOrientation] = useState<ChessColor>("white");
+  const [flipped, setFlipped] = useState<{ gameId: string; color: ChessColor } | null>(null);
+  const human = humanColor(state.details);
+  const orientation =
+    flipped && flipped.gameId === state.details?.snapshot.gameId
+      ? flipped.color
+      : (human ?? "white");
   useLayoutEffect(() => {
     if (!state.startedGameId) return;
     const active = document.activeElement;
@@ -80,12 +85,17 @@ export function MatchScreen({
     state.phase === "recovering"
       ? t("match.recovering")
       : state.busy
-        ? t("match.applying")
+        ? t(controller.hasPendingMove() ? "match.moving" : "match.applying")
         : state.thinking && snapshot
           ? t("match.thinking", { color: t(`players.${snapshot.turn}`) })
           : snapshot?.state === "paused"
             ? t("match.paused")
-            : t("match.waiting");
+            : snapshot?.state === "active" && snapshot.turn === human
+              ? t("match.yourTurn", { color: t(`players.${human}`) })
+              : t("match.waiting");
+  const guidance = human
+    ? t("match.playing", { color: t(`players.${human}`) })
+    : t("match.observing");
   const resultTitle = snapshot?.terminationReason
     ? t(`results.${snapshot.terminationReason}`, {
         winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
@@ -107,7 +117,9 @@ export function MatchScreen({
         ? t("players.paused")
         : state.thinking && snapshot?.turn === color
           ? t("reference.thinking")
-          : t("players.waiting");
+          : snapshot?.turn === color && seat?.type === "human"
+            ? t("players.toMove")
+            : t("players.waiting");
     return {
       identity:
         seat?.type === "ai"
@@ -120,14 +132,14 @@ export function MatchScreen({
           t("players.paused"),
           t("reference.thinking"),
           t("players.waiting"),
+          t("players.toMove"),
         ],
         isTurn: snapshot?.state === "active" && snapshot.turn === color,
       },
     };
   };
-  const supported = details?.configuration?.mode === "ai_vs_ai";
-  const canContinue =
-    state.phase === "ready" && !state.thinking && state.keys.white && state.keys.black;
+  const supported = details?.configuration !== null && details?.configuration !== undefined;
+  const canContinue = state.phase === "ready" && !state.thinking && matchKeysReady(state);
   return (
     <AppShell
       mainId="arena-match"
@@ -147,15 +159,20 @@ export function MatchScreen({
               title={status}
               titleVariants={[
                 ...thinkingLabels,
+                t("match.yourTurn", { color: t("players.white") }),
+                t("match.yourTurn", { color: t("players.black") }),
                 t("match.paused"),
                 t("match.waiting"),
                 t("match.applying"),
+                t("match.moving"),
                 t("match.recovering"),
               ]}
               pausedLabels={[t("match.paused")]}
             />
+          ) : terminal ? (
+            t("match.replaying")
           ) : (
-            t("match.observing")
+            guidance
           )
         }
         score={
@@ -197,12 +214,14 @@ export function MatchScreen({
               <Chessboard
                 ref={board}
                 snapshot={snapshot}
-                canMove={false}
+                canMove={controller.canMove()}
                 orientation={orientation}
                 interactionEpoch={`${snapshot.gameId}:${snapshot.version}:${state.replayPly}`}
                 describedBy={helpId}
                 view={state.replay ? replayView(state.replay, state.replayPly) : undefined}
-                onMove={() => undefined}
+                onMove={(move) => {
+                  void controller.move(move);
+                }}
               />
               {terminal ? (
                 <>
@@ -240,7 +259,11 @@ export function MatchScreen({
                   paused={snapshot.state === "paused" && !state.thinking}
                   busy={state.busy || state.phase === "loading" || state.phase === "recovering"}
                   canContinue={canContinue}
-                  canStep={canContinue && snapshot.state === "paused"}
+                  canStep={
+                    canContinue &&
+                    snapshot.state === "paused" &&
+                    details.configuration?.seats[snapshot.turn].type === "ai"
+                  }
                   epoch={`${snapshot.version}:${state.phase}`}
                   speed={state.speed}
                   onPause={() => {
@@ -256,12 +279,28 @@ export function MatchScreen({
                     void controller.lifecycle("abort");
                   }}
                   onSpeed={(speed) => controller.setSpeed(speed)}
+                  resignation={
+                    human
+                      ? {
+                          color: human,
+                          disabled: state.phase !== "ready",
+                          onResign: () => {
+                            void controller.lifecycle("resign");
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
               <BoardTools
                 helpId={helpId}
                 orientation={orientation}
-                onFlip={() => setOrientation((color) => (color === "white" ? "black" : "white"))}
+                onFlip={() =>
+                  setFlipped({
+                    gameId: snapshot.gameId,
+                    color: orientation === "white" ? "black" : "white",
+                  })
+                }
               />
             </>
           }
@@ -299,6 +338,17 @@ export function MatchScreen({
                         {t("match.retryControl")}
                       </Button>
                     ) : null}
+                    {controller.hasPendingMove() ? (
+                      <Button
+                        variant="secondary"
+                        aria-disabled={state.busy}
+                        onClick={() => {
+                          void controller.retryMove();
+                        }}
+                      >
+                        {t("match.retryMove")}
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
                 {terminal ? (
@@ -307,6 +357,7 @@ export function MatchScreen({
                   </Button>
                 ) : snapshot.state === "paused" ? (
                   <section aria-label={t("match.keys")} className="grid gap-4">
+                    {snapshot.turn === human ? <p>{t("match.humanPaused")}</p> : null}
                     <p className="text-label text-text-secondary">
                       {t("setup.sessionOnly")} · {t("setup.sessionOnlyHint")}
                     </p>
@@ -342,7 +393,7 @@ export function MatchScreen({
                     })}
                   </section>
                 ) : (
-                  <p className="text-text-secondary">{t("match.observing")}</p>
+                  <p className="text-text-secondary">{guidance}</p>
                 )}
               </div>
             </ArenaDetails>
