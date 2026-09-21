@@ -296,16 +296,18 @@ test("setup keeps key rejection and empty discovery recoverable and clears page-
   );
 });
 
-test("setup handles an existing Sandbox and public Arena preserves the return path", async ({
+test("setup ignores an existing Sandbox and explicit game URLs preserve the return path", async ({
   page,
 }) => {
   const game = await startSandbox(page, false);
   await page.goto("/__test__/setup");
-  await page.getByRole("button", { name: "Return to game" }).click();
-  await expect(page.getByRole("status")).toContainText(game.gameId);
+  await expect(page.getByLabel("Game mode")).toHaveAttribute("aria-disabled", "false");
+  await expect(page.getByRole("button", { name: "Return to game" })).toHaveCount(0);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
-  await page.getByRole("button", { name: "Return to game" }).click();
+  await expect(page.getByLabel("Game mode")).toHaveAttribute("aria-disabled", "false");
+  await expect(page.getByRole("button", { name: "Return to game" })).toHaveCount(0);
+  await page.goto("/?game=" + game.gameId);
   await expect(page.getByRole("link", { name: "Return to Sandbox" })).toHaveAttribute(
     "href",
     `/sandbox?game=${game.gameId}`,

@@ -62,7 +62,10 @@ export interface GameReader {
   getMoves(gameId: string): Promise<StoredMove[]>;
   getAiTurns(gameId: string): Promise<StoredAiTurn[]>;
   getModelInvocations(gameId: string): Promise<StoredModelInvocation[]>;
-  findUnfinishedGame(guestId: string, sandboxOnly?: boolean): Promise<StoredGame | undefined>;
+  findUnfinishedGame(
+    guestId: string,
+    scope: "ordinary" | "sandbox",
+  ): Promise<StoredGame | undefined>;
 }
 
 export interface GameTransaction extends GameReader {
@@ -143,7 +146,7 @@ function readerFor(db: Executor): GameReader {
           ),
         )
         .orderBy(asc(modelInvocations.attemptNumber)),
-    async findUnfinishedGame(guestId, sandboxOnly = false) {
+    async findUnfinishedGame(guestId, scope) {
       const [game] = await db
         .select()
         .from(games)
@@ -151,7 +154,7 @@ function readerFor(db: Executor): GameReader {
           and(
             eq(games.ownerGuestSessionId, guestId),
             inArray(games.state, ["active", "paused"]),
-            sandboxOnly ? eq(games.isSandbox, true) : undefined,
+            eq(games.isSandbox, scope === "sandbox"),
           ),
         );
       return game;

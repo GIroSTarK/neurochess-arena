@@ -1,0 +1,2 @@
+DROP INDEX "games_one_unfinished_per_guest";--> statement-breakpoint
+CREATE UNIQUE INDEX "games_one_unfinished_per_guest_scope" ON "games" USING btree ("owner_guest_session_id","is_sandbox") WHERE "games"."state" in ('active', 'paused');

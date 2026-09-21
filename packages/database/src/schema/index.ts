@@ -92,8 +92,8 @@ export const games = pgTable(
   },
   (table) => [
     index("games_owner_idx").on(table.ownerGuestSessionId),
-    uniqueIndex("games_one_unfinished_per_guest")
-      .on(table.ownerGuestSessionId)
+    uniqueIndex("games_one_unfinished_per_guest_scope")
+      .on(table.ownerGuestSessionId, table.isSandbox)
       .where(sql`${table.state} in ('active', 'paused')`),
     check("games_version_check", sql`${table.version} between 0 and 9007199254740991`),
     check("games_sandbox_mode_check", sql`not ${table.isSandbox} or ${table.mode} is null`),

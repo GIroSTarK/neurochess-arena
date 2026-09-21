@@ -251,7 +251,10 @@ export function createGameService(
       if (!(await tx.lockGuest(principal.guestSessionId))) {
         throw new GameRequestError("UNAUTHORIZED");
       }
-      const occupied = await tx.findUnfinishedGame(principal.guestSessionId);
+      const occupied = await tx.findUnfinishedGame(
+        principal.guestSessionId,
+        configuration === null ? "sandbox" : "ordinary",
+      );
       if (occupied) {
         const locked = await tx.lockGame(occupied.id);
         if (!locked) throw new GameIntegrityError();
@@ -375,7 +378,7 @@ export function createGameService(
         if (!(await reader.getGuest(principal.guestSessionId))) {
           throw new GameRequestError("UNAUTHORIZED");
         }
-        const stored = await reader.findUnfinishedGame(principal.guestSessionId);
+        const stored = await reader.findUnfinishedGame(principal.guestSessionId, "ordinary");
         if (!stored) return { game: null };
         const { snapshot, configuration } = await restoreAuthorized(reader, principal, stored);
         return { game: { snapshot, configuration } };
@@ -414,7 +417,7 @@ export function createGameService(
         if (!(await reader.getGuest(principal.guestSessionId))) {
           throw new GameRequestError("UNAUTHORIZED");
         }
-        const stored = await reader.findUnfinishedGame(principal.guestSessionId, true);
+        const stored = await reader.findUnfinishedGame(principal.guestSessionId, "sandbox");
         return {
           snapshot: stored ? (await restoreAuthorized(reader, principal, stored)).snapshot : null,
         };

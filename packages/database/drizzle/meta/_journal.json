@@ -50,6 +50,13 @@
       "when": 1789916288133,
       "tag": "0006_ai_controller_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789998905107,
+      "tag": "0007_separate_sandbox_game_slot",
+      "breakpoints": true
     }
   ]
 }

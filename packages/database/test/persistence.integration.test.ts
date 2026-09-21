@@ -173,6 +173,8 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0003_ai_game_configuration",
         "0004_ai_turn_reservations",
         "0005_ai_invocation_policy",
+        "0006_ai_controller_presence",
+        "0007_separate_sandbox_game_slot",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -283,6 +285,16 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       );
       expect((await tx.execute(sql`select * from ai_turns`)).rows).toEqual([]);
       expect((await tx.execute(sql`select * from model_invocations`)).rows).toEqual([]);
+      await applyMigration(migrationFiles[5]!);
+      await tx.execute(
+        sql`insert into ai_controllers(game_id, controller_id, expires_at) values (${aiGame}, ${randomUUID()}, clock_timestamp() + interval '1 minute')`,
+      );
+      const controllers = await tx.execute(sql`select * from ai_controllers`);
+      await applyMigration(migrationFiles[6]!);
+      expect((await tx.execute(sql`select * from ai_controllers`)).rows).toEqual(controllers.rows);
+      expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual(
+        reservationRows.rows,
+      );
       expect((await tx.execute(sql`select * from games order by id`)).rows).toEqual(
         afterReservations[0]!.rows,
       );
@@ -475,7 +487,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, other.id))).toBe(1);
   });
 
-  it("reapplies migrations without changing persisted data and installs exactly one unfinished-owner index", async () => {
+  it("reapplies migrations without changing persisted data and replaces the unfinished-owner index with a scoped index", async () => {
     const created = await game();
     await runMigrations(database);
     await runMigrations(database);
@@ -483,27 +495,46 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       created,
     );
     const result = await database.db.execute<{ indexdef: string }>(sql`
-      select indexdef from pg_indexes where schemaname = 'public' and indexname = 'games_one_unfinished_per_guest'
+      select indexdef from pg_indexes where schemaname = 'public' and indexname in ('games_one_unfinished_per_guest', 'games_one_unfinished_per_guest_scope')
     `);
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]!.indexdef).toContain("UNIQUE INDEX");
+    expect(result.rows[0]!.indexdef).toContain("games_one_unfinished_per_guest_scope");
+    expect(result.rows[0]!.indexdef).toContain("(owner_guest_session_id, is_sandbox)");
     expect(result.rows[0]!.indexdef).toContain("active");
     expect(result.rows[0]!.indexdef).toContain("paused");
   });
 
-  it("enforces the active/paused slot in PostgreSQL even for direct racing inserts", async () => {
+  it.each([false, true])(
+    "enforces the active/paused slot for isSandbox=%s even for direct racing inserts",
+    async (isSandbox) => {
+      const owner = await guest();
+      const second = integrationDatabase();
+      try {
+        const results = await Promise.allSettled([
+          database.db.insert(games).values({ ...gameValues(owner.id), isSandbox }),
+          second.db.insert(games).values({ ...gameValues(owner.id), state: "paused", isSandbox }),
+        ]);
+        expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+        expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+        expect(await database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(1);
+      } finally {
+        await second.close();
+      }
+    },
+  );
+
+  it("allows independent ordinary and Sandbox slots during direct racing inserts", async () => {
     const owner = await guest();
     const second = integrationDatabase();
     try {
-      const results = await Promise.allSettled([
+      await Promise.all([
         database.db.insert(games).values(gameValues(owner.id)),
         second.db
           .insert(games)
           .values({ ...gameValues(owner.id), state: "paused", isSandbox: true }),
       ]);
-      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-      expect(await database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(1);
+      expect(await database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(2);
     } finally {
       await second.close();
     }
