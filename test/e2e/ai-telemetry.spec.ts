@@ -175,6 +175,24 @@ test("live details stay within the primary controls across tabs and long comment
       true,
     );
     await expectUnbrokenWords(rail.locator("button"));
+    const moves = page.getByRole("tabpanel", { name: "Moves", exact: true });
+    if (await moves.isVisible()) {
+      const width = await moves.evaluate((panel) => {
+        const history = panel.querySelector('[role="region"][tabindex="0"]')!;
+        const table = history.querySelector("table")!;
+        return {
+          panelLeft: panel.getBoundingClientRect().left,
+          panelRight: panel.getBoundingClientRect().right,
+          historyLeft: history.getBoundingClientRect().left,
+          historyRight: history.getBoundingClientRect().right,
+          contentWidth: history.clientWidth,
+          tableWidth: table.getBoundingClientRect().width,
+        };
+      });
+      expect(width.historyLeft).toBeCloseTo(width.panelLeft, 0);
+      expect(width.historyRight).toBeCloseTo(width.panelRight, 0);
+      expect(width.tableWidth).toBeCloseTo(width.contentWidth, 0);
+    }
   }
   for (const width of widths) {
     await page.setViewportSize({ width, height: 900 });
