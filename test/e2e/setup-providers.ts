@@ -35,6 +35,9 @@ export function setupProviders(): AiAdapters {
             });
           }
           const base = { durationMs: 1, usage: null, providerRequestId: null };
+          if (input.apiKey === "expired-fixture") {
+            return { ...base, ok: false as const, error: { code: "provider_auth" as const } };
+          }
           if (input.apiKey === "quota-fixture") {
             return { ...base, ok: false as const, error: { code: "provider_quota" as const } };
           }

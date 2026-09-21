@@ -15,7 +15,6 @@ import { MoveHistory } from "../arena/panels/MoveHistory";
 import { PgnActions } from "../arena/panels/PgnActions";
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
 import { ReplayControls } from "../arena/panels/ReplayControls";
-import { setupFieldClass } from "../arena/setup/ModelPicker";
 import { StatusSummary } from "../arena/StatusSummary";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { replayView } from "../position/replay";
@@ -25,6 +24,7 @@ import { Button } from "../ui/Button";
 import { CommentaryPanel } from "./CommentaryPanel";
 import { humanColor, MatchController, matchKeysReady } from "./controller";
 import { InvocationEvents } from "./InvocationEvents";
+import { PausedCredentials } from "./PausedCredentials";
 import { TelemetryPanel } from "./TelemetryPanel";
 
 export function MatchScreen({
@@ -378,42 +378,23 @@ export function MatchScreen({
                     {t("match.newGame")}
                   </Button>
                 ) : snapshot.state === "paused" ? (
-                  <section aria-label={t("match.keys")} className="grid gap-4">
+                  <>
                     {snapshot.turn === human ? <p>{t("match.humanPaused")}</p> : null}
-                    <p className="text-label text-text-secondary">
-                      {t("setup.sessionOnly")} · {t("setup.sessionOnlyHint")}
-                    </p>
-                    {(["white", "black"] as const).map((color) => {
-                      const seat = details.configuration?.seats[color];
-                      return seat?.type === "ai" ? (
-                        <div
-                          key={`${color}:${state.keyEpoch}`}
-                          className="grid min-w-0 gap-2 text-label"
-                        >
-                          <label htmlFor={`${helpId}-${color}-key`}>
-                            {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
-                            {t("setup.apiKey")}
-                          </label>
-                          <input
-                            id={`${helpId}-${color}-key`}
-                            aria-describedby={`${helpId}-${color}-hint`}
-                            type="password"
-                            autoComplete="off"
-                            autoCapitalize="none"
-                            spellCheck={false}
-                            maxLength={4096}
-                            className={setupFieldClass}
-                            readOnly={state.thinking || state.busy}
-                            aria-disabled={state.thinking || state.busy}
-                            onChange={(event) => controller.setKey(color, event.target.value)}
-                          />
-                          <span id={`${helpId}-${color}-hint`} className="text-text-secondary">
-                            {t(state.keys[color] ? "match.keyReady" : "match.keyMissing")}
-                          </span>
-                        </div>
-                      ) : null;
-                    })}
-                  </section>
+                    {details.configuration ? (
+                      <PausedCredentials
+                        key={`${snapshot.gameId}:${snapshot.version}:${state.keyEpoch}`}
+                        seats={details.configuration.seats}
+                        keys={state.keys}
+                        rejectedColor={
+                          issue?.kind === "provider" && issue.error.code === "provider_auth"
+                            ? issue.color
+                            : null
+                        }
+                        disabled={state.thinking || state.busy}
+                        onKeyChange={(color, value) => controller.setKey(color, value)}
+                      />
+                    ) : null}
+                  </>
                 ) : (
                   <p className="text-text-secondary">{guidance}</p>
                 )}

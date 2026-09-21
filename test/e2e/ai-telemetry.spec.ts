@@ -92,6 +92,7 @@ test("provider pause keeps the invalid budget and attempt history through manual
   await expect(events.getByText("Invalid responses: 1 of 3", { exact: true })).toBeVisible();
   await expect(events.getByText("Attempt 2 · Provider failure", { exact: true })).toBeVisible();
   await expect(events.getByText("Paused for user-directed retry.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Change API keys", exact: true }).click();
   await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("match-fixture");
   await page.getByRole("button", { name: "Next move", exact: true }).click();
   await expect(events.getByText("Attempt 3 · Move accepted", { exact: true })).toBeVisible();

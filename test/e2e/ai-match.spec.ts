@@ -41,6 +41,8 @@ async function read(page: Page, gameId: string) {
   return gameSnapshotSchema.parse(await response.json());
 }
 async function fillRecovery(page: Page) {
+  const changeKeys = page.getByRole("button", { name: "Change API keys", exact: true });
+  if (await changeKeys.isVisible()) await changeKeys.click();
   await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("match-fixture");
   await page.getByLabel("Black · Anthropic · API key", { exact: true }).fill("match-fixture");
 }
@@ -98,6 +100,7 @@ test("Pause, speed, duplicate Next move and Resume use complete server snapshots
   await pause.press("Enter");
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeFocused();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Keys for this tab" })).toHaveCount(0);
   await fillRecovery(page);
   const before = await read(page, game.gameId);
   const step = page.getByRole("button", { name: "Next move", exact: true });
@@ -133,12 +136,76 @@ test("single steps can complete checkmate and every paused position remains read
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
 });
 
+test("ordinary Pause preserves keys through credential form toggles, Next move and Resume", async ({
+  page,
+}, testInfo) => {
+  const game = await start(page);
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  const keys = page.getByRole("region", { name: "Keys for this tab" });
+  await expect(keys).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  const changeKeys = page.getByRole("button", { name: "Change API keys", exact: true });
+  await changeKeys.focus();
+  await changeKeys.press("Enter");
+  const hideKeys = page.getByRole("button", { name: "Hide API keys", exact: true });
+  await expect(hideKeys).toBeFocused();
+  await expect(hideKeys).toHaveAttribute("aria-expanded", "true");
+  const whiteKey = page.getByLabel("White · OpenAI · API key", { exact: true });
+  await whiteKey.fill("replacement-fixture");
+  await hideKeys.click();
+  await expect(changeKeys).toBeFocused();
+  await expect(changeKeys).toHaveAttribute("aria-expanded", "false");
+  await expect(keys).toHaveCount(0);
+  await changeKeys.press("Enter");
+  await expect(whiteKey).toHaveValue("replacement-fixture");
+  await hideKeys.click();
+  await page.screenshot({ path: testInfo.outputPath("ordinary-pause.png"), fullPage: true });
+  await page.getByRole("button", { name: "Next move", exact: true }).click();
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(2);
+  await expect(keys).toHaveCount(0);
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+});
+
+test("a provider-rejected key opens only its seat and replacement stays editable until explicit retry", async ({
+  page,
+}) => {
+  const game = await start(page, "expired-fixture");
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  const whiteKey = page.getByLabel("White · OpenAI · API key", { exact: true });
+  await expect(whiteKey).toHaveValue("");
+  await expect(page.getByLabel("Black · Anthropic · API key", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("The provider rejected this key. Enter a replacement, then retry.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await whiteKey.pressSequentially("match-fixture");
+  await expect(whiteKey).toHaveValue("match-fixture");
+  await expect(whiteKey).toBeFocused();
+  expect((await read(page, game.gameId)).moves).toHaveLength(0);
+  await page.getByRole("button", { name: "Next move", exact: true }).click();
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+  await expect(page.getByRole("region", { name: "Keys for this tab" })).toHaveCount(0);
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+});
+
 test("recovery fields and match controls reflow with expanded text and keyboard focus", async ({
   page,
 }, testInfo) => {
   await start(page, "slow-fixture");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Change API keys", exact: true }).click();
   await setPseudoLocalization(page, true);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "200%";
@@ -233,6 +300,16 @@ for (const during of ["inference", "delay"] as const) {
       "true",
     );
     await expect(page.getByLabel("White · OpenAI · API key", { exact: true })).toHaveValue("");
+    await page.getByRole("button", { name: "Hide API keys", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Keys for this tab" })).toHaveCount(0);
+    await expect(
+      page.getByText("Re-enter the missing API keys before continuing.", { exact: true }),
+    ).toBeVisible();
+    const resume = page.getByRole("button", { name: "Resume", exact: true });
+    await expect(resume).toHaveAttribute("aria-disabled", "true");
+    await resume.focus();
+    await resume.press("Enter");
+    expect(turns).toHaveLength(count);
     await fillRecovery(page);
     expect(turns).toHaveLength(count);
     await page.getByRole("button", { name: "Next move", exact: true }).click();
