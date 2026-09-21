@@ -115,6 +115,16 @@ for (const human of [undefined, "white", "black"] as const) {
       "aria-disabled",
       "false",
     );
+    await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+    await expect(rail.getByText("Game paused", { exact: true })).toHaveCount(0);
+    await expect(
+      rail.getByText(
+        human
+          ? "Your turn is next. Resume to play your move."
+          : "Explore the position. Resume or use Next move.",
+        { exact: true },
+      ),
+    ).toBeVisible();
     expect(await geometry()).toEqual(before);
     await page.getByRole("tab", { name: "Analysis", exact: true }).click();
     const totals = page.getByRole("region", { name: "Operational totals" });
@@ -362,6 +372,25 @@ test("live details stay within the primary controls across tabs and long comment
   });
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
   await expect(commentary.getByText(longCommentary, { exact: true })).toHaveCount(2);
+  const previewSizes = await commentary
+    .getByText(longCommentary, { exact: true })
+    .evaluateAll((elements) =>
+      elements.map((element) => {
+        const style = getComputedStyle(element);
+        return {
+          height: element.getBoundingClientRect().height,
+          lineHeight: parseFloat(style.lineHeight),
+          fontSize: parseFloat(style.fontSize),
+        };
+      }),
+    );
+  const headingSize = await commentary
+    .getByRole("heading", { name: "Commentary & move details", exact: true })
+    .evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+  for (const preview of previewSizes) {
+    expect(preview.height).toBeCloseTo(preview.lineHeight * 2, 0);
+    expect(headingSize).toBeGreaterThan(preview.fontSize);
+  }
   for (const width of widths) {
     await page.setViewportSize({ width, height: 900 });
     for (const name of ["Moves", "Analysis", "Events"]) {

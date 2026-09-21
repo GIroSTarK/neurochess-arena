@@ -147,7 +147,7 @@ export function MatchScreen({
   const detailMessage = issue?.kind === "notice" && issue.code === "recovered" ? null : issueText;
   const detailGuidance =
     snapshot?.state === "paused"
-      ? t(snapshot.turn === human ? "match.humanPaused" : "match.paused")
+      ? t(snapshot.turn === human ? "match.humanPaused" : "match.aiPaused")
       : guidance;
   return (
     <AppShell
@@ -386,7 +386,7 @@ export function MatchScreen({
                     <p className="text-text-secondary">
                       <StableText
                         value={detailMessage ?? detailGuidance}
-                        variants={[guidance, t("match.humanPaused"), t("match.paused")]}
+                        variants={[guidance, t("match.humanPaused"), t("match.aiPaused")]}
                       />
                     </p>
                   ) : null}

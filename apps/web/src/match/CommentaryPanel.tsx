@@ -51,7 +51,7 @@ export function CommentaryPanel({
   const pending = !error && (loading || !records || records.version < details.snapshot.version);
   return (
     <section aria-label={t("telemetry.commentary")} className="grid min-w-0 shrink-0 gap-3">
-      <h2 className="font-display text-label">{t("telemetry.commentary")}</h2>
+      <h2 className="font-display text-section">{t("telemetry.commentary")}</h2>
       <div className="grid auto-rows-fr gap-3">
         {colors.map((color) => {
           const move =
@@ -115,7 +115,7 @@ export function CommentaryPanel({
                   {t("telemetry.read")}
                 </Button>
               </div>
-              <div className="grid min-h-[3lh] min-w-0 text-body wrap-anywhere whitespace-pre-wrap text-text-secondary">
+              <div className="grid min-h-[2lh] min-w-0 text-body wrap-anywhere whitespace-pre-wrap text-text-secondary">
                 {/* Translated empty/loading messages must fit without changing the preview's height. */}
                 {previewMessages.map((message) => (
                   <span
@@ -126,7 +126,7 @@ export function CommentaryPanel({
                   />
                 ))}
                 <p
-                  className={cx("min-w-0 self-start [grid-area:1/1]", commentary && "line-clamp-3")}
+                  className={cx("min-w-0 self-start [grid-area:1/1]", commentary && "line-clamp-2")}
                 >
                   {text}
                 </p>

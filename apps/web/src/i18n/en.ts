@@ -72,6 +72,7 @@ export const en = {
     playing: "You play {{color}}. Select a piece and its destination on your turn.",
     replaying: "Review the game with replay and PGN export.",
     humanPaused: "Your turn is next. Resume to play your move.",
+    aiPaused: "Explore the position. Resume or use Next move.",
     yourTurn: "Your turn · {{color}} to move",
     retryMove: "Retry same move",
     thinking: "{{color}} is choosing a move…",
