@@ -221,7 +221,7 @@ The adapter expects one candidate and parses only visible text, discarding thoug
 
 [Google's GenerateContent errors](https://ai.google.dev/gemini-api/docs/generate-content/api-errors) map to the common pause policy. Structured `API_KEY_INVALID` details distinguish invalid-key HTTP 400 responses from other invalid requests. Ambiguous `INVALID_ARGUMENT` and `FAILED_PRECONDITION` errors remain `provider_unavailable/upstream`; raw error prose never determines classification. Generation-only 404/501 failures identify unavailable models/methods.
 
-`apps/api/test/providers/google.test.ts` runs the shared HTTP adapter contract; `apps/api/test/google.integration.test.ts` covers protected routes, real PostgreSQL orchestration, persisted parameters, retry/recovery, cancellation, and redaction using mocked transport. Live account access and response quality remain unverified.
+`apps/api/test/providers/google.test.ts` runs the shared HTTP adapter contract; `apps/api/test/google.integration.test.ts` covers protected routes, real PostgreSQL orchestration, persisted parameters, retry/recovery, cancellation, and redaction using mocked transport. These tests do not establish live account access or response quality.
 
 ### OpenRouter adapter
 
@@ -231,7 +231,7 @@ OpenRouter uses the fixed `https://openrouter.ai/api/v1` origin with request-sco
 
 [Errors](https://openrouter.ai/docs/api_reference/errors-and-debugging) are checked even under HTTP 200 and take precedence over choices. Typed model refusals and generation truncation follow the invalid-output policy; external content filters, ambiguous 403s, and request/context errors pause as upstream failures. Router credential rejection maps to `provider_auth`; identified upstream authentication failures map to `provider_unavailable/upstream`, avoiding a misleading invalid-OpenRouter-key diagnosis. Typed quota and timeout errors retain their categories even when wrapped in another HTTP status. Raw error prose and nested provider payloads never determine classification or leave the adapter.
 
-`apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. Live provider availability, billing behavior, and response quality remain unverified.
+`apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. These tests do not establish live provider availability, billing behavior, or response quality.
 
 ## PostgreSQL integration tests
 

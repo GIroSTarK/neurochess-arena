@@ -19,6 +19,9 @@ async function start(page: Page, key: string, human?: "white" | "black") {
       "aria-disabled",
       "false",
     );
+    await seat
+      .getByLabel("Provider", { exact: true })
+      .selectOption(color === "White" ? "openai" : "anthropic");
     await seat.getByLabel("API key", { exact: true }).fill(key);
     await seat.getByRole("button", { name: "Load models", exact: true }).click();
     const model = seat.getByRole("combobox", { name: "Model", exact: true });
