@@ -3,7 +3,8 @@ import type { ComponentProps } from "react";
 import { cx } from "./cx";
 import { cancelHeldActivation } from "./keyboard";
 
-export type ButtonVariant = "primary" | "secondary" | "danger" | "quiet" | "quiet-danger";
+export type ButtonVariant =
+  "primary" | "secondary" | "danger" | "quiet" | "quiet-danger" | "dismiss";
 
 const variants: Record<ButtonVariant, string> = {
   primary: cx(
@@ -20,6 +21,8 @@ const variants: Record<ButtonVariant, string> = {
     "border-transparent bg-transparent text-text-secondary hover:not-disabled:not-aria-disabled:bg-surface-raised",
   "quiet-danger":
     "border-transparent bg-transparent text-danger hover:not-disabled:not-aria-disabled:bg-surface-raised",
+  dismiss:
+    "border-transparent bg-transparent text-text-secondary hover:not-disabled:not-aria-disabled:bg-surface hover:not-disabled:not-aria-disabled:text-text active:not-disabled:not-aria-disabled:bg-surface",
 };
 
 export interface ButtonProps extends ComponentProps<"button"> {
@@ -42,7 +45,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const unavailable = ariaDisabled === true || ariaDisabled === "true";
-  const quiet = variant === "quiet" || variant === "quiet-danger";
+  const quiet = variant === "quiet" || variant === "quiet-danger" || variant === "dismiss";
   return (
     <button
       type={type}

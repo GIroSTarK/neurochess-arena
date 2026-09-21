@@ -166,14 +166,10 @@ export function CommentaryPanel({
         <Dialog
           title={t("telemetry.fullCommentary", { move: reading.move })}
           description={reading.identity}
+          closeLabel={t("telemetry.closeCommentary")}
           onCancel={() => setReading(null)}
         >
-          <div className="sticky top-0 flex justify-end bg-surface-raised py-3">
-            <Button variant="secondary" onClick={() => setReading(null)}>
-              {t("telemetry.closeCommentary")}
-            </Button>
-          </div>
-          <p className="text-body wrap-anywhere whitespace-pre-wrap">{reading.commentary}</p>
+          <p className="mt-4 text-body wrap-anywhere whitespace-pre-wrap">{reading.commentary}</p>
         </Dialog>
       ) : null}
     </section>

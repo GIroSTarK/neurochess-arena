@@ -83,7 +83,7 @@ Sizes assume a 16px browser default and scale with user preferences. Reserve upp
 
 Use a single chamfered arena frame as the signature motif. Buttons, forms, rows, and menus use the ordinary corner tokens. Frame geometry must not clip content, focus rings, menus, or pointer targets; apply decorative clipping to a separate non-interactive layer.
 
-Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
+Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus, except the conventional dialog close icon, which uses an accessible name without a tooltip. Its hover and pressed background must contrast with the dialog surface. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
 
 Use restrained shadow only for overlays; ordinary panels separate through surfaces and spacing. Keep glow outside the board and away from reading surfaces. Animate accepted moves and state changes briefly. Apply transitions and animations only through `motion-safe:` variants so `prefers-reduced-motion: reduce` removes movement and pulsing while a static activity label remains. Do not fabricate progress percentages or countdowns for provider requests.
 

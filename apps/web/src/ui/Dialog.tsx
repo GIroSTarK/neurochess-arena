@@ -1,13 +1,16 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
+import { Button } from "./Button";
 import { cx } from "./cx";
+import { Icon } from "./Icon";
 import { cancelHeldActivation } from "./keyboard";
 
 export interface DialogProps {
   readonly title: ReactNode;
   readonly description: ReactNode;
   readonly onCancel: () => void;
+  readonly closeLabel?: string;
   readonly children: ReactNode;
 }
 
@@ -34,7 +37,7 @@ function focusable(dialog: HTMLDialogElement): HTMLElement[] {
  * Mounting focuses the first control and contains Tab; unmounting restores trigger focus.
  * Escape requests cancellation through `onCancel`; the owner must unmount the dialog.
  */
-export function Dialog({ title, description, onCancel, children }: DialogProps) {
+export function Dialog({ title, description, onCancel, closeLabel, children }: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -86,9 +89,33 @@ export function Dialog({ title, description, onCancel, children }: DialogProps) 
       }}
       onKeyDown={onKeyDown}
     >
-      <h2 id={titleId} className="text-section font-semibold">
-        {title}
-      </h2>
+      <div
+        className={cx(
+          closeLabel &&
+            "sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 bg-surface-raised",
+        )}
+      >
+        <h2
+          id={titleId}
+          className={cx(
+            "text-section font-semibold",
+            closeLabel && "flex min-h-target items-center",
+          )}
+        >
+          {title}
+        </h2>
+        {closeLabel ? (
+          <Button
+            variant="dismiss"
+            padding="compact"
+            className="size-target"
+            aria-label={closeLabel}
+            onClick={onCancel}
+          >
+            <Icon path="M6 6l12 12M18 6 6 18" />
+          </Button>
+        ) : null}
+      </div>
       <p id={descriptionId} className="mt-3 text-text-secondary">
         {description}
       </p>

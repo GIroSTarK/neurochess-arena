@@ -373,8 +373,43 @@ test("live details stay within the primary controls across tabs and long comment
   await read.click();
   const dialog = page.getByRole("dialog", { name: "Commentary · Black · 1. e5" });
   await expect(dialog.getByText(longCommentary, { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Close commentary" })).toBeInViewport();
+  const close = dialog.getByRole("button", { name: "Close commentary" });
+  await expect(close).toBeInViewport();
+  await expect(dialog.getByRole("tooltip", { includeHidden: true })).toHaveCount(0);
+  if (desktop) {
+    const restBackground = await close.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    const dialogBackground = await dialog.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    await close.hover();
+    await expect(close).not.toHaveCSS("background-color", restBackground);
+    await expect(close).not.toHaveCSS("background-color", dialogBackground);
+    await dialog.screenshot({
+      path: testInfo.outputPath("commentary-dialog-hover.png"),
+      animations: "disabled",
+    });
+    await dialog.getByRole("heading").hover();
+  }
+  const titleBounds = (await dialog
+    .getByRole("heading", { name: "Commentary · Black · 1. e5" })
+    .boundingBox())!;
+  const closeBounds = (await close.boundingBox())!;
+  expect(closeBounds.x).toBeGreaterThanOrEqual(titleBounds.x + titleBounds.width);
+  expect(closeBounds.y).toBeLessThan(titleBounds.y + titleBounds.height);
+  expect(closeBounds.width).toBeGreaterThanOrEqual(44);
+  expect(closeBounds.height).toBeGreaterThanOrEqual(44);
+  await dialog.screenshot({ path: testInfo.outputPath("commentary-dialog.png") });
   expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+  await dialog.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(close).toBeInViewport();
+  await close.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(read).toBeFocused();
+  await read.click();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(read).toBeFocused();

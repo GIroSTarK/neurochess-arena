@@ -80,6 +80,13 @@ describe("minimal Arena telemetry panels", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+    view.rerender(
+      <CommentaryPanel details={telemetryDetails} records={records} selectedPly={null} />,
+    );
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Close commentary" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
   it("preserves received totals during refresh and labels a failed refresh", () => {
     const next = { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) };
