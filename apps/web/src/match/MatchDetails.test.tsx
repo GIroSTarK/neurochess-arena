@@ -19,6 +19,9 @@ describe("minimal Arena telemetry panels", () => {
     view.rerender(<CommentaryPanel {...props} selectedPly={1} />);
     expect(screen.queryByText("No commentary provided")).not.toBeInTheDocument();
     expect(screen.getByText("300 ms")).toBeVisible();
+    expect(screen.getByText("Input tokens")).toBeVisible();
+    expect(screen.getByText("Output tokens")).toBeVisible();
+    expect(screen.queryByText("Total tokens")).not.toBeInTheDocument();
     expect(screen.queryByText("400 ms")).not.toBeInTheDocument();
     view.rerender(<CommentaryPanel {...props} selectedPly={0} />);
     expect(screen.getByText("Initial position · no move selected.")).toBeVisible();
@@ -42,7 +45,7 @@ describe("minimal Arena telemetry panels", () => {
     expect(screen.queryByText("No commentary provided")).not.toBeInTheDocument();
     view.rerender(<CommentaryPanel details={details} records={null} selectedPly={2} />);
     expect(screen.getByText("Move details unavailable.")).toBeVisible();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(4);
+    expect(screen.getAllByText("Unavailable")).toHaveLength(3);
   });
   it("labels all-attempt totals with independent missing-data coverage and a retryable load error", async () => {
     const onRefresh = vi.fn();

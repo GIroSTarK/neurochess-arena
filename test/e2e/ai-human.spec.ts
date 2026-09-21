@@ -116,6 +116,7 @@ for (const human of ["white", "black"] as const) {
         { exact: true },
       ),
     ).toBeVisible();
+    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
     await expect(
       page
         .getByRole("region", { name: "Operational totals" })
@@ -192,7 +193,8 @@ for (const human of ["white", "black"] as const) {
     await page.keyboard.press("ArrowRight");
     await expect(square(page, human === "white" ? "f4" : "d4")).toBeFocused();
     await page.getByRole("button", { name: /Flip board/ }).click();
-    await page.getByRole("button", { name: "Change API keys", exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toBeVisible();
     await page.getByLabel(/· OpenAI · API key/).fill("match-fixture");
     const before = await readSnapshot(page, game.gameId);
     await page.getByRole("button", { name: "Next move", exact: true }).click();

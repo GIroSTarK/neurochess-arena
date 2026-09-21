@@ -5,172 +5,198 @@ import { describe, expect, it, vi } from "vitest";
 
 import { telemetryDetails } from "../test/ai-invocations";
 import { renderLocalized } from "../test/render";
+import { DetailTabs } from "../ui/DetailTabs";
 
 import { PausedCredentials } from "./PausedCredentials";
 
 const ready = { white: true, black: true };
 const missing = { white: false, black: false };
 const props = {
+  epoch: "pause-1",
+  paused: true,
   seats: telemetryDetails.configuration.seats,
   keys: ready,
   rejectedColor: null,
   disabled: false,
+  canContinue: true,
   onKeyChange: vi.fn(),
+  onResume: vi.fn(),
+  children: <p>Game details</p>,
 };
 
-describe("paused credential entry", () => {
-  it("keeps ordinary pauses free of key fields and session-loss guidance", () => {
+describe("paused credential recovery", () => {
+  it("keeps ordinary pauses free of key fields and replacement controls", () => {
     renderLocalized(<PausedCredentials {...props} />);
-    expect(screen.queryByRole("region", { name: "Keys for this tab" })).not.toBeInTheDocument();
+    expect(screen.getByText("Game details")).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "Re-enter your API keys" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Cleared when you refresh/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change API keys" })).toBeVisible();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("shows only missing AI keys, excluding human seats", () => {
-    const view = renderLocalized(
-      <PausedCredentials {...props} keys={{ ...ready, black: false }} />,
+  it("replaces details with only the missing AI fields without moving focus on load", () => {
+    renderLocalized(
+      <PausedCredentials {...props} keys={{ ...ready, black: false }} canContinue={false} />,
     );
+    expect(screen.getByRole("region", { name: "Re-enter your API keys" })).toBeVisible();
+    expect(screen.getByText("Game details")).not.toBeVisible();
     expect(screen.getByLabelText("Black · Anthropic · API key")).toHaveValue("");
     expect(screen.queryByLabelText("White · OpenAI · API key")).not.toBeInTheDocument();
-    view.rerender(
+    expect(screen.getByRole("button", { name: "Resume game" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(document.body).toHaveFocus();
+  });
+
+  it("excludes human seats", () => {
+    renderLocalized(
       <PausedCredentials
         {...props}
         keys={missing}
         seats={{ white: { type: "human" }, black: props.seats.black }}
       />,
     );
-    expect(screen.getAllByLabelText(/API key/)).toHaveLength(1);
+    expect(screen.getByLabelText("Black · Anthropic · API key")).toBeVisible();
+    expect(screen.queryByLabelText("White · OpenAI · API key")).not.toBeInTheDocument();
   });
 
-  it("opens a rejected seat when the provider failure arrives without moving focus", () => {
-    const view = renderLocalized(<PausedCredentials {...props} />);
-    const change = screen.getByRole("button", { name: "Change API keys" });
-    change.focus();
-    view.rerender(<PausedCredentials {...props} rejectedColor="white" />);
-    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveValue("");
+  it("opens the rejected seat when authentication fails on the same paused revision", async () => {
+    const onResume = vi.fn();
+    const view = renderLocalized(<PausedCredentials {...props} onResume={onResume} />);
+    view.rerender(<PausedCredentials {...props} onResume={onResume} rejectedColor="white" />);
+    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(screen.queryByLabelText("Black · Anthropic · API key")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("The provider rejected this key. Enter a replacement, then retry."),
-    ).toBeVisible();
-    expect(change).toHaveFocus();
+    const resume = screen.getByRole("button", { name: "Resume game" });
+    await userEvent.setup().click(resume);
+    expect(onResume).not.toHaveBeenCalled();
+    await userEvent
+      .setup()
+      .type(screen.getByLabelText("White · OpenAI · API key"), "replacement-fixture");
+    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveAttribute(
+      "aria-invalid",
+      "false",
+    );
+    await userEvent.setup().click(resume);
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 
-  it("opens optional replacement by keyboard without exposing or clearing existing keys", async () => {
-    const onKeyChange = vi.fn();
-    renderLocalized(<PausedCredentials {...props} onKeyChange={onKeyChange} />);
+  it("keeps fields and focus while typing and waits for explicit Resume", async () => {
+    const onResume = vi.fn();
+    renderLocalized(<RecoveryHarness onResume={onResume} />);
     const user = userEvent.setup();
-    screen.getByRole("button", { name: "Change API keys" }).focus();
-    await user.keyboard("{Enter}");
-    expect(screen.getByRole("button", { name: "Hide API keys" })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveFocus();
-    for (const input of screen.getAllByLabelText(/API key/)) {
-      expect(input).toHaveAttribute("type", "password");
-      expect(input).toHaveValue("");
-    }
-    expect(onKeyChange).not.toHaveBeenCalled();
+    const white = screen.getByLabelText("White · OpenAI · API key");
+    await user.type(white, "replacement-fixture");
+    expect(white).toHaveFocus();
+    expect(white).toHaveValue("replacement-fixture");
+    expect(screen.getByRole("button", { name: "Resume game" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.type(screen.getByLabelText("Black · Anthropic · API key"), "second-fixture");
+    expect(screen.getByText("Game details")).not.toBeVisible();
+    expect(onResume).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Resume game" }));
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles the same control and preserves entered values and credentials while collapsed", async () => {
-    const onKeyChange = vi.fn();
-    renderLocalized(<PausedCredentials {...props} onKeyChange={onKeyChange} />);
+  it("returns to details with recovery guidance, then restores masked fields and keyboard focus", async () => {
+    const onResume = vi.fn();
+    renderLocalized(<RecoveryHarness onResume={onResume} />);
     const user = userEvent.setup();
-    const toggle = screen.getByRole("button", { name: "Change API keys" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(toggle);
-    expect(toggle).toHaveTextContent("Hide API keys");
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    const panel = screen.getByRole("region", { name: "Keys for this tab" });
-    expect(toggle).toHaveAttribute("aria-controls", panel.id);
     const input = screen.getByLabelText("White · OpenAI · API key");
     await user.type(input, "replacement-fixture");
-    onKeyChange.mockClear();
-    await user.click(toggle);
-    expect(toggle).toHaveFocus();
-    expect(toggle).toHaveTextContent("Change API keys");
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(panel).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Show White API key" }));
+    expect(input).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Return to game" }));
+    expect(screen.getByText("Game details")).toBeVisible();
+    expect(screen.getByText("Re-enter the missing API keys before continuing.")).toBeVisible();
+    const reopen = screen.getByRole("button", { name: "Re-enter your API keys" });
+    expect(reopen).toHaveFocus();
     await user.keyboard("{Enter}");
-    expect(panel).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Re-enter your API keys" })).toHaveFocus();
     expect(input).toHaveValue("replacement-fixture");
     expect(input).toHaveAttribute("type", "password");
-    expect(onKeyChange).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
   });
 
-  it("allows recovery fields to collapse while keeping missing-key guidance visible", async () => {
-    const onKeyChange = vi.fn();
-    renderLocalized(<PausedCredentials {...props} keys={missing} onKeyChange={onKeyChange} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Hide API keys" }));
-    expect(screen.queryByRole("region", { name: "Keys for this tab" })).not.toBeInTheDocument();
-    expect(screen.getByText("Re-enter the missing API keys before continuing.")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Change API keys" }));
-    expect(screen.getByRole("region", { name: "Keys for this tab" })).toBeVisible();
-    expect(
-      screen.queryByText("Re-enter the missing API keys before continuing."),
-    ).not.toBeInTheDocument();
-    expect(onKeyChange).not.toHaveBeenCalled();
-  });
-
-  it("does not present an unchanged rejected key as ready after collapsing and reopening", async () => {
-    renderLocalized(<PausedCredentials {...props} rejectedColor="white" />);
-    const user = userEvent.setup();
-    const message = "The provider rejected this key. Enter a replacement, then retry.";
-    await user.click(screen.getByRole("button", { name: "Hide API keys" }));
-    expect(screen.getByText(message, { selector: "p" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Change API keys" }));
-    expect(screen.getByText(message, { selector: "span" })).toBeVisible();
-  });
-
-  it("retains the field and focus while entering a key that becomes ready after the first character", async () => {
-    const onKeyChange = vi.fn();
-    renderLocalized(<RecoveryHarness onKeyChange={onKeyChange} />);
-    const input = screen.getByLabelText("White · OpenAI · API key");
-    await userEvent.setup().type(input, "replacement-fixture");
-    expect(input).toHaveValue("replacement-fixture");
-    expect(input).toHaveFocus();
-    expect(onKeyChange).toHaveBeenLastCalledWith("white", "replacement-fixture");
-    expect(screen.getByLabelText("Black · Anthropic · API key")).toHaveValue("");
-  });
-
-  it("resets editing after a new paused revision and clears inputs after key loss", async () => {
-    const view = renderLocalized(<PausedCredentials key="pause-1" {...props} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Change API keys" }));
-    await user.type(screen.getByLabelText("White · OpenAI · API key"), "replacement-fixture");
-    view.rerender(<PausedCredentials key="pause-2" {...props} />);
-    expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
-    view.rerender(<PausedCredentials key="new-page" {...props} keys={missing} />);
-    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveValue("");
-  });
-
-  it("prevents optional editing and input changes while a command is pending", async () => {
-    const onKeyChange = vi.fn();
-    const view = renderLocalized(
-      <PausedCredentials {...props} disabled onKeyChange={onKeyChange} />,
+  it("preserves the selected detail tab while recovery replaces it", async () => {
+    const children = (
+      <DetailTabs
+        label="Game details"
+        tabs={[
+          { id: "moves", label: "Moves", content: "Move list" },
+          { id: "analysis", label: "Analysis", content: "Operational totals" },
+        ]}
+      />
     );
+    const view = renderLocalized(<PausedCredentials {...props}>{children}</PausedCredentials>);
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Change API keys" }));
-    expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Analysis" }));
     view.rerender(
-      <PausedCredentials {...props} disabled keys={missing} onKeyChange={onKeyChange} />,
+      <PausedCredentials {...props} keys={missing}>
+        {children}
+      </PausedCredentials>,
     );
-    await user.type(screen.getByLabelText("White · OpenAI · API key"), "replacement-fixture");
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Return to game" }));
+    expect(screen.getByRole("tab", { name: "Analysis" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Operational totals")).toBeVisible();
+  });
+
+  it("clears recovery values on a new revision or credential lifetime and closes on continuation", async () => {
+    const view = renderLocalized(<PausedCredentials {...props} keys={missing} />);
+    await userEvent
+      .setup()
+      .type(screen.getByLabelText("White · OpenAI · API key"), "replacement-fixture");
+    view.rerender(<PausedCredentials {...props} epoch="new-page" keys={missing} />);
+    expect(screen.getByLabelText("White · OpenAI · API key")).toHaveValue("");
+    view.rerender(<PausedCredentials {...props} epoch="resumed" paused={false} />);
+    expect(
+      screen.queryByRole("region", { name: "Re-enter your API keys" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Game details")).toBeVisible();
+  });
+
+  it("keeps empty keys masked and prevents editing or resuming during a pending command", async () => {
+    const onKeyChange = vi.fn();
+    const onResume = vi.fn();
+    renderLocalized(
+      <PausedCredentials
+        {...props}
+        disabled
+        keys={missing}
+        onKeyChange={onKeyChange}
+        onResume={onResume}
+      />,
+    );
+    const user = userEvent.setup();
+    const input = screen.getByLabelText("White · OpenAI · API key");
+    await user.type(input, "replacement-fixture");
+    await user.click(screen.getByRole("button", { name: "Show White API key" }));
+    await user.click(screen.getByRole("button", { name: "Resume game" }));
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveValue("");
     expect(onKeyChange).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
   });
 });
 
-function RecoveryHarness({ onKeyChange }: { readonly onKeyChange: typeof props.onKeyChange }) {
+function RecoveryHarness({ onResume }: { readonly onResume: () => void }) {
   const [keys, setKeys] = useState(missing);
   return (
     <PausedCredentials
       {...props}
       keys={keys}
-      onKeyChange={(color, value) => {
-        setKeys((current) => ({ ...current, [color]: value.length > 0 }));
-        onKeyChange(color, value);
-      }}
+      canContinue={keys.white && keys.black}
+      onResume={onResume}
+      onKeyChange={(color, value) =>
+        setKeys((current) => ({ ...current, [color]: value.length > 0 }))
+      }
     />
   );
 }

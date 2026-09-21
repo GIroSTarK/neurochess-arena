@@ -100,7 +100,7 @@ export function MoveHistory({
   }
 
   return (
-    <section className="min-w-0 lg:flex lg:flex-1 lg:flex-col" aria-labelledby={headingId}>
+    <section className="min-h-0 min-w-0 lg:flex lg:flex-1 lg:flex-col" aria-labelledby={headingId}>
       <div
         className={
           showHeading
@@ -121,7 +121,10 @@ export function MoveHistory({
       <div
         ref={scroller}
         // Contain long histories, but preserve a text-scaled reading area when feedback grows.
-        className="mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto lg:max-h-none lg:min-h-64 lg:flex-1 lg:contain-size"
+        className={cx(
+          "mt-2 max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto lg:max-h-none lg:flex-1 lg:contain-size",
+          showHeading ? "lg:min-h-64" : "lg:min-h-0",
+        )}
         role="region"
         aria-label={t("moves.scrollLabel")}
         tabIndex={0}

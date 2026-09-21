@@ -32,11 +32,7 @@ export function InvocationEvents({
       ) : records.turns.length === 0 ? (
         <p>{t("telemetry.noAttempts")}</p>
       ) : (
-        <ol
-          tabIndex={0}
-          aria-label={t("telemetry.events")}
-          className="grid max-h-[32rem] min-w-0 gap-5 overflow-y-auto pr-2"
-        >
+        <ol aria-label={t("telemetry.events")} className="grid min-w-0 gap-5">
           {records.turns.map((turn) => (
             <li key={turn.id} className="grid min-w-0 gap-2">
               <h3 className="text-label font-semibold">

@@ -1,7 +1,9 @@
 import type { GameDetails, GameInvocations } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
-import { acceptedAttempt, metricNames, metricValue } from "./telemetry";
+import { acceptedAttempt, metricValue } from "./telemetry";
+
+const commentaryMetrics = ["durationMs", "inputTokens", "outputTokens"] as const;
 
 export function CommentaryPanel({
   details,
@@ -25,7 +27,11 @@ export function CommentaryPanel({
         ? [selected.ply % 2 ? ("white" as const) : ("black" as const)]
         : [];
   return (
-    <section aria-label={t("telemetry.commentary")} className="grid min-w-0 gap-4">
+    <section
+      aria-label={t("telemetry.commentary")}
+      tabIndex={0}
+      className="grid min-h-0 min-w-0 shrink-0 gap-3 focus-visible:-outline-offset-2 lg:max-h-[50%] lg:overflow-y-auto lg:pr-2"
+    >
       <h2 className="font-display text-section">{t("telemetry.commentary")}</h2>
       {colors.length === 0 ? (
         <p className="text-body text-text-secondary">{t("telemetry.initial")}</p>
@@ -37,20 +43,22 @@ export function CommentaryPanel({
         const human = details.configuration?.seats[color].type === "human";
         return (
           <article key={color} className="grid min-w-0 gap-2 border-l-2 border-divider pl-3">
-            <h3 className="text-label font-semibold wrap-anywhere">
-              {move
-                ? t("telemetry.move", {
-                    color: t(`players.${color}`),
-                    number: Math.ceil(move.ply / 2),
-                    san: move.san,
-                  })
-                : t(`players.${color}`)}
-            </h3>
-            {attempt ? (
-              <p className="text-label text-text-secondary">
-                {t("telemetry.acceptedOn", { number: attempt.attemptNumber })}
-              </p>
-            ) : null}
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h3 className="text-label font-semibold wrap-anywhere">
+                {move
+                  ? t("telemetry.move", {
+                      color: t(`players.${color}`),
+                      number: Math.ceil(move.ply / 2),
+                      san: move.san,
+                    })
+                  : t(`players.${color}`)}
+              </h3>
+              {attempt ? (
+                <p className="text-caption text-text-secondary">
+                  {t("telemetry.acceptedOn", { number: attempt.attemptNumber })}
+                </p>
+              ) : null}
+            </div>
             <p className="text-body wrap-anywhere whitespace-pre-wrap text-text-secondary">
               {human
                 ? t("telemetry.humanMove")
@@ -63,8 +71,8 @@ export function CommentaryPanel({
                       : t("telemetry.missingCommentary")}
             </p>
             {move && !human ? (
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-label">
-                {metricNames.map((name) => {
+              <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2 text-label">
+                {commentaryMetrics.map((name) => {
                   const value = metricValue(attempt, name);
                   return (
                     <div key={name} className="min-w-0">

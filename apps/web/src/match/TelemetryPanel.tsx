@@ -22,10 +22,7 @@ export function TelemetryPanel({
   const number = new Intl.NumberFormat(i18n.language);
   const totals = records ? operationalTotals(details, records) : null;
   return (
-    <section
-      aria-label={t("telemetry.totals")}
-      className="grid min-w-0 gap-3 border-t border-divider pt-4"
-    >
+    <section aria-label={t("telemetry.totals")} className="grid min-w-0 gap-3">
       <h2 className="font-display text-section">{t("telemetry.totals")}</h2>
       <p className="text-label text-text-secondary">{t("telemetry.includesAttempts")}</p>
       {totals ? (

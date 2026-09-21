@@ -141,8 +141,15 @@ export function MatchScreen({
       },
     };
   };
-  const supported = details?.configuration !== null && details?.configuration !== undefined;
+  const configuration = details?.configuration;
   const canContinue = state.phase === "ready" && !state.thinking && matchKeysReady(state);
+  const detailMessage = issue?.kind === "notice" && issue.code === "recovered" ? null : issueText;
+  const showDetailFooter =
+    Boolean(detailMessage) ||
+    state.phase === "uncertain" ||
+    terminal ||
+    snapshot?.state !== "paused" ||
+    snapshot.turn === human;
   return (
     <AppShell
       mainId="arena-match"
@@ -198,7 +205,7 @@ export function MatchScreen({
             </Button>
           ) : null}
         </div>
-      ) : !supported ? (
+      ) : !configuration ? (
         <div className="grid gap-4">
           <p>{t(details.configuration === null ? "match.sandbox" : "match.unsupported")}</p>
           {details.configuration === null && sandboxEnabled ? (
@@ -212,6 +219,21 @@ export function MatchScreen({
           players={{ white: player("white"), black: player("black") }}
           playAreaLabel={t("sandbox.playArea")}
           detailsLabel={t("sandbox.gameDetails")}
+          constrainDetails
+          boardTools={
+            <div className="min-w-0">
+              <BoardTools
+                helpId={helpId}
+                orientation={orientation}
+                onFlip={() =>
+                  setFlipped({
+                    gameId: snapshot.gameId,
+                    color: orientation === "white" ? "black" : "white",
+                  })
+                }
+              />
+            </div>
+          }
           board={
             <>
               <Chessboard
@@ -295,111 +317,113 @@ export function MatchScreen({
                   }
                 />
               )}
-              <BoardTools
-                helpId={helpId}
-                orientation={orientation}
-                onFlip={() =>
-                  setFlipped({
-                    gameId: snapshot.gameId,
-                    color: orientation === "white" ? "black" : "white",
-                  })
-                }
-              />
             </>
           }
           details={
-            <ArenaDetails
-              commentary={
-                <CommentaryPanel
-                  details={details}
-                  records={state.invocations}
-                  selectedPly={terminal ? state.replayPly : null}
-                />
+            <PausedCredentials
+              epoch={`${snapshot.gameId}:${snapshot.version}:${state.keyEpoch}`}
+              paused={snapshot.state === "paused" && state.phase === "ready"}
+              seats={configuration.seats}
+              keys={state.keys}
+              rejectedColor={
+                issue?.kind === "provider" && issue.error.code === "provider_auth"
+                  ? issue.color
+                  : null
               }
-              telemetry={
-                <TelemetryPanel
-                  details={details}
-                  records={state.invocations}
-                  loading={state.invocationsLoading}
-                  error={state.invocationsError}
-                  onRefresh={() => {
-                    void controller.loadInvocations();
-                  }}
-                />
-              }
-              events={<InvocationEvents records={state.invocations} snapshot={snapshot} />}
-              moves={
-                <MoveHistory
-                  moves={snapshot.moves}
-                  selectedPly={state.replay ? state.replayPly : undefined}
-                  onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
-                />
+              disabled={state.thinking || state.busy}
+              canContinue={canContinue}
+              onKeyChange={(color, value) => controller.setKey(color, value)}
+              onResume={() => {
+                void controller.continue(false);
+              }}
+              notice={
+                issue?.kind === "provider" && issue.error.code !== "provider_auth"
+                  ? issueText
+                  : null
               }
             >
-              <div className="grid gap-4 border-t border-divider pt-4 text-body">
-                {issueText ? <p>{issueText}</p> : null}
-                {state.phase === "uncertain" ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="primary"
-                      aria-disabled={state.busy}
-                      onClick={() => {
-                        void controller.recover();
-                      }}
-                    >
-                      {t("match.recover")}
-                    </Button>
-                    {controller.hasPendingControl() ? (
-                      <Button
-                        variant="secondary"
-                        aria-disabled={state.busy}
-                        onClick={() => {
-                          void controller.retryControl();
-                        }}
-                      >
-                        {t("match.retryControl")}
-                      </Button>
+              <ArenaDetails
+                commentary={
+                  <CommentaryPanel
+                    details={details}
+                    records={state.invocations}
+                    selectedPly={terminal ? state.replayPly : null}
+                  />
+                }
+                analysis={
+                  <TelemetryPanel
+                    details={details}
+                    records={state.invocations}
+                    loading={state.invocationsLoading}
+                    error={state.invocationsError}
+                    onRefresh={() => {
+                      void controller.loadInvocations();
+                    }}
+                  />
+                }
+                events={<InvocationEvents records={state.invocations} snapshot={snapshot} />}
+                moves={
+                  <MoveHistory
+                    showHeading={false}
+                    moves={snapshot.moves}
+                    selectedPly={state.replay ? state.replayPly : undefined}
+                    onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+                  />
+                }
+              >
+                {showDetailFooter ? (
+                  <div className="grid shrink-0 gap-4 border-t border-divider pt-4 text-body">
+                    {detailMessage ? <p>{detailMessage}</p> : null}
+                    {state.phase === "uncertain" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="primary"
+                          aria-disabled={state.busy}
+                          onClick={() => {
+                            void controller.recover();
+                          }}
+                        >
+                          {t("match.recover")}
+                        </Button>
+                        {controller.hasPendingControl() ? (
+                          <Button
+                            variant="secondary"
+                            aria-disabled={state.busy}
+                            onClick={() => {
+                              void controller.retryControl();
+                            }}
+                          >
+                            {t("match.retryControl")}
+                          </Button>
+                        ) : null}
+                        {controller.hasPendingMove() ? (
+                          <Button
+                            variant="secondary"
+                            aria-disabled={state.busy}
+                            onClick={() => {
+                              void controller.retryMove();
+                            }}
+                          >
+                            {t("match.retryMove")}
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
-                    {controller.hasPendingMove() ? (
-                      <Button
-                        variant="secondary"
-                        aria-disabled={state.busy}
-                        onClick={() => {
-                          void controller.retryMove();
-                        }}
-                      >
-                        {t("match.retryMove")}
+                    {terminal ? (
+                      <Button variant="primary" onClick={() => controller.newGame()}>
+                        {t("match.newGame")}
                       </Button>
-                    ) : null}
+                    ) : snapshot.state === "paused" ? (
+                      snapshot.turn === human ? (
+                        <p>{t("match.humanPaused")}</p>
+                      ) : null
+                    ) : (
+                      <p className="text-text-secondary">{guidance}</p>
+                    )}
                   </div>
                 ) : null}
-                {terminal ? (
-                  <Button variant="primary" onClick={() => controller.newGame()}>
-                    {t("match.newGame")}
-                  </Button>
-                ) : snapshot.state === "paused" ? (
-                  <>
-                    {snapshot.turn === human ? <p>{t("match.humanPaused")}</p> : null}
-                    {details.configuration ? (
-                      <PausedCredentials
-                        key={`${snapshot.gameId}:${snapshot.version}:${state.keyEpoch}`}
-                        seats={details.configuration.seats}
-                        keys={state.keys}
-                        rejectedColor={
-                          issue?.kind === "provider" && issue.error.code === "provider_auth"
-                            ? issue.color
-                            : null
-                        }
-                        disabled={state.thinking || state.busy}
-                        onKeyChange={(color, value) => controller.setKey(color, value)}
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-text-secondary">{guidance}</p>
-                )}
-              </div>
-            </ArenaDetails>
+              </ArenaDetails>
+            </PausedCredentials>
           }
         />
       )}

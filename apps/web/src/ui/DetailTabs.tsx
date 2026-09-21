@@ -96,7 +96,7 @@ export function DetailTabs({
           hidden={tab.id !== selectedId}
           tabIndex={0}
           className={cx(
-            "min-h-0 min-w-0 flex-1 flex-col pt-4",
+            "min-h-48 min-w-0 flex-1 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] flex-col overflow-y-auto px-2 pt-4 pb-2 focus-visible:-outline-offset-2 max-lg:max-h-[32rem] lg:contain-size",
             tab.id === selectedId ? "flex" : "hidden",
           )}
         >
