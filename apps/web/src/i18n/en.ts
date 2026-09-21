@@ -1,8 +1,17 @@
 export const en = {
   telemetry: {
     commentary: "Commentary & move details",
+    read: "Read",
+    readCommentary: "Read full commentary: {{move}}",
+    fullCommentary: "Commentary · {{move}}",
+    closeCommentary: "Close commentary",
+    pending: "Pending",
+    updating: "Updating details… Showing the last received data.",
+    current: "Details are up to date.",
+    refreshError: "Could not refresh details. Showing the last received data.",
     missingCommentary: "No commentary provided",
     initial: "Initial position · no move selected.",
+    initialTitle: "Initial position",
     humanMove: "Human move · no model invocation.",
     noMove: "No accepted move yet.",
     move: "{{color}} · {{number}}. {{san}}",

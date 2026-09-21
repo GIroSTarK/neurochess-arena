@@ -2,6 +2,7 @@ import { gameInvocationsSchema } from "@neurochess/contracts";
 import { describe, expect, it } from "vitest";
 
 import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
+import { snapshot } from "../test/fixtures";
 
 import { acceptedAttempt, metricValue, operationalTotals } from "./telemetry";
 
@@ -81,5 +82,14 @@ describe("invocation telemetry", () => {
       },
     };
     expect(operationalTotals(humanDetails, records).missingMoves).toBe(1);
+  });
+
+  it("keeps totals for the received history while the next move's records are pending", () => {
+    const records = invocationRecords();
+    const next = { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) };
+    expect(operationalTotals(next, records, 2)).toEqual(
+      operationalTotals(telemetryDetails, records),
+    );
+    expect(operationalTotals(next, records).missingMoves).toBe(1);
   });
 });

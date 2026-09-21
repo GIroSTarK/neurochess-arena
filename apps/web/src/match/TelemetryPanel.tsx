@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../ui/Button";
 
 import { operationalTotals } from "./telemetry";
+import { TelemetryStatus } from "./TelemetryStatus";
 
 export function TelemetryPanel({
   details,
@@ -11,20 +12,28 @@ export function TelemetryPanel({
   loading,
   error,
   onRefresh,
+  recordedMoveCount = details.snapshot.moves.length,
 }: {
   readonly details: GameDetails;
   readonly records: GameInvocations | null;
   readonly loading: boolean;
   readonly error: boolean;
   readonly onRefresh: () => void;
+  readonly recordedMoveCount?: number;
 }) {
   const { t, i18n } = useTranslation();
   const number = new Intl.NumberFormat(i18n.language);
-  const totals = records ? operationalTotals(details, records) : null;
+  const totals = records ? operationalTotals(details, records, recordedMoveCount) : null;
   return (
     <section aria-label={t("telemetry.totals")} className="grid min-w-0 gap-3">
       <h2 className="font-display text-section">{t("telemetry.totals")}</h2>
       <p className="text-label text-text-secondary">{t("telemetry.includesAttempts")}</p>
+      <TelemetryStatus
+        hasRecords={Boolean(records)}
+        loading={loading}
+        error={error}
+        stale={Boolean(records && records.version !== details.snapshot.version)}
+      />
       {totals ? (
         <>
           <p className="text-label">{t("telemetry.attemptCount", { count: totals.attempts })}</p>
@@ -53,11 +62,7 @@ export function TelemetryPanel({
             <p className="text-label text-text-secondary">{t("telemetry.missingHistory")}</p>
           ) : null}
         </>
-      ) : (
-        <p className="text-body text-text-secondary">
-          {t(error ? "telemetry.loadError" : "telemetry.loading")}
-        </p>
-      )}
+      ) : null}
       <Button variant="quiet" aria-disabled={loading} onClick={onRefresh}>
         {t("telemetry.refresh")}
       </Button>

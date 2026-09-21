@@ -122,8 +122,8 @@ export function MoveHistory({
         ref={scroller}
         // Contain long histories, but preserve a text-scaled reading area when feedback grows.
         className={cx(
-          "max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] overflow-auto lg:max-h-none lg:flex-1 lg:contain-size",
-          showHeading ? "mt-2 [scrollbar-gutter:stable] lg:min-h-64" : "lg:min-h-0",
+          "max-h-112 [scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-auto lg:max-h-none lg:flex-1 lg:contain-size",
+          showHeading ? "mt-2 lg:min-h-64" : "lg:min-h-0",
         )}
         role="region"
         aria-label={t("moves.scrollLabel")}

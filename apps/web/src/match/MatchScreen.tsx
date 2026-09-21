@@ -20,6 +20,7 @@ import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
+import { StableText } from "../ui/StableText";
 
 import { CommentaryPanel } from "./CommentaryPanel";
 import { humanColor, MatchController, matchKeysReady } from "./controller";
@@ -144,12 +145,10 @@ export function MatchScreen({
   const configuration = details?.configuration;
   const canContinue = state.phase === "ready" && !state.thinking && matchKeysReady(state);
   const detailMessage = issue?.kind === "notice" && issue.code === "recovered" ? null : issueText;
-  const showDetailFooter =
-    Boolean(detailMessage) ||
-    state.phase === "uncertain" ||
-    terminal ||
-    snapshot?.state !== "paused" ||
-    snapshot.turn === human;
+  const detailGuidance =
+    snapshot?.state === "paused"
+      ? t(snapshot.turn === human ? "match.humanPaused" : "match.paused")
+      : guidance;
   return (
     <AppShell
       mainId="arena-match"
@@ -345,15 +344,19 @@ export function MatchScreen({
               <ArenaDetails
                 commentary={
                   <CommentaryPanel
+                    key={snapshot.gameId}
                     details={details}
                     records={state.invocations}
                     selectedPly={terminal ? state.replayPly : null}
+                    loading={state.invocationsLoading}
+                    error={state.invocationsError}
                   />
                 }
                 analysis={
                   <TelemetryPanel
                     details={details}
                     records={state.invocations}
+                    recordedMoveCount={state.invocationsMoveCount}
                     loading={state.invocationsLoading}
                     error={state.invocationsError}
                     onRefresh={() => {
@@ -361,7 +364,14 @@ export function MatchScreen({
                     }}
                   />
                 }
-                events={<InvocationEvents records={state.invocations} snapshot={snapshot} />}
+                events={
+                  <InvocationEvents
+                    records={state.invocations}
+                    snapshot={snapshot}
+                    loading={state.invocationsLoading}
+                    error={state.invocationsError}
+                  />
+                }
                 moves={
                   <MoveHistory
                     showHeading={false}
@@ -371,57 +381,56 @@ export function MatchScreen({
                   />
                 }
               >
-                {showDetailFooter ? (
-                  <div className="grid shrink-0 gap-4 border-t border-divider pt-4 text-body">
-                    {detailMessage ? <p>{detailMessage}</p> : null}
-                    {state.phase === "uncertain" ? (
-                      <div className="flex flex-wrap gap-2">
+                <div className="grid shrink-0 gap-4 border-t border-divider pt-4 text-body">
+                  {!terminal || detailMessage ? (
+                    <p className="text-text-secondary">
+                      <StableText
+                        value={detailMessage ?? detailGuidance}
+                        variants={[guidance, t("match.humanPaused"), t("match.paused")]}
+                      />
+                    </p>
+                  ) : null}
+                  {state.phase === "uncertain" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="primary"
+                        aria-disabled={state.busy}
+                        onClick={() => {
+                          void controller.recover();
+                        }}
+                      >
+                        {t("match.recover")}
+                      </Button>
+                      {controller.hasPendingControl() ? (
                         <Button
-                          variant="primary"
+                          variant="secondary"
                           aria-disabled={state.busy}
                           onClick={() => {
-                            void controller.recover();
+                            void controller.retryControl();
                           }}
                         >
-                          {t("match.recover")}
+                          {t("match.retryControl")}
                         </Button>
-                        {controller.hasPendingControl() ? (
-                          <Button
-                            variant="secondary"
-                            aria-disabled={state.busy}
-                            onClick={() => {
-                              void controller.retryControl();
-                            }}
-                          >
-                            {t("match.retryControl")}
-                          </Button>
-                        ) : null}
-                        {controller.hasPendingMove() ? (
-                          <Button
-                            variant="secondary"
-                            aria-disabled={state.busy}
-                            onClick={() => {
-                              void controller.retryMove();
-                            }}
-                          >
-                            {t("match.retryMove")}
-                          </Button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {terminal ? (
-                      <Button variant="primary" onClick={() => controller.newGame()}>
-                        {t("match.newGame")}
-                      </Button>
-                    ) : snapshot.state === "paused" ? (
-                      snapshot.turn === human ? (
-                        <p>{t("match.humanPaused")}</p>
-                      ) : null
-                    ) : (
-                      <p className="text-text-secondary">{guidance}</p>
-                    )}
-                  </div>
-                ) : null}
+                      ) : null}
+                      {controller.hasPendingMove() ? (
+                        <Button
+                          variant="secondary"
+                          aria-disabled={state.busy}
+                          onClick={() => {
+                            void controller.retryMove();
+                          }}
+                        >
+                          {t("match.retryMove")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {terminal ? (
+                    <Button variant="primary" onClick={() => controller.newGame()}>
+                      {t("match.newGame")}
+                    </Button>
+                  ) : null}
+                </div>
               </ArenaDetails>
             </PausedCredentials>
           }

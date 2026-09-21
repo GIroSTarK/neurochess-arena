@@ -3,12 +3,17 @@ import { gameInvocationsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN } from "./environment";
-import { expect, test } from "./fixtures";
+import { expect, square, test } from "./fixtures";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
-async function start(page: Page, key: string) {
+async function start(page: Page, key: string, human?: "white" | "black") {
   await page.goto("/");
-  for (const color of ["White", "Black"]) {
+  if (human) {
+    await expect(page.getByLabel("Game mode")).toHaveAttribute("aria-disabled", "false");
+    await page.getByLabel("Game mode").selectOption("ai_vs_human");
+    await page.getByLabel("Your color").selectOption(human);
+  }
+  for (const color of human ? [human === "white" ? "Black" : "White"] : ["White", "Black"]) {
     const seat = page.getByRole("group", { name: color, exact: true });
     await expect(seat.getByLabel("Provider", { exact: true })).toHaveAttribute(
       "aria-disabled",
@@ -25,6 +30,117 @@ async function start(page: Page, key: string) {
   await page.getByRole("button", { name: "Start game", exact: true }).click();
   await expect(page).toHaveURL(/\?game=/);
   return new URL(page.url()).searchParams.get("game")!;
+}
+
+for (const human of [undefined, "white", "black"] as const) {
+  test(`details keep their anchors from the first move through refresh and pause (${human ?? "AI vs AI"})`, async ({
+    page,
+  }) => {
+    let releaseTurn: (() => void) | undefined;
+    await page.route("**/ai-turn", async (route) => {
+      await new Promise<void>((resolve) => {
+        releaseTurn = resolve;
+      });
+      await route.continue();
+    });
+    const longCommentary = "Controls the center while keeping the king safe. ".repeat(30);
+    let long = false;
+    let hold = false;
+    let releaseRecords: (() => void) | undefined;
+    await page.route("**/invocations", async (route) => {
+      const response = await route.fetch();
+      const records = gameInvocationsSchema.parse(await response.json());
+      if (hold) {
+        await new Promise<void>((resolve) => {
+          releaseRecords = resolve;
+        });
+      }
+      await route.fulfill({
+        response,
+        json: {
+          ...records,
+          turns: records.turns.map((turn) => ({
+            ...turn,
+            attempts: turn.attempts.map((attempt) => ({
+              ...attempt,
+              commentary:
+                attempt.outcome === "accepted"
+                  ? long
+                    ? longCommentary
+                    : "Controls the center."
+                  : attempt.commentary,
+            })),
+          })),
+        },
+      });
+    });
+    await start(page, "telemetry-fixture", human);
+    await page.getByLabel("Delay between moves").selectOption("5000");
+    await page.evaluate(() => document.fonts.ready);
+    const rail = page.getByRole("complementary", { name: "Game details" });
+    const commentary = page.getByRole("region", { name: "Commentary & move details" });
+    const geometry = () =>
+      rail.evaluate((element) => {
+        const top = element.getBoundingClientRect().top;
+        return [
+          element.querySelector('[role="tablist"]')!.getBoundingClientRect().top - top,
+          ...[...element.querySelectorAll("article")].flatMap((card) => {
+            const rect = card.getBoundingClientRect();
+            return [
+              rect.top - top,
+              rect.height,
+              card.querySelector("dl")!.getBoundingClientRect().top - top,
+            ];
+          }),
+        ];
+      });
+    const before = await geometry();
+    if (human === "white") {
+      await square(page, "f2").click();
+      await square(page, "f3").click();
+    }
+    await expect.poll(() => Boolean(releaseTurn)).toBe(true);
+    hold = true;
+    releaseTurn!();
+    const move = human === "white" ? "Black · 1. e5" : "White · 1. f3";
+    await expect(commentary.getByRole("heading", { name: move, exact: true })).toBeVisible();
+    await expect(commentary.getByText("Loading move details…", { exact: true })).toBeVisible();
+    expect(await geometry()).toEqual(before);
+    await expect.poll(() => Boolean(releaseRecords)).toBe(true);
+    hold = false;
+    releaseRecords!();
+    await expect(commentary.getByText("Controls the center.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    expect(await geometry()).toEqual(before);
+    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+    const totals = page.getByRole("region", { name: "Operational totals" });
+    const count = totals.getByText(/^Recorded attempts:/);
+    await expect(count).toBeVisible();
+    const recordedCount = await count.textContent();
+    await expect(
+      page.getByRole("button", { name: "Refresh details", exact: true }),
+    ).toHaveAttribute("aria-disabled", "false");
+    hold = true;
+    releaseRecords = undefined;
+    long = true;
+    await page.getByRole("button", { name: "Refresh details", exact: true }).click();
+    await expect.poll(() => Boolean(releaseRecords)).toBe(true);
+    await expect(count).toHaveText(recordedCount!);
+    await expect(commentary.getByText("Controls the center.", { exact: true })).toBeVisible();
+    expect(await geometry()).toEqual(before);
+    hold = false;
+    releaseRecords!();
+    await expect(commentary.getByText(longCommentary, { exact: true })).toBeVisible();
+    expect(await geometry()).toEqual(before);
+    await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
 }
 
 test("accepted-move commentary follows replay; Analysis shows totals and Events includes retries", async ({
@@ -135,7 +251,8 @@ test("provider pause keeps the invalid budget and attempt history through manual
     route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
   );
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
-  await expect(totals.getByText(/Telemetry could not be loaded/)).toBeVisible();
+  await expect(totals.getByText(/Could not refresh details/)).toBeVisible();
+  await expect(totals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
   await page.unroute("**/invocations");
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
   await expect(totals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
@@ -155,6 +272,7 @@ test("live details stay within the primary controls across tabs and long comment
   const widths = desktop ? [1025, 1280, 1440, 1920] : [320, 390, 768, 1024];
   const rail = page.getByRole("complementary", { name: "Game details" });
   const controls = page.getByRole("region", { name: "Game controls" });
+  const anchors = new Map<number, { tabs: number; cards: number[] }>();
   async function checkRail() {
     const railBounds = await rail.boundingBox();
     const controlsBounds = await controls.boundingBox();
@@ -174,6 +292,19 @@ test("live details stay within the primary controls across tabs and long comment
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
+    const geometry = await rail.evaluate((element) => {
+      const top = element.getBoundingClientRect().top;
+      return {
+        tabs: element.querySelector('[role="tablist"]')!.getBoundingClientRect().top - top,
+        cards: [...element.querySelectorAll("article")].map(
+          (card) => card.getBoundingClientRect().height,
+        ),
+      };
+    });
+    const width = page.viewportSize()!.width;
+    const previous = anchors.get(width);
+    if (previous) expect(geometry).toEqual(previous);
+    else anchors.set(width, geometry);
     await expectUnbrokenWords(rail.locator("button"));
     const moves = page.getByRole("tabpanel", { name: "Moves", exact: true });
     if (await moves.isVisible()) {
@@ -238,18 +369,38 @@ test("live details stay within the primary controls across tabs and long comment
       await checkRail();
     }
   }
-  if (desktop) {
-    expect(
-      await commentary.evaluate((element) => element.scrollHeight > element.clientHeight),
-    ).toBe(true);
-    await commentary.focus();
-    await page.keyboard.press("Control+End");
-    await expect(commentary.getByRole("heading", { name: "Black · 1. e5" })).not.toBeInViewport();
-    await expect(commentary.getByText("Output tokens").last()).toBeInViewport();
-  }
+  const read = commentary.getByRole("button", { name: "Read full commentary: Black · 1. e5" });
+  await read.click();
+  const dialog = page.getByRole("dialog", { name: "Commentary · Black · 1. e5" });
+  await expect(dialog.getByText(longCommentary, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close commentary" })).toBeInViewport();
+  expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(read).toBeFocused();
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
   await events.focus();
   await page.keyboard.press("Control+End");
   await expect(events.getByRole("heading", { name: "Black · Move 1" })).toBeInViewport();
   expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
+  await setPseudoLocalization(page, true);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "200%";
+  });
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await commentary.getByRole("button", { name: /^Read full commentary: Black/ }).click();
+    const expanded = page.getByRole("dialog");
+    await expect(expanded.getByRole("button", { name: /^Close commentary/ })).toBeInViewport();
+    expect(await expanded.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    await page.keyboard.press("Escape");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.getByRole("tab", { name: /^Analysis/ }).click();
+    await page.getByRole("button", { name: /^Refresh details/ }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("button", { name: /^Refresh details/ })).toBeInViewport();
+  }
 });

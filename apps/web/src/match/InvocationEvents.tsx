@@ -2,6 +2,8 @@ import type { GameInvocations, GameSnapshot, ProviderFailure } from "@neurochess
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
+import { TelemetryStatus } from "./TelemetryStatus";
+
 function failureReason(error: ProviderFailure, t: TFunction) {
   return "reason" in error
     ? t(`telemetry.reasons.${error.reason}`)
@@ -11,9 +13,13 @@ function failureReason(error: ProviderFailure, t: TFunction) {
 export function InvocationEvents({
   records,
   snapshot,
+  loading = false,
+  error = false,
 }: {
   readonly records: GameInvocations | null;
   readonly snapshot: GameSnapshot;
+  readonly loading?: boolean;
+  readonly error?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const number = new Intl.NumberFormat(i18n.language);
@@ -27,6 +33,12 @@ export function InvocationEvents({
         </p>
       ) : null}
       <p className="text-label text-text-secondary">{t("telemetry.retryPolicy")}</p>
+      <TelemetryStatus
+        hasRecords={Boolean(records)}
+        loading={loading}
+        error={error}
+        stale={Boolean(records && records.version !== snapshot.version)}
+      />
       {!records ? (
         <p>{t("telemetry.detailsUnavailable")}</p>
       ) : records.turns.length === 0 ? (

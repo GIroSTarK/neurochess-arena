@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { invocationRecords, telemetryDetails, viewerCommentary } from "../test/ai-invocations";
+import { snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 
 import { CommentaryPanel } from "./CommentaryPanel";
@@ -42,10 +43,60 @@ describe("minimal Arena telemetry panels", () => {
       <CommentaryPanel details={details} records={invocationRecords()} selectedPly={1} />,
     );
     expect(screen.getByText("Human move · no model invocation.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Read full commentary/ })).not.toBeInTheDocument();
     expect(screen.queryByText("No commentary provided")).not.toBeInTheDocument();
-    view.rerender(<CommentaryPanel details={details} records={null} selectedPly={2} />);
+    view.rerender(<CommentaryPanel details={details} records={null} selectedPly={2} error />);
     expect(screen.getByText("Move details unavailable.")).toBeVisible();
     expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+  });
+  it("keeps accepted commentary on its own ply while the next move is waiting for details", () => {
+    const records = invocationRecords();
+    const next = { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) };
+    const view = renderLocalized(
+      <CommentaryPanel details={next} records={records} selectedPly={null} loading />,
+    );
+    expect(screen.getByRole("heading", { name: "White · 2. Nf3" })).toBeVisible();
+    expect(screen.queryByText(viewerCommentary)).not.toBeInTheDocument();
+    expect(screen.getByText("Loading move details…")).toBeVisible();
+    expect(screen.getByText("400 ms")).toBeVisible();
+    view.rerender(<CommentaryPanel details={next} records={records} selectedPly={1} loading />);
+    expect(screen.getByText(viewerCommentary)).toBeVisible();
+    expect(screen.getByText("300 ms")).toBeVisible();
+  });
+  it("opens literal commentary in a dialog, keeps that move during live updates, and restores focus", async () => {
+    const user = userEvent.setup();
+    const records = invocationRecords();
+    const view = renderLocalized(
+      <CommentaryPanel details={telemetryDetails} records={records} selectedPly={null} />,
+    );
+    const trigger = screen.getByRole("button", { name: "Read full commentary: White · 1. e4" });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Commentary · White · 1. e4" });
+    expect(within(dialog).getByText(viewerCommentary)).toBeVisible();
+    expect(dialog.querySelector("img, script, strong")).toBeNull();
+    const next = { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) };
+    view.rerender(<CommentaryPanel details={next} records={records} selectedPly={null} loading />);
+    expect(within(dialog).getByText(viewerCommentary)).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+  it("preserves received totals during refresh and labels a failed refresh", () => {
+    const next = { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) };
+    const props = {
+      details: next,
+      records: invocationRecords(),
+      recordedMoveCount: 2,
+      onRefresh: vi.fn(),
+    };
+    const view = renderLocalized(<TelemetryPanel {...props} loading error={false} />);
+    expect(screen.getByText("1,000 ms")).toBeVisible();
+    expect(screen.getByText("Updating details… Showing the last received data.")).toBeVisible();
+    view.rerender(<TelemetryPanel {...props} loading={false} error />);
+    expect(screen.getByText("1,000 ms")).toBeVisible();
+    expect(
+      screen.getByText("Could not refresh details. Showing the last received data."),
+    ).toBeVisible();
   });
   it("labels all-attempt totals with independent missing-data coverage and a retryable load error", async () => {
     const onRefresh = vi.fn();

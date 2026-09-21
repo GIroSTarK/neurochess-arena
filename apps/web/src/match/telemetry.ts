@@ -15,12 +15,20 @@ export function acceptedAttempt(records: GameInvocations | null, ply: number) {
     ?.attempts.find((attempt) => attempt.outcome === "accepted");
 }
 
-export function operationalTotals(details: GameDetails, records: GameInvocations) {
+export function operationalTotals(
+  details: GameDetails,
+  records: GameInvocations,
+  moveCount = details.snapshot.moves.length,
+) {
   const attempts = records.turns.flatMap((turn) => turn.attempts);
   const recordedMoves = new Set(records.turns.map((turn) => turn.acceptedMovePly));
   const missingMoves = details.snapshot.moves.filter((move) => {
     const color = move.ply % 2 ? "white" : "black";
-    return details.configuration?.seats[color].type === "ai" && !recordedMoves.has(move.ply);
+    return (
+      move.ply <= moveCount &&
+      details.configuration?.seats[color].type === "ai" &&
+      !recordedMoves.has(move.ply)
+    );
   }).length;
   return {
     attempts: attempts.length,

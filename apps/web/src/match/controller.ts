@@ -40,6 +40,7 @@ export interface MatchState {
   exportResult: "copied" | "downloaded" | "manual" | "error" | null;
   exportText: string | null;
   invocations: GameInvocations | null;
+  invocationsMoveCount: number;
   invocationsLoading: boolean;
   invocationsError: boolean;
 }
@@ -98,6 +99,7 @@ export class MatchController {
     exportResult: null,
     exportText: null,
     invocations: null,
+    invocationsMoveCount: 0,
     invocationsLoading: false,
     invocationsError: false,
   };
@@ -265,7 +267,7 @@ export class MatchController {
       return;
     }
     const changed = snapshot.version !== previous.snapshot.version;
-    if (changed) this.clearInvocations();
+    if (changed) this.cancelInvocationRead();
     this.publish({ details: { ...previous, snapshot } });
     if (changed) void this.loadInvocations();
     if (snapshot.state !== "active") this.stopRunning();
@@ -435,11 +437,19 @@ export class MatchController {
       this.fail(error);
     }
   }
-  private clearInvocations() {
+  private cancelInvocationRead() {
     clearTimeout(this.invocationTimer);
     this.invocationRequest?.abort();
     this.invocationRequest = null;
-    this.publish({ invocations: null, invocationsLoading: false, invocationsError: false });
+  }
+  private clearInvocations() {
+    this.cancelInvocationRead();
+    this.publish({
+      invocations: null,
+      invocationsMoveCount: 0,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
   }
   async loadInvocations() {
     const lifetime = this.lifetime?.signal;
@@ -462,7 +472,8 @@ export class MatchController {
       if (records.gameId !== snapshot.gameId || records.version !== snapshot.version) {
         throw new ApiFailure("malformed");
       }
-      this.publish({ invocations: records });
+      // Totals describe the history at this read, even while the next revision is loading.
+      this.publish({ invocations: records, invocationsMoveCount: snapshot.moves.length });
       const turn = records.turns.at(-1);
       const attempt = turn?.attempts.at(-1);
       const error = attempt?.error;
@@ -480,7 +491,7 @@ export class MatchController {
       }
     } catch (error) {
       if (current() && !this.accessLost(error)) {
-        this.publish({ invocations: null, invocationsError: true });
+        this.publish({ invocationsError: true });
       }
     } finally {
       if (current()) {

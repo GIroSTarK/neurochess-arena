@@ -165,6 +165,77 @@ describe("page-owned Arena orchestration", () => {
     });
   });
 
+  it("retains received telemetry through new revisions and failed reads, then clears it on leaving", async () => {
+    const game = {
+      ...telemetryDetails,
+      snapshot: snapshot(["e2e4", "e7e5"], { state: "paused", legalMoves: [] }),
+    };
+    const h = harness(game);
+    const records = invocationRecords();
+    h.api.invocations.mockImplementation(async () => ({
+      ...records,
+      version: h.controller.getSnapshot().details!.snapshot.version,
+    }));
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const received = h.controller.getSnapshot().invocations;
+    expect(received?.turns).toEqual(records.turns);
+    const reads: ReturnType<
+      typeof Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>
+    >[] = [];
+    h.api.invocations.mockImplementation(() => {
+      const read = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
+      reads.push(read);
+      return read.promise;
+    });
+    h.controller.setKey("white", "white-secret");
+    h.controller.setKey("black", "black-secret");
+    h.api.turn.mockImplementationOnce(async () => {
+      const accepted = snapshot(["e2e4", "e7e5", "g1f3"], {
+        state: "paused",
+        legalMoves: [],
+        version: h.controller.getSnapshot().details!.snapshot.version + 1,
+      });
+      h.store(accepted);
+      return accepted;
+    });
+    const observed: (typeof received)[] = [];
+    const unsubscribe = h.controller.subscribe(() =>
+      observed.push(h.controller.getSnapshot().invocations),
+    );
+    await h.controller.continue(true);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: received,
+      invocationsMoveCount: 2,
+      invocationsLoading: true,
+    });
+    reads.at(-1)!.reject(new ApiFailure("network"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: received,
+      invocationsMoveCount: 2,
+      invocationsError: true,
+      invocationsLoading: false,
+    });
+    expect(observed.every((value) => value === received)).toBe(true);
+    unsubscribe();
+    const updated = { ...records, version: h.controller.getSnapshot().details!.snapshot.version };
+    h.api.invocations.mockResolvedValueOnce(updated);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: updated,
+      invocationsMoveCount: 3,
+      invocationsError: false,
+    });
+    h.disconnect();
+    for (const read of reads) read.resolve(records);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: null,
+      invocationsMoveCount: 0,
+    });
+  });
+
   it("fences superseded telemetry by revision without blocking inference", async () => {
     const h = harness();
     const pending = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
@@ -198,7 +269,10 @@ describe("page-owned Arena orchestration", () => {
     expect(h.controller.getSnapshot().invocationsError).toBe(false);
     h.api.invocations.mockResolvedValueOnce({ gameId: crypto.randomUUID(), version: 0, turns: [] });
     await h.controller.loadInvocations();
-    expect(h.controller.getSnapshot()).toMatchObject({ invocations: null, invocationsError: true });
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: { gameId: GAME_ID, version: 0, turns: [] },
+      invocationsError: true,
+    });
     h.api.invocations.mockRejectedValueOnce(new ApiFailure("api", "NOT_FOUND"));
     await h.controller.loadInvocations();
     expect(h.controller.getSnapshot()).toMatchObject({

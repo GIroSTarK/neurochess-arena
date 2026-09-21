@@ -62,7 +62,9 @@ export function ArenaLayout({
           "flex min-h-0 min-w-0 flex-col max-lg:mx-auto max-lg:w-full max-lg:max-w-[640px] lg:border-l lg:border-divider lg:pl-8",
           Boolean(introduction) && "lg:col-start-2 lg:row-start-2",
           separateToolsRow && "lg:col-start-2 lg:row-start-1",
-          constrainDetails ? "gap-6 lg:overflow-y-auto lg:pr-2 lg:pb-2 lg:contain-size" : "gap-8",
+          constrainDetails
+            ? "gap-4 lg:[scrollbar-gutter:stable] lg:overflow-y-auto lg:pr-2 lg:pb-2 lg:contain-size"
+            : "gap-8",
         )}
         aria-label={detailsLabel}
       >
