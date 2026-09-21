@@ -67,7 +67,7 @@ async function selectModel(color: "White" | "Black") {
   await waitFor(() =>
     expect(seat.getByLabelText("Provider")).toHaveAttribute("aria-disabled", "false"),
   );
-  await user.selectOptions(seat.getByLabelText("Provider"), "openai");
+  expect(seat.getByLabelText("Provider")).toHaveValue("openai");
   await user.type(seat.getByLabelText("API key"), `${color}-key-sentinel`);
   await user.click(seat.getByRole("button", { name: "Load models" }));
   await seat.findByText("Models loaded. Choose a model to continue.");
