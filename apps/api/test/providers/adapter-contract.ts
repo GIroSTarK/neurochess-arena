@@ -194,6 +194,153 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       },
     );
 
+    it.each([
+      { name: "SAN move", text: '{"move":"e5"}' },
+      { name: "extra field", text: '{"move":"e7e5","extra":true}' },
+      { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
+      { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
+      { name: "incomplete JSON", text: '{"move":' },
+      { name: "empty text", text: "" },
+      {
+        name: "oversized commentary",
+        text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
+      },
+    ])("rejects malformed model JSON: $name", async ({ text }) => {
+      const usage = fixture.reportedUsage;
+      const http = mockHttp([fixture.completion(text, usage)]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "model_invalid", reason: "malformed_output" },
+        usage,
+        providerRequestId: null,
+      });
+      expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"])(
+      "classifies native fetch timeout %s without preserving its cause",
+      async (code) => {
+        const http = mockHttp([
+          new TypeError(PROVIDER_KEY, { cause: { code, message: PROVIDER_KEY } }),
+        ]);
+        const result = await fixture
+          .createAdapter(http.transport)
+          .requestMove(contractInput(fixture));
+        expect(result).toMatchObject({ ok: false, error: { code: "provider_timeout" } });
+        expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
+        expect(http.transport).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("propagates cancellation while consuming the response body", async ({ onTestFinished }) => {
+      const controller = new AbortController();
+      const reading = Promise.withResolvers<void>();
+      const envelope = await fixture.completion('{"move":"e7e5"}').text();
+      let bodyController: ReadableStreamDefaultController<Uint8Array>;
+      let sent = false;
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          bodyController = stream;
+        },
+        pull(stream) {
+          if (!sent) {
+            stream.enqueue(new TextEncoder().encode(envelope.slice(0, -1)));
+            sent = true;
+          } else {
+            // A second pull proves the adapter consumed the first chunk and is awaiting more.
+            reading.resolve();
+          }
+        },
+      });
+      const interrupt = () => bodyController.error(new Error(PROVIDER_KEY));
+      const http = mockHttp([
+        (request) => {
+          request.signal.addEventListener("abort", interrupt, { once: true });
+          return new Response(body);
+        },
+      ]);
+      const pending = fixture.createAdapter(http.transport).requestMove({
+        ...contractInput(fixture),
+        signal: controller.signal,
+      });
+      onTestFinished(async () => {
+        controller.abort();
+        http.requests[0]?.signal.removeEventListener("abort", interrupt);
+        interrupt();
+        await pending;
+      });
+      await reading.promise;
+      expect(body.locked).toBe(true);
+      controller.abort(PROVIDER_KEY);
+      const result = await pending;
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "provider_unavailable", reason: "cancelled" },
+      });
+      expect(http.requests[0]!.signal.aborted).toBe(true);
+      expect(body.locked).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
+    it("classifies an interrupted body as a network failure", async () => {
+      const body = new ReadableStream({
+        start(stream) {
+          stream.error(new TypeError(PROVIDER_KEY));
+        },
+      });
+      const http = mockHttp([new Response(body)]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "provider_unavailable", reason: "network" },
+      });
+      expect(body.locked).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { name: "invalid JSON", body: () => "not json" },
+      {
+        name: "oversized body",
+        body: async () => {
+          const envelope = await fixture.completion('{"move":"e7e5"}').text();
+          // Valid JSON ensures the size limit, rather than JSON parsing, rejects this body.
+          return envelope.padEnd(4 * 1024 * 1024 + 1, " ");
+        },
+      },
+      {
+        name: "invalid UTF-8",
+        body: async () => {
+          const envelope = await fixture.completion('{"move":"e7e5","commentary":"#"}').text();
+          const bytes = new TextEncoder().encode(envelope);
+          // Replacement decoding would yield a valid move with commentary and pass JSON parsing.
+          bytes[bytes.indexOf(0x23)] = 0xff;
+          return bytes;
+        },
+      },
+    ])("rejects response body: $name", async ({ body }) => {
+      const response = new Response(await body());
+      const http = mockHttp([response]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "provider_unavailable", reason: "invalid_response" },
+      });
+      expect(response.body!.locked).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
     it.each(["discovery", "move"] as const)(
       "sanitizes network failures during %s",
       async (operation) => {

@@ -179,26 +179,15 @@ describe("OpenAI Responses API details", () => {
     expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
   });
 
-  it.each([
-    { name: "SAN move", text: '{"move":"e5"}' },
-    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
-    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
-    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
-    { name: "incomplete JSON", text: '{"move":' },
-    {
-      name: "oversized commentary",
-      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-    },
-  ])("classifies malformed model JSON: $name", async ({ text }) => {
-    const http = mockHttp([
-      Response.json(openAiResponse(text, { inputTokens: 0, outputTokens: 1, totalTokens: null })),
-    ]);
+  it("preserves zero and partial usage on malformed model output", async () => {
+    const usage = { inputTokens: 0, outputTokens: 1, totalTokens: null };
+    const http = mockHttp([Response.json(openAiResponse('{"move":', usage))]);
     expect(
       await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
     ).toMatchObject({
       ok: false,
       error: { code: "model_invalid", reason: "malformed_output" },
-      usage: { inputTokens: 0, outputTokens: 1, totalTokens: null },
+      usage,
     });
   });
 
@@ -327,80 +316,5 @@ describe("OpenAI Responses API details", () => {
     expect(
       await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
     ).toMatchObject({ ok: true, usage: { inputTokens: 50, outputTokens: 10, totalTokens: null } });
-  });
-
-  it.each(["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"])(
-    "classifies native fetch timeout %s without preserving its cause",
-    async (code) => {
-      const http = mockHttp([
-        new TypeError(PROVIDER_KEY, { cause: { code, message: PROVIDER_KEY } }),
-      ]);
-      const result = await createOpenAiAdapter(http.transport).requestMove(
-        contractInput(openAiFixture),
-      );
-      expect(result).toMatchObject({ ok: false, error: { code: "provider_timeout" } });
-      expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
-      expect(http.transport).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it("propagates cancellation while consuming the response body", async () => {
-    const controller = new AbortController();
-    const entered = Promise.withResolvers<void>();
-    const http = mockHttp([
-      (request) =>
-        new Response(
-          new ReadableStream({
-            start(stream) {
-              request.signal.addEventListener(
-                "abort",
-                () => stream.error(new Error(PROVIDER_KEY)),
-                { once: true },
-              );
-              stream.enqueue(new TextEncoder().encode('{"object":'));
-              entered.resolve();
-            },
-          }),
-        ),
-    ]);
-    const pending = createOpenAiAdapter(http.transport).requestMove({
-      ...contractInput(openAiFixture),
-      signal: controller.signal,
-    });
-    await entered.promise;
-    controller.abort();
-    expect(await pending).toMatchObject({
-      ok: false,
-      error: { code: "provider_unavailable", reason: "cancelled" },
-    });
-    expect(http.transport).toHaveBeenCalledTimes(1);
-  });
-
-  it("classifies an interrupted body as a network failure", async () => {
-    const http = mockHttp([
-      new Response(
-        new ReadableStream({
-          start(stream) {
-            stream.error(new TypeError(PROVIDER_KEY));
-          },
-        }),
-      ),
-    ]);
-    expect(
-      await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
-    ).toMatchObject({ ok: false, error: { code: "provider_unavailable", reason: "network" } });
-  });
-
-  it.each([
-    { name: "invalid JSON", body: "not json" },
-    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
-  ])("rejects response body: $name", async ({ body }) => {
-    const http = mockHttp([new Response(body)]);
-    expect(
-      await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
-    ).toMatchObject({
-      ok: false,
-      error: { code: "provider_unavailable", reason: "invalid_response" },
-    });
   });
 });

@@ -305,28 +305,6 @@ describe("OpenRouter move requests and responses", () => {
   });
 
   it.each([
-    { name: "SAN move", text: '{"move":"e5"}' },
-    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
-    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
-    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
-    { name: "incomplete JSON", text: '{"move":' },
-    { name: "empty text", text: "" },
-    {
-      name: "oversized commentary",
-      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-    },
-  ])("rejects malformed model JSON: $name", async ({ text }) => {
-    const http = mockHttp([
-      Response.json(openRouterResponse(text, openRouterFixture.reportedUsage)),
-    ]);
-    expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
-      ok: false,
-      error: { code: "model_invalid", reason: "malformed_output" },
-      usage: openRouterFixture.reportedUsage,
-    });
-  });
-
-  it.each([
     ["length", { code: "model_invalid", reason: "truncated_output" }],
     ["content_filter", { code: "model_invalid", reason: "refusal" }],
     ["tool_calls", { code: "model_invalid", reason: "malformed_output" }],
@@ -663,60 +641,5 @@ describe("OpenRouter router and upstream failures", () => {
     const result = await createOpenRouterAdapter(http.transport).listModels(input());
     expect(result).toMatchObject({ ok: false, error: { code } });
     expect(JSON.stringify(result)).not.toContain(PROVIDER_KEY);
-  });
-
-  it.each(["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"])(
-    "normalizes native timeout %s",
-    async (code) => {
-      const http = mockHttp([new TypeError(PROVIDER_KEY, { cause: { code } })]);
-      expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
-        ok: false,
-        error: { code: "provider_timeout" },
-      });
-    },
-  );
-
-  it("propagates cancellation while reading the response body", async () => {
-    const controller = new AbortController();
-    const entered = Promise.withResolvers<void>();
-    const http = mockHttp([
-      (request) =>
-        new Response(
-          new ReadableStream({
-            start(stream) {
-              request.signal.addEventListener(
-                "abort",
-                () => stream.error(new Error(PROVIDER_KEY)),
-                { once: true },
-              );
-              stream.enqueue(new TextEncoder().encode('{"choices":'));
-              entered.resolve();
-            },
-          }),
-        ),
-    ]);
-    const pending = createOpenRouterAdapter(http.transport).requestMove({
-      ...input(),
-      signal: controller.signal,
-    });
-    await entered.promise;
-    controller.abort();
-    expect(await pending).toMatchObject({
-      ok: false,
-      error: { code: "provider_unavailable", reason: "cancelled" },
-    });
-    expect(http.transport).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    { name: "invalid JSON", body: "not json" },
-    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
-    { name: "invalid UTF-8", body: new Uint8Array([0xff]) },
-  ])("rejects response body: $name", async ({ body }) => {
-    const http = mockHttp([new Response(body)]);
-    expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
-      ok: false,
-      error: invalidResponse,
-    });
   });
 });
