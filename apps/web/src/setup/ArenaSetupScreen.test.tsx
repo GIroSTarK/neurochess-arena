@@ -22,7 +22,7 @@ import { ArenaSetupScreen } from "./ArenaSetupScreen";
 const cleanup: (() => void)[] = [];
 afterEach(() => cleanup.splice(0).forEach((dispose) => dispose()));
 
-function fixture() {
+function fixture(models = setupModels) {
   const lifetime = new AbortController();
   const credentials = createSessionCredentials(lifetime.signal);
   cleanup.push(() => lifetime.abort());
@@ -32,7 +32,7 @@ function fixture() {
     if (path === "/guest-session") return jsonResponse({ status: "ready" });
     if (path === "/providers/models") {
       const body = modelDiscoveryRequestSchema.parse(JSON.parse(requestBody(init)));
-      return jsonResponse({ ok: true, models: setupModels(body.provider) });
+      return jsonResponse({ ok: true, models: models(body.provider) });
     }
     if (path === "/games") {
       return jsonResponse(
@@ -61,20 +61,37 @@ function fixture() {
   return { ...view, credentials, fetch, onCreated, onReturnToGame };
 }
 
-async function selectModel(color: "White" | "Black") {
+async function loadModels(color: "White" | "Black", { typeKey = false } = {}) {
   const user = userEvent.setup();
   const seat = within(screen.getByRole("group", { name: color }));
   await waitFor(() =>
     expect(seat.getByLabelText("Provider")).toHaveAttribute("aria-disabled", "false"),
   );
   expect(seat.getByLabelText("Provider")).toHaveValue("openai");
-  await user.type(seat.getByLabelText("API key"), `${color}-key-sentinel`);
+  const key = seat.getByLabelText("API key");
+  if (typeKey) {
+    await user.type(key, `${color}-key-sentinel`);
+  } else {
+    // Most cases need a credential, not a keystroke-by-keystroke edit. Pasting
+    // still exercises the real field's change, validation and blur handlers.
+    await user.click(key);
+    await user.paste(`${color}-key-sentinel`);
+  }
   await user.click(seat.getByRole("button", { name: "Load models" }));
   await seat.findByText("Models loaded. Choose a model to continue.");
   const model = seat.getByRole("combobox", { name: "Model" });
+  return { user, seat, model };
+}
+
+async function selectModel(color: "White" | "Black", { keyboard = false } = {}) {
+  const { user, seat, model } = await loadModels(color, { typeKey: keyboard });
   await user.click(model);
-  await user.type(model, "model-a");
-  await user.keyboard("{ArrowDown}{Enter}");
+  if (keyboard) {
+    await user.type(model, "model-a");
+    await user.keyboard("{ArrowDown}{Enter}");
+  } else {
+    await user.click(seat.getByRole("option", { name: /^Model A \(test fixture\)/ }));
+  }
   return { user, seat, model };
 }
 
@@ -152,10 +169,10 @@ describe("Arena setup presentation and validated API handoff", () => {
   it("supports independent keyboard selection, bounded parameters, and key-free creation", async () => {
     const { onCreated, fetch, credentials } = fixture();
     expect(fetch.mock.calls.every(([url]) => requestPath(url) === "/games/unfinished")).toBe(true);
-    const { user, seat: white } = await selectModel("White");
+    const { user, seat: white } = await selectModel("White", { keyboard: true });
     await user.click(white.getByText("Advanced parameters"));
     await user.type(white.getByLabelText("Temperature"), "0.3");
-    const { seat: black } = await selectModel("Black");
+    const { seat: black } = await selectModel("Black", { keyboard: true });
     await user.click(black.getByText("Advanced parameters"));
     await user.selectOptions(black.getByLabelText("Reasoning effort"), "high");
     expect(black.getByLabelText("Temperature")).toHaveValue("");
@@ -225,7 +242,7 @@ describe("Arena setup presentation and validated API handoff", () => {
 
   it("masks keys and clears DOM values, catalogs and readiness on provider change and pagehide", async () => {
     const { credentials } = fixture();
-    const { user, seat } = await selectModel("White");
+    const { user, seat } = await selectModel("White", { keyboard: true });
     expect(seat.getByLabelText("API key")).toHaveAttribute("type", "password");
     await user.click(seat.getByRole("button", { name: "Show key" }));
     expect(seat.getByLabelText("API key")).toHaveAttribute("type", "text");
@@ -241,7 +258,7 @@ describe("Arena setup presentation and validated API handoff", () => {
 
   it("shows loading, empty, invalid-key, unavailable and no-match guidance without raw errors", async () => {
     const { fetch } = fixture();
-    const { user, seat, model } = await selectModel("White");
+    const { user, seat, model } = await loadModels("White");
     await user.click(model);
     await user.type(model, "no-such-model");
     expect(seat.getByText(/No matching models/)).toBeVisible();
@@ -291,16 +308,13 @@ describe("Arena setup presentation and validated API handoff", () => {
   });
 
   it("renders discovered model names as text, including after selection", async () => {
-    const { fetch } = fixture();
-    const { user, seat, model } = await selectModel("White");
-    const models = setupModels("openai");
     const untrusted = '<img src=x onerror="alert(1)">';
-    models[0]!.name = untrusted;
-    fetch
-      .mockResolvedValueOnce(jsonResponse({ status: "ready" }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, models }));
-    await user.click(seat.getByRole("button", { name: "Refresh models" }));
-    await seat.findByText("Models loaded. Choose a model to continue.");
+    fixture((provider) =>
+      setupModels(provider).map((model, index) =>
+        index === 0 ? { ...model, name: untrusted } : model,
+      ),
+    );
+    const { user, seat, model } = await loadModels("White");
     await user.click(model);
     expect(seat.getByRole("option", { name: /<img src=x/ })).toBeVisible();
     await user.keyboard("{Enter}");
