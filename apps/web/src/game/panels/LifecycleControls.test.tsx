@@ -1,121 +1,93 @@
-import { fireEvent, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { mockController, OTHER_GAME_ID, readyState, snapshot } from "../../test/fixtures";
+import { LifecycleControls as LifecyclePanel } from "../../arena/panels/LifecycleControls";
+import {
+  mockController,
+  OTHER_GAME_ID,
+  readyState,
+  sandboxState,
+  snapshot,
+} from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 
 import { LifecycleControls } from "./LifecycleControls";
 
+vi.mock("../../arena/panels/LifecycleControls", () => ({ LifecycleControls: vi.fn(() => null) }));
+
 function props() {
-  const controller = mockController();
   return {
-    controller,
+    controller: mockController(),
     state: readyState(),
-    lifecycle: controller.lifecycle,
     boardTools: { orientation: "white" as const, onFlip: vi.fn(), helpId: "board-help" },
   };
 }
 
-describe("lifecycle confirmations", () => {
-  it("explains guest-session replay and PGN export before aborting", async () => {
+function panelProps() {
+  const call = vi.mocked(LifecyclePanel).mock.lastCall;
+  expect(call).toBeDefined();
+  return call![0];
+}
+
+describe("Sandbox lifecycle mapping", () => {
+  it("maps state, action colors and the localized guest-session explanation to shared controls", () => {
     const initial = props();
-    renderLocalized(<LifecycleControls {...initial} />);
-    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
-    const dialog = screen.getByRole("dialog", { name: "Stop this game?" });
-    expect(dialog).toHaveAccessibleDescription(
+    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
+    const panel = panelProps();
+    expect(panel).toMatchObject({ paused: false, disabled: false });
+    expect(panel.boardTools).toBe(initial.boardTools);
+    expect(panel.abortDescription).toBe(
       "This ends the game without awarding a win or loss. Its moves remain available for replay and PGN export during your guest session.",
     );
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
-    expect(initial.lifecycle).not.toHaveBeenCalled();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Stop game" }));
-    expect(initial.lifecycle).toHaveBeenCalledExactlyOnceWith({ action: "abort" });
+    expect(panel.resignations.map(({ color }) => color)).toEqual(["white", "black"]);
+    expect(initial.controller.lifecycle).not.toHaveBeenCalled();
+    panel.onTogglePause!();
+    panel.onAbort!();
+    for (const seat of panel.resignations) seat.onResign();
+
+    rerender(
+      <LifecycleControls
+        {...initial}
+        state={readyState({ snapshot: snapshot([], { state: "paused", legalMoves: [] }) })}
+      />,
+    );
+    expect(panelProps()).toMatchObject({ paused: true, disabled: false });
+    panelProps().onTogglePause!();
+    expect(initial.controller.lifecycle.mock.calls).toEqual([
+      [{ action: "pause" }],
+      [{ action: "abort" }],
+      [{ action: "resign", losingColor: "white" }],
+      [{ action: "resign", losingColor: "black" }],
+      [{ action: "resume" }],
+    ]);
+
+    rerender(
+      <LifecycleControls
+        {...initial}
+        state={sandboxState({ phase: "synchronizing", snapshot: snapshot(), pendingCommand: null })}
+      />,
+    );
+    expect(panelProps().disabled).toBe(true);
   });
 
   it.each([
-    { name: "Abort game", confirm: "Stop game", action: { action: "abort" } },
+    { reason: "accepted revision", state: readyState({ snapshot: snapshot([], { version: 1 }) }) },
     {
-      name: "Resign White",
-      confirm: "Confirm resignation",
-      action: { action: "resign", losingColor: "white" },
+      reason: "interaction revision without a new snapshot",
+      state: readyState({ interactionRevision: 1 }),
     },
     {
-      name: "Resign Black",
-      confirm: "Confirm resignation",
-      action: { action: "resign", losingColor: "black" },
+      reason: "game identity at the same revision",
+      state: readyState({ snapshot: snapshot([], { gameId: OTHER_GAME_ID }) }),
     },
-  ])(
-    "invalidates an open $name confirmation after an accepted revision changes",
-    async ({ name, confirm, action }) => {
-      const initial = props();
-      const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
-      const trigger = screen.getByRole("button", { name });
-      await userEvent.click(trigger);
-      const dialog = screen.getByRole("dialog");
-      const staleConfirm = within(dialog).getByRole("button", { name: confirm });
-
-      rerender(
-        <LifecycleControls {...initial} state={readyState({ snapshot: snapshot(["e2e4"]) })} />,
-      );
-
-      expect(screen.getByRole("button", { name })).toBe(trigger);
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      fireEvent.click(staleConfirm);
-      expect(initial.lifecycle).not.toHaveBeenCalled();
-      await userEvent.click(trigger);
-      await userEvent.click(
-        within(screen.getByRole("dialog")).getByRole("button", { name: confirm }),
-      );
-      expect(initial.lifecycle).toHaveBeenCalledExactlyOnceWith(action);
-    },
-  );
-
-  it("invalidates a confirmation when the interaction epoch changes without a new snapshot", async () => {
+  ])("changes the shared confirmation epoch for $reason", ({ state }) => {
     const initial = props();
     const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
-    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    rerender(
-      <LifecycleControls
-        {...initial}
-        state={readyState({ interactionRevision: initial.state.interactionRevision + 1 })}
-      />,
-    );
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(initial.lifecycle).not.toHaveBeenCalled();
-  });
-
-  it("does not carry a confirmation to another game at the same revision", async () => {
-    const initial = props();
-    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
-    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    rerender(
-      <LifecycleControls
-        {...initial}
-        state={readyState({ snapshot: snapshot([], { gameId: OTHER_GAME_ID }) })}
-      />,
-    );
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(initial.lifecycle).not.toHaveBeenCalled();
-  });
-
-  it("keeps a current confirmation and its focus during unrelated renders", async () => {
-    const initial = props();
-    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
-    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
-    const dialog = screen.getByRole("dialog");
-    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
-    expect(cancel).toHaveFocus();
+    const epoch = panelProps().epoch;
 
     rerender(<LifecycleControls {...initial} state={{ ...initial.state }} />);
-
-    expect(screen.getByRole("dialog")).toBe(dialog);
-    expect(cancel).toHaveFocus();
-    expect(initial.lifecycle).not.toHaveBeenCalled();
+    expect(panelProps().epoch).toBe(epoch);
+    rerender(<LifecycleControls {...initial} state={state} />);
+    expect(panelProps().epoch).not.toBe(epoch);
+    expect(initial.controller.lifecycle).not.toHaveBeenCalled();
   });
 });

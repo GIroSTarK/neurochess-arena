@@ -4,6 +4,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { gameDetailsSchema, type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
+import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
@@ -281,18 +282,29 @@ for (const during of ["inference", "delay"] as const) {
   test(`refresh during ${during} recovers full configuration and requires both keys plus explicit action`, async ({
     page,
   }, testInfo) => {
-    const turns: unknown[] = [];
+    const keys = [
+      during === "inference" ? "slow-fixture" : "refresh-white-fixture-sentinel",
+      "refresh-black-fixture-sentinel",
+    ] as const;
+    const expectPrivate = observeCredentialPrivacy(page, [...keys, "match-fixture"]);
+    const turnsWithOriginalKey: boolean[] = [];
     page.on("request", (request) => {
-      if (request.url().endsWith("/ai-turn")) turns.push(request.postDataJSON());
+      if (request.url().endsWith("/ai-turn")) {
+        turnsWithOriginalKey.push(keys.some((key) => request.postData()?.includes(key)));
+      }
     });
-    const game = await start(page, during === "inference" ? "slow-fixture" : "match-fixture");
+    const game = await start(page, ...keys);
     if (during === "delay") {
       await page.getByLabel("Delay between moves").selectOption("5000");
       await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
     }
+    await expect.poll(() => turnsWithOriginalKey).toEqual([true]);
+    await expectPrivate();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-    const count = turns.length;
+    const count = turnsWithOriginalKey.length;
+    expect(count).toBe(1);
+    await expectPrivate();
     const recovered = await read(page, game.gameId);
     expect(recovered.state).toBe("paused");
     await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
@@ -300,6 +312,7 @@ for (const during of ["inference", "delay"] as const) {
       "true",
     );
     await expect(page.getByLabel("White · OpenAI · API key", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Black · Anthropic · API key", { exact: true })).toHaveValue("");
     const recovery = page.getByRole("region", { name: "Re-enter your API keys" });
     await expect(recovery).toBeVisible();
     await expect(page.getByRole("tablist")).toHaveCount(0);
@@ -322,9 +335,10 @@ for (const during of ["inference", "delay"] as const) {
     await expect(resume).toHaveAttribute("aria-disabled", "true");
     await resume.focus();
     await resume.press("Enter");
-    expect(turns).toHaveLength(count);
+    expect(turnsWithOriginalKey).toHaveLength(count);
     await fillRecovery(page);
-    expect(turns).toHaveLength(count);
+    expect(turnsWithOriginalKey).toHaveLength(count);
+    await expectPrivate();
     await expect(recovery).toBeVisible();
     await expect(page.getByRole("tablist")).toHaveCount(0);
     expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual(
@@ -337,6 +351,8 @@ for (const during of ["inference", "delay"] as const) {
     await expect
       .poll(async () => (await read(page, game.gameId)).moves.length)
       .toBe(recovered.moves.length + 1);
+    expect(turnsWithOriginalKey.slice(count)).toEqual([false]);
+    await expectPrivate();
     await stop(page);
   });
 }

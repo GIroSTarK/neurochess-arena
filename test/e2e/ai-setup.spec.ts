@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { gameDetailsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
+import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { expect, startSandbox, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
@@ -192,7 +193,15 @@ test("setup uses protected discovery and hands off an independently configured g
   context,
 }, testInfo) => {
   const posts: { url: string; body: string | null }[] = [];
+  const apiReads: string[] = [];
+  const expectPrivate = observeCredentialPrivacy(page, [
+    "White-fixture-sentinel",
+    "Black-fixture-sentinel",
+  ]);
   page.on("request", (request) => {
+    if (request.url().startsWith(API_ORIGIN) && request.method() === "GET") {
+      apiReads.push(new URL(request.url()).pathname);
+    }
     if (request.url().startsWith(API_ORIGIN) && request.method() === "POST") {
       posts.push({ url: request.url(), body: request.postData() });
     }
@@ -202,6 +211,10 @@ test("setup uses protected discovery and hands off an independently configured g
     "aria-disabled",
     "true",
   );
+  await expect(
+    page.getByRole("group", { name: "White", exact: true }).getByLabel("Provider", { exact: true }),
+  ).toHaveAttribute("aria-disabled", "false");
+  expect(apiReads).toEqual(["/games/unfinished"]);
   expect(posts).toEqual([]);
   expect(await context.cookies(API_ORIGIN)).toEqual([]);
   const white = await configure(page, "White");
@@ -227,16 +240,7 @@ test("setup uses protected discovery and hands off an independently configured g
   );
   expect((await new AxeBuilder({ page }).include("#arena-setup").analyze()).violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("setup-ready.png"), fullPage: true });
-  expect(
-    await page.evaluate(() =>
-      JSON.stringify({
-        local: localStorage,
-        session: sessionStorage,
-        name: window.name,
-        cookie: document.cookie,
-      }),
-    ),
-  ).not.toContain("fixture-sentinel");
+  await expectPrivate();
   const created = page.waitForResponse(
     (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
   );
@@ -247,14 +251,14 @@ test("setup uses protected discovery and hands off an independently configured g
     white: { provider: "openai", modelId: "fixture/model-a", parameters: { temperature: 0.4 } },
     black: { provider: "openai", modelId: "fixture/model-a", parameters: { maxOutputTokens: 512 } },
   });
+  expect(JSON.stringify(game).includes("fixture-sentinel")).toBe(false);
   expect(
     posts
       .filter((post) => !post.url.endsWith("/providers/models"))
       .some((post) => post.body?.includes("fixture-sentinel")),
   ).toBe(false);
-  expect(
-    posts.some((post) => post.url.includes("fixture-sentinel") || post.url.endsWith("/ai-turn")),
-  ).toBe(false);
+  expect(posts.some((post) => post.url.endsWith("/ai-turn"))).toBe(false);
+  await expectPrivate();
   await page.reload();
   await expect(page.getByRole("button", { name: "Return to game" })).toBeVisible();
   for (const color of ["White", "Black"]) {
@@ -262,6 +266,7 @@ test("setup uses protected discovery and hands off an independently configured g
       page.getByRole("group", { name: color, exact: true }).getByLabel("API key", { exact: true }),
     ).toHaveValue("");
   }
+  await expectPrivate();
 });
 
 test("setup keeps key rejection and empty discovery recoverable and clears page-memory fields", async ({

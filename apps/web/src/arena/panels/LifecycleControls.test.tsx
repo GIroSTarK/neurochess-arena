@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,75 @@ import { renderLocalized } from "../../test/render";
 
 import { LifecycleControls } from "./LifecycleControls";
 
+function confirmationProps() {
+  return {
+    paused: false,
+    disabled: false,
+    epoch: "match:1",
+    onAbort: vi.fn(),
+    abortDescription: "Stop this test match.",
+    resignations: [
+      { color: "white" as const, onResign: vi.fn() },
+      { color: "black" as const, onResign: vi.fn() },
+    ],
+    boardTools: { orientation: "white" as const, onFlip: vi.fn(), helpId: "board-help" },
+  };
+}
+
 describe("shared lifecycle capabilities", () => {
+  it.each([
+    { name: "Abort game", confirm: "Stop game", callback: "abort" },
+    { name: "Resign White", confirm: "Confirm resignation", callback: "white" },
+    { name: "Resign Black", confirm: "Confirm resignation", callback: "black" },
+  ])(
+    "invalidates an open $name confirmation when its epoch changes",
+    async ({ name, confirm, callback }) => {
+      const initial = confirmationProps();
+      const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
+      const trigger = screen.getByRole("button", { name });
+      await userEvent.click(trigger);
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+      const staleConfirm = within(dialog).getByRole("button", { name: confirm });
+
+      rerender(<LifecycleControls {...initial} epoch="match:2" />);
+
+      expect(screen.getByRole("button", { name })).toBe(trigger);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+      fireEvent.click(staleConfirm);
+      const callbacks = {
+        abort: initial.onAbort,
+        white: initial.resignations[0]!.onResign,
+        black: initial.resignations[1]!.onResign,
+      };
+      for (const action of Object.values(callbacks)) expect(action).not.toHaveBeenCalled();
+      await userEvent.click(trigger);
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: confirm }),
+      );
+      for (const [action, handler] of Object.entries(callbacks)) {
+        expect(handler).toHaveBeenCalledTimes(action === callback ? 1 : 0);
+      }
+      expect(trigger).toHaveFocus();
+    },
+  );
+
+  it("keeps a current confirmation and its focus during unrelated renders", async () => {
+    const initial = confirmationProps();
+    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
+    await userEvent.click(screen.getByRole("button", { name: "Abort game" }));
+    const dialog = screen.getByRole("dialog");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+
+    rerender(<LifecycleControls {...initial} boardTools={{ ...initial.boardTools }} />);
+
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(cancel).toHaveFocus();
+    expect(initial.onAbort).not.toHaveBeenCalled();
+  });
+
   it("keeps the toolbar's logical order and permits inspection while game commands are locked", async () => {
     const togglePause = vi.fn();
     const abort = vi.fn();
