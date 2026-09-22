@@ -8,6 +8,23 @@ function workspacePath(relativePath: string): string {
   return fileURLToPath(new URL(relativePath, import.meta.url));
 }
 
+// Keep this allowlist shared by Node inclusion and DOM exclusion. Audit each new
+// file (including controller splits) before opting it out of the DOM environment.
+const webNodeTestFiles = [
+  "apps/web/src/position/position.test.ts",
+  "apps/web/src/position/squares.test.ts",
+  "apps/web/src/position/replay.test.ts",
+  "apps/web/src/match/telemetry.test.ts",
+  "apps/web/src/game/state.test.ts",
+  "apps/web/src/game/store.test.ts",
+  "apps/web/src/game/presentation.test.ts",
+  "apps/web/src/game/controller.test.ts",
+  "apps/web/src/api/client.test.ts",
+  "apps/web/src/api/ai-client.test.ts",
+  "apps/web/src/app/env.test.ts",
+];
+const unitTestExclude = [...configDefaults.exclude, "**/*.integration.test.ts"];
+
 export default defineConfig({
   define: {
     __ARENA_REFERENCE_ENABLED__: "true",
@@ -23,7 +40,7 @@ export default defineConfig({
   },
   test: {
     ...baseTestConfig,
-    exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
+    exclude: unitTestExclude,
     projects: [
       {
         extends: true,
@@ -31,6 +48,7 @@ export default defineConfig({
           name: "web",
           environment: "jsdom",
           include: ["apps/web/src/**/*.test.{ts,tsx}"],
+          exclude: [...unitTestExclude, ...webNodeTestFiles],
           setupFiles: [workspacePath("./apps/web/src/test/setup.ts")],
         },
       },
@@ -39,7 +57,12 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["apps/api/**/*.test.ts", "apps/web/*.test.ts", "packages/**/*.test.ts"],
+          include: [
+            "apps/api/**/*.test.ts",
+            "apps/web/*.test.ts",
+            "packages/**/*.test.ts",
+            ...webNodeTestFiles,
+          ],
         },
       },
     ],

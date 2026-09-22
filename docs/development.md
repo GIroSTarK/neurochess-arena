@@ -233,6 +233,21 @@ OpenRouter uses the fixed `https://openrouter.ai/api/v1` origin with request-sco
 
 `apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. These tests do not establish live provider availability, billing behavior, or response quality.
 
+## Unit test environments
+
+`npm run test:unit` runs both projects in `vitest.config.ts`. Select one with
+`npm run test:unit -- --project=node` or `npm run test:unit -- --project=web`.
+The `node` project includes API, package, web build, and explicitly audited
+DOM-independent frontend tests; it does not load the web DOM setup. The `web`
+project uses jsdom and `apps/web/src/test/setup.ts` for the remaining frontend tests,
+including components, hooks, navigation, and page-memory credentials.
+
+Keep `webNodeTestFiles` as the shared inclusion/exclusion allowlist. When splitting
+a listed test such as `game/controller.test.ts`, audit each resulting file's imports
+and exercised browser APIs before adding its exact path; unlisted frontend tests
+stay in jsdom regardless of `.ts` or `.tsx` extension. Both unit projects exclude
+`*.integration.test.ts`, which belongs only to the PostgreSQL configuration.
+
 ## PostgreSQL integration tests
 
 Add `TEST_DATABASE_URL` from `.env.example` if updating an existing `.env`, then run:
