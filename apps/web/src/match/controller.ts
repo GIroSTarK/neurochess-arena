@@ -469,8 +469,14 @@ export class MatchController {
     try {
       const records = await this.api.invocations(snapshot.gameId, signal);
       if (!current()) return;
-      if (records.gameId !== snapshot.gameId || records.version !== snapshot.version) {
+      if (records.gameId !== snapshot.gameId || records.version < snapshot.version) {
         throw new ApiFailure("malformed");
+      }
+      if (records.version > snapshot.version) {
+        const latest = await this.api.snapshot(snapshot.gameId, signal);
+        if (!current()) return;
+        this.adopt(latest);
+        return;
       }
       // Totals describe the history at this read, even while the next revision is loading.
       this.publish({ invocations: records, invocationsMoveCount: snapshot.moves.length });

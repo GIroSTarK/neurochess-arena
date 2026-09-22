@@ -254,6 +254,149 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.invocations.mock.calls[0]![1].aborted).toBe(true);
   });
 
+  it("synchronizes a passive game when telemetry reports a newer server revision", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    h.api.snapshot.mockClear();
+    h.api.lifecycle.mockClear();
+    const reads = h.api.invocations.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.snapshot).toHaveBeenCalledTimes(1);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsMoveCount: 0,
+      invocationsLoading: true,
+      invocationsError: false,
+    });
+    const signal = h.api.invocations.mock.calls.at(-1)![1];
+    pending.resolve(latest);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signal.aborted).toBe(true);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads + 2);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: { snapshot: latest },
+      invocations: { gameId: GAME_ID, version: latest.version },
+      invocationsMoveCount: 1,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads + 3);
+    expect(h.controller.getSnapshot().invocationsError).toBe(false);
+    expect(h.api.controller).not.toHaveBeenCalled();
+    expect(h.api.turn).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+  });
+
+  it("retries telemetry synchronization after a failed snapshot read", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
+    h.store(latest);
+    h.api.snapshot.mockRejectedValueOnce(new ApiFailure("network"));
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsLoading: false,
+      invocationsError: true,
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: { snapshot: latest },
+      invocations: { version: latest.version },
+      invocationsMoveCount: 1,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+  });
+
+  it("discards telemetry synchronization returning after the page lifetime ends", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const latest = snapshot(["e2e4"], {
+      version: h.controller.getSnapshot().details!.snapshot.version + 2,
+    });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    h.api.snapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.snapshot).toHaveBeenCalledTimes(1);
+    const signal = h.api.snapshot.mock.calls.at(-1)![1];
+
+    window.dispatchEvent(new Event("pagehide"));
+    expect(signal.aborted).toBe(true);
+    pending.resolve(latest);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      phase: "loading",
+      details: null,
+      invocations: null,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+  });
+
+  it("discards a telemetry synchronization superseded by explicit recovery", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const latest = snapshot(["e2e4"], {
+      version: h.controller.getSnapshot().details!.snapshot.version + 2,
+    });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    const signal = h.api.snapshot.mock.calls.at(-1)![1];
+
+    await h.controller.recover();
+    await vi.advanceTimersByTimeAsync(0);
+    const recovered = h.controller.getSnapshot();
+    expect(signal.aborted).toBe(true);
+    expect(recovered.details!.snapshot.version).toBe(latest.version + 1);
+    const reads = h.api.invocations.mock.calls.length;
+    pending.resolve(snapshot(["e2e4", "e7e5"], { version: latest.version + 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toEqual(recovered);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads);
+  });
+
+  it("rejects telemetry older than the accepted snapshot without synchronizing", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    h.api.snapshot.mockClear();
+    h.api.invocations.mockResolvedValueOnce({
+      gameId: GAME_ID,
+      version: cached.details!.snapshot.version - 1,
+      turns: [],
+    });
+
+    await h.controller.loadInvocations();
+    expect(h.api.snapshot).not.toHaveBeenCalled();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsLoading: false,
+      invocationsError: true,
+    });
+  });
+
   it("polls same-revision records on human turns and handles telemetry errors independently", async () => {
     const game = humanGame("white");
     const h = harness(game);
