@@ -243,7 +243,7 @@ project uses jsdom and `apps/web/src/test/setup.ts` for the remaining frontend t
 including components, hooks, navigation, and page-memory credentials.
 
 Keep `webNodeTestFiles` as the shared inclusion/exclusion allowlist. When splitting
-a listed test such as `game/controller.test.ts`, audit each resulting file's imports
+a listed test such as `game/controller.commands.test.ts`, audit each resulting file's imports
 and exercised browser APIs before adding its exact path; unlisted frontend tests
 stay in jsdom regardless of `.ts` or `.tsx` extension. Both unit projects exclude
 `*.integration.test.ts`, which belongs only to the PostgreSQL configuration.
