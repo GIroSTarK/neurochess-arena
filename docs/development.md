@@ -101,7 +101,7 @@ Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm r
 
 One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.
 
-The entry screen shows a read-only standard-position preview. Its single **Start sandbox** action sits in the desktop rail and before the board on mobile; inspecting the preview never creates a guest session or submits moves.
+The entry screen shows a read-only standard-position preview. Its single **Start sandbox** action sits in the desktop rail and before the board on mobile; inspecting the preview never creates a guest session or submits moves. Sandbox has its own [unfinished-game limit](product.md#development-sandbox): starting or recovering it does not select or modify an unfinished Arena game, and an unfinished Sandbox does not block Arena setup.
 
 An uncertain submission keeps the original move or lifecycle command in memory. **Check game status** reads the authorized snapshot; **Retry same move** or **Retry same command** reuses the original ID, version, and payload. A same-version GET is still uncertain because the first request could commit later. Rejections also require synchronization before another command. Access loss clears the private position, replay, and export text, returns to the standard-position preview, and requires **Start sandbox again**.
 
@@ -133,7 +133,7 @@ Set `NODE_ENV=development` and `SANDBOX_ENABLED=true` in the local `.env`, apply
 | ------------------------------- | -------------------------------------------------------------- | -------------------------------------------------- |
 | `POST /guest-session`           | `{}`                                                           | `200 { "status": "ready" }` plus guest cookie      |
 | `POST /sandbox/games`           | `{}`                                                           | `201` standard-position active snapshot, version 0 |
-| `GET /sandbox/games/unfinished` | No query fields                                                | `200 { snapshot }`, unfinished game or `null`      |
+| `GET /sandbox/games/unfinished` | No query fields                                                | `200 { snapshot }`, unfinished Sandbox or `null`   |
 | `GET /games/:gameId`            | UUID parameter, no query fields                                | `200` current authorized snapshot                  |
 | `POST /games/:gameId/moves`     | `{ gameId, move, expectedVersion, commandId }`                 | `200` accepted snapshot                            |
 | `POST /games/:gameId/lifecycle` | `{ gameId, action, expectedVersion, commandId, losingColor? }` | `200` accepted snapshot                            |
@@ -187,7 +187,7 @@ See the [AI turn transport policy](architecture.md#ai-turns) for cancellation, d
 
 `POST /games/:gameId/controller` accepts either `{ gameId, controllerId, action: "acquire", expectedVersion }` or `{ gameId, controllerId, action: "heartbeat" }` and returns the current authorized snapshot. It requires the same cookie, exact Origin, strict schema, and no-store protections as other commands. Claims and heartbeats carry no provider keys. `AI_CONTROLLER_BUSY` identifies another live controller; `AI_CONTROLLER_LOST` requires explicit paused recovery. Ordinary AI Resume requires a live `controllerId` on its lifecycle command. Recovery Pause omits that field to revoke any previous controller; it is valid even while already paused and advances the revision to fence uncertain steps.
 
-The Arena mounts mode selection and setup at `/`. Start acquires control and requests one AI move at a time, waiting for commands on human turns; `/?game=<uuid>` restores configuration and full history through private reads, then pauses explicitly. Re-enter missing AI-seat keys before Resume or Next move. Next move sends `step: true` to the turn route and is available only on an AI turn; speed selects the delay between acknowledged moves and the next AI request. Stop requires confirmation and persists `aborted`; AI-versus-human also offers confirmed resignation for the human's color, including paused/off-turn positions. Completed/stopped games reuse private replay and PGN. A Sandbox conflict links to `/sandbox?game=<uuid>` only when that development flow is enabled.
+The Arena mounts mode selection and setup at `/`. Start acquires control and requests one AI move at a time, waiting for commands on human turns; `/?game=<uuid>` restores configuration and full history through private reads, then pauses explicitly. Re-enter missing AI-seat keys before Resume or Next move. Next move sends `step: true` to the turn route and is available only on an AI turn; speed selects the delay between acknowledged moves and the next AI request. Stop requires confirmation and persists `aborted`; AI-versus-human also offers confirmed resignation for the human's color, including paused/off-turn positions. Completed/stopped games reuse private replay and PGN. Ordinary creation conflicts and `/games/unfinished` exclude Sandbox. Explicitly opening a Sandbox game ID on the Arena route offers a link to `/sandbox?game=<uuid>` only when that development flow is enabled.
 
 Presence timing and restart/competing-tab behavior are defined in [ADR-0011](decisions/0011-ai-controller-presence-and-step.md). Session-only keys disappear on refresh, close, and navigation; recovering an uncertain provider call does not guarantee that the first request was unbilled.
 
@@ -221,7 +221,7 @@ The adapter expects one candidate and parses only visible text, discarding thoug
 
 [Google's GenerateContent errors](https://ai.google.dev/gemini-api/docs/generate-content/api-errors) map to the common pause policy. Structured `API_KEY_INVALID` details distinguish invalid-key HTTP 400 responses from other invalid requests. Ambiguous `INVALID_ARGUMENT` and `FAILED_PRECONDITION` errors remain `provider_unavailable/upstream`; raw error prose never determines classification. Generation-only 404/501 failures identify unavailable models/methods.
 
-`apps/api/test/providers/google.test.ts` runs the shared HTTP adapter contract; `apps/api/test/google.integration.test.ts` covers protected routes, real PostgreSQL orchestration, persisted parameters, retry/recovery, cancellation, and redaction using mocked transport. Live account access and response quality remain unverified.
+`apps/api/test/providers/google.test.ts` runs the shared HTTP adapter contract; `apps/api/test/google.integration.test.ts` covers protected routes, real PostgreSQL orchestration, persisted parameters, retry/recovery, cancellation, and redaction using mocked transport. These tests do not establish live account access or response quality.
 
 ### OpenRouter adapter
 
@@ -231,7 +231,7 @@ OpenRouter uses the fixed `https://openrouter.ai/api/v1` origin with request-sco
 
 [Errors](https://openrouter.ai/docs/api_reference/errors-and-debugging) are checked even under HTTP 200 and take precedence over choices. Typed model refusals and generation truncation follow the invalid-output policy; external content filters, ambiguous 403s, and request/context errors pause as upstream failures. Router credential rejection maps to `provider_auth`; identified upstream authentication failures map to `provider_unavailable/upstream`, avoiding a misleading invalid-OpenRouter-key diagnosis. Typed quota and timeout errors retain their categories even when wrapped in another HTTP status. Raw error prose and nested provider payloads never determine classification or leave the adapter.
 
-`apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. Live provider availability, billing behavior, and response quality remain unverified.
+`apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. These tests do not establish live provider availability, billing behavior, or response quality.
 
 ## PostgreSQL integration tests
 
@@ -255,6 +255,8 @@ On that disposable test server, `/` plays Fool's Mate with ordinary placeholder 
 
 Run `npm run test:e2e -- test/e2e/ai-human.spec.ts` for either human color, AI-first play, promotion, duplicate/uncertain human commands, provider retry, single-key recovery, resignation, and natural completion. `promotion-fixture` supplies a legal promotion approach from the standard position in this isolated server only.
 
+Run `npm run test:e2e -- test/e2e/ai-telemetry.spec.ts` for replay-linked commentary/usage, retry Events, incomplete operational totals, and detail-read recovery. `telemetry-fixture` supplies two initial invalid outputs followed by legal moves, literal markup commentary, and mixed reported/missing usage. `retry-fixture` supplies an invalid output followed by a quota pause; replacing it with an ordinary placeholder key permits explicit retry. These are test-server fixtures only. The provider matrix in `apps/api/test/provider-matrix.integration.test.ts` instead exercises all four real adapters through injected HTTP responses, the API, and PostgreSQL. Neither suite establishes current live-provider availability.
+
 After installing dependencies, prepare Chromium and the disposable database:
 
 ```text
@@ -277,6 +279,8 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 ## Migrations
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
+
+Migration `0007_separate_sandbox_game_slot.sql` replaces the unfinished-owner index with a unique `(owner_guest_session_id, is_sandbox)` index for active/paused games. It does not rewrite game data. Stop old API writers, apply it, and restart the updated API so creation and discovery consistently use their own group. See [ADR-0012](decisions/0012-independent-sandbox-game-slot.md) for the contract and rollback constraint.
 
 Migration `0006_ai_controller_presence.sql` adds the per-game controller UUID/expiry table and cascading foreign key. It does not rewrite existing games or Sandbox data. Stop old API writers, apply it, and restart the updated API; active ordinary AI games without a lease are then paused by the presence worker. Never expire a reservation into another provider dispatch. The [controller ADR](decisions/0011-ai-controller-presence-and-step.md) defines recovery and deployment behavior.
 

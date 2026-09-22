@@ -50,7 +50,7 @@ Do not add JSDoc to every function, method, hook, or component by default. Add J
 - Retry an invalid or illegal model response at most twice after the initial attempt; a third invalid result is a technical loss.
 - Provider, network, authentication, quota, and timeout failures pause the game for user-directed retry. They are not technical losses.
 - AI resignation and chess clocks are outside the MVP.
-- Only one game may be in the `active` or `paused` state per authenticated user or guest session.
+- Only one game across the public modes may be in the `active` or `paused` state per authenticated user or guest session. The development-only Sandbox has its own independent one-game limit.
 
 ## Security and privacy
 

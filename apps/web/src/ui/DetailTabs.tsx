@@ -6,6 +6,7 @@ export interface DetailTab {
   readonly id: string;
   readonly label: string;
   readonly content: ReactNode;
+  readonly scroll?: "panel" | "content";
 }
 
 export function DetailTabs({
@@ -41,7 +42,7 @@ export function DetailTabs({
   });
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="flex min-h-min min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 border-b border-divider" role="tablist" aria-label={label}>
         {tabs.map((tab, index) => (
           <button
@@ -96,7 +97,9 @@ export function DetailTabs({
           hidden={tab.id !== selectedId}
           tabIndex={0}
           className={cx(
-            "min-h-0 min-w-0 flex-1 flex-col pt-4",
+            "min-h-48 min-w-0 flex-1 flex-col focus-visible:-outline-offset-2 max-lg:max-h-[32rem] lg:min-h-32 lg:contain-size",
+            tab.scroll !== "content" &&
+              "[scrollbar-color:var(--color-control-border)_var(--color-surface)] [scrollbar-gutter:stable] overflow-y-auto px-2 pt-4 pb-2",
             tab.id === selectedId ? "flex" : "hidden",
           )}
         >

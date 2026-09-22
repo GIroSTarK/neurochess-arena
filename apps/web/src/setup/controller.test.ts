@@ -35,7 +35,6 @@ async function fixture() {
   });
   await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("editing"));
   async function ready() {
-    controller.setProvider("black", "openai");
     for (const color of ["white", "black"] as const) {
       controller.setKey(color, `${color}-sentinel-key`);
       await controller.discover(color);
@@ -88,17 +87,25 @@ describe("independent AI setup", () => {
     expect(setupConfiguration(controller.getSnapshot())).toBeNull();
   });
 
-  it("mounts read-only, then creates identical models with independent settings and keys", async () => {
+  it("defaults both seats to OpenAI, then creates identical models with independent settings and keys", async () => {
     const { controller, api, credentials, ready, disconnect } = await fixture();
     expect(api.bootstrap).not.toHaveBeenCalled();
     expect(api.discover).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().seats).toMatchObject({
+      white: { provider: "openai" },
+      black: { provider: "openai" },
+    });
     await ready();
     controller.setParameter("white", "temperature", "0.2");
     controller.setParameter("black", "reasoningEffort", "high");
     const game = await controller.start();
     expect(game?.configuration?.seats).toMatchObject({
-      white: { modelId: "fixture/model-a", parameters: { temperature: 0.2 } },
-      black: { modelId: "fixture/model-a", parameters: { reasoningEffort: "high" } },
+      white: { provider: "openai", modelId: "fixture/model-a", parameters: { temperature: 0.2 } },
+      black: {
+        provider: "openai",
+        modelId: "fixture/model-a",
+        parameters: { reasoningEffort: "high" },
+      },
     });
     expect(api.discover.mock.calls.map(([input]) => input.apiKey)).toEqual([
       "white-sentinel-key",

@@ -30,7 +30,7 @@ export class SetupController {
   private state: SetupState = {
     mode: "ai_vs_ai",
     humanColor: "white",
-    seats: { white: emptySeat("openai"), black: emptySeat("anthropic") },
+    seats: { white: emptySeat("openai"), black: emptySeat("openai") },
     phase: "checking",
     existingGameId: null,
     issue: null,

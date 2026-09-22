@@ -590,11 +590,11 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     expect(adapter.moveCalls).toBe(0);
   });
 
-  it("preserves Sandbox control and the single unfinished slot across modes", async () => {
+  it("preserves Sandbox control with separate unfinished slots and discovery for ordinary games", async () => {
     const api = await harness.createApi();
     const guest = await harness.guest(api);
     const sandbox = await createSandbox(api, guest);
-    expect((await post(api, guest, "/games", configuration)).statusCode).toBe(409);
+    expect((await get(api, guest, "/games/unfinished")).json()).toEqual({ game: null });
     expect(
       (
         await post(api, guest, `/games/${sandbox.gameId}/ai-turn`, {
@@ -603,10 +603,19 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
         })
       ).statusCode,
     ).toBe(403);
-    await post(api, guest, `/games/${sandbox.gameId}/lifecycle`, control(sandbox, "abort"));
     const game = await create(api, guest, {
       mode: "ai_vs_human",
       seats: { white: { type: "human" }, black: aiMatch.seats.black },
+    });
+    expect((await get(api, guest, "/sandbox/games/unfinished")).json()).toEqual({
+      snapshot: sandbox,
+    });
+    expect((await get(api, guest, "/games/unfinished")).json()).toEqual({ game });
+    const conflict = await post(api, guest, "/games", configuration);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      code: "GAME_CONFLICT",
+      currentSnapshot: game.snapshot,
     });
     const moved = await post(api, guest, `/games/${game.snapshot.gameId}/moves`, {
       ...command(game.snapshot, "e2e4"),
@@ -625,6 +634,12 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
         await post(api, guest, `/games/${next.gameId}/ai-turn`, { ...turnCommand(next), apiKey })
       ).json(),
     ).toMatchObject({ code: "AI_ADAPTER_UNAVAILABLE" });
-    expect((await post(api, guest, "/sandbox/games", {})).statusCode).toBe(409);
+    const sandboxConflict = await post(api, guest, "/sandbox/games", {});
+    expect(sandboxConflict.statusCode).toBe(409);
+    expect(sandboxConflict.json()).toMatchObject({
+      code: "GAME_CONFLICT",
+      currentSnapshot: sandbox,
+    });
+    expect((await get(api, guest, `/games/${sandbox.gameId}`)).json()).toEqual(sandbox);
   });
 });

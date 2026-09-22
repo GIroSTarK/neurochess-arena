@@ -113,7 +113,7 @@ describe("ordinary AI configuration through the real game service", () => {
     const recovered = await service(restarted).details(principal, initial.gameId);
     expect(recovered).toEqual({ configuration: null, snapshot: paused });
     expect(await service(restarted).unfinished(principal)).toEqual({ snapshot: paused });
-    expect(await service(restarted).unfinishedGame(principal)).toEqual({ game: recovered });
+    expect(await service(restarted).unfinishedGame(principal)).toEqual({ game: null });
     expect(await service(restarted).lifecycle(principal, control(paused, "resume"))).toMatchObject({
       moves: played.moves,
       fen: played.fen,
@@ -264,8 +264,62 @@ describe("ordinary AI configuration through the real game service", () => {
     expect(await gamesService.unfinished(principal)).toEqual({ snapshot: null });
   });
 
-  it("serializes concurrent creation across both AI modes and Sandbox on independent connections", async () => {
-    const apis = await Promise.all([harness.createApi(), harness.createApi(), harness.createApi()]);
+  it.each([aiMatch, humanMatch("white"), humanMatch("black")])(
+    "keeps a paused %j game independent from Sandbox creation, recovery, and commands",
+    async (configuration) => {
+      const api = await harness.createApi();
+      const owner = await harness.guest(api);
+      const principal = { guestSessionId: owner.id };
+      const gamesService = service(api);
+      const created = await gamesService.createAi(principal, configuration);
+      const paused = await gamesService.lifecycle(principal, control(created.snapshot, "pause"));
+      expect(await gamesService.unfinished(principal)).toEqual({ snapshot: null });
+
+      const sandbox = await gamesService.createSandbox(principal);
+      expect(sandbox.gameId).not.toBe(paused.gameId);
+      expect(sandbox).toMatchObject({ state: "active", version: 0, moves: [] });
+      const recovered = await gamesService.lifecycle(principal, control(sandbox, "pause"));
+      const resumed = await gamesService.lifecycle(principal, control(recovered, "resume"));
+      const played = await gamesService.move(principal, command(resumed, "e2e4"));
+      expect(await gamesService.unfinished(principal)).toEqual({ snapshot: played });
+      expect(await gamesService.unfinishedGame(principal)).toEqual({
+        game: { snapshot: paused, configuration },
+      });
+      expect(await service(api, false).unfinishedGame(principal)).toEqual({
+        game: { snapshot: paused, configuration },
+      });
+      await expect(service(api, false).createSandbox(principal)).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      await expect(gamesService.createSandbox(principal)).rejects.toMatchObject({
+        code: "GAME_CONFLICT",
+        currentSnapshot: played,
+      });
+      await expect(gamesService.createAi(principal, configuration)).rejects.toMatchObject({
+        code: "GAME_CONFLICT",
+        currentSnapshot: paused,
+      });
+
+      await gamesService.lifecycle(principal, control(played, "abort"));
+      const replacement = await gamesService.createSandbox(principal);
+      expect(replacement.gameId).not.toBe(played.gameId);
+      expect(await gamesService.snapshot(principal, paused.gameId)).toEqual(paused);
+      await gamesService.lifecycle(principal, control(paused, "abort"));
+      expect(await gamesService.unfinishedGame(principal)).toEqual({ game: null });
+      expect(await gamesService.unfinished(principal)).toEqual({ snapshot: replacement });
+      expect((await gamesService.createAi(principal, configuration)).snapshot.gameId).not.toBe(
+        paused.gameId,
+      );
+    },
+  );
+
+  it("serializes concurrent creation within each of the ordinary and Sandbox slots", async () => {
+    const apis = await Promise.all([
+      harness.createApi(),
+      harness.createApi(),
+      harness.createApi(),
+      harness.createApi(),
+    ]);
     const owner = await harness.guest(apis[0]);
     const principal = { guestSessionId: owner.id };
     const results = await Promise.allSettled([
@@ -276,31 +330,39 @@ describe("ordinary AI configuration through the real game service", () => {
         .createAi(principal, humanMatch("black"))
         .then((game) => game.snapshot),
       service(apis[2]).createSandbox(principal),
+      service(apis[3]).createSandbox(principal),
     ]);
-    const winners = results.filter((result) => result.status === "fulfilled");
-    expect(winners).toHaveLength(1);
-    const winner = winners[0]!;
     const gamesService = service(apis[0]);
-    for (const result of results) {
-      if (result.status === "rejected") {
-        expect(result.reason).toBeInstanceOf(GameConflictError);
-        expect((result.reason as GameConflictError).currentSnapshot).toEqual(winner.value);
+    for (const group of [results.slice(0, 2), results.slice(2)]) {
+      const winners = group.filter((result) => result.status === "fulfilled");
+      expect(winners).toHaveLength(1);
+      for (const result of group) {
+        if (result.status === "rejected") {
+          expect(result.reason).toBeInstanceOf(GameConflictError);
+          expect((result.reason as GameConflictError).currentSnapshot).toEqual(winners[0]!.value);
+        }
       }
     }
     expect(await apis[0].database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(
-      1,
+      2,
     );
-    const paused = await gamesService.lifecycle(principal, control(winner.value, "pause"));
+    const ordinary = (await gamesService.unfinishedGame(principal)).game!.snapshot;
+    const sandbox = (await gamesService.unfinished(principal)).snapshot!;
+    const paused = await gamesService.lifecycle(principal, control(ordinary, "pause"));
+    const pausedSandbox = await gamesService.lifecycle(principal, control(sandbox, "pause"));
     for (const create of [
       () => gamesService.createAi(principal, aiMatch),
       () => gamesService.createAi(principal, humanMatch("white")),
-      () => gamesService.createSandbox(principal),
     ]) {
       await expect(create()).rejects.toMatchObject({
         code: "GAME_CONFLICT",
         currentSnapshot: paused,
       });
     }
+    await expect(gamesService.createSandbox(principal)).rejects.toMatchObject({
+      code: "GAME_CONFLICT",
+      currentSnapshot: pausedSandbox,
+    });
     const aborted = await gamesService.lifecycle(principal, control(paused, "abort"));
     expect((await gamesService.createAi(principal, aiMatch)).snapshot.gameId).not.toBe(
       aborted.gameId,

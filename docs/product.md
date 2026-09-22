@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-21
 
 ## Vision
 
@@ -40,7 +40,7 @@ A guest can:
 - start AI-versus-AI and AI-versus-human games using session-only API keys;
 - join a private human game through an invitation link or code;
 - recover an unfinished game after a page refresh through a guest session in the `paused` state, but must re-enter any API key;
-- have only one game in the `active` or `paused` state at a time.
+- have only one game across the public modes in the `active` or `paused` state at a time.
 
 A guest cannot:
 
@@ -90,6 +90,8 @@ If a participant disconnects, the game remains available for reconnection withou
 ### Development sandbox
 
 The [local development sandbox](architecture.md#local-development-sandbox) is a development/test-only flow outside the three public game modes. One guest controls both colors; only explicit Start bootstraps a guest.
+
+Sandbox has an independent limit of one active or paused game per guest session. A session may therefore keep one unfinished public-mode game and one unfinished Sandbox game at the same time. Creation conflicts and unfinished-game recovery stay within their respective group; Sandbox actions do not change the public-mode game.
 
 Arena is the default page at `/`, with AI-versus-AI observation, AI-versus-human play with either color, and private game recovery at `/?game=<uuid>`. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox?game=<uuid>`.
 
@@ -200,7 +202,7 @@ configuring -> active <-> paused -> completed
 
 `completed` includes normal chess results and technical losses. The termination reason distinguishes checkmate, draw type, human resignation, and model technical loss.
 
-Only one game may be `active` or `paused` for a given authenticated user or guest session.
+Only one game across the three public modes may be `active` or `paused` for a given authenticated user or guest session. The [development sandbox](#development-sandbox) has a separate limit.
 Paused games count toward this limit. Completion or abortion releases the slot. Completed and aborted games reject further moves; replay does not modify their accepted positions or result.
 
 ## Localization and responsive design

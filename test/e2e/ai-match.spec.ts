@@ -15,6 +15,9 @@ async function configure(page: Page, color: "White" | "Black", key: string) {
     "aria-disabled",
     "false",
   );
+  await seat
+    .getByLabel("Provider", { exact: true })
+    .selectOption(color === "White" ? "openai" : "anthropic");
   await seat.getByLabel("API key", { exact: true }).fill(key);
   await seat.getByRole("button", { name: "Load models", exact: true }).click();
   const model = seat.getByRole("combobox", { name: "Model", exact: true });
@@ -41,6 +44,8 @@ async function read(page: Page, gameId: string) {
   return gameSnapshotSchema.parse(await response.json());
 }
 async function fillRecovery(page: Page) {
+  const reenter = page.getByRole("button", { name: "Re-enter your API keys", exact: true });
+  if (await reenter.isVisible()) await reenter.click();
   await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("match-fixture");
   await page.getByLabel("Black · Anthropic · API key", { exact: true }).fill("match-fixture");
 }
@@ -98,6 +103,8 @@ test("Pause, speed, duplicate Next move and Resume use complete server snapshots
   await pause.press("Enter");
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeFocused();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toHaveCount(0);
+  await page.reload();
   await fillRecovery(page);
   const before = await read(page, game.gameId);
   const step = page.getByRole("button", { name: "Next move", exact: true });
@@ -123,6 +130,7 @@ test("single steps can complete checkmate and every paused position remains read
   const game = await start(page, "slow-fixture");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.reload();
   await fillRecovery(page);
   for (let ply = 1; ply <= 4; ply++) {
     const step = page.getByRole("button", { name: "Next move", exact: true });
@@ -133,12 +141,65 @@ test("single steps can complete checkmate and every paused position remains read
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
 });
 
+test("ordinary Pause preserves keys and details without credential replacement controls", async ({
+  page,
+}, testInfo) => {
+  const game = await start(page);
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  const keys = page.getByRole("region", { name: "Re-enter your API keys" });
+  await expect(keys).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  await expect(page.getByRole("button", { name: /Change API keys|Hide API keys/ })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Commentary & move details" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("ordinary-pause.png"), fullPage: true });
+  await page.getByRole("button", { name: "Next move", exact: true }).click();
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(2);
+  await expect(keys).toHaveCount(0);
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+});
+
+test("a provider-rejected key opens only its seat and replacement stays editable until explicit retry", async ({
+  page,
+}) => {
+  const game = await start(page, "expired-fixture");
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  const whiteKey = page.getByLabel("White · OpenAI · API key", { exact: true });
+  await expect(whiteKey).toHaveValue("");
+  await expect(page.getByLabel("Black · Anthropic · API key", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("The provider rejected this key. Enter a replacement, then retry.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await whiteKey.pressSequentially("match-fixture");
+  await expect(whiteKey).toHaveValue("match-fixture");
+  await expect(whiteKey).toBeFocused();
+  expect((await read(page, game.gameId)).moves).toHaveLength(0);
+  await page.getByRole("button", { name: "Next move", exact: true }).click();
+  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toHaveCount(0);
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+});
+
 test("recovery fields and match controls reflow with expanded text and keyboard focus", async ({
   page,
 }, testInfo) => {
   await start(page, "slow-fixture");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toBeVisible();
   await setPseudoLocalization(page, true);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "200%";
@@ -150,9 +211,14 @@ test("recovery fields and match controls reflow with expanded text and keyboard 
       true,
     );
     await expectUnbrokenWords(page.getByRole("region", { name: /^Game controls/ }));
-    const resume = page.getByRole("button", { name: /^Resume/ });
+    const resume = page
+      .getByRole("region", { name: /^Game controls/ })
+      .getByRole("button", { name: /^Resume/ });
     await resume.focus();
     await expect(resume).toBeFocused();
+    const recoveryResume = page.getByRole("button", { name: /^Resume game/ });
+    await recoveryResume.scrollIntoViewIfNeeded();
+    await expect(recoveryResume).toBeInViewport();
   }
   await page.screenshot({ path: testInfo.outputPath("ai-expanded.png"), fullPage: true });
   await setPseudoLocalization(page, false);
@@ -190,6 +256,11 @@ test("invalid outputs cause a technical loss while provider failures pause for k
   const invalid = await start(page, "invalid-fixture");
   await expect(page.getByRole("heading", { name: /technical loss/i })).toBeVisible();
   expect((await read(page, invalid.gameId)).terminationReason).toBe("model_technical_loss");
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await expect(events.getByText("Invalid responses: 3 of 3", { exact: true })).toBeVisible();
+  await expect(events.getByText("Attempt 3 · Invalid response", { exact: true })).toBeVisible();
+  await expect(events.getByText(/Attempt 4/)).toHaveCount(0);
   await page.getByRole("button", { name: "New game", exact: true }).click();
   await configure(page, "White", "quota-fixture");
   await configure(page, "Black", "match-fixture");
@@ -197,6 +268,7 @@ test("invalid outputs cause a technical loss while provider failures pause for k
   await expect(
     page.getByText(/White · The provider reported a quota/, { exact: false }).first(),
   ).toBeVisible();
+  await page.reload();
   await fillRecovery(page);
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Resume", exact: true }).click();
@@ -208,7 +280,7 @@ test("invalid outputs cause a technical loss while provider failures pause for k
 for (const during of ["inference", "delay"] as const) {
   test(`refresh during ${during} recovers full configuration and requires both keys plus explicit action`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     const turns: unknown[] = [];
     page.on("request", (request) => {
       if (request.url().endsWith("/ai-turn")) turns.push(request.postDataJSON());
@@ -228,9 +300,40 @@ for (const during of ["inference", "delay"] as const) {
       "true",
     );
     await expect(page.getByLabel("White · OpenAI · API key", { exact: true })).toHaveValue("");
+    const recovery = page.getByRole("region", { name: "Re-enter your API keys" });
+    await expect(recovery).toBeVisible();
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Commentary & move details" })).toHaveCount(0);
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", recovered.fen);
+    await page.screenshot({
+      path: testInfo.outputPath(`key-recovery-${during}.png`),
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Return to game", exact: true }).click();
+    await expect(recovery).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Moves", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Re-enter your API keys", exact: true }),
+    ).toBeFocused();
+    await expect(
+      page.getByText("Re-enter the missing API keys before continuing.", { exact: true }),
+    ).toBeVisible();
+    const resume = page.getByRole("button", { name: "Resume", exact: true });
+    await expect(resume).toHaveAttribute("aria-disabled", "true");
+    await resume.focus();
+    await resume.press("Enter");
+    expect(turns).toHaveLength(count);
     await fillRecovery(page);
     expect(turns).toHaveLength(count);
-    await page.getByRole("button", { name: "Next move", exact: true }).click();
+    await expect(recovery).toBeVisible();
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual(
+      [],
+    );
+    await page.getByLabel("Delay between moves").selectOption("5000");
+    await page
+      .getByRole("button", { name: during === "delay" ? "Resume game" : "Next move", exact: true })
+      .click();
     await expect
       .poll(async () => (await read(page, game.gameId)).moves.length)
       .toBe(recovered.moves.length + 1);

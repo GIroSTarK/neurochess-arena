@@ -1,10 +1,10 @@
 # Neurochess Arena design system
 
-**Version:** 1.2
+**Version:** 1.3
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-09-22
 
 ## Purpose and authority
 
@@ -83,7 +83,7 @@ Sizes assume a 16px browser default and scale with user preferences. Reserve upp
 
 Use a single chamfered arena frame as the signature motif. Buttons, forms, rows, and menus use the ordinary corner tokens. Frame geometry must not clip content, focus rings, menus, or pointer targets; apply decorative clipping to a separate non-interactive layer.
 
-Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
+Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus, except the conventional dialog close icon, which uses an accessible name without a tooltip. Its hover and pressed background must contrast with the dialog surface. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
 
 Use restrained shadow only for overlays; ordinary panels separate through surfaces and spacing. Keep glow outside the board and away from reading surfaces. Animate accepted moves and state changes briefly. Apply transitions and animations only through `motion-safe:` variants so `prefers-reduced-motion: reduce` removes movement and pulsing while a static activity label remains. Do not fabricate progress percentages or countdowns for provider requests.
 
@@ -99,7 +99,7 @@ Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adj
 
 The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest concepts show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
 
-The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. The Arena placeholder explains the upcoming AI experience without inactive game controls; it links to the development Sandbox only when enabled.
+The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. Arena hosts independent AI seat setup and the live/replay views for both AI modes; it links to the development Sandbox only when enabled.
 
 The development Sandbox uses the [selected live composition](design-system/concepts/sandbox-v1/README.md): turn/lifecycle in the page header, both participants above the board, and game controls directly below it. Service readiness sits in the footer. The live rail begins with Moves; guidance and routine feedback share a reserved text area below it. Desktop toolbar rows use three equal-width columns. The primary pair fills its columns; compact lower actions share the column starts, with equal resignation widths and equal gaps between buttons. Each button centers its icon and label. The toolbar reflows to two columns when its own width or enlarged text makes the desktop row too narrow. Keep keyboard order consistent, with orientation and inspection before the final abort action.
 
@@ -107,7 +107,11 @@ With further text enlargement, stack live controls in one column and allow parti
 
 On desktop, Sandbox move history fills the rail height available beside the play area after supporting content and spacing. Preserve a text-scaled minimum reading area that shows the table header and complete move rows; allow the rail and arena to grow when supporting content needs more room. Long histories scroll within the list rather than increasing the arena height. Supporting guidance, recovery messages, and New game retain their natural height below it. In the one-column layout, the move list remains bounded so later actions stay reachable.
 
-The live information rail shows both models' latest commentary and compact per-move latency, total tokens, and estimated cost. Moves is the default detail tab; Analysis contains the graph and usage breakdown, and Events contains attempts and recovery events. On mobile these become successive sections after the board and controls. Show cumulative telemetry in Analysis and result summaries.
+The live information rail shows both models' latest commentary in equal blocks with a two-line preview and a compact row of per-move latency, input tokens, and output tokens. Use the section heading size for Commentary & move details. Reserve the preview, attempt, and measurement space before the first move and while details load. A labeled Read action opens the full commentary in a dialog tied to that move; continued play does not replace the text being read. Escape or Close restores trigger focus. Allow labels and measurements to reflow with enlarged text. Total tokens remain available in Events. Moves is the default detail tab, followed by Analysis for cumulative operational totals and usage breakdown, then Events for attempts and recovery events. Evaluation graphs and estimated costs extend Analysis when implemented.
+
+On desktop, the AI rail ends with the board's primary controls (the live Delay between moves row); board inspection tools sit below that boundary. New commentary, pending measurements, tab switches, and routine pause/resume guidance keep the detail tabs in place. Show the pause status above the board; the rail's guidance explains the available next actions instead of repeating that status. Detail-tab content scrolls internally; full commentary scrolls in its dialog. Reserve scrollbar gutters and routine guidance space. Recovery actions remain reachable if they require additional scrolling. On mobile the commentary and tabs follow the board and controls in normal page flow, with bounded detail lists; enlarged text may require additional rail scrolling on desktop.
+
+Background refresh keeps already received commentary, measurements, and events visible. New-move details stay pending until records for that move arrive, without borrowing the preceding move's explanation or usage. Analysis totals retain the history boundary of their last successful read; Analysis and Events label refreshing or failed refreshes explicitly. Leaving a game or losing access clears retained private data.
 
 Forms use two equal seat columns on desktop and stacked White then Black sections on mobile. Keep the provider, credential, and model fields together; advanced parameters start collapsed. Overlays center on desktop and become scrollable sheets on mobile. Opening the keyboard must leave the focused field and recovery action reachable.
 
@@ -159,7 +163,7 @@ Use the shared `ui/Select` for native single-value dropdowns. Its decorative arr
 | Playback toolbar     | Pause, Resume, Next move, selected speed, Stop where the mode permits. Next move is available while paused with required credentials ready. Explain speed as presentation pacing; it is not a chess clock or a guarantee of provider latency.                                |
 | Move list            | Move number, White SAN, Black SAN, current/selected move. UCI remains the machine format. Preserve reader scroll when they inspect earlier rows. Replay selection synchronizes the displayed position, commentary, evaluation, and per-move metrics.                         |
 | Commentary entry     | Color, model, associated move, concise text, optional measurements                                                                                                                                                                                                           |
-| Telemetry row        | Per-move latency, input/output/total tokens when known, estimated cost; compact view may show total tokens with details in Analysis. Use consistent units and tabular digits.                                                                                                |
+| Telemetry row        | Compact per-move latency and input/output tokens when known; total tokens in Events and cumulative operational totals in Analysis. Use consistent units and tabular digits.                                                                                                  |
 | Evaluation graph     | Move/ply axis, neutral baseline, selected-move marker, labeled score or mate. Keep unknown samples as gaps. Provide selected values and an accessible tabular/text equivalent. Do not draw mate as an invented numeric centipawn score.                                      |
 | Event history        | Ordered attempts, safe normalized reason, and recovery/result events. “Attempt 2 of 3” and “Retry 1 of 2” describe different counts; label them explicitly. Never include raw provider payloads or credentials.                                                              |
 | Result summary       | Result, winner where applicable, termination reason, totals, replay actions, PGN copy/download. Draw, technical loss, and stopped game receive their own wording. A generic red “Error” cannot replace the result.                                                           |
@@ -205,7 +209,8 @@ While a pause/stop request is pending, show that the command is being applied an
 
 - Session-only is the default. Label it **Use for this tab** with **Cleared when you refresh or close this tab.** Keep raw values only in page memory and the minimum backend request scope described in [ADR-0004](decisions/0004-bring-your-own-key-security.md).
 - Authenticated users may explicitly select an existing saved credential or check **Save this key to my account**. Explain persistence before submission. Never preselect the save checkbox, imply guests can save, or claim a key stays only on the user's device.
-- On refresh, show which seats/providers need keys. A dismissed sheet leaves a persistent recovery banner. Preserve configuration and accepted position, but never restore raw keys from browser storage.
+- On refresh, show which seats/providers need keys. Dismissing recovery leaves a persistent banner. Preserve configuration and accepted position, but never restore raw keys from browser storage.
+- Ordinary Pause keeps the available keys and shows commentary and detail tabs without a key-editing action. Missing keys replace the rail contents with the recovery card from the [recovery concept](design-system/concepts/05-recovery-desktop.png): named AI-seat fields, reveal controls, the session-only explanation, gated Resume, and Return to game. Authentication failures open the same card for the rejected seat. Keep fields visible while typing; only explicit continuation resumes play. Return to game restores details and leaves a persistent re-entry action while paused. On mobile the card replaces details below the board and controls.
 - Use **Estimated cost** or **Est. cost** in compact rows. Unknown usage or pricing displays **Unavailable**, with a concise reason where available. Do not substitute zero or sum incomplete data as a complete total. Keep per-move details available even when an aggregate is unavailable.
 - “Latency” is measured response duration; it is not a countdown. All provider names, model names, usernames, avatars, commentary, and error details are untrusted rendering inputs.
 
@@ -263,12 +268,12 @@ Copy should identify the condition and the useful next action. Avoid technical e
 
 ## Screen reference contract
 
-| Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game   | Seats stack in the same order; fields remain labeled and full width                              |
-| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                         |
-| Recovery | Same accepted position and player identities; paused banner, key re-entry dialog, Resume gated on missing inputs           | Scrollable recovery sheet with both required provider fields and reachable actions               |
-| Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow |
+| Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game   | Seats stack in the same order; fields remain labeled and full width                                 |
+| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                            |
+| Recovery | Same accepted position and player identities; key re-entry card replaces details, Resume gated on missing inputs           | Recovery card replaces details below the board, with required provider fields and reachable actions |
+| Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow    |
 
 The eight concepts share the same palette, typography, frame, controls, and sample game. Reference images contain fictional model labels and explicitly illustrative telemetry. They are not provider performance claims or live provider output.
 

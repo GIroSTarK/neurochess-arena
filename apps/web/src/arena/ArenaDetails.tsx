@@ -20,7 +20,7 @@ export function ArenaDetails({
 }) {
   const { t } = useTranslation();
   const tabs: [DetailTab, ...DetailTab[]] = [
-    { id: "moves", label: t("moves.title"), content: moves },
+    { id: "moves", label: t("moves.title"), content: moves, scroll: "content" },
   ];
   if (analysis) tabs.push({ id: "analysis", label: t("details.analysis"), content: analysis });
   if (events) tabs.push({ id: "events", label: t("details.events"), content: events });

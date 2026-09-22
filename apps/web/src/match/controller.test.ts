@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
+import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
 import { GAME_ID, snapshot } from "../test/fixtures";
 
 import { MatchController } from "./controller";
@@ -87,6 +88,345 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("does not restore an earlier provider-pause notice while an explicit retry is in flight", async () => {
+    const game = { ...details, snapshot: snapshot([], { state: "paused", legalMoves: [] }) };
+    const h = harness(game);
+    const records = invocationRecords();
+    records.turns = [records.turns[0]!];
+    records.turns[0]!.acceptedMovePly = null;
+    records.turns[0]!.attempts.pop();
+    h.api.invocations.mockImplementation(async () => ({
+      ...records,
+      version: h.controller.getSnapshot().details!.snapshot.version,
+    }));
+    await h.controller.load(GAME_ID);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot().issue?.kind).toBe("provider");
+    h.controller.setKey("white", "white-secret");
+    h.controller.setKey("black", "black-secret");
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.api.turn.mockReturnValueOnce(pending.promise);
+    const sending = h.controller.continue(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot().thinking).toBe(true);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot().issue).toBeNull();
+    const accepted = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
+    h.store(accepted);
+    pending.resolve(accepted);
+    await sending;
+  });
+
+  it("refreshes terminal operational records even when the chess revision does not change", async () => {
+    const game = {
+      ...telemetryDetails,
+      snapshot: snapshot(["e2e4", "e7e5"], {
+        state: "aborted",
+        terminationReason: "aborted",
+        legalMoves: [],
+      }),
+    };
+    const h = harness(game);
+    const records = invocationRecords();
+    h.api.invocations.mockResolvedValue(records);
+    await h.controller.load(GAME_ID);
+    expect(h.controller.getSnapshot().invocations).toEqual(records);
+    const refreshed = structuredClone(records);
+    refreshed.turns[1]!.attempts[0]!.durationMs = 900;
+    h.api.invocations.mockResolvedValue(refreshed);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot().invocations).toEqual(refreshed);
+    expect(h.api.turn).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+  });
+
+  it("discards telemetry returning after leaving a private game", async () => {
+    const game = {
+      ...telemetryDetails,
+      snapshot: snapshot(["e2e4", "e7e5"], {
+        state: "aborted",
+        terminationReason: "aborted",
+        legalMoves: [],
+      }),
+    };
+    const h = harness(game);
+    const pending = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
+    h.api.invocations.mockReturnValue(pending.promise);
+    await h.controller.load(GAME_ID);
+    const signal = h.api.invocations.mock.calls[0]![1];
+    h.controller.newGame();
+    expect(signal.aborted).toBe(true);
+    pending.resolve(invocationRecords());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      phase: "setup",
+      invocations: null,
+      invocationsLoading: false,
+    });
+  });
+
+  it("retains received telemetry through new revisions and failed reads, then clears it on leaving", async () => {
+    const game = {
+      ...telemetryDetails,
+      snapshot: snapshot(["e2e4", "e7e5"], { state: "paused", legalMoves: [] }),
+    };
+    const h = harness(game);
+    const records = invocationRecords();
+    h.api.invocations.mockImplementation(async () => ({
+      ...records,
+      version: h.controller.getSnapshot().details!.snapshot.version,
+    }));
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const received = h.controller.getSnapshot().invocations;
+    expect(received?.turns).toEqual(records.turns);
+    const reads: ReturnType<
+      typeof Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>
+    >[] = [];
+    h.api.invocations.mockImplementation(() => {
+      const read = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
+      reads.push(read);
+      return read.promise;
+    });
+    h.controller.setKey("white", "white-secret");
+    h.controller.setKey("black", "black-secret");
+    h.api.turn.mockImplementationOnce(async () => {
+      const accepted = snapshot(["e2e4", "e7e5", "g1f3"], {
+        state: "paused",
+        legalMoves: [],
+        version: h.controller.getSnapshot().details!.snapshot.version + 1,
+      });
+      h.store(accepted);
+      return accepted;
+    });
+    const observed: (typeof received)[] = [];
+    const unsubscribe = h.controller.subscribe(() =>
+      observed.push(h.controller.getSnapshot().invocations),
+    );
+    await h.controller.continue(true);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: received,
+      invocationsMoveCount: 2,
+      invocationsLoading: true,
+    });
+    reads.at(-1)!.reject(new ApiFailure("network"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: received,
+      invocationsMoveCount: 2,
+      invocationsError: true,
+      invocationsLoading: false,
+    });
+    expect(observed.every((value) => value === received)).toBe(true);
+    unsubscribe();
+    const updated = { ...records, version: h.controller.getSnapshot().details!.snapshot.version };
+    h.api.invocations.mockResolvedValueOnce(updated);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: updated,
+      invocationsMoveCount: 3,
+      invocationsError: false,
+    });
+    h.disconnect();
+    for (const read of reads) read.resolve(records);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: null,
+      invocationsMoveCount: 0,
+    });
+  });
+
+  it("fences superseded telemetry by revision without blocking inference", async () => {
+    const h = harness();
+    const pending = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
+    h.api.invocations.mockReturnValueOnce(pending.promise);
+    h.api.turn.mockImplementationOnce(async () => {
+      const accepted = snapshot(["e2e4"]);
+      h.store(accepted);
+      return accepted;
+    });
+    h.keys();
+    await h.controller.created(details);
+    expect(h.api.turn).toHaveBeenCalledTimes(1);
+    pending.resolve({ gameId: GAME_ID, version: 0, turns: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot().invocations?.version).toBe(1);
+    expect(h.api.invocations.mock.calls[0]![1].aborted).toBe(true);
+  });
+
+  it("synchronizes a passive game when telemetry reports a newer server revision", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    h.api.snapshot.mockClear();
+    h.api.lifecycle.mockClear();
+    const reads = h.api.invocations.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.snapshot).toHaveBeenCalledTimes(1);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsMoveCount: 0,
+      invocationsLoading: true,
+      invocationsError: false,
+    });
+    const signal = h.api.invocations.mock.calls.at(-1)![1];
+    pending.resolve(latest);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signal.aborted).toBe(true);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads + 2);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: { snapshot: latest },
+      invocations: { gameId: GAME_ID, version: latest.version },
+      invocationsMoveCount: 1,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads + 3);
+    expect(h.controller.getSnapshot().invocationsError).toBe(false);
+    expect(h.api.controller).not.toHaveBeenCalled();
+    expect(h.api.turn).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+  });
+
+  it("retries telemetry synchronization after a failed snapshot read", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
+    h.store(latest);
+    h.api.snapshot.mockRejectedValueOnce(new ApiFailure("network"));
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsLoading: false,
+      invocationsError: true,
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: { snapshot: latest },
+      invocations: { version: latest.version },
+      invocationsMoveCount: 1,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+  });
+
+  it("discards telemetry synchronization returning after the page lifetime ends", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const latest = snapshot(["e2e4"], {
+      version: h.controller.getSnapshot().details!.snapshot.version + 2,
+    });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    h.api.snapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.snapshot).toHaveBeenCalledTimes(1);
+    const signal = h.api.snapshot.mock.calls.at(-1)![1];
+
+    window.dispatchEvent(new Event("pagehide"));
+    expect(signal.aborted).toBe(true);
+    pending.resolve(latest);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toMatchObject({
+      phase: "loading",
+      details: null,
+      invocations: null,
+      invocationsLoading: false,
+      invocationsError: false,
+    });
+  });
+
+  it("discards a telemetry synchronization superseded by explicit recovery", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const latest = snapshot(["e2e4"], {
+      version: h.controller.getSnapshot().details!.snapshot.version + 2,
+    });
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.store(latest);
+    h.api.snapshot.mockReturnValueOnce(pending.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    const signal = h.api.snapshot.mock.calls.at(-1)![1];
+
+    await h.controller.recover();
+    await vi.advanceTimersByTimeAsync(0);
+    const recovered = h.controller.getSnapshot();
+    expect(signal.aborted).toBe(true);
+    expect(recovered.details!.snapshot.version).toBe(latest.version + 1);
+    const reads = h.api.invocations.mock.calls.length;
+    pending.resolve(snapshot(["e2e4", "e7e5"], { version: latest.version + 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot()).toEqual(recovered);
+    expect(h.api.invocations).toHaveBeenCalledTimes(reads);
+  });
+
+  it("rejects telemetry older than the accepted snapshot without synchronizing", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    await vi.advanceTimersByTimeAsync(0);
+    const cached = h.controller.getSnapshot();
+    h.api.snapshot.mockClear();
+    h.api.invocations.mockResolvedValueOnce({
+      gameId: GAME_ID,
+      version: cached.details!.snapshot.version - 1,
+      turns: [],
+    });
+
+    await h.controller.loadInvocations();
+    expect(h.api.snapshot).not.toHaveBeenCalled();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: cached.details,
+      invocations: cached.invocations,
+      invocationsLoading: false,
+      invocationsError: true,
+    });
+  });
+
+  it("polls same-revision records on human turns and handles telemetry errors independently", async () => {
+    const game = humanGame("white");
+    const h = harness(game);
+    h.keys();
+    await h.controller.created(game);
+    const reads = h.api.invocations.mock.calls.length;
+    h.api.invocations.mockRejectedValueOnce(new ApiFailure("network"));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(h.api.invocations.mock.calls.length).toBeGreaterThan(reads);
+    expect(h.controller.getSnapshot().invocationsError).toBe(true);
+    expect(h.controller.canMove()).toBe(true);
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot().invocationsError).toBe(false);
+    h.api.invocations.mockResolvedValueOnce({ gameId: crypto.randomUUID(), version: 0, turns: [] });
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      invocations: { gameId: GAME_ID, version: 0, turns: [] },
+      invocationsError: true,
+    });
+    h.api.invocations.mockRejectedValueOnce(new ApiFailure("api", "NOT_FOUND"));
+    await h.controller.loadInvocations();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      phase: "unavailable",
+      details: null,
+      invocations: null,
+    });
+    expect(h.controller.credentials).toBeNull();
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
+
   function humanGame(color: "white" | "black"): GameDetails {
     return {
       ...details,
