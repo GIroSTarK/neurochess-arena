@@ -28,7 +28,12 @@ export default defineConfig({
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1080 } },
     },
-    { name: "mobile-touch", use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } } },
+    {
+      name: "mobile-touch",
+      // Lease/protocol coverage runs once in desktop; recovery and touch flows run in both.
+      grepInvert: /@controller-protocol/,
+      use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
+    },
   ],
   webServer: {
     command: "node --conditions=development --import tsx test/e2e/server.ts",

@@ -341,31 +341,32 @@ for (const during of ["inference", "delay"] as const) {
   });
 }
 
-test("a competing tab fences the old controller and an absent tab pauses between calls", async ({
-  page,
-  context,
-}) => {
-  const game = await start(page);
-  await page.getByLabel("Delay between moves").selectOption("5000");
-  await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
-  const other = await context.newPage();
-  try {
-    await other.goto(page.url());
-    await expect(other.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-    await expect(page.getByText(/This tab lost control/).first()).toBeVisible();
-    await fillRecovery(other);
-    await other.getByLabel("Delay between moves").selectOption("5000");
-    await other.getByRole("button", { name: "Resume", exact: true }).click();
-    await expect.poll(async () => (await read(other, game.gameId)).moves.length).toBe(2);
-    await other.close();
-    await expect
-      .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
-      .toBe("paused");
-    expect((await read(page, game.gameId)).moves).toHaveLength(2);
-  } finally {
-    if (!other.isClosed()) await other.close();
-  }
-});
+test(
+  "a competing tab fences the old controller and an absent tab pauses between calls",
+  { tag: "@controller-protocol" },
+  async ({ page, context }) => {
+    const game = await start(page);
+    await page.getByLabel("Delay between moves").selectOption("5000");
+    await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
+    const other = await context.newPage();
+    try {
+      await other.goto(page.url());
+      await expect(other.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+      await expect(page.getByText(/This tab lost control/).first()).toBeVisible();
+      await fillRecovery(other);
+      await other.getByLabel("Delay between moves").selectOption("5000");
+      await other.getByRole("button", { name: "Resume", exact: true }).click();
+      await expect.poll(async () => (await read(other, game.gameId)).moves.length).toBe(2);
+      await other.close();
+      await expect
+        .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
+        .toBe("paused");
+      expect((await read(page, game.gameId)).moves).toHaveLength(2);
+    } finally {
+      if (!other.isClosed()) await other.close();
+    }
+  },
+);
 
 test("lost turn acknowledgement blocks automatic dispatch until explicit synchronization", async ({
   page,
@@ -390,22 +391,24 @@ test("lost turn acknowledgement blocks automatic dispatch until explicit synchro
   await stop(page);
 });
 
-test("network loss between calls expires presence without a snapshot read performing recovery", async ({
-  page,
-}) => {
-  await page.route("**/controller", async (route) => {
-    const body = route.request().postDataJSON() as { action: string };
-    if (body.action === "heartbeat") await route.fulfill({ json: {} });
-    else await route.continue();
-  });
-  const game = await start(page);
-  await page.getByLabel("Delay between moves").selectOption("5000");
-  await expect(page.getByRole("button", { name: "Synchronize and pause" })).toBeVisible();
-  await expect
-    .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
-    .toBe("paused");
-  expect((await read(page, game.gameId)).moves).toHaveLength(1);
-});
+test(
+  "network loss between calls expires presence without a snapshot read performing recovery",
+  { tag: "@controller-protocol" },
+  async ({ page }) => {
+    await page.route("**/controller", async (route) => {
+      const body = route.request().postDataJSON() as { action: string };
+      if (body.action === "heartbeat") await route.fulfill({ json: {} });
+      else await route.continue();
+    });
+    const game = await start(page);
+    await page.getByLabel("Delay between moves").selectOption("5000");
+    await expect(page.getByRole("button", { name: "Synchronize and pause" })).toBeVisible();
+    await expect
+      .poll(async () => (await read(page, game.gameId)).state, { timeout: 20_000 })
+      .toBe("paused");
+    expect((await read(page, game.gameId)).moves).toHaveLength(1);
+  },
+);
 
 test("closing the controlling tab during inference pauses without accepting its late move", async ({
   page,

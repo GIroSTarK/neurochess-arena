@@ -7,6 +7,11 @@ import { activate, expect, playMove, readSnapshot, square, startSandbox, test } 
 import { setPseudoLocalization } from "./text-layout";
 
 const widths = [320, 390, 768, 1024, 1440];
+// Keep the 1024px boundary in both device contexts; interaction still uses each default viewport.
+const compositionWidths: Record<string, readonly number[]> = {
+  desktop: [1024, 1440],
+  "mobile-touch": [320, 390, 768, 1024],
+};
 const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 async function bounds(locator: Locator) {
@@ -28,6 +33,9 @@ async function checkLayouts(
   state: "entry" | "live" | "recovery" | "replay",
   checkComposition?: (width: number) => Promise<void>,
 ) {
+  // Replay's scrollable move list has different native gutter geometry in the two contexts.
+  const stateWidths = state === "replay" ? widths : compositionWidths[testInfo.project.name];
+  if (!stateWidths) throw new Error("Assign composition widths for " + testInfo.project.name);
   const viewport = page.viewportSize()!;
   const board = page.getByRole("grid");
   const fen = await board.getAttribute("data-fen");
@@ -40,7 +48,7 @@ async function checkLayouts(
           document.documentElement.style.fontSize = "200%";
         });
       }
-      for (const width of widths) {
+      for (const width of stateWidths) {
         await page.setViewportSize({ width, height: 1080 });
         await page.evaluate(() => document.fonts.ready);
         await expectArenaLayout(page);
