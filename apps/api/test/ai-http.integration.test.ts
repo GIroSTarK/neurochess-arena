@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import {
   type AiGameConfiguration,
+  type GameDetails,
   gameDetailsSchema,
+  gameErrorResponseSchema,
   gameInvocationsSchema,
+  gamePgnResponseSchema,
+  gameReplayResponseSchema,
   gameSnapshotSchema,
   type ModelDiscoveryResult,
 } from "@neurochess/contracts";
@@ -27,6 +31,7 @@ import {
   claimController,
   command,
   createSandbox,
+  FOOLS_MATE,
   type TestApi,
   type TestGuest,
   WEB_ORIGIN,
@@ -61,6 +66,147 @@ async function create(api: TestApi, guest: TestGuest, config = configuration) {
   await claimController(api, guest, details.snapshot);
   return details;
 }
+
+async function privateTerminalReads(
+  api: TestApi,
+  owner: TestGuest,
+  stranger: TestGuest,
+  expected: GameDetails,
+) {
+  const { snapshot } = expected;
+  const base = `/games/${snapshot.gameId}`;
+  const responses = {
+    replay: await get(api, owner, base + "/replay"),
+    pgn: await get(api, owner, base + "/pgn"),
+    invocations: await get(api, owner, base + "/invocations"),
+    details: await get(api, owner, base + "/details"),
+  };
+  for (const [endpoint, response] of Object.entries(responses)) {
+    expect(response.statusCode, `${endpoint}: ${response.body}`).toBe(200);
+    expect(response.headers["cache-control"], endpoint).toBe("no-store");
+    expect(response.body).not.toContain(apiKey);
+    const foreign = await get(api, stranger, `${base}/${endpoint}`);
+    const anonymous = await api.app.inject({ method: "GET", url: `${base}/${endpoint}` });
+    for (const [denied, status, code] of [
+      [foreign, 404, "NOT_FOUND"],
+      [anonymous, 401, "UNAUTHORIZED"],
+    ] as const) {
+      expect(denied.statusCode, endpoint).toBe(status);
+      expect(denied.headers["cache-control"], endpoint).toBe("no-store");
+      const error = gameErrorResponseSchema.parse(denied.json());
+      expect(error.code, endpoint).toBe(code);
+      expect(error, endpoint).not.toHaveProperty("currentSnapshot");
+      expect(denied.body).not.toContain(snapshot.fen);
+      expect(denied.body).not.toContain(apiKey);
+    }
+    expect(anonymous.headers["set-cookie"]).toBeUndefined();
+  }
+  expect(gameReplayResponseSchema.parse(responses.replay.json()).snapshot).toEqual(snapshot);
+  expect(gamePgnResponseSchema.parse(responses.pgn.json())).toEqual({
+    gameId: snapshot.gameId,
+    version: snapshot.version,
+    pgn: snapshot.pgn,
+  });
+  expect(gameDetailsSchema.parse(responses.details.json())).toEqual(expected);
+  return gameInvocationsSchema.parse(responses.invocations.json());
+}
+
+describe("private terminal AI HTTP reads", () => {
+  const modes: { name: string; config: AiGameConfiguration }[] = [
+    { name: "AI versus AI", config: configuration },
+    {
+      name: "human White",
+      config: {
+        mode: "ai_vs_human",
+        seats: { white: { type: "human" }, black: aiMatch.seats.white },
+      },
+    },
+    {
+      name: "human Black",
+      config: {
+        mode: "ai_vs_human",
+        seats: { white: aiMatch.seats.white, black: { type: "human" } },
+      },
+    },
+  ];
+  it.each(
+    modes.flatMap((mode) =>
+      (["completed", "aborted"] as const).map((state) => ({ ...mode, state })),
+    ),
+  )(
+    "keeps $name $state reads private and uncached before and after a later game occupies the slot",
+    async ({ config, state }) => {
+      const history = state === "completed" ? FOOLS_MATE : [];
+      const aiMoves = history
+        .map((move, index) => ({ move, ply: index + 1 }))
+        .filter(({ ply }) => config.seats[ply % 2 ? "white" : "black"].type === "ai");
+      const adapter = createScriptedAdapter({
+        provider: "openai",
+        models: aiMoves.map(() => catalog()),
+        moves: aiMoves.map(({ move, ply }) => output(move, `Private viewer note ${ply}`)),
+      });
+      const api = await harness.createApi({
+        aiAdapters: { openai: adapter },
+        sandboxEnabled: false,
+      });
+      const owner = await harness.guest(api);
+      const stranger = await harness.guest(api);
+      let { snapshot } = await create(api, owner, config);
+      for (const move of history) {
+        const response =
+          config.seats[snapshot.turn].type === "human"
+            ? await post(api, owner, `/games/${snapshot.gameId}/moves`, command(snapshot, move))
+            : await post(api, owner, `/games/${snapshot.gameId}/ai-turn`, {
+                ...turnCommand(snapshot),
+                apiKey,
+              });
+        expect(response.statusCode, response.body).toBe(200);
+        snapshot = gameSnapshotSchema.parse(response.json());
+      }
+      if (state === "aborted") {
+        const response = await post(
+          api,
+          owner,
+          `/games/${snapshot.gameId}/lifecycle`,
+          control(snapshot, "abort"),
+        );
+        expect(response.statusCode, response.body).toBe(200);
+        snapshot = gameSnapshotSchema.parse(response.json());
+      }
+      expect(snapshot).toMatchObject({
+        state,
+        result: state === "completed" ? "0-1" : "*",
+        terminationReason: state === "completed" ? "checkmate" : "aborted",
+      });
+      const expected = { snapshot, configuration: config };
+      const invocations = await privateTerminalReads(api, owner, stranger, expected);
+      expect(invocations).toMatchObject({ gameId: snapshot.gameId, version: snapshot.version });
+      expect(invocations.turns.map((turn) => turn.acceptedMovePly)).toEqual(
+        aiMoves.map(({ ply }) => ply),
+      );
+      for (const turn of invocations.turns) {
+        expect(turn.attempts).toHaveLength(1);
+        expect(turn.attempts[0]).toMatchObject({
+          outcome: "accepted",
+          commentary: `Private viewer note ${turn.ply}`,
+        });
+      }
+      expect(snapshot.pgn).not.toMatch(
+        /Viewer note|commentary|openai|anthropic|google|openrouter|gpt-|claude|gemini/i,
+      );
+
+      const next = await create(api, owner, config);
+      expect(next.snapshot.state).toBe("active");
+      expect(next.snapshot.gameId).not.toBe(snapshot.gameId);
+      const occupied = await post(api, owner, "/games", config);
+      expect(occupied.statusCode).toBe(409);
+      expect(occupied.json()).toHaveProperty("currentSnapshot", next.snapshot);
+      expect(await privateTerminalReads(api, owner, stranger, expected)).toEqual(invocations);
+      expect(adapter.discoveryCalls).toBe(aiMoves.length);
+      expect(adapter.moveCalls).toBe(aiMoves.length);
+    },
+  );
+});
 
 describe("protected discovery and ordinary AI HTTP operations", () => {
   it.each(["discovery", "inference"] as const)(
