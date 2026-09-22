@@ -43,14 +43,18 @@ describe("session-only HTTP credential contracts", () => {
       false,
     );
   });
-  it.each(["", " ", "line\nbreak", "key\n", "nul\0key", "a".repeat(4097)])(
-    "rejects malformed keys",
-    (apiKey) => {
-      expect(modelDiscoveryRequestSchema.safeParse({ provider: "openai", apiKey }).success).toBe(
-        false,
-      );
-    },
-  );
+  it.each([
+    { name: "empty string", apiKey: "" },
+    { name: "whitespace", apiKey: " " },
+    { name: "embedded newline", apiKey: "line\nbreak" },
+    { name: "trailing newline", apiKey: "key\n" },
+    { name: "NUL character", apiKey: "nul\0key" },
+    { name: "oversized key", apiKey: "a".repeat(4097) },
+  ])("rejects malformed key: $name", ({ apiKey }) => {
+    expect(modelDiscoveryRequestSchema.safeParse({ provider: "openai", apiKey }).success).toBe(
+      false,
+    );
+  });
   it.each(["prompt", "fen", "legalMoves", "provider", "parameters", "credentialId"])(
     "rejects client-controlled %s in a turn",
     (field) => {

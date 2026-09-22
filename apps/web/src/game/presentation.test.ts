@@ -162,7 +162,7 @@ describe("sandbox presentation boundary", () => {
       score: "*",
     },
   ] as const)(
-    "presents $terminationReason with its own result and score",
+    "presents $terminationReason with result $result and its score",
     ({ title, score, ...ending }) => {
       const view = sandboxPresentation(
         readyState({ snapshot: snapshot([], { ...ending, legalMoves: [] }) }),

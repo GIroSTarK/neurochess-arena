@@ -99,29 +99,29 @@ describe("durable AI failure policy and private invocation records", () => {
     },
   );
 
-  it.each([`Credential echo: ${access().apiKey}`, "Unstorable\0commentary"])(
-    "omits unsafe optional commentary while accepting its legal move",
-    async (commentary) => {
-      const api = await harness.createApi();
-      const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
-      const gamesService = service(api, {
-        openai: createScriptedAdapter({ provider: "openai", moves: [output("e2e4", commentary)] }),
-      });
-      const { snapshot } = await gamesService.createAi(principal, aiMatch);
-      const accepted = await gamesService.aiTurn(principal, turnCommand(snapshot), access());
-      expect(accepted.moves).toHaveLength(1);
-      const records = await gamesService.invocations(principal, snapshot.gameId);
-      expect(records.turns[0]?.attempts[0]).toMatchObject({
-        outcome: "accepted",
-        commentary: null,
-      });
-      const stored = await api.repository.read((reader) =>
-        reader.getModelInvocations(snapshot.gameId),
-      );
-      expect(JSON.stringify(stored)).not.toContain(access().apiKey);
-    },
-  );
+  it.each([
+    { name: "credential echo", commentary: `Credential echo: ${access().apiKey}` },
+    { name: "NUL character", commentary: "Unstorable\0commentary" },
+  ])("omits unsafe commentary while accepting a legal move: $name", async ({ commentary }) => {
+    const api = await harness.createApi();
+    const owner = await harness.guest(api);
+    const principal = { guestSessionId: owner.id };
+    const gamesService = service(api, {
+      openai: createScriptedAdapter({ provider: "openai", moves: [output("e2e4", commentary)] }),
+    });
+    const { snapshot } = await gamesService.createAi(principal, aiMatch);
+    const accepted = await gamesService.aiTurn(principal, turnCommand(snapshot), access());
+    expect(accepted.moves).toHaveLength(1);
+    const records = await gamesService.invocations(principal, snapshot.gameId);
+    expect(records.turns[0]?.attempts[0]).toMatchObject({
+      outcome: "accepted",
+      commentary: null,
+    });
+    const stored = await api.repository.read((reader) =>
+      reader.getModelInvocations(snapshot.gameId),
+    );
+    expect(JSON.stringify(stored)).not.toContain(access().apiKey);
+  });
 
   it("links invalid-invalid-valid attempts and missing commentary to one accepted move with measured duration and exact parameters", async () => {
     const api = await harness.createApi();
@@ -369,11 +369,17 @@ describe("durable AI failure policy and private invocation records", () => {
   );
 
   it.each([
-    null,
-    { inputTokens: null, outputTokens: null, totalTokens: null },
-    { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-    { inputTokens: 12, outputTokens: 8, totalTokens: null },
-  ])("preserves reported usage exactly: %j", async (usage) => {
+    { name: "null usage", usage: null },
+    {
+      name: "all token counts null",
+      usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+    },
+    { name: "all token counts zero", usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+    {
+      name: "missing total with reported input and output",
+      usage: { inputTokens: 12, outputTokens: 8, totalTokens: null },
+    },
+  ])("preserves reported usage: $name", async ({ usage }) => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const principal = { guestSessionId: owner.id };

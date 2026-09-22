@@ -201,12 +201,12 @@ describe("history restoration and PGN", () => {
   });
 
   it.each([
-    null,
-    { moves: "e2e4", lifecycle: ACTIVE },
-    { fen: INITIAL_FEN, lifecycle: ACTIVE },
-    { moves: [], lifecycle: ACTIVE, fen: INITIAL_FEN },
-    { moves: [] },
-  ])("rejects missing history or unsupported restore inputs: %j", (input) => {
+    { name: "null input", input: null },
+    { name: "string history", input: { moves: "e2e4", lifecycle: ACTIVE } },
+    { name: "FEN instead of history", input: { fen: INITIAL_FEN, lifecycle: ACTIVE } },
+    { name: "extra starting FEN", input: { moves: [], lifecycle: ACTIVE, fen: INITIAL_FEN } },
+    { name: "missing lifecycle", input: { moves: [] } },
+  ])("rejects invalid restore input: $name", ({ input }) => {
     expect(restoreGame(input as RestoreGameInput)).toEqual({
       ok: false,
       error: { code: "INVALID_HISTORY" },
@@ -214,14 +214,29 @@ describe("history restoration and PGN", () => {
   });
 
   it.each([
-    null,
-    { state: "active", result: "1-0", terminationReason: "checkmate" },
-    { state: "active", result: "*" },
-    { state: "active", result: "*", terminationReason: null, secret: "canary" },
-    { state: "completed", result: "*", terminationReason: "checkmate" },
-    { state: "completed", result: "1/2-1/2", terminationReason: "human_resignation" },
-    { state: "aborted", result: "0-1", terminationReason: "aborted" },
-  ])("rejects invalid lifecycle metadata: %j", (lifecycle) => {
+    { name: "null lifecycle", lifecycle: null },
+    {
+      name: "active game with result",
+      lifecycle: { state: "active", result: "1-0", terminationReason: "checkmate" },
+    },
+    { name: "missing termination reason", lifecycle: { state: "active", result: "*" } },
+    {
+      name: "extra secret field",
+      lifecycle: { state: "active", result: "*", terminationReason: null, secret: "canary" },
+    },
+    {
+      name: "completed game without result",
+      lifecycle: { state: "completed", result: "*", terminationReason: "checkmate" },
+    },
+    {
+      name: "draw by resignation",
+      lifecycle: { state: "completed", result: "1/2-1/2", terminationReason: "human_resignation" },
+    },
+    {
+      name: "aborted game with winner",
+      lifecycle: { state: "aborted", result: "0-1", terminationReason: "aborted" },
+    },
+  ])("rejects invalid lifecycle metadata: $name", ({ lifecycle }) => {
     expect(restoreGame({ moves: [], lifecycle } as RestoreGameInput)).toEqual({
       ok: false,
       error: { code: "INVALID_LIFECYCLE" },
@@ -229,13 +244,25 @@ describe("history restoration and PGN", () => {
   });
 
   it.each([
-    { state: "active", result: "*", terminationReason: null },
-    { state: "paused", result: "*", terminationReason: null },
-    { state: "aborted", result: "*", terminationReason: "aborted" },
-    { state: "completed", result: "1-0", terminationReason: "checkmate" },
-    { state: "completed", result: "0-1", terminationReason: "human_resignation" },
-    { state: "completed", result: "1/2-1/2", terminationReason: "stalemate" },
-  ] as const)("rejects lifecycle contradicting the replayed mate: %j", (lifecycle) => {
+    { name: "active state", lifecycle: { state: "active", result: "*", terminationReason: null } },
+    { name: "paused state", lifecycle: { state: "paused", result: "*", terminationReason: null } },
+    {
+      name: "aborted state",
+      lifecycle: { state: "aborted", result: "*", terminationReason: "aborted" },
+    },
+    {
+      name: "wrong winner",
+      lifecycle: { state: "completed", result: "1-0", terminationReason: "checkmate" },
+    },
+    {
+      name: "resignation reason",
+      lifecycle: { state: "completed", result: "0-1", terminationReason: "human_resignation" },
+    },
+    {
+      name: "stalemate draw",
+      lifecycle: { state: "completed", result: "1/2-1/2", terminationReason: "stalemate" },
+    },
+  ] as const)("rejects lifecycle contradicting mate: $name", ({ lifecycle }) => {
     expect(restoreGame({ moves: FOOLS_MATE, lifecycle })).toEqual({
       ok: false,
       error: { code: "INVALID_LIFECYCLE" },

@@ -33,19 +33,23 @@ describe("parseWebEnvironment", () => {
     ).toEqual({ VITE_API_BASE_URL: "http://localhost:3001", SANDBOX_ENABLED: value === "true" });
   });
 
-  it.each(["", "TRUE", "1", true, null, "private-canary"])(
-    "rejects a malformed sandbox flag without disclosing its value (%s)",
-    (value) => {
-      try {
-        parseWebEnvironment({ VITE_API_BASE_URL: "http://localhost:3001", SANDBOX_ENABLED: value });
-        throw new Error("Expected environment parsing to fail");
-      } catch (error: unknown) {
-        expect(error).toBeInstanceOf(WebEnvironmentValidationError);
-        expect((error as WebEnvironmentValidationError).variables).toEqual(["SANDBOX_ENABLED"]);
-        expect((error as Error).message).toBe("INVALID_WEB_ENVIRONMENT");
-      }
-    },
-  );
+  it.each([
+    { name: "empty string", value: "" },
+    { name: "uppercase string", value: "TRUE" },
+    { name: "numeric string", value: "1" },
+    { name: "boolean", value: true },
+    { name: "null", value: null },
+    { name: "secret canary", value: "private-canary" },
+  ])("rejects malformed sandbox flag: $name", ({ value }) => {
+    try {
+      parseWebEnvironment({ VITE_API_BASE_URL: "http://localhost:3001", SANDBOX_ENABLED: value });
+      throw new Error("Expected environment parsing to fail");
+    } catch (error: unknown) {
+      expect(error).toBeInstanceOf(WebEnvironmentValidationError);
+      expect((error as WebEnvironmentValidationError).variables).toEqual(["SANDBOX_ENABLED"]);
+      expect((error as Error).message).toBe("INVALID_WEB_ENVIRONMENT");
+    }
+  });
 
   it("identifies invalid variables without printing their values", () => {
     const canary = "phase-zero-web-secret";
@@ -61,12 +65,12 @@ describe("parseWebEnvironment", () => {
   });
 
   it.each([
-    "ftp://localhost",
-    "https://user:secret@example.test",
-    "https://example.test/path",
-    "https://example.test?token=secret",
-    "https://example.test#secret",
-  ])("rejects an API value that is not a public HTTP origin", (value) => {
+    { name: "non-HTTP protocol", value: "ftp://localhost" },
+    { name: "embedded credentials", value: "https://user:secret@example.test" },
+    { name: "non-root path", value: "https://example.test/path" },
+    { name: "query string", value: "https://example.test?token=secret" },
+    { name: "fragment", value: "https://example.test#secret" },
+  ])("rejects invalid public API origin: $name", ({ value }) => {
     expect(() => parseWebEnvironment({ VITE_API_BASE_URL: value })).toThrow(
       WebEnvironmentValidationError,
     );

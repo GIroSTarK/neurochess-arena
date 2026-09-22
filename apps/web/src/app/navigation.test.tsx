@@ -49,19 +49,20 @@ describe("Arena and Sandbox routes", () => {
     },
   );
 
-  it.each(["/sandbox", "/sandbox/", "/sandbox?game=" + GAME_ID])(
-    "blocks %s without mounting or requesting the disabled sandbox",
-    (path) => {
-      visit(path, false);
-      expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeInTheDocument();
-      expect(document.title).toBe("Page unavailable · Neurochess Arena");
-      expect(screen.queryByRole("link", { name: "Sandbox" })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Back to Arena" })).toHaveAttribute("href", "/");
-      expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-      expect(http.fetch).not.toHaveBeenCalled();
-      expect(window.location.pathname + window.location.search).toBe(path);
-    },
-  );
+  it.each([
+    { name: "entry path", path: "/sandbox" },
+    { name: "trailing slash", path: "/sandbox/" },
+    { name: "game query", path: "/sandbox?game=" + GAME_ID },
+  ])("blocks disabled Sandbox route: $name", ({ path }) => {
+    visit(path, false);
+    expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeInTheDocument();
+    expect(document.title).toBe("Page unavailable · Neurochess Arena");
+    expect(screen.queryByRole("link", { name: "Sandbox" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to Arena" })).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(http.fetch).not.toHaveBeenCalled();
+    expect(window.location.pathname + window.location.search).toBe(path);
+  });
 
   it("does not treat an unknown route as a sandbox game", () => {
     visit("/missing?game=" + GAME_ID, true);

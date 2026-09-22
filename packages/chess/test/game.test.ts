@@ -30,27 +30,27 @@ describe("public chess API", () => {
   });
 
   it.each([
-    "",
-    "e4",
-    "Nf3",
-    "0000",
-    "--",
-    "E2E4",
-    " e2e4",
-    "e2e4 ",
-    "e2e4\n",
-    "e2e4\r\n",
-    "e2e4q\n",
-    "a0a1",
-    "i2i4",
-    "e7e8Q",
-    "e7e8k",
-    "e2e2",
-    null,
-    undefined,
-    42,
-    { move: "e2e4" },
-  ])("rejects noncanonical UCI without changing state: %j", (input) => {
+    { name: "empty string", input: "" },
+    { name: "SAN pawn move", input: "e4" },
+    { name: "SAN knight move", input: "Nf3" },
+    { name: "null-move digits", input: "0000" },
+    { name: "null-move dashes", input: "--" },
+    { name: "uppercase squares", input: "E2E4" },
+    { name: "leading space", input: " e2e4" },
+    { name: "trailing space", input: "e2e4 " },
+    { name: "trailing LF", input: "e2e4\n" },
+    { name: "trailing CRLF", input: "e2e4\r\n" },
+    { name: "promotion with trailing LF", input: "e2e4q\n" },
+    { name: "rank outside board", input: "a0a1" },
+    { name: "file outside board", input: "i2i4" },
+    { name: "uppercase promotion", input: "e7e8Q" },
+    { name: "king promotion", input: "e7e8k" },
+    { name: "same square", input: "e2e2" },
+    { name: "null", input: null },
+    { name: "undefined", input: undefined },
+    { name: "number", input: 42 },
+    { name: "object", input: { move: "e2e4" } },
+  ])("rejects noncanonical UCI without mutation: $name", ({ input }) => {
     const game = activeGame();
     const before = game.snapshot();
     expect(game.playMove(input as string)).toEqual({ ok: false, error: { code: "INVALID_UCI" } });
@@ -159,9 +159,21 @@ describe("castling", () => {
   });
 
   it.each([
-    [["h1h2", "h8h7", "h2h1", "h7h8"], "Qq", "e1g1", "e1c1"],
-    [["a1a2", "a8a7", "a2a1", "a7a8"], "Kk", "e1c1", "e1g1"],
-  ] as const)("does not restore rights when rooks return: %j", (moves, rights, lost, retained) => {
+    {
+      name: "kingside rooks",
+      moves: ["h1h2", "h8h7", "h2h1", "h7h8"],
+      rights: "Qq",
+      lost: "e1g1",
+      retained: "e1c1",
+    },
+    {
+      name: "queenside rooks",
+      moves: ["a1a2", "a8a7", "a2a1", "a7a8"],
+      rights: "Kk",
+      lost: "e1c1",
+      retained: "e1g1",
+    },
+  ] as const)("does not restore rights after $name return", ({ moves, rights, lost, retained }) => {
     const game = position("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1");
     play(game, moves);
     expect(game.snapshot().fen.split(" ")[2]).toBe(rights);

@@ -561,14 +561,35 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
   });
 
   it.each([
-    { state: "active", result: "1-0", terminationReason: "checkmate" },
-    { state: "completed", result: "1-0", terminationReason: null },
-    { state: "completed", result: "1/2-1/2", terminationReason: null },
-    { state: "completed", result: "*", terminationReason: "checkmate" },
-    { state: "completed", result: "1-0", terminationReason: "stalemate" },
-    { state: "aborted", result: "*", terminationReason: null },
-    { state: "aborted", result: "0-1", terminationReason: "aborted" },
-  ] as const)("rejects contradictory lifecycle fields: %j", async (lifecycle) => {
+    {
+      name: "active game with result",
+      lifecycle: { state: "active", result: "1-0", terminationReason: "checkmate" },
+    },
+    {
+      name: "decisive completion without reason",
+      lifecycle: { state: "completed", result: "1-0", terminationReason: null },
+    },
+    {
+      name: "draw completion without reason",
+      lifecycle: { state: "completed", result: "1/2-1/2", terminationReason: null },
+    },
+    {
+      name: "completed game without result",
+      lifecycle: { state: "completed", result: "*", terminationReason: "checkmate" },
+    },
+    {
+      name: "decisive stalemate",
+      lifecycle: { state: "completed", result: "1-0", terminationReason: "stalemate" },
+    },
+    {
+      name: "aborted game without reason",
+      lifecycle: { state: "aborted", result: "*", terminationReason: null },
+    },
+    {
+      name: "aborted game with winner",
+      lifecycle: { state: "aborted", result: "0-1", terminationReason: "aborted" },
+    },
+  ] as const)("rejects contradictory lifecycle: $name", async ({ lifecycle }) => {
     const owner = await guest();
     await expect(
       database.db.insert(games).values({ ...gameValues(owner.id), ...lifecycle }),

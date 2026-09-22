@@ -98,42 +98,51 @@ describe("Anthropic model discovery", () => {
   });
 
   it.each([
-    {},
-    { ...anthropicCatalog(), data: {} },
-    anthropicCatalog(["duplicate", "duplicate"]),
-    anthropicCatalog(["bad\nmodel"]),
-    anthropicCatalog(["x".repeat(257)]),
-    anthropicCatalog([PROVIDER_KEY], true),
-    anthropicCatalog([], true),
-    { ...anthropicCatalog(), last_id: PROVIDER_KEY, has_more: true },
-    { ...anthropicCatalog(), first_id: null },
-    { ...anthropicCatalog(), has_more: "true" },
-    ...[
-      { display_name: PROVIDER_KEY },
-      { display_name: "bad\0name" },
-      { display_name: "x".repeat(257) },
-      { created_at: "yesterday" },
-      { max_tokens: -1 },
-      { max_tokens: 0 },
-      { max_tokens: 1.5 },
-      { max_tokens: Number.MAX_SAFE_INTEGER + 1 },
-      { capabilities: { effort: { supported: "true" } } },
-      { capabilities: { effort: { supported: true, low: { supported: 1 } } } },
-    ].map((fields) => ({ ...anthropicCatalog(), data: [{ ...anthropicModel(), ...fields }] })),
-  ])(
-    "rejects invalid/secret-bearing catalogs without dispatching another page: %j",
-    async (catalog) => {
-      const http = mockHttp([Response.json(catalog)]);
-      const result = await createAnthropicAdapter(http.transport).listModels(
-        contractInput(anthropicFixture),
-      );
-      expect(result).toEqual({ ok: false, error: invalidResponse });
-      expect(JSON.stringify({ result, urls: http.requests.map(({ url }) => url) })).not.toContain(
-        PROVIDER_KEY,
-      );
-      expect(http.transport).toHaveBeenCalledTimes(1);
+    { name: "missing catalog fields", catalog: {} },
+    { name: "non-array data", catalog: { ...anthropicCatalog(), data: {} } },
+    { name: "duplicate model IDs", catalog: anthropicCatalog(["duplicate", "duplicate"]) },
+    { name: "newline in model ID", catalog: anthropicCatalog(["bad\nmodel"]) },
+    { name: "oversized model ID", catalog: anthropicCatalog(["x".repeat(257)]) },
+    { name: "credential in model ID", catalog: anthropicCatalog([PROVIDER_KEY], true) },
+    { name: "empty page with more pages", catalog: anthropicCatalog([], true) },
+    {
+      name: "credential in last cursor",
+      catalog: { ...anthropicCatalog(), last_id: PROVIDER_KEY, has_more: true },
     },
-  );
+    { name: "null first cursor", catalog: { ...anthropicCatalog(), first_id: null } },
+    { name: "non-boolean has-more flag", catalog: { ...anthropicCatalog(), has_more: "true" } },
+    ...[
+      { name: "credential in display name", fields: { display_name: PROVIDER_KEY } },
+      { name: "NUL in display name", fields: { display_name: "bad\0name" } },
+      { name: "oversized display name", fields: { display_name: "x".repeat(257) } },
+      { name: "invalid creation timestamp", fields: { created_at: "yesterday" } },
+      { name: "negative output limit", fields: { max_tokens: -1 } },
+      { name: "zero output limit", fields: { max_tokens: 0 } },
+      { name: "fractional output limit", fields: { max_tokens: 1.5 } },
+      { name: "unsafe output limit integer", fields: { max_tokens: Number.MAX_SAFE_INTEGER + 1 } },
+      {
+        name: "non-boolean effort support",
+        fields: { capabilities: { effort: { supported: "true" } } },
+      },
+      {
+        name: "non-boolean low-effort support",
+        fields: { capabilities: { effort: { supported: true, low: { supported: 1 } } } },
+      },
+    ].map(({ name, fields }) => ({
+      name,
+      catalog: { ...anthropicCatalog(), data: [{ ...anthropicModel(), ...fields }] },
+    })),
+  ])("rejects invalid catalogs: $name", async ({ catalog }) => {
+    const http = mockHttp([Response.json(catalog)]);
+    const result = await createAnthropicAdapter(http.transport).listModels(
+      contractInput(anthropicFixture),
+    );
+    expect(result).toEqual({ ok: false, error: invalidResponse });
+    expect(JSON.stringify({ result, urls: http.requests.map(({ url }) => url) })).not.toContain(
+      PROVIDER_KEY,
+    );
+    expect(http.transport).toHaveBeenCalledTimes(1);
+  });
 
   it("fails the entire catalog on repeated pages or later-page errors", async () => {
     for (const last of [
@@ -232,33 +241,34 @@ describe("Anthropic Messages requests", () => {
     });
   });
 
-  it.each([{ maxOutputTokens: 0 }, { maxOutputTokens: 64_001 }, { reasoningEffort: "xhigh" }])(
-    "rejects invalid advertised settings before inference: %j",
-    async (parameters) => {
-      const http = mockHttp([]);
-      expect(
-        await createAnthropicAdapter(http.transport).requestMove({
-          ...contractInput(anthropicFixture),
-          parameters,
-        }),
-      ).toMatchObject({ ok: false });
-      expect(http.transport).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    { name: "zero output tokens", parameters: { maxOutputTokens: 0 } },
+    { name: "output tokens above maximum", parameters: { maxOutputTokens: 64_001 } },
+    { name: "unsupported reasoning effort", parameters: { reasoningEffort: "xhigh" } },
+  ])("rejects invalid advertised settings: $name", async ({ parameters }) => {
+    const http = mockHttp([]);
+    expect(
+      await createAnthropicAdapter(http.transport).requestMove({
+        ...contractInput(anthropicFixture),
+        parameters,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(http.transport).not.toHaveBeenCalled();
+  });
 
-  it.each(["bad\nmodel", PROVIDER_KEY])(
-    "rejects unsafe selected identifiers: %s",
-    async (modelId) => {
-      const http = mockHttp([]);
-      expect(
-        await createAnthropicAdapter(http.transport).requestMove({
-          ...contractInput(anthropicFixture),
-          modelId,
-        }),
-      ).toMatchObject({ ok: false, error: invalidResponse });
-      expect(http.transport).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    { name: "newline", modelId: "bad\nmodel" },
+    { name: "credential echo", modelId: PROVIDER_KEY },
+  ])("rejects unsafe model ID: $name", async ({ modelId }) => {
+    const http = mockHttp([]);
+    expect(
+      await createAnthropicAdapter(http.transport).requestMove({
+        ...contractInput(anthropicFixture),
+        modelId,
+      }),
+    ).toMatchObject({ ok: false, error: invalidResponse });
+    expect(http.transport).not.toHaveBeenCalled();
+  });
 });
 
 describe("Anthropic content and usage", () => {
@@ -290,14 +300,17 @@ describe("Anthropic content and usage", () => {
   });
 
   it.each([
-    '{"move":"e5"}',
-    '{"move":"e7e5","extra":true}',
-    '{"move":"e7e5","commentary":null}',
-    '```json\n{"move":"e7e5"}\n```',
-    '{"move":',
-    "",
-    JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-  ])("does not repair invalid model JSON: %s", async (text) => {
+    { name: "SAN move", text: '{"move":"e5"}' },
+    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
+    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
+    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
+    { name: "incomplete JSON", text: '{"move":' },
+    { name: "empty text", text: "" },
+    {
+      name: "oversized commentary",
+      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
+    },
+  ])("rejects malformed model JSON: $name", async ({ text }) => {
     const http = mockHttp([Response.json(anthropicResponse(text, anthropicFixture.reportedUsage))]);
     expect(
       await createAnthropicAdapter(http.transport).requestMove(contractInput(anthropicFixture)),
@@ -329,20 +342,26 @@ describe("Anthropic content and usage", () => {
   });
 
   it.each([
-    { usage: { input_tokens: -1 } },
-    { usage: { output_tokens: 1.5 } },
-    { usage: { input_tokens: Number.MAX_SAFE_INTEGER + 1 } },
-    { usage: { cache_read_input_tokens: "invalid" } },
-    { usage: "unavailable" },
-    { role: "user" },
-    { type: "error" },
-    { stop_reason: null },
-    { stop_reason: "invented" },
-    { stop_sequence: "unrequested" },
-    { content: [{ type: "text", text: 1 }] },
-    { content: [{ type: "tool_use" }] },
-    { content: Array.from({ length: 129 }, () => ({ type: "text", text: "" })) },
-  ])("classifies malformed envelopes/usage as provider failures: %j", async (fields) => {
+    { name: "negative input tokens", fields: { usage: { input_tokens: -1 } } },
+    { name: "fractional output tokens", fields: { usage: { output_tokens: 1.5 } } },
+    {
+      name: "unsafe input token integer",
+      fields: { usage: { input_tokens: Number.MAX_SAFE_INTEGER + 1 } },
+    },
+    { name: "non-numeric cache tokens", fields: { usage: { cache_read_input_tokens: "invalid" } } },
+    { name: "non-object usage", fields: { usage: "unavailable" } },
+    { name: "user message role", fields: { role: "user" } },
+    { name: "error message type", fields: { type: "error" } },
+    { name: "null stop reason", fields: { stop_reason: null } },
+    { name: "unknown stop reason", fields: { stop_reason: "invented" } },
+    { name: "unrequested stop sequence", fields: { stop_sequence: "unrequested" } },
+    { name: "non-string text", fields: { content: [{ type: "text", text: 1 }] } },
+    { name: "tool use content", fields: { content: [{ type: "tool_use" }] } },
+    {
+      name: "too many content blocks",
+      fields: { content: Array.from({ length: 129 }, () => ({ type: "text", text: "" })) },
+    },
+  ])("rejects malformed envelopes or usage: $name", async ({ fields }) => {
     const http = mockHttp([Response.json({ ...anthropicResponse(), ...fields })]);
     expect(
       await createAnthropicAdapter(http.transport).requestMove(contractInput(anthropicFixture)),
@@ -455,13 +474,14 @@ describe("Anthropic transport failures", () => {
     ).toMatchObject({ ok: false, error: { code: "provider_unavailable", reason: "network" } });
   });
 
-  it.each(["not json", "x".repeat(4 * 1024 * 1024 + 1), new Uint8Array([0xff])])(
-    "rejects non-JSON, oversized or invalid UTF-8 bodies",
-    async (body) => {
-      const http = mockHttp([new Response(body)]);
-      expect(
-        await createAnthropicAdapter(http.transport).requestMove(contractInput(anthropicFixture)),
-      ).toMatchObject({ ok: false, error: invalidResponse });
-    },
-  );
+  it.each([
+    { name: "invalid JSON", body: "not json" },
+    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
+    { name: "invalid UTF-8", body: new Uint8Array([0xff]) },
+  ])("rejects response body: $name", async ({ body }) => {
+    const http = mockHttp([new Response(body)]);
+    expect(
+      await createAnthropicAdapter(http.transport).requestMove(contractInput(anthropicFixture)),
+    ).toMatchObject({ ok: false, error: invalidResponse });
+  });
 });

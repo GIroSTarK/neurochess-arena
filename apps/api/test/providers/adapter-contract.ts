@@ -136,36 +136,42 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       expect(http.transport).toHaveBeenCalledTimes(1);
     });
 
-    it.each([undefined, "Develops a central pawn."])(
-      "accepts a legal UCI move with optional commentary: %s",
-      async (commentary) => {
-        const output = { move: "e7e5", ...(commentary === undefined ? {} : { commentary }) };
-        const usage = fixture.reportedUsage;
-        const http = mockHttp([fixture.completion(JSON.stringify(output), usage)]);
-        const input = contractInput(fixture);
-        const result = normalizedMoveResponseSchema.parse(
-          await fixture.createAdapter(http.transport).requestMove(input),
-        );
-        expect(result).toMatchObject({ ok: true, output, usage, providerRequestId: null });
-        expect(result.durationMs).toBeGreaterThanOrEqual(0);
-        expect(input.context.legalMoves).toContain(output.move);
-        expect(await fixture.readMove(http.requests[0]!)).toEqual({
-          instructions: input.instructions,
-          context: input.context,
-          modelId: input.modelId,
-          parameters: input.parameters,
-        });
-        expect(http.requests[0]!.url).not.toContain(PROVIDER_KEY);
-        expect(http.transport).toHaveBeenCalledTimes(1);
-      },
-    );
+    it.each([
+      { name: "absent commentary", commentary: undefined },
+      { name: "present commentary", commentary: "Develops a central pawn." },
+    ])("accepts a legal UCI move: $name", async ({ commentary }) => {
+      const output = { move: "e7e5", ...(commentary === undefined ? {} : { commentary }) };
+      const usage = fixture.reportedUsage;
+      const http = mockHttp([fixture.completion(JSON.stringify(output), usage)]);
+      const input = contractInput(fixture);
+      const result = normalizedMoveResponseSchema.parse(
+        await fixture.createAdapter(http.transport).requestMove(input),
+      );
+      expect(result).toMatchObject({ ok: true, output, usage, providerRequestId: null });
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+      expect(input.context.legalMoves).toContain(output.move);
+      expect(await fixture.readMove(http.requests[0]!)).toEqual({
+        instructions: input.instructions,
+        context: input.context,
+        modelId: input.modelId,
+        parameters: input.parameters,
+      });
+      expect(http.requests[0]!.url).not.toContain(PROVIDER_KEY);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
 
     it.each([
-      undefined,
-      null,
-      { inputTokens: 0, outputTokens: null, totalTokens: null },
-      { inputTokens: null, outputTokens: null, totalTokens: null },
-    ])("preserves missing usage and distinguishes reported zero: %j", async (usage) => {
+      { name: "undefined usage", usage: undefined },
+      { name: "null usage", usage: null },
+      {
+        name: "reported zero input tokens",
+        usage: { inputTokens: 0, outputTokens: null, totalTokens: null },
+      },
+      {
+        name: "all token counts null",
+        usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+      },
+    ])("preserves usage: $name", async ({ usage }) => {
       const http = mockHttp([fixture.completion('{"move":"e7e5"}', usage)]);
       expect(
         await fixture.createAdapter(http.transport).requestMove(contractInput(fixture)),
@@ -253,16 +259,16 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       expect(http.transport).not.toHaveBeenCalled();
     });
 
-    it.each([PROVIDER_KEY, "unsafe\0text"])(
-      "omits unsafe optional commentary without rejecting the move",
-      async (commentary) => {
-        const http = mockHttp([fixture.completion(JSON.stringify({ move: "e7e5", commentary }))]);
-        const result = await fixture
-          .createAdapter(http.transport)
-          .requestMove(contractInput(fixture));
-        expect(result).toMatchObject({ ok: true, output: { move: "e7e5" } });
-        if (result.ok) expect(result.output).not.toHaveProperty("commentary");
-      },
-    );
+    it.each([
+      { name: "credential echo", commentary: PROVIDER_KEY },
+      { name: "NUL character", commentary: "unsafe\0text" },
+    ])("omits unsafe optional commentary: $name", async ({ commentary }) => {
+      const http = mockHttp([fixture.completion(JSON.stringify({ move: "e7e5", commentary }))]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({ ok: true, output: { move: "e7e5" } });
+      if (result.ok) expect(result.output).not.toHaveProperty("commentary");
+    });
   });
 }

@@ -435,26 +435,32 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
   });
 
   it.each([
-    { ok: false, error: { code: "provider_auth" } },
-    { ok: false, error: { code: "provider_quota" } },
-    { ok: false, error: { code: "provider_timeout" } },
-    { ok: false, error: { code: "provider_unavailable", reason: "network" } },
-    { ok: true, models: [] },
+    { name: "authentication failure", discovery: { ok: false, error: { code: "provider_auth" } } },
+    { name: "quota failure", discovery: { ok: false, error: { code: "provider_quota" } } },
+    { name: "timeout", discovery: { ok: false, error: { code: "provider_timeout" } } },
     {
-      ok: true,
-      models: [
-        {
-          ...turnCatalog("openai")[0]!,
-          capabilities: {
-            ...turnCatalog("openai")[0]!.capabilities,
-            moveGeneration: "unsupported",
-          },
-        },
-      ],
+      name: "network failure",
+      discovery: { ok: false, error: { code: "provider_unavailable", reason: "network" } },
     },
-  ] satisfies ModelDiscoveryResult[])(
-    "pauses safely when turn discovery cannot supply a callable model",
-    async (discovery) => {
+    { name: "empty catalog", discovery: { ok: true, models: [] } },
+    {
+      name: "unsupported move generation",
+      discovery: {
+        ok: true,
+        models: [
+          {
+            ...turnCatalog("openai")[0]!,
+            capabilities: {
+              ...turnCatalog("openai")[0]!.capabilities,
+              moveGeneration: "unsupported",
+            },
+          },
+        ],
+      },
+    },
+  ] satisfies { name: string; discovery: ModelDiscoveryResult }[])(
+    "pauses on failed turn discovery: $name",
+    async ({ discovery }) => {
       const adapter = createScriptedAdapter({ provider: "openai", models: [discovery] });
       const api = await harness.createApi({ aiAdapters: { openai: adapter } });
       const guest = await harness.guest(api);

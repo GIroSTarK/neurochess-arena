@@ -22,12 +22,12 @@ describe("browser navigation", () => {
   });
 
   it.each([
-    "?game=",
-    "?game=not-a-game",
-    "?game=" + encodeURIComponent("../../secret"),
-    "?game=" + GAME_ID + "&game=" + OTHER_GAME_ID,
-    "?game=" + GAME_ID + "&game=" + GAME_ID,
-  ])("treats %s as an invalid link that names no game", (search) => {
+    { name: "empty game ID", search: "?game=" },
+    { name: "malformed game ID", search: "?game=not-a-game" },
+    { name: "path traversal", search: "?game=" + encodeURIComponent("../../secret") },
+    { name: "different duplicate IDs", search: "?game=" + GAME_ID + "&game=" + OTHER_GAME_ID },
+    { name: "identical duplicate IDs", search: "?game=" + GAME_ID + "&game=" + GAME_ID },
+  ])("rejects invalid game link: $name", ({ search }) => {
     visit(search);
     expect(browserNavigation().read()).toEqual({ kind: "invalid" });
   });

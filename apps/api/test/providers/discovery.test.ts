@@ -43,30 +43,39 @@ describe("request-scoped model discovery", () => {
   });
 
   it.each([
-    { ok: true, models: [{ ...model, provider: "google" }] },
-    { ok: true, models: [{ ...model, name: apiKey }] },
-    { ok: true, models: [{ ...model, id: apiKey }] },
+    { name: "provider mismatch", raw: { ok: true, models: [{ ...model, provider: "google" }] } },
+    { name: "credential in model name", raw: { ok: true, models: [{ ...model, name: apiKey }] } },
+    { name: "credential in model ID", raw: { ok: true, models: [{ ...model, id: apiKey }] } },
     {
-      ok: true,
-      models: [
-        {
-          ...model,
-          capabilities: {
-            ...model.capabilities,
-            parameters: {
-              ...model.capabilities.parameters,
-              reasoningEffort: { values: [apiKey] },
+      name: "credential in reasoning effort",
+      raw: {
+        ok: true,
+        models: [
+          {
+            ...model,
+            capabilities: {
+              ...model.capabilities,
+              parameters: {
+                ...model.capabilities.parameters,
+                reasoningEffort: { values: [apiKey] },
+              },
             },
           },
-        },
-      ],
+        ],
+      },
     },
-    { ok: true, models: [{ ...model, name: "bad\0name" }] },
-    { ok: true, models: [model, model] },
-    { ok: true, models: [{ ...model, extra: apiKey }] },
-    { ok: false, error: { code: "model_invalid", reason: "malformed_output" } },
-    { ok: false, error: { code: "provider_auth", message: apiKey } },
-  ])("drops invalid/secret-bearing normalized data without exposing the payload", async (raw) => {
+    { name: "NUL in model name", raw: { ok: true, models: [{ ...model, name: "bad\0name" }] } },
+    { name: "duplicate models", raw: { ok: true, models: [model, model] } },
+    { name: "extra model field", raw: { ok: true, models: [{ ...model, extra: apiKey }] } },
+    {
+      name: "model-invalid discovery error",
+      raw: { ok: false, error: { code: "model_invalid", reason: "malformed_output" } },
+    },
+    {
+      name: "extra error message",
+      raw: { ok: false, error: { code: "provider_auth", message: apiKey } },
+    },
+  ])("drops invalid normalized data: $name", async ({ raw }) => {
     const result = await discoverModels(
       {
         provider: "openai",
@@ -102,34 +111,34 @@ describe("request-scoped model discovery", () => {
     });
   });
 
-  it.each([false, true])(
-    "propagates cancellation/timeout without retaining a secret reason",
-    async (timeout) => {
-      const controller = new AbortController();
-      const entered = Promise.withResolvers<void>();
-      const adapter = createScriptedAdapter({
-        provider: "openai",
-        models: [
-          ({ signal }) => {
-            expect(signal).toBe(controller.signal);
-            entered.resolve();
-            return new Promise<ModelDiscoveryResult>((_resolve, reject) =>
-              signal.addEventListener("abort", () => reject(new Error(apiKey)), { once: true }),
-            );
-          },
-        ],
-      });
-      const pending = discoverModels(adapter, { apiKey, signal: controller.signal });
-      await entered.promise;
-      controller.abort(timeout ? new DOMException(apiKey, "TimeoutError") : apiKey);
-      expect(await pending).toEqual({
-        ok: false,
-        error: timeout
-          ? { code: "provider_timeout" }
-          : { code: "provider_unavailable", reason: "cancelled" },
-      });
-    },
-  );
+  it.each([
+    { name: "cancellation", timeout: false },
+    { name: "timeout", timeout: true },
+  ])("propagates $name without retaining a secret reason", async ({ timeout }) => {
+    const controller = new AbortController();
+    const entered = Promise.withResolvers<void>();
+    const adapter = createScriptedAdapter({
+      provider: "openai",
+      models: [
+        ({ signal }) => {
+          expect(signal).toBe(controller.signal);
+          entered.resolve();
+          return new Promise<ModelDiscoveryResult>((_resolve, reject) =>
+            signal.addEventListener("abort", () => reject(new Error(apiKey)), { once: true }),
+          );
+        },
+      ],
+    });
+    const pending = discoverModels(adapter, { apiKey, signal: controller.signal });
+    await entered.promise;
+    controller.abort(timeout ? new DOMException(apiKey, "TimeoutError") : apiKey);
+    expect(await pending).toEqual({
+      ok: false,
+      error: timeout
+        ? { code: "provider_timeout" }
+        : { code: "provider_unavailable", reason: "cancelled" },
+    });
+  });
 });
 
 describe("server capability filtering", () => {
@@ -152,11 +161,11 @@ describe("server capability filtering", () => {
       }),
     ).toEqual({ maxOutputTokens: 100 });
   });
-  it.each<AiParameters>([
-    { temperature: 3 },
-    { reasoningEffort: "extreme" },
-    { maxOutputTokens: 100_001 },
-  ])("rejects values outside a known capability", (parameters) => {
+  it.each<{ name: string; parameters: AiParameters }>([
+    { name: "temperature above maximum", parameters: { temperature: 3 } },
+    { name: "unsupported reasoning effort", parameters: { reasoningEffort: "extreme" } },
+    { name: "output tokens above maximum", parameters: { maxOutputTokens: 100_001 } },
+  ])("rejects values outside a known capability: $name", ({ parameters }) => {
     expect(effectiveParameters(parameters, model.capabilities)).toBeNull();
   });
 });

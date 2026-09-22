@@ -135,25 +135,25 @@ describe("move command contracts", () => {
   );
 
   it.each([
-    "",
-    "e4",
-    "O-O",
-    "0000",
-    "--",
-    "a0a1",
-    "i1a1",
-    "e2e2",
-    "E2E4",
-    "a7a8Q",
-    "a7a8k",
-    " e2e4",
-    "e2e4 ",
-    "e2e4\n",
-    "e2e4\r\n",
-    "e2e4q\n",
-    null,
-    12,
-  ])("rejects noncanonical UCI syntax: %j", (move) =>
+    { name: "empty string", move: "" },
+    { name: "SAN pawn move", move: "e4" },
+    { name: "SAN castling", move: "O-O" },
+    { name: "null-move digits", move: "0000" },
+    { name: "null-move dashes", move: "--" },
+    { name: "rank outside board", move: "a0a1" },
+    { name: "file outside board", move: "i1a1" },
+    { name: "same square", move: "e2e2" },
+    { name: "uppercase squares", move: "E2E4" },
+    { name: "uppercase promotion", move: "a7a8Q" },
+    { name: "king promotion", move: "a7a8k" },
+    { name: "leading space", move: " e2e4" },
+    { name: "trailing space", move: "e2e4 " },
+    { name: "trailing LF", move: "e2e4\n" },
+    { name: "trailing CRLF", move: "e2e4\r\n" },
+    { name: "promotion with trailing LF", move: "e2e4q\n" },
+    { name: "null", move: null },
+    { name: "number", move: 12 },
+  ])("rejects noncanonical UCI syntax: $name", ({ move }) =>
     expect(uciMoveSchema.safeParse(move).success).toBe(false),
   );
 
@@ -163,24 +163,33 @@ describe("move command contracts", () => {
     expect(moveCommandSchema.safeParse(input).success).toBe(false);
   });
 
-  it.each(["", "not-a-uuid", "10000000-0000-4000-8000-000000000001\n", null, 1])(
-    "requires UUID game and command identifiers: %j",
-    (id) => {
-      expect(moveCommandSchema.safeParse({ ...command, gameId: id }).success).toBe(false);
-      expect(moveCommandSchema.safeParse({ ...command, commandId: id }).success).toBe(false);
-    },
-  );
+  it.each([
+    { name: "empty string", id: "" },
+    { name: "malformed UUID", id: "not-a-uuid" },
+    { name: "UUID with newline", id: "10000000-0000-4000-8000-000000000001\n" },
+    { name: "null", id: null },
+    { name: "number", id: 1 },
+  ])("requires UUID identifiers: $name", ({ id }) => {
+    expect(moveCommandSchema.safeParse({ ...command, gameId: id }).success).toBe(false);
+    expect(moveCommandSchema.safeParse({ ...command, commandId: id }).success).toBe(false);
+  });
 
-  it.each([-1, 0.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, "1", null, undefined])(
-    "rejects invalid versions: %j",
-    (version) => {
-      expect(gameVersionSchema.safeParse(version).success).toBe(false);
-      expect(moveCommandSchema.safeParse({ ...command, expectedVersion: version }).success).toBe(
-        false,
-      );
-      expect(gameSnapshotSchema.safeParse({ ...initialSnapshot, version }).success).toBe(false);
-    },
-  );
+  it.each([
+    { name: "negative version", version: -1 },
+    { name: "fractional version", version: 0.5 },
+    { name: "unsafe integer version", version: Number.MAX_SAFE_INTEGER + 1 },
+    { name: "NaN version", version: NaN },
+    { name: "Infinity version", version: Infinity },
+    { name: "string version", version: "1" },
+    { name: "null version", version: null },
+    { name: "undefined version", version: undefined },
+  ])("rejects invalid version: $name", ({ version }) => {
+    expect(gameVersionSchema.safeParse(version).success).toBe(false);
+    expect(moveCommandSchema.safeParse({ ...command, expectedVersion: version }).success).toBe(
+      false,
+    );
+    expect(gameSnapshotSchema.safeParse({ ...initialSnapshot, version }).success).toBe(false);
+  });
 
   it.each([0, 1, Number.MAX_SAFE_INTEGER])("accepts nonnegative safe version %s", (version) => {
     expect(gameVersionSchema.parse(version)).toBe(version);
@@ -224,18 +233,55 @@ describe("lifecycle contracts", () => {
   });
 
   it.each([
-    { state: "unknown", result: "*", terminationReason: null },
-    { state: "active", result: "1-0", terminationReason: "checkmate" },
-    { state: "paused", result: "*", terminationReason: "provider_timeout" },
-    { state: "completed", result: "*", terminationReason: null },
-    { state: "completed", result: "1/2-1/2", terminationReason: "checkmate" },
-    { state: "completed", result: "0-1", terminationReason: "stalemate" },
-    { state: "completed", result: "1/2-1/2", terminationReason: "model_technical_loss" },
-    { state: "completed", result: "1-0", terminationReason: "aborted" },
-    { state: "aborted", result: "0-1", terminationReason: "aborted" },
-    { state: "aborted", result: "*", terminationReason: null },
-    { state: "active", result: "*", terminationReason: null, winner: "white" },
-  ])("rejects inconsistent lifecycle data: %j", (lifecycle) => {
+    {
+      name: "unknown state",
+      lifecycle: { state: "unknown", result: "*", terminationReason: null },
+    },
+    {
+      name: "active game with result",
+      lifecycle: { state: "active", result: "1-0", terminationReason: "checkmate" },
+    },
+    {
+      name: "paused game with termination",
+      lifecycle: { state: "paused", result: "*", terminationReason: "provider_timeout" },
+    },
+    {
+      name: "completed game without result",
+      lifecycle: { state: "completed", result: "*", terminationReason: null },
+    },
+    {
+      name: "draw by checkmate",
+      lifecycle: { state: "completed", result: "1/2-1/2", terminationReason: "checkmate" },
+    },
+    {
+      name: "decisive stalemate",
+      lifecycle: { state: "completed", result: "0-1", terminationReason: "stalemate" },
+    },
+    {
+      name: "draw by technical loss",
+      lifecycle: {
+        state: "completed",
+        result: "1/2-1/2",
+        terminationReason: "model_technical_loss",
+      },
+    },
+    {
+      name: "completed game marked aborted",
+      lifecycle: { state: "completed", result: "1-0", terminationReason: "aborted" },
+    },
+    {
+      name: "aborted game with winner",
+      lifecycle: { state: "aborted", result: "0-1", terminationReason: "aborted" },
+    },
+    {
+      name: "aborted game without reason",
+      lifecycle: { state: "aborted", result: "*", terminationReason: null },
+    },
+    {
+      name: "extra winner field",
+      lifecycle: { state: "active", result: "*", terminationReason: null, winner: "white" },
+    },
+  ])("rejects inconsistent lifecycle: $name", ({ lifecycle }) => {
     expect(gameLifecycleSchema.safeParse(lifecycle).success).toBe(false);
     expect(
       gameSnapshotSchema.safeParse({ ...initialSnapshot, legalMoves: [], ...lifecycle }).success,
@@ -268,19 +314,19 @@ describe("snapshot contracts", () => {
   });
 
   it.each([
-    { fen: "" },
-    { pgn: "" },
-    { turn: "w" },
-    { inCheck: "false" },
-    { legalMoves: ["Nf3"] },
-    { moves: [{ ...moveRecord, san: "" }] },
-    { moves: [{ ...moveRecord, fen: "" }] },
-    { moves: [{ ...moveRecord, uci: "e4" }] },
-    { moves: [{ ...moveRecord, ply: 0 }] },
-    { moves: [{ ...moveRecord, ply: 1.5 }] },
-    { moves: [{ ...moveRecord, ply: 2 }] },
-    { moves: [moveRecord, moveRecord] },
-  ])("rejects invalid snapshot structure: %j", (fields) => {
+    { name: "empty FEN", fields: { fen: "" } },
+    { name: "empty PGN", fields: { pgn: "" } },
+    { name: "invalid turn", fields: { turn: "w" } },
+    { name: "non-boolean check flag", fields: { inCheck: "false" } },
+    { name: "SAN in legal moves", fields: { legalMoves: ["Nf3"] } },
+    { name: "empty move SAN", fields: { moves: [{ ...moveRecord, san: "" }] } },
+    { name: "empty move FEN", fields: { moves: [{ ...moveRecord, fen: "" }] } },
+    { name: "non-UCI move", fields: { moves: [{ ...moveRecord, uci: "e4" }] } },
+    { name: "zero ply", fields: { moves: [{ ...moveRecord, ply: 0 }] } },
+    { name: "fractional ply", fields: { moves: [{ ...moveRecord, ply: 1.5 }] } },
+    { name: "nonsequential first ply", fields: { moves: [{ ...moveRecord, ply: 2 }] } },
+    { name: "duplicate ply", fields: { moves: [moveRecord, moveRecord] } },
+  ])("rejects invalid snapshot: $name", ({ fields }) => {
     expect(gameSnapshotSchema.safeParse({ ...initialSnapshot, ...fields }).success).toBe(false);
   });
 

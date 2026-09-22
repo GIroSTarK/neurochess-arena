@@ -287,22 +287,22 @@ describe("sandbox transport boundary", () => {
     expect(String(error)).not.toContain("server-message-canary");
   });
 
-  it.each([false, true])(
-    "rejects a different game's snapshot, including conflict envelopes",
-    async (conflict) => {
-      const foreign = snapshot([], { gameId: OTHER_GAME_ID });
-      const api = createSandboxApi("http://localhost:3001", {
-        fetch: vi
-          .fn()
-          .mockResolvedValue(
-            conflict ? errorResponse("GAME_CONFLICT", 409, foreign) : jsonResponse(foreign),
-          ),
-      });
-      await expect(api.snapshot(GAME_ID, new AbortController().signal)).rejects.toMatchObject({
-        kind: "malformed",
-      });
-    },
-  );
+  it.each([
+    { name: "accepted response", conflict: false },
+    { name: "conflict response", conflict: true },
+  ])("rejects another game's snapshot: $name", async ({ conflict }) => {
+    const foreign = snapshot([], { gameId: OTHER_GAME_ID });
+    const api = createSandboxApi("http://localhost:3001", {
+      fetch: vi
+        .fn()
+        .mockResolvedValue(
+          conflict ? errorResponse("GAME_CONFLICT", 409, foreign) : jsonResponse(foreign),
+        ),
+    });
+    await expect(api.snapshot(GAME_ID, new AbortController().signal)).rejects.toMatchObject({
+      kind: "malformed",
+    });
+  });
 
   it("rejects invalid requests before fetch", async () => {
     const fetch = vi.fn();

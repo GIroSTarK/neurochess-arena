@@ -78,11 +78,11 @@ describe("AI HTTP client", () => {
   });
 
   it.each([
-    "http://api.example.test",
-    "https://user:password@example.test",
-    "https://api.example.test?apiKey=secret",
-    "https://api.example.test/path",
-  ])("rejects unsafe credential destinations: %s", (origin) => {
+    { name: "non-local HTTP", origin: "http://api.example.test" },
+    { name: "embedded credentials", origin: "https://user:password@example.test" },
+    { name: "query string", origin: "https://api.example.test?apiKey=secret" },
+    { name: "non-root path", origin: "https://api.example.test/path" },
+  ])("rejects unsafe credential destination: $name", ({ origin }) => {
     expect(() => createAiApi(origin)).toThrow(ApiFailure);
   });
 
@@ -99,23 +99,36 @@ describe("AI HTTP client", () => {
 
   it.each([
     {
+      name: "turn in progress",
       payload: { code: "AI_TURN_IN_PROGRESS", requestId: "request-1" },
       status: 409,
       expected: { code: "AI_TURN_IN_PROGRESS" },
     },
     {
+      name: "unauthorized with discarded prose",
       payload: { code: "UNAUTHORIZED", requestId: "request-1", message: apiKey },
       status: 401,
       expected: { code: "UNAUTHORIZED" },
     },
     {
+      name: "unrecognized cancellation code",
       payload: { code: "AI_TURN_CANCELLED", requestId: "request-1", message: apiKey },
       status: 409,
       expected: { kind: "malformed" },
     },
-    { payload: { snapshot: apiKey }, status: 200, expected: { kind: "malformed" } },
-    { payload: { code: apiKey }, status: 500, expected: { kind: "malformed" } },
-  ])("preserves only recognized safe errors", async ({ payload, status, expected }) => {
+    {
+      name: "malformed success payload",
+      payload: { snapshot: apiKey },
+      status: 200,
+      expected: { kind: "malformed" },
+    },
+    {
+      name: "credential as error code",
+      payload: { code: apiKey },
+      status: 500,
+      expected: { kind: "malformed" },
+    },
+  ])("preserves only safe errors: $name", async ({ payload, status, expected }) => {
     const api = createAiApi("https://api.example.test", {
       fetch: vi.fn().mockResolvedValue(jsonResponse(payload, status)),
     });
@@ -127,30 +140,30 @@ describe("AI HTTP client", () => {
     expect(String(error)).not.toContain(apiKey);
   });
 
-  it.each([false, true])(
-    "rejects another game's accepted or conflict snapshot",
-    async (conflict) => {
-      const foreign = snapshot([], { gameId: OTHER_GAME_ID });
-      const api = createAiApi("https://api.example.test", {
-        fetch: vi.fn().mockResolvedValue(
-          jsonResponse(
-            conflict
-              ? {
-                  code: "GAME_CONFLICT",
-                  requestId: "test",
-                  message: apiKey,
-                  currentSnapshot: foreign,
-                }
-              : foreign,
-            conflict ? 409 : 200,
-          ),
+  it.each([
+    { name: "accepted response", conflict: false },
+    { name: "conflict response", conflict: true },
+  ])("rejects another game's snapshot: $name", async ({ conflict }) => {
+    const foreign = snapshot([], { gameId: OTHER_GAME_ID });
+    const api = createAiApi("https://api.example.test", {
+      fetch: vi.fn().mockResolvedValue(
+        jsonResponse(
+          conflict
+            ? {
+                code: "GAME_CONFLICT",
+                requestId: "test",
+                message: apiKey,
+                currentSnapshot: foreign,
+              }
+            : foreign,
+          conflict ? 409 : 200,
         ),
-      });
-      await expect(api.turn(command, apiKey, signal())).rejects.toMatchObject({
-        kind: "malformed",
-      });
-    },
-  );
+      ),
+    });
+    await expect(api.turn(command, apiKey, signal())).rejects.toMatchObject({
+      kind: "malformed",
+    });
+  });
 
   it("uses a 190-second turn transport deadline without automatic retries", async () => {
     vi.useFakeTimers();

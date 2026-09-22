@@ -9,14 +9,15 @@ const API_ORIGIN = "http://localhost:3001";
 
 describe("strict HTTP mock", () => {
   it.each([
-    { input: API_ORIGIN + "/ready", options: undefined },
-    { input: new URL("/ready", API_ORIGIN), options: undefined },
-    { input: new Request(API_ORIGIN + "/ready"), options: undefined },
+    { name: "string URL", input: API_ORIGIN + "/ready", options: undefined },
+    { name: "URL object", input: new URL("/ready", API_ORIGIN), options: undefined },
+    { name: "Request object", input: new Request(API_ORIGIN + "/ready"), options: undefined },
     {
+      name: "Request with method override",
       input: new Request(API_ORIGIN + "/ready", { method: "POST" }),
       options: { method: "get" },
     },
-  ])("matches the effective method for fetch input %#", async ({ input, options }) => {
+  ])("matches the effective method for $name", async ({ input, options }) => {
     const http = createHttpMock({ "GET /ready": () => jsonResponse({ status: "ready" }) });
     const response = await http.fetch(input, options);
     expect(await response.json()).toEqual({ status: "ready" });

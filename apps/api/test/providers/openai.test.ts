@@ -92,33 +92,37 @@ describe("OpenAI Responses API details", () => {
     ).toBe(true);
   });
 
-  it.each([{ temperature: 3 }, { maxOutputTokens: 15 }, { maxOutputTokens: 32_769 }])(
-    "rejects invalid advertised parameters before transport: %j",
-    async (parameters) => {
-      const http = mockHttp([]);
-      expect(
-        await createOpenAiAdapter(http.transport).requestMove({
-          ...contractInput(openAiFixture),
-          parameters,
-        }),
-      ).toMatchObject({ ok: false });
-      expect(http.transport).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    { name: "temperature above maximum", parameters: { temperature: 3 } },
+    { name: "output tokens below minimum", parameters: { maxOutputTokens: 15 } },
+    { name: "output tokens above maximum", parameters: { maxOutputTokens: 32_769 } },
+  ])("rejects invalid advertised parameters: $name", async ({ parameters }) => {
+    const http = mockHttp([]);
+    expect(
+      await createOpenAiAdapter(http.transport).requestMove({
+        ...contractInput(openAiFixture),
+        parameters,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(http.transport).not.toHaveBeenCalled();
+  });
 
   it.each([
-    {},
-    { object: "list", data: {} },
-    openAiCatalog(["duplicate", "duplicate"]),
-    openAiCatalog(["bad\nmodel"]),
-    openAiCatalog(["x".repeat(257)]),
-    openAiCatalog([PROVIDER_KEY]),
-    { ...openAiCatalog(), has_more: true },
+    { name: "missing catalog fields", catalog: {} },
+    { name: "non-array data", catalog: { object: "list", data: {} } },
+    { name: "duplicate model IDs", catalog: openAiCatalog(["duplicate", "duplicate"]) },
+    { name: "newline in model ID", catalog: openAiCatalog(["bad\nmodel"]) },
+    { name: "oversized model ID", catalog: openAiCatalog(["x".repeat(257)]) },
+    { name: "credential in model ID", catalog: openAiCatalog([PROVIDER_KEY]) },
+    { name: "partial catalog", catalog: { ...openAiCatalog(), has_more: true } },
     {
-      object: "list",
-      data: [{ id: "gpt-4.1", object: "model", created: "yesterday", owned_by: "openai" }],
+      name: "non-numeric creation timestamp",
+      catalog: {
+        object: "list",
+        data: [{ id: "gpt-4.1", object: "model", created: "yesterday", owned_by: "openai" }],
+      },
     },
-  ])("rejects malformed, partial, duplicated, or secret-bearing catalogs: %j", async (catalog) => {
+  ])("rejects invalid catalogs: $name", async ({ catalog }) => {
     const http = mockHttp([Response.json(catalog)]);
     expect(
       await createOpenAiAdapter(http.transport).listModels(contractInput(openAiFixture)),
@@ -176,13 +180,16 @@ describe("OpenAI Responses API details", () => {
   });
 
   it.each([
-    '{"move":"e5"}',
-    '{"move":"e7e5","extra":true}',
-    '{"move":"e7e5","commentary":null}',
-    '```json\n{"move":"e7e5"}\n```',
-    '{"move":',
-    JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-  ])("classifies invalid model JSON without repairing it: %s", async (text) => {
+    { name: "SAN move", text: '{"move":"e5"}' },
+    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
+    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
+    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
+    { name: "incomplete JSON", text: '{"move":' },
+    {
+      name: "oversized commentary",
+      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
+    },
+  ])("classifies malformed model JSON: $name", async ({ text }) => {
     const http = mockHttp([
       Response.json(openAiResponse(text, { inputTokens: 0, outputTokens: 1, totalTokens: null })),
     ]);
@@ -196,31 +203,48 @@ describe("OpenAI Responses API details", () => {
   });
 
   it.each([
-    { usage: { input_tokens: -1 } },
-    { usage: { output_tokens: 1.5 } },
-    { usage: { total_tokens: Number.MAX_SAFE_INTEGER + 1 } },
-    { usage: "unavailable" },
-    { output: [{ type: "message", role: "user", status: "completed", content: [] }] },
-    { output: [{ type: "message", role: "assistant", status: "in_progress", content: [] }] },
+    { name: "negative input tokens", fields: { usage: { input_tokens: -1 } } },
+    { name: "fractional output tokens", fields: { usage: { output_tokens: 1.5 } } },
     {
-      output: [
-        {
-          type: "message",
-          role: "assistant",
-          status: "completed",
-          content: [{ type: "output_text", text: 1 }],
-        },
-      ],
+      name: "unsafe total token integer",
+      fields: { usage: { total_tokens: Number.MAX_SAFE_INTEGER + 1 } },
     },
-    { output: [{ type: "tool_call" }] },
-    { status: "invented" },
-    { error: { code: "server_error" } },
+    { name: "non-object usage", fields: { usage: "unavailable" } },
     {
-      status: "incomplete",
-      error: { code: "server_error" },
-      incomplete_details: { reason: "max_output_tokens" },
+      name: "user message role",
+      fields: { output: [{ type: "message", role: "user", status: "completed", content: [] }] },
     },
-  ])("treats invalid envelope/usage as a provider failure: %j", async (fields) => {
+    {
+      name: "in-progress message",
+      fields: {
+        output: [{ type: "message", role: "assistant", status: "in_progress", content: [] }],
+      },
+    },
+    {
+      name: "non-string output text",
+      fields: {
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: 1 }],
+          },
+        ],
+      },
+    },
+    { name: "tool call output", fields: { output: [{ type: "tool_call" }] } },
+    { name: "unknown response status", fields: { status: "invented" } },
+    { name: "error with completed status", fields: { error: { code: "server_error" } } },
+    {
+      name: "error with incomplete status",
+      fields: {
+        status: "incomplete",
+        error: { code: "server_error" },
+        incomplete_details: { reason: "max_output_tokens" },
+      },
+    },
+  ])("rejects malformed envelopes or usage: $name", async ({ fields }) => {
     const http = mockHttp([Response.json({ ...openAiResponse(), ...fields })]);
     expect(
       await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
@@ -231,29 +255,42 @@ describe("OpenAI Responses API details", () => {
   });
 
   it.each([
-    [
-      { status: "failed", error: { code: "rate_limit_exceeded", message: PROVIDER_KEY } },
-      { code: "provider_quota" },
-    ],
-    [
-      { status: "failed", error: { code: "server_error", message: PROVIDER_KEY } },
-      { code: "provider_unavailable", reason: "upstream" },
-    ],
-    [
-      { status: "incomplete", incomplete_details: { reason: "content_filter" } },
-      { code: "model_invalid", reason: "refusal" },
-    ],
-    [
-      { status: "incomplete", incomplete_details: { reason: "unknown" } },
-      { code: "provider_unavailable", reason: "invalid_response" },
-    ],
-    [
-      { status: "incomplete", incomplete_details: null },
-      { code: "provider_unavailable", reason: "invalid_response" },
-    ],
-    [{ status: "queued" }, { code: "provider_unavailable", reason: "invalid_response" }],
-    [{ status: "cancelled" }, { code: "provider_unavailable", reason: "cancelled" }],
-  ])("normalizes Responses status without returning error text: %j", async (fields, error) => {
+    {
+      name: "failed rate limit",
+      fields: { status: "failed", error: { code: "rate_limit_exceeded", message: PROVIDER_KEY } },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "failed upstream",
+      fields: { status: "failed", error: { code: "server_error", message: PROVIDER_KEY } },
+      error: { code: "provider_unavailable", reason: "upstream" },
+    },
+    {
+      name: "incomplete content filter",
+      fields: { status: "incomplete", incomplete_details: { reason: "content_filter" } },
+      error: { code: "model_invalid", reason: "refusal" },
+    },
+    {
+      name: "incomplete unknown reason",
+      fields: { status: "incomplete", incomplete_details: { reason: "unknown" } },
+      error: { code: "provider_unavailable", reason: "invalid_response" },
+    },
+    {
+      name: "incomplete null details",
+      fields: { status: "incomplete", incomplete_details: null },
+      error: { code: "provider_unavailable", reason: "invalid_response" },
+    },
+    {
+      name: "queued response",
+      fields: { status: "queued" },
+      error: { code: "provider_unavailable", reason: "invalid_response" },
+    },
+    {
+      name: "cancelled response",
+      fields: { status: "cancelled" },
+      error: { code: "provider_unavailable", reason: "cancelled" },
+    },
+  ])("normalizes Responses status: $name", async ({ fields, error }) => {
     const http = mockHttp([Response.json({ ...openAiResponse(), ...fields })]);
     const result = await createOpenAiAdapter(http.transport).requestMove(
       contractInput(openAiFixture),
@@ -354,16 +391,16 @@ describe("OpenAI Responses API details", () => {
     ).toMatchObject({ ok: false, error: { code: "provider_unavailable", reason: "network" } });
   });
 
-  it.each(["not json", "x".repeat(4 * 1024 * 1024 + 1)])(
-    "rejects non-JSON or oversized responses",
-    async (body) => {
-      const http = mockHttp([new Response(body)]);
-      expect(
-        await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
-      ).toMatchObject({
-        ok: false,
-        error: { code: "provider_unavailable", reason: "invalid_response" },
-      });
-    },
-  );
+  it.each([
+    { name: "invalid JSON", body: "not json" },
+    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
+  ])("rejects response body: $name", async ({ body }) => {
+    const http = mockHttp([new Response(body)]);
+    expect(
+      await createOpenAiAdapter(http.transport).requestMove(contractInput(openAiFixture)),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "provider_unavailable", reason: "invalid_response" },
+    });
+  });
 });

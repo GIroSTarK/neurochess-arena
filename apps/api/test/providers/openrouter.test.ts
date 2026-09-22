@@ -104,33 +104,51 @@ describe("OpenRouter discovery", () => {
   });
 
   it.each([
-    {},
-    { data: null },
-    openRouterCatalog(["duplicate", "duplicate"]),
-    openRouterCatalog([PROVIDER_KEY]),
-    { ...openRouterCatalog(), total_count: 0 },
-    { ...openRouterCatalog(), total_count: 10_001 },
-    { ...openRouterCatalog(), links: { next: 2 } },
+    { name: "missing data", catalog: {} },
+    { name: "null data", catalog: { data: null } },
+    { name: "duplicate model IDs", catalog: openRouterCatalog(["duplicate", "duplicate"]) },
+    { name: "credential in model ID", catalog: openRouterCatalog([PROVIDER_KEY]) },
+    { name: "total below page size", catalog: { ...openRouterCatalog(), total_count: 0 } },
+    { name: "total above catalog limit", catalog: { ...openRouterCatalog(), total_count: 10_001 } },
+    { name: "non-string next link", catalog: { ...openRouterCatalog(), links: { next: 2 } } },
     ...[
-      { id: "https://evil.example/model" },
-      { id: "vendor/../model" },
-      { id: "vendor/a?key=value" },
-      { id: "vendor/model\n" },
-      { id: "x".repeat(257) },
-      { name: PROVIDER_KEY },
-      { name: "bad\0name" },
-      { name: "x".repeat(257) },
-      { supported_parameters: "temperature" },
-      { supported_parameters: Array.from({ length: 129 }, () => "temperature") },
-      { architecture: { input_modalities: "text" } },
-      { top_provider: { max_completion_tokens: -1 } },
-      { top_provider: { max_completion_tokens: 1.5 } },
-      { top_provider: { max_completion_tokens: Number.MAX_SAFE_INTEGER + 1 } },
-      { reasoning: { mandatory: "true" } },
-      { reasoning: { supported_efforts: ["high", "high"] } },
-      { reasoning: { supported_efforts: [PROVIDER_KEY] } },
-    ].map((fields) => ({ data: [{ ...openRouterModel(), ...fields }] })),
-  ])("rejects malformed or unsafe catalogs: %j", async (catalog) => {
+      { name: "absolute URL model ID", fields: { id: "https://evil.example/model" } },
+      { name: "parent traversal model ID", fields: { id: "vendor/../model" } },
+      { name: "query in model ID", fields: { id: "vendor/a?key=value" } },
+      { name: "newline in model ID", fields: { id: "vendor/model\n" } },
+      { name: "oversized model ID", fields: { id: "x".repeat(257) } },
+      { name: "credential in model name", fields: { name: PROVIDER_KEY } },
+      { name: "NUL in model name", fields: { name: "bad\0name" } },
+      { name: "oversized model name", fields: { name: "x".repeat(257) } },
+      { name: "non-array parameters", fields: { supported_parameters: "temperature" } },
+      {
+        name: "too many parameters",
+        fields: { supported_parameters: Array.from({ length: 129 }, () => "temperature") },
+      },
+      {
+        name: "non-array input modalities",
+        fields: { architecture: { input_modalities: "text" } },
+      },
+      { name: "negative output limit", fields: { top_provider: { max_completion_tokens: -1 } } },
+      { name: "fractional output limit", fields: { top_provider: { max_completion_tokens: 1.5 } } },
+      {
+        name: "unsafe output limit integer",
+        fields: { top_provider: { max_completion_tokens: Number.MAX_SAFE_INTEGER + 1 } },
+      },
+      { name: "non-boolean mandatory reasoning", fields: { reasoning: { mandatory: "true" } } },
+      {
+        name: "duplicate reasoning efforts",
+        fields: { reasoning: { supported_efforts: ["high", "high"] } },
+      },
+      {
+        name: "credential in reasoning effort",
+        fields: { reasoning: { supported_efforts: [PROVIDER_KEY] } },
+      },
+    ].map(({ name, fields }) => ({
+      name,
+      catalog: { data: [{ ...openRouterModel(), ...fields }] },
+    })),
+  ])("rejects invalid catalogs: $name", async ({ catalog }) => {
     const http = mockHttp([Response.json(catalog)]);
     const result = await createOpenRouterAdapter(http.transport).listModels(input());
     expect(result).toEqual({ ok: false, error: invalidResponse });
@@ -203,10 +221,16 @@ describe("OpenRouter move requests and responses", () => {
   });
 
   it.each([
-    undefined,
-    unknownOpenRouterCapabilities,
-    { ...openRouterFixture.capabilities, parameters: unknownOpenRouterCapabilities.parameters },
-  ])("omits unknown parameters without inventing defaults", async (capabilities) => {
+    { name: "absent capabilities", capabilities: undefined },
+    { name: "unknown capabilities", capabilities: unknownOpenRouterCapabilities },
+    {
+      name: "known model with unknown parameter support",
+      capabilities: {
+        ...openRouterFixture.capabilities,
+        parameters: unknownOpenRouterCapabilities.parameters,
+      },
+    },
+  ])("omits unknown parameters: $name", async ({ capabilities }) => {
     const http = mockHttp([Response.json(openRouterResponse())]);
     const request = input();
     delete (request as { capabilities?: unknown }).capabilities;
@@ -218,14 +242,22 @@ describe("OpenRouter move requests and responses", () => {
   });
 
   it.each([
-    { modelId: `vendor/${PROVIDER_KEY}` },
-    { modelId: "vendor/../model" },
-    { parameters: { temperature: 3 } },
-    { parameters: { reasoningEffort: "invented" } },
-    { parameters: { maxOutputTokens: 64_001 } },
-    { parameters: { maxOutputTokens: -1 } },
-    { capabilities: { ...unknownOpenRouterCapabilities, moveGeneration: "unsupported" as const } },
-  ])("rejects unsupported models or invalid settings before dispatch: %j", async (fields) => {
+    { name: "credential in model ID", fields: { modelId: `vendor/${PROVIDER_KEY}` } },
+    { name: "parent traversal model ID", fields: { modelId: "vendor/../model" } },
+    { name: "temperature above maximum", fields: { parameters: { temperature: 3 } } },
+    {
+      name: "unsupported reasoning effort",
+      fields: { parameters: { reasoningEffort: "invented" } },
+    },
+    { name: "output tokens above maximum", fields: { parameters: { maxOutputTokens: 64_001 } } },
+    { name: "negative output tokens", fields: { parameters: { maxOutputTokens: -1 } } },
+    {
+      name: "unsupported move generation",
+      fields: {
+        capabilities: { ...unknownOpenRouterCapabilities, moveGeneration: "unsupported" as const },
+      },
+    },
+  ])("rejects models or settings before dispatch: $name", async ({ fields }) => {
     const http = mockHttp([]);
     expect(
       await createOpenRouterAdapter(http.transport).requestMove({ ...input(), ...fields }),
@@ -273,14 +305,17 @@ describe("OpenRouter move requests and responses", () => {
   });
 
   it.each([
-    '{"move":"e5"}',
-    '{"move":"e7e5","extra":true}',
-    '{"move":"e7e5","commentary":null}',
-    '```json\n{"move":"e7e5"}\n```',
-    '{"move":',
-    "",
-    JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-  ])("does not repair malformed model JSON: %s", async (text) => {
+    { name: "SAN move", text: '{"move":"e5"}' },
+    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
+    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
+    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
+    { name: "incomplete JSON", text: '{"move":' },
+    { name: "empty text", text: "" },
+    {
+      name: "oversized commentary",
+      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
+    },
+  ])("rejects malformed model JSON: $name", async ({ text }) => {
     const http = mockHttp([
       Response.json(openRouterResponse(text, openRouterFixture.reportedUsage)),
     ]);
@@ -310,105 +345,273 @@ describe("OpenRouter move requests and responses", () => {
   });
 
   it.each([
-    {},
-    { choices: [] },
-    { choices: [openRouterResponse().choices[0], openRouterResponse().choices[0]] },
+    { name: "missing choices", response: {} },
+    { name: "empty choices", response: { choices: [] } },
+    {
+      name: "multiple choices",
+      response: { choices: [openRouterResponse().choices[0], openRouterResponse().choices[0]] },
+    },
     ...[
-      { index: 1 },
-      { finish_reason: null },
-      { message: null },
-      { message: { role: "user", content: "text" } },
-      { message: { role: "assistant", content: [{ type: "image_url", image_url: PROVIDER_KEY }] } },
-      { message: { role: "assistant", content: "x".repeat(64_001) } },
-    ].map((fields) => ({
-      ...openRouterResponse(),
-      choices: [{ ...openRouterResponse().choices[0], ...fields }],
+      { name: "nonzero choice index", fields: { index: 1 } },
+      { name: "null finish reason", fields: { finish_reason: null } },
+      { name: "null message", fields: { message: null } },
+      { name: "user message role", fields: { message: { role: "user", content: "text" } } },
+      {
+        name: "image content",
+        fields: {
+          message: { role: "assistant", content: [{ type: "image_url", image_url: PROVIDER_KEY }] },
+        },
+      },
+      {
+        name: "oversized visible content",
+        fields: { message: { role: "assistant", content: "x".repeat(64_001) } },
+      },
+    ].map(({ name, fields }) => ({
+      name,
+      response: {
+        ...openRouterResponse(),
+        choices: [{ ...openRouterResponse().choices[0], ...fields }],
+      },
     })),
     ...[
-      "unavailable",
-      { prompt_tokens: -1 },
-      { completion_tokens: 1.5 },
-      { total_tokens: "50" },
-      { prompt_tokens: Number.MAX_SAFE_INTEGER + 1 },
-    ].map((usage) => ({ ...openRouterResponse(), usage })),
-    ...[null, {}, { code: "429" }, { code: 200 }, { code: 429, metadata: { error_type: 1 } }].map(
-      (error) => ({ ...openRouterResponse(), error }),
-    ),
-  ])(
-    "rejects malformed envelopes/usage rather than counting a model-invalid attempt: %j",
-    async (response) => {
-      const http = mockHttp([Response.json(response)]);
-      expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
-        ok: false,
-        error: invalidResponse,
-      });
-    },
-  );
+      { name: "non-object usage", usage: "unavailable" },
+      { name: "negative prompt tokens", usage: { prompt_tokens: -1 } },
+      { name: "fractional completion tokens", usage: { completion_tokens: 1.5 } },
+      { name: "non-numeric total tokens", usage: { total_tokens: "50" } },
+      {
+        name: "unsafe prompt token integer",
+        usage: { prompt_tokens: Number.MAX_SAFE_INTEGER + 1 },
+      },
+    ].map(({ name, usage }) => ({ name, response: { ...openRouterResponse(), usage } })),
+    ...[
+      { name: "null error", error: null },
+      { name: "empty error", error: {} },
+      { name: "non-numeric error code", error: { code: "429" } },
+      { name: "success error code", error: { code: 200 } },
+      { name: "non-string error type", error: { code: 429, metadata: { error_type: 1 } } },
+    ].map(({ name, error }) => ({ name, response: { ...openRouterResponse(), error } })),
+  ])("rejects malformed envelopes or usage: $name", async ({ response }) => {
+    const http = mockHttp([Response.json(response)]);
+    expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
+      ok: false,
+      error: invalidResponse,
+    });
+  });
 });
 
 describe("OpenRouter router and upstream failures", () => {
   it.each([
-    [401, 401, undefined, { code: "provider_auth" }],
-    [401, 401, { error_type: null }, { code: "provider_auth" }],
-    [401, 401, { provider_name: null, provider_code: null }, { code: "provider_auth" }],
-    [
-      200,
-      429,
-      { error_type: null, provider_name: null, provider_code: null },
-      { code: "provider_quota" },
-    ],
-    [401, 401, { error_type: null, provider_name: "Upstream", provider_code: null }, upstream],
-    [
-      401,
-      401,
-      { error_type: null, provider_name: null, provider_code: "invalid_api_key" },
-      upstream,
-    ],
-    [
-      200,
-      502,
-      { error_type: "provider_unavailable", provider_name: null, provider_code: null },
-      invalidResponse,
-    ],
-    [
-      200,
-      502,
-      { error_type: "rate_limit_exceeded", provider_name: null, provider_code: null },
-      { code: "provider_quota" },
-    ],
-    [403, 403, undefined, upstream],
-    [200, 401, { provider_name: "Upstream" }, upstream],
-    [502, 401, { provider_name: "Upstream" }, upstream],
-    [200, 429, { provider_name: "Upstream" }, { code: "provider_quota" }],
-    [502, 502, { error_type: "rate_limit_exceeded" }, { code: "provider_quota" }],
-    [200, 402, { error_type: "payment_required" }, { code: "provider_quota" }],
-    [200, 400, { error_type: "token_limit_exceeded" }, { code: "provider_quota" }],
-    [
-      200,
-      400,
-      { error_type: "max_tokens_exceeded" },
-      { code: "model_invalid", reason: "truncated_output" },
-    ],
-    [200, 403, { error_type: "refusal" }, { code: "model_invalid", reason: "refusal" }],
-    [403, 403, { error_type: "refusal" }, { code: "model_invalid", reason: "refusal" }],
-    [200, 403, { error_type: "content_policy_violation" }, upstream],
-    [200, 401, { error_type: "authentication" }, upstream],
-    [200, 403, { error_type: "permission_denied" }, upstream],
-    [
-      200,
-      404,
-      { error_type: "not_found" },
-      { code: "provider_unavailable", reason: "unsupported_model" },
-    ],
-    [200, 502, { error_type: "provider_unavailable" }, invalidResponse],
-    [200, 504, { error_type: "timeout" }, { code: "provider_timeout" }],
-    [200, 400, { error_type: "context_length_exceeded" }, upstream],
-    [200, 400, { error_type: "invalid_request" }, upstream],
-    [200, 503, { error_type: "provider_overloaded" }, upstream],
-    [200, 500, { error_type: "server" }, upstream],
-    [200, 500, { error_type: "unmapped" }, upstream],
-    [200, 500, { error_type: "future-code" }, upstream],
-  ] as const)("normalizes HTTP %i / error %i / %j", async (status, code, metadata, error) => {
+    {
+      name: "HTTP 401 router auth without metadata",
+      status: 401,
+      code: 401,
+      metadata: undefined,
+      error: { code: "provider_auth" },
+    },
+    {
+      name: "HTTP 401 router auth with null type",
+      status: 401,
+      code: 401,
+      metadata: { error_type: null },
+      error: { code: "provider_auth" },
+    },
+    {
+      name: "HTTP 401 router auth with null provider fields",
+      status: 401,
+      code: 401,
+      metadata: { provider_name: null, provider_code: null },
+      error: { code: "provider_auth" },
+    },
+    {
+      name: "HTTP 200 quota with all metadata null",
+      status: 200,
+      code: 429,
+      metadata: { error_type: null, provider_name: null, provider_code: null },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 401 upstream named with null type and code",
+      status: 401,
+      code: 401,
+      metadata: { error_type: null, provider_name: "Upstream", provider_code: null },
+      error: upstream,
+    },
+    {
+      name: "HTTP 401 upstream auth code with null type and name",
+      status: 401,
+      code: 401,
+      metadata: { error_type: null, provider_name: null, provider_code: "invalid_api_key" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 unavailable with null provider fields",
+      status: 200,
+      code: 502,
+      metadata: { error_type: "provider_unavailable", provider_name: null, provider_code: null },
+      error: invalidResponse,
+    },
+    {
+      name: "HTTP 200 rate limit with null provider fields",
+      status: 200,
+      code: 502,
+      metadata: { error_type: "rate_limit_exceeded", provider_name: null, provider_code: null },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 403 ambiguous denial",
+      status: 403,
+      code: 403,
+      metadata: undefined,
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 upstream auth",
+      status: 200,
+      code: 401,
+      metadata: { provider_name: "Upstream" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 502 upstream auth",
+      status: 502,
+      code: 401,
+      metadata: { provider_name: "Upstream" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 upstream quota",
+      status: 200,
+      code: 429,
+      metadata: { provider_name: "Upstream" },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 502 wrapped rate limit",
+      status: 502,
+      code: 502,
+      metadata: { error_type: "rate_limit_exceeded" },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 200 payment required",
+      status: 200,
+      code: 402,
+      metadata: { error_type: "payment_required" },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 200 token limit",
+      status: 200,
+      code: 400,
+      metadata: { error_type: "token_limit_exceeded" },
+      error: { code: "provider_quota" },
+    },
+    {
+      name: "HTTP 200 output truncation",
+      status: 200,
+      code: 400,
+      metadata: { error_type: "max_tokens_exceeded" },
+      error: { code: "model_invalid", reason: "truncated_output" },
+    },
+    {
+      name: "HTTP 200 refusal",
+      status: 200,
+      code: 403,
+      metadata: { error_type: "refusal" },
+      error: { code: "model_invalid", reason: "refusal" },
+    },
+    {
+      name: "HTTP 403 refusal",
+      status: 403,
+      code: 403,
+      metadata: { error_type: "refusal" },
+      error: { code: "model_invalid", reason: "refusal" },
+    },
+    {
+      name: "HTTP 200 content policy",
+      status: 200,
+      code: 403,
+      metadata: { error_type: "content_policy_violation" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 upstream authentication type",
+      status: 200,
+      code: 401,
+      metadata: { error_type: "authentication" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 permission denial",
+      status: 200,
+      code: 403,
+      metadata: { error_type: "permission_denied" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 model not found",
+      status: 200,
+      code: 404,
+      metadata: { error_type: "not_found" },
+      error: { code: "provider_unavailable", reason: "unsupported_model" },
+    },
+    {
+      name: "HTTP 200 unavailable without provider fields",
+      status: 200,
+      code: 502,
+      metadata: { error_type: "provider_unavailable" },
+      error: invalidResponse,
+    },
+    {
+      name: "HTTP 200 timeout",
+      status: 200,
+      code: 504,
+      metadata: { error_type: "timeout" },
+      error: { code: "provider_timeout" },
+    },
+    {
+      name: "HTTP 200 context length",
+      status: 200,
+      code: 400,
+      metadata: { error_type: "context_length_exceeded" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 invalid request",
+      status: 200,
+      code: 400,
+      metadata: { error_type: "invalid_request" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 overload",
+      status: 200,
+      code: 503,
+      metadata: { error_type: "provider_overloaded" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 server error",
+      status: 200,
+      code: 500,
+      metadata: { error_type: "server" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 unmapped error",
+      status: 200,
+      code: 500,
+      metadata: { error_type: "unmapped" },
+      error: upstream,
+    },
+    {
+      name: "HTTP 200 future error type",
+      status: 200,
+      code: 500,
+      metadata: { error_type: "future-code" },
+      error: upstream,
+    },
+  ] as const)("normalizes router error: $name", async ({ status, code, metadata, error }) => {
     const http = mockHttp([
       openRouterError(
         status,
@@ -505,14 +708,15 @@ describe("OpenRouter router and upstream failures", () => {
     expect(http.transport).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["not json", "x".repeat(4 * 1024 * 1024 + 1), new Uint8Array([0xff])])(
-    "rejects invalid JSON, oversized and non-UTF-8 bodies",
-    async (body) => {
-      const http = mockHttp([new Response(body)]);
-      expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
-        ok: false,
-        error: invalidResponse,
-      });
-    },
-  );
+  it.each([
+    { name: "invalid JSON", body: "not json" },
+    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
+    { name: "invalid UTF-8", body: new Uint8Array([0xff]) },
+  ])("rejects response body: $name", async ({ body }) => {
+    const http = mockHttp([new Response(body)]);
+    expect(await createOpenRouterAdapter(http.transport).requestMove(input())).toMatchObject({
+      ok: false,
+      error: invalidResponse,
+    });
+  });
 });

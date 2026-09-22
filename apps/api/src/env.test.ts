@@ -36,14 +36,18 @@ describe("parseApiEnvironment", () => {
     ).toBe(false);
   });
 
-  it.each(["TRUE", "1", "yes", "", true, 1])(
-    "rejects ambiguous sandbox flags: %j",
-    (SANDBOX_ENABLED) => {
-      expect(() => parseApiEnvironment({ ...validEnvironment, SANDBOX_ENABLED })).toThrow(
-        "SANDBOX_ENABLED",
-      );
-    },
-  );
+  it.each([
+    { name: "uppercase string", SANDBOX_ENABLED: "TRUE" },
+    { name: "numeric string", SANDBOX_ENABLED: "1" },
+    { name: "affirmative string", SANDBOX_ENABLED: "yes" },
+    { name: "empty string", SANDBOX_ENABLED: "" },
+    { name: "boolean", SANDBOX_ENABLED: true },
+    { name: "number", SANDBOX_ENABLED: 1 },
+  ])("rejects ambiguous sandbox flag: $name", ({ SANDBOX_ENABLED }) => {
+    expect(() => parseApiEnvironment({ ...validEnvironment, SANDBOX_ENABLED })).toThrow(
+      "SANDBOX_ENABLED",
+    );
+  });
 
   it.each(["0", "-1", "1.5", "", "31536001", "secret-canary"])(
     "rejects invalid guest expiry: %s",

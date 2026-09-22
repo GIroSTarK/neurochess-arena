@@ -62,15 +62,21 @@ describe("ordinary AI game configuration", () => {
   });
 
   it.each([
-    { ...configuration, mode: "sandbox" },
-    { ...configuration, mode: "human_vs_human" },
-    { ...configuration, mode: "ai_vs_human" },
-    { ...configuration, seats: { white: human, black: ai } },
-    { mode: "ai_vs_human", seats: { white: human, black: human } },
-    { ...configuration, seats: { white: ai } },
-    { ...configuration, seats: [ai, ai] },
-    { ...configuration, seats: { white: ai, black: ai, red: ai } },
-  ])("rejects mismatched modes and seat identities: %j", (input) => {
+    { name: "Sandbox mode", input: { ...configuration, mode: "sandbox" } },
+    { name: "human-only mode", input: { ...configuration, mode: "human_vs_human" } },
+    { name: "AI versus human with two AI seats", input: { ...configuration, mode: "ai_vs_human" } },
+    {
+      name: "AI versus AI with a human seat",
+      input: { ...configuration, seats: { white: human, black: ai } },
+    },
+    {
+      name: "AI versus human with two human seats",
+      input: { mode: "ai_vs_human", seats: { white: human, black: human } },
+    },
+    { name: "missing black seat", input: { ...configuration, seats: { white: ai } } },
+    { name: "array of seats", input: { ...configuration, seats: [ai, ai] } },
+    { name: "extra seat", input: { ...configuration, seats: { white: ai, black: ai, red: ai } } },
+  ])("rejects mismatched mode or seats: $name", ({ input }) => {
     expect(aiGameConfigurationSchema.safeParse(input).success).toBe(false);
   });
 
@@ -102,24 +108,30 @@ describe("ordinary AI game configuration", () => {
   });
 
   it.each([
-    { provider: "mock" },
-    { provider: "unknown" },
-    { modelId: "" },
-    { modelId: "m\n" },
-    { modelId: "m".repeat(257) },
-    { modelId: "model?key=sentinel" },
-    { parameters: null },
-    { parameters: [] },
-    { parameters: { temperature: -1 } },
-    { parameters: { temperature: Infinity } },
-    { parameters: { temperature: "0.5" } },
-    { parameters: { reasoningEffort: "" } },
-    { parameters: { reasoningEffort: "r".repeat(65) } },
-    { parameters: { maxOutputTokens: 0 } },
-    { parameters: { maxOutputTokens: 1.5 } },
-    { parameters: { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 } },
-    { parameters: { nested: { temperature: 1 } } },
-  ])("rejects malformed selection and parameter metadata: %j", (patch) => {
+    { name: "mock provider", patch: { provider: "mock" } },
+    { name: "unknown provider", patch: { provider: "unknown" } },
+    { name: "empty model ID", patch: { modelId: "" } },
+    { name: "newline in model ID", patch: { modelId: "m\n" } },
+    { name: "oversized model ID", patch: { modelId: "m".repeat(257) } },
+    { name: "query in model ID", patch: { modelId: "model?key=sentinel" } },
+    { name: "null parameters", patch: { parameters: null } },
+    { name: "array parameters", patch: { parameters: [] } },
+    { name: "negative temperature", patch: { parameters: { temperature: -1 } } },
+    { name: "Infinity temperature", patch: { parameters: { temperature: Infinity } } },
+    { name: "string temperature", patch: { parameters: { temperature: "0.5" } } },
+    { name: "empty reasoning effort", patch: { parameters: { reasoningEffort: "" } } },
+    {
+      name: "oversized reasoning effort",
+      patch: { parameters: { reasoningEffort: "r".repeat(65) } },
+    },
+    { name: "zero output tokens", patch: { parameters: { maxOutputTokens: 0 } } },
+    { name: "fractional output tokens", patch: { parameters: { maxOutputTokens: 1.5 } } },
+    {
+      name: "unsafe output token integer",
+      patch: { parameters: { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 } },
+    },
+    { name: "nested parameters", patch: { parameters: { nested: { temperature: 1 } } } },
+  ])("rejects malformed selection: $name", ({ patch }) => {
     expect(
       aiGameConfigurationSchema.safeParse({
         ...configuration,

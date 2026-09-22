@@ -9,13 +9,16 @@ describe("integration database safety", () => {
   });
 
   it.each([
-    undefined,
-    "",
-    "postgresql://localhost/neurochess",
-    "https://localhost/neurochess_test",
-    "postgresql://localhost/neurochess_test?options=-csearch_path=public",
-    "canary-secret",
-  ])("rejects unsafe test configuration without leaking its value (%j)", (url) => {
+    { name: "undefined URL", url: undefined },
+    { name: "empty URL", url: "" },
+    { name: "database without test suffix", url: "postgresql://localhost/neurochess" },
+    { name: "non-PostgreSQL protocol", url: "https://localhost/neurochess_test" },
+    {
+      name: "connection-level options",
+      url: "postgresql://localhost/neurochess_test?options=-csearch_path=public",
+    },
+    { name: "secret canary", url: "canary-secret" },
+  ])("rejects unsafe test database configuration: $name", ({ url }) => {
     expect(() => parseTestDatabaseUrl(url)).toThrow("TEST_DATABASE_URL");
     try {
       parseTestDatabaseUrl(url);

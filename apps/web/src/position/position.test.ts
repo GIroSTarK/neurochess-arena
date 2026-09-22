@@ -16,20 +16,20 @@ describe("defensive presentation parser", () => {
   });
 
   it.each([
-    "",
-    "8/8/8/8/8/8/8 w - - 0 1",
-    "9/8/8/8/8/8/8/8 w - - 0 1",
-    "7/8/8/8/8/8/8/8 w - - 0 1",
-    "8K/8/8/8/8/8/8/8 w - - 0 1",
-    "8/8/8/8/8/8/8/X7 w - - 0 1",
-    "8/8/8/8/8/8/8/8 x - - 0 1",
-    "8/8/8/8/8/8/8/8 w <script> - 0 1",
-    "8/8/8/8/8/8/8/8 w - e4 0 1",
-    "8/8/8/8/8/8/8/8 w - - -1 1",
-    "8/8/8/8/8/8/8/8 w - - 0 0",
-    "8/8/8/8/8/8/8/8 w - - 9007199254740992 1",
-    " ".repeat(200),
-  ])("rejects malformed presentation input", (fen) => {
+    { name: "empty FEN", fen: "" },
+    { name: "too few ranks", fen: "8/8/8/8/8/8/8 w - - 0 1" },
+    { name: "invalid empty-square digit", fen: "9/8/8/8/8/8/8/8 w - - 0 1" },
+    { name: "rank underflow", fen: "7/8/8/8/8/8/8/8 w - - 0 1" },
+    { name: "rank overflow", fen: "8K/8/8/8/8/8/8/8 w - - 0 1" },
+    { name: "unknown piece", fen: "8/8/8/8/8/8/8/X7 w - - 0 1" },
+    { name: "invalid side to move", fen: "8/8/8/8/8/8/8/8 x - - 0 1" },
+    { name: "markup in castling rights", fen: "8/8/8/8/8/8/8/8 w <script> - 0 1" },
+    { name: "invalid en passant rank", fen: "8/8/8/8/8/8/8/8 w - e4 0 1" },
+    { name: "negative halfmove clock", fen: "8/8/8/8/8/8/8/8 w - - -1 1" },
+    { name: "zero fullmove number", fen: "8/8/8/8/8/8/8/8 w - - 0 0" },
+    { name: "unsafe halfmove integer", fen: "8/8/8/8/8/8/8/8 w - - 9007199254740992 1" },
+    { name: "oversized whitespace", fen: " ".repeat(200) },
+  ])("rejects malformed presentation input: $name", ({ fen }) => {
     expect(parsePosition(fen)).toBeNull();
   });
 });

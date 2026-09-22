@@ -315,10 +315,16 @@ describe("private ownership and sandbox authority", () => {
   });
 
   it.each([
-    { sandboxEnabled: false, nodeEnv: "test" as const },
-    { sandboxEnabled: false, nodeEnv: "production" as const },
-    { sandboxEnabled: true, nodeEnv: "production" as const },
-  ])("rejects creation and existing sandbox access under %j", async (options) => {
+    { name: "disabled in test", options: { sandboxEnabled: false, nodeEnv: "test" as const } },
+    {
+      name: "disabled in production",
+      options: { sandboxEnabled: false, nodeEnv: "production" as const },
+    },
+    {
+      name: "enabled in production",
+      options: { sandboxEnabled: true, nodeEnv: "production" as const },
+    },
+  ])("rejects Sandbox access: $name", async ({ options }) => {
     const guest = await harness.guest(api);
     const initial = await createSandbox(api, guest);
     const disabled = await harness.createApi(options);

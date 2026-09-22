@@ -101,65 +101,82 @@ describe("Google discovery", () => {
     });
   });
 
-  it.each([{}, { models: [] }, { models: [], nextPageToken: "" }])(
-    "accepts empty protobuf catalogs: %j",
-    async (catalog) => {
-      const http = mockHttp([Response.json(catalog)]);
-      expect(
-        await createGoogleAdapter(http.transport).listModels(contractInput(googleFixture)),
-      ).toEqual({ ok: true, models: [] });
-    },
-  );
+  it.each([
+    { name: "omitted models", catalog: {} },
+    { name: "empty models", catalog: { models: [] } },
+    { name: "empty models and cursor", catalog: { models: [], nextPageToken: "" } },
+  ])("accepts empty protobuf catalog: $name", async ({ catalog }) => {
+    const http = mockHttp([Response.json(catalog)]);
+    expect(
+      await createGoogleAdapter(http.transport).listModels(contractInput(googleFixture)),
+    ).toEqual({ ok: true, models: [] });
+  });
 
   it.each([
-    { models: {} },
-    { models: null },
-    { nextPageToken: "next" },
-    googleCatalog(["duplicate", "duplicate"]),
-    googleCatalog([PROVIDER_KEY]),
-    ...[PROVIDER_KEY, "line\nbreak", "trailing\n", "x".repeat(2049), 1, null].map(
-      (nextPageToken) => ({
+    { name: "non-array models", catalog: { models: {} } },
+    { name: "null models", catalog: { models: null } },
+    { name: "cursor without models", catalog: { nextPageToken: "next" } },
+    { name: "duplicate model IDs", catalog: googleCatalog(["duplicate", "duplicate"]) },
+    { name: "credential in model ID", catalog: googleCatalog([PROVIDER_KEY]) },
+    ...[
+      { name: "credential in cursor", nextPageToken: PROVIDER_KEY },
+      { name: "embedded newline in cursor", nextPageToken: "line\nbreak" },
+      { name: "trailing newline in cursor", nextPageToken: "trailing\n" },
+      { name: "oversized cursor", nextPageToken: "x".repeat(2049) },
+      { name: "numeric cursor", nextPageToken: 1 },
+      { name: "null cursor", nextPageToken: null },
+    ].map(({ name, nextPageToken }) => ({
+      name,
+      catalog: {
         ...googleCatalog(),
         nextPageToken,
-      }),
-    ),
+      },
+    })),
     ...[
-      { name: "https://evil.example/model" },
-      { name: "models/a/b" },
-      { name: "models/../models" },
-      { name: "models/a:generateContent" },
-      { name: "models/a?key=value" },
-      { name: "models/a%2fb" },
-      { name: "models/bad\n" },
-      { name: `models/${"x".repeat(257)}` },
-      { displayName: PROVIDER_KEY },
-      { displayName: "bad\0name" },
-      { displayName: "trailing\n" },
-      { displayName: "x".repeat(129) },
-      { supportedGenerationMethods: "generateContent" },
-      { supportedGenerationMethods: [1] },
-      { supportedGenerationMethods: Array.from({ length: 129 }, () => "generateContent") },
-      { outputTokenLimit: -1 },
-      { outputTokenLimit: 0 },
-      { outputTokenLimit: 1.5 },
-      { outputTokenLimit: Number.MAX_SAFE_INTEGER + 1 },
-      { maxTemperature: -1 },
-      { maxTemperature: "2" },
-    ].map((fields) => ({ models: [{ ...googleModel(), ...fields }] })),
-  ])(
-    "rejects malformed or credential-echoing catalogs before further dispatch: %j",
-    async (catalog) => {
-      const http = mockHttp([Response.json(catalog)]);
-      const result = await createGoogleAdapter(http.transport).listModels(
-        contractInput(googleFixture),
-      );
-      expect(result).toEqual({ ok: false, error: invalidResponse });
-      expect(JSON.stringify({ result, urls: http.requests.map(({ url }) => url) })).not.toContain(
-        PROVIDER_KEY,
-      );
-      expect(http.transport).toHaveBeenCalledTimes(1);
-    },
-  );
+      { name: "absolute URL model name", fields: { name: "https://evil.example/model" } },
+      { name: "nested model path", fields: { name: "models/a/b" } },
+      { name: "parent traversal model name", fields: { name: "models/../models" } },
+      { name: "method suffix in model name", fields: { name: "models/a:generateContent" } },
+      { name: "query in model name", fields: { name: "models/a?key=value" } },
+      { name: "encoded slash in model name", fields: { name: "models/a%2fb" } },
+      { name: "newline in model name", fields: { name: "models/bad\n" } },
+      { name: "oversized model name", fields: { name: `models/${"x".repeat(257)}` } },
+      { name: "credential in display name", fields: { displayName: PROVIDER_KEY } },
+      { name: "NUL in display name", fields: { displayName: "bad\0name" } },
+      { name: "newline in display name", fields: { displayName: "trailing\n" } },
+      { name: "oversized display name", fields: { displayName: "x".repeat(129) } },
+      {
+        name: "non-array generation methods",
+        fields: { supportedGenerationMethods: "generateContent" },
+      },
+      { name: "non-string generation method", fields: { supportedGenerationMethods: [1] } },
+      {
+        name: "too many generation methods",
+        fields: {
+          supportedGenerationMethods: Array.from({ length: 129 }, () => "generateContent"),
+        },
+      },
+      { name: "negative output limit", fields: { outputTokenLimit: -1 } },
+      { name: "zero output limit", fields: { outputTokenLimit: 0 } },
+      { name: "fractional output limit", fields: { outputTokenLimit: 1.5 } },
+      {
+        name: "unsafe output limit integer",
+        fields: { outputTokenLimit: Number.MAX_SAFE_INTEGER + 1 },
+      },
+      { name: "negative maximum temperature", fields: { maxTemperature: -1 } },
+      { name: "non-numeric maximum temperature", fields: { maxTemperature: "2" } },
+    ].map(({ name, fields }) => ({ name, catalog: { models: [{ ...googleModel(), ...fields }] } })),
+  ])("rejects invalid catalogs: $name", async ({ catalog }) => {
+    const http = mockHttp([Response.json(catalog)]);
+    const result = await createGoogleAdapter(http.transport).listModels(
+      contractInput(googleFixture),
+    );
+    expect(result).toEqual({ ok: false, error: invalidResponse });
+    expect(JSON.stringify({ result, urls: http.requests.map(({ url }) => url) })).not.toContain(
+      PROVIDER_KEY,
+    );
+    expect(http.transport).toHaveBeenCalledTimes(1);
+  });
 
   it("rejects duplicate IDs, cursor cycles and failed later pages without returning partial catalogs", async () => {
     for (const last of [
@@ -228,19 +245,19 @@ describe("Google generation requests", () => {
     expect(request.credentials).toBe("omit");
   });
 
-  it.each([undefined, unknownGoogleCapabilities])(
-    "attempts unknown capabilities with no optional fields: %j",
-    async (capabilities) => {
-      const http = mockHttp([Response.json(googleResponse())]);
-      const input = { ...contractInput(googleFixture), modelId: "future-text-model" };
-      if (capabilities === undefined) delete input.capabilities;
-      else input.capabilities = capabilities;
-      expect(await createGoogleAdapter(http.transport).requestMove(input)).toMatchObject({
-        ok: true,
-      });
-      expect(await http.requests[0]!.json()).not.toHaveProperty("generationConfig");
-    },
-  );
+  it.each([
+    { name: "absent capabilities", capabilities: undefined },
+    { name: "unknown capabilities", capabilities: unknownGoogleCapabilities },
+  ])("omits optional fields with $name", async ({ capabilities }) => {
+    const http = mockHttp([Response.json(googleResponse())]);
+    const input = { ...contractInput(googleFixture), modelId: "future-text-model" };
+    if (capabilities === undefined) delete input.capabilities;
+    else input.capabilities = capabilities;
+    expect(await createGoogleAdapter(http.transport).requestMove(input)).toMatchObject({
+      ok: true,
+    });
+    expect(await http.requests[0]!.json()).not.toHaveProperty("generationConfig");
+  });
 
   it("rejects non-generation models without inference", async () => {
     const http = mockHttp([]);
@@ -257,11 +274,11 @@ describe("Google generation requests", () => {
   });
 
   it.each([
-    { maxOutputTokens: 0 },
-    { maxOutputTokens: 65_537 },
-    { temperature: 2.1 },
-    { temperature: -1 },
-  ])("rejects invalid settings before dispatch: %j", async (parameters) => {
+    { name: "zero output tokens", parameters: { maxOutputTokens: 0 } },
+    { name: "output tokens above maximum", parameters: { maxOutputTokens: 65_537 } },
+    { name: "temperature above maximum", parameters: { temperature: 2.1 } },
+    { name: "negative temperature", parameters: { temperature: -1 } },
+  ])("rejects invalid settings: $name", async ({ parameters }) => {
     const http = mockHttp([]);
     expect(
       await createGoogleAdapter(http.transport).requestMove({
@@ -273,15 +290,15 @@ describe("Google generation requests", () => {
   });
 
   it.each([
-    "bad\nmodel",
-    PROVIDER_KEY,
-    "models/gemini-2.5-flash",
-    "../models",
-    "a/b",
-    "a?key=value",
-    "a:generateContent",
-    "a%2fb",
-  ])("rejects unsafe or noncanonical selected identifiers: %s", async (modelId) => {
+    { name: "newline", modelId: "bad\nmodel" },
+    { name: "credential echo", modelId: PROVIDER_KEY },
+    { name: "resource prefix", modelId: "models/gemini-2.5-flash" },
+    { name: "parent traversal", modelId: "../models" },
+    { name: "nested path", modelId: "a/b" },
+    { name: "query", modelId: "a?key=value" },
+    { name: "method suffix", modelId: "a:generateContent" },
+    { name: "encoded slash", modelId: "a%2fb" },
+  ])("rejects unsafe model ID: $name", async ({ modelId }) => {
     const http = mockHttp([]);
     expect(
       await createGoogleAdapter(http.transport).requestMove({
@@ -354,14 +371,17 @@ describe("Google candidates and usage", () => {
   });
 
   it.each([
-    '{"move":"e5"}',
-    '{"move":"e7e5","extra":true}',
-    '{"move":"e7e5","commentary":null}',
-    '```json\n{"move":"e7e5"}\n```',
-    '{"move":',
-    "",
-    JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
-  ])("does not repair invalid model JSON: %s", async (text) => {
+    { name: "SAN move", text: '{"move":"e5"}' },
+    { name: "extra field", text: '{"move":"e7e5","extra":true}' },
+    { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
+    { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
+    { name: "incomplete JSON", text: '{"move":' },
+    { name: "empty text", text: "" },
+    {
+      name: "oversized commentary",
+      text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
+    },
+  ])("rejects malformed model JSON: $name", async ({ text }) => {
     const http = mockHttp([Response.json(googleResponse(text, googleFixture.reportedUsage))]);
     expect(
       await createGoogleAdapter(http.transport).requestMove(contractInput(googleFixture)),
@@ -431,44 +451,62 @@ describe("Google candidates and usage", () => {
   );
 
   it.each([
-    {},
-    { candidates: [] },
-    { candidates: [{}] },
+    { name: "missing candidates", response: {} },
+    { name: "empty candidates", response: { candidates: [] } },
+    { name: "empty candidate", response: { candidates: [{}] } },
     {
-      ...googleResponse(),
-      candidates: [googleResponse().candidates[0], googleResponse().candidates[0]],
+      name: "multiple candidates",
+      response: {
+        ...googleResponse(),
+        candidates: [googleResponse().candidates[0], googleResponse().candidates[0]],
+      },
     },
-    { ...googleResponse(), promptFeedback: { blockReason: "SAFETY" } },
-    { ...googleResponse(), promptFeedback: { blockReason: "invented" } },
+    {
+      name: "blocked prompt with candidate",
+      response: { ...googleResponse(), promptFeedback: { blockReason: "SAFETY" } },
+    },
+    {
+      name: "unknown prompt block reason",
+      response: { ...googleResponse(), promptFeedback: { blockReason: "invented" } },
+    },
     ...[
-      { index: 1 },
-      { finishReason: null },
-      { finishReason: "x".repeat(129) },
-      { content: { role: "user", parts: [] } },
-      { content: { role: "model" } },
+      { name: "nonzero candidate index", candidate: { index: 1 } },
+      { name: "null finish reason", candidate: { finishReason: null } },
+      { name: "oversized finish reason", candidate: { finishReason: "x".repeat(129) } },
+      { name: "user content role", candidate: { content: { role: "user", parts: [] } } },
+      { name: "missing content parts", candidate: { content: { role: "model" } } },
       ...[
-        [{ text: 1 }],
-        [{ text: "", thought: "true" }],
-        [{ functionCall: {} }],
-        [{ inlineData: {} }],
-        [{}],
-        [{ text: "", functionCall: {} }],
-        Array.from({ length: 129 }, () => ({ text: "" })),
-      ].map((parts) => ({ content: { role: "model", parts } })),
-    ].map((candidate) => ({
-      ...googleResponse(),
-      candidates: [{ ...googleResponse().candidates[0], ...candidate }],
+        { name: "non-string text", parts: [{ text: 1 }] },
+        { name: "non-boolean thought flag", parts: [{ text: "", thought: "true" }] },
+        { name: "function call part", parts: [{ functionCall: {} }] },
+        { name: "inline data part", parts: [{ inlineData: {} }] },
+        { name: "empty part", parts: [{}] },
+        { name: "mixed text and function call", parts: [{ text: "", functionCall: {} }] },
+        { name: "too many parts", parts: Array.from({ length: 129 }, () => ({ text: "" })) },
+      ].map(({ name, parts }) => ({ name, candidate: { content: { role: "model", parts } } })),
+    ].map(({ name, candidate }) => ({
+      name,
+      response: {
+        ...googleResponse(),
+        candidates: [{ ...googleResponse().candidates[0], ...candidate }],
+      },
     })),
     ...[
-      { promptTokenCount: -1 },
-      { candidatesTokenCount: 1.5 },
-      { totalTokenCount: "50" },
-      { promptTokenCount: Number.MAX_SAFE_INTEGER + 1 },
-      { thoughtsTokenCount: "invalid" },
-      { cachedContentTokenCount: -1 },
-      "unavailable",
-    ].map((usageMetadata) => ({ ...googleResponse(), usageMetadata })),
-  ])("classifies malformed envelopes/usage as provider failures: %j", async (response) => {
+      { name: "negative prompt tokens", usageMetadata: { promptTokenCount: -1 } },
+      { name: "fractional candidate tokens", usageMetadata: { candidatesTokenCount: 1.5 } },
+      { name: "non-numeric total tokens", usageMetadata: { totalTokenCount: "50" } },
+      {
+        name: "unsafe prompt token integer",
+        usageMetadata: { promptTokenCount: Number.MAX_SAFE_INTEGER + 1 },
+      },
+      { name: "non-numeric thought tokens", usageMetadata: { thoughtsTokenCount: "invalid" } },
+      { name: "negative cache tokens", usageMetadata: { cachedContentTokenCount: -1 } },
+      { name: "non-object usage", usageMetadata: "unavailable" },
+    ].map(({ name, usageMetadata }) => ({
+      name,
+      response: { ...googleResponse(), usageMetadata },
+    })),
+  ])("rejects malformed envelopes or usage: $name", async ({ response }) => {
     const http = mockHttp([Response.json(response)]);
     expect(
       await createGoogleAdapter(http.transport).requestMove(contractInput(googleFixture)),
@@ -581,13 +619,14 @@ describe("Google transport", () => {
     ).toMatchObject({ ok: false, error: { code: "provider_unavailable", reason: "network" } });
   });
 
-  it.each(["not json", "x".repeat(4 * 1024 * 1024 + 1), new Uint8Array([0xff])])(
-    "rejects non-JSON, oversized or invalid UTF-8 bodies",
-    async (body) => {
-      const http = mockHttp([new Response(body)]);
-      expect(
-        await createGoogleAdapter(http.transport).requestMove(contractInput(googleFixture)),
-      ).toMatchObject({ ok: false, error: invalidResponse });
-    },
-  );
+  it.each([
+    { name: "invalid JSON", body: "not json" },
+    { name: "oversized body", body: "x".repeat(4 * 1024 * 1024 + 1) },
+    { name: "invalid UTF-8", body: new Uint8Array([0xff]) },
+  ])("rejects response body: $name", async ({ body }) => {
+    const http = mockHttp([new Response(body)]);
+    expect(
+      await createGoogleAdapter(http.transport).requestMove(contractInput(googleFixture)),
+    ).toMatchObject({ ok: false, error: invalidResponse });
+  });
 });

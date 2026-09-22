@@ -18,38 +18,40 @@ const request: MoveRequest = {
 describe("safe move invocation boundary", () => {
   it.each([
     {
+      name: "missing move",
       response: { ...output("e2e4"), output: { commentary: "not persisted" } },
       error: { code: "model_invalid", reason: "malformed_output" },
     },
     {
+      name: "SAN move",
       response: { ...output("e2e4"), output: { move: "e4" } },
       error: { code: "model_invalid", reason: "malformed_output" },
     },
     {
+      name: "non-numeric usage",
       response: { ...output("e2e4"), usage: { totalTokens: "unknown" } },
       error: { code: "provider_unavailable", reason: "invalid_response" },
     },
     {
+      name: "extra credential field",
       response: { ...output("e2e4"), apiKey: "secret" },
       error: { code: "provider_unavailable", reason: "invalid_response" },
     },
     {
+      name: "extra error message",
       response: { ok: false, error: { code: "provider_auth", message: "secret" } },
       error: { code: "provider_unavailable", reason: "invalid_response" },
     },
-  ])(
-    "distinguishes invalid model output from a broken adapter envelope: $error",
-    async ({ response, error }) => {
-      const adapter = {
-        ...createScriptedAdapter({ provider: "openai" }),
-        requestMove: async () => response as NormalizedMoveResponse,
-      };
-      const result = await invokeMove(adapter, request);
-      expect(result).toMatchObject({ ok: false, error, usage: null });
-      expect(JSON.stringify(result)).not.toContain("secret");
-      expect(JSON.stringify(result)).not.toContain("not persisted");
-    },
-  );
+  ])("classifies invalid adapter output: $name", async ({ response, error }) => {
+    const adapter = {
+      ...createScriptedAdapter({ provider: "openai" }),
+      requestMove: async () => response as NormalizedMoveResponse,
+    };
+    const result = await invokeMove(adapter, request);
+    expect(result).toMatchObject({ ok: false, error, usage: null });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(JSON.stringify(result)).not.toContain("not persisted");
+  });
 
   it("drops secret-bearing exceptions and preserves no cause, response or provider request ID", async () => {
     const adapter = createScriptedAdapter({

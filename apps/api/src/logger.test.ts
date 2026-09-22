@@ -26,21 +26,22 @@ describe("secret-safe logging", () => {
     expect(output).not.toContain(canary);
   });
 
-  it.each([null, "unrecognized failure", { name: 123, code: 456 }])(
-    "uses a safe fallback for unrecognized error values (%j)",
-    (error) => {
-      const chunks: string[] = [];
-      const logger = pino(createLoggerOptions("info"), {
-        write(chunk: string) {
-          chunks.push(chunk);
-        },
-      });
+  it.each([
+    { name: "null error", error: null },
+    { name: "string error", error: "unrecognized failure" },
+    { name: "non-string name and code", error: { name: 123, code: 456 } },
+  ])("uses safe error fallback: $name", ({ error }) => {
+    const chunks: string[] = [];
+    const logger = pino(createLoggerOptions("info"), {
+      write(chunk: string) {
+        chunks.push(chunk);
+      },
+    });
 
-      logger.error({ err: error }, "request failed");
+    logger.error({ err: error }, "request failed");
 
-      expect(JSON.parse(chunks.join(""))).toHaveProperty("err", { name: "UnknownError" });
-    },
-  );
+    expect(JSON.parse(chunks.join(""))).toHaveProperty("err", { name: "UnknownError" });
+  });
 
   it("removes nested credentials, raw errors, and URL queries", () => {
     const chunks: string[] = [];
