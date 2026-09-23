@@ -18,6 +18,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0010](0010-ai-failure-policy-and-invocations.md)     | Accepted   | Durable logical-turn budgets and atomic invocation outcomes    |
 | [0011](0011-ai-controller-presence-and-step.md)       | Accepted   | Controller presence fencing and atomic paused AI steps         |
 | [0012](0012-independent-sandbox-game-slot.md)         | Accepted   | Independent unfinished-game slots for Sandbox and public modes |
+| [0013](0013-principal-and-account-ownership.md)       | Accepted   | Server-derived principals and separate account ownership       |
 
 ## Status values
 

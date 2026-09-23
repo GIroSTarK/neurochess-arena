@@ -392,7 +392,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       { modelId: "m".repeat(257) },
       { modelId: "model\n" },
       { parameters: null },
-      { guestSessionId: created.ownerGuestSessionId },
+      { kind: "guest", guestSessionId: created.ownerGuestSessionId },
       { seatType: "human" as const },
     ]) {
       await expect(

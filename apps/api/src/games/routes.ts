@@ -22,10 +22,11 @@ import {
   unfinishedGameDetailsSchema,
   unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
-import { GUEST_COOKIE_NAME, type GuestIdentity, type GuestService } from "../guests/service.js";
+import { createGuestRequestIdentity } from "../guests/http.js";
+import type { GuestService } from "../guests/service.js";
 import { gameErrorMessages } from "../locales/en.js";
 import {
   AI_TURN_TIMEOUT_MS,
@@ -71,6 +72,8 @@ export async function registerGameRoutes(
   options: GameApiOptions,
 ): Promise<void> {
   const routes = app.withTypeProvider<ZodTypeProvider>();
+  const guestIdentity = createGuestRequestIdentity(options.guests);
+  const principalFor = guestIdentity.authenticate;
   let sweeping: Promise<void> | undefined;
   const sweep = () => {
     sweeping ??= options.games
@@ -119,22 +122,6 @@ export async function registerGameRoutes(
     });
     return reply.code(errorStatuses[code]).send(response);
   });
-
-  function setGuestCookie(reply: FastifyReply, identity: GuestIdentity): void {
-    reply.setCookie(GUEST_COOKIE_NAME, identity.token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-      maxAge: options.guests.ttlSeconds,
-    });
-  }
-
-  async function principalFor(request: FastifyRequest, reply: FastifyReply) {
-    const identity = await options.guests.authenticate(request.cookies[GUEST_COOKIE_NAME]);
-    setGuestCookie(reply, identity);
-    return identity.principal;
-  }
 
   const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
 
@@ -289,8 +276,7 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      const identity = await options.guests.bootstrap(request.cookies[GUEST_COOKIE_NAME]);
-      setGuestCookie(reply, identity);
+      await guestIdentity.bootstrap(request, reply);
       return { status: "ready" as const };
     },
   );

@@ -51,7 +51,7 @@ describe("durable AI failure policy and private invocation records", () => {
     async (invalidNumber) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const controller = new AbortController();
       let locks = 0;
       const repository: GameRepository = {
@@ -105,7 +105,7 @@ describe("durable AI failure policy and private invocation records", () => {
   ])("omits unsafe commentary while accepting a legal move: $name", async ({ commentary }) => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api, {
       openai: createScriptedAdapter({ provider: "openai", moves: [output("e2e4", commentary)] }),
     });
@@ -126,7 +126,7 @@ describe("durable AI failure policy and private invocation records", () => {
   it("links invalid-invalid-valid attempts and missing commentary to one accepted move with measured duration and exact parameters", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const reported = { inputTokens: 0, outputTokens: null, totalTokens: null };
     const contexts: unknown[] = [];
     const adapter = createScriptedAdapter({
@@ -190,10 +190,10 @@ describe("durable AI failure policy and private invocation records", () => {
     expect(adapter.moveCalls).toBe(3);
     const stranger = await harness.guest(api);
     await expect(
-      gamesService.invocations({ guestSessionId: stranger.id }, snapshot.gameId),
+      gamesService.invocations(stranger.principal, snapshot.gameId),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
-      gamesService.invocations({ guestSessionId: randomUUID() }, snapshot.gameId),
+      gamesService.invocations({ kind: "guest", guestSessionId: randomUUID() }, snapshot.gameId),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
@@ -202,7 +202,7 @@ describe("durable AI failure policy and private invocation records", () => {
     async (color) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const losing = createScriptedAdapter({
         provider: color === "white" ? "openai" : "anthropic",
         moves: [
@@ -267,7 +267,7 @@ describe("durable AI failure policy and private invocation records", () => {
     async (error) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const adapter = createScriptedAdapter({
         provider: "openai",
         moves: [failure(error, { inputTokens: 10, outputTokens: 0, totalTokens: null })],
@@ -320,7 +320,7 @@ describe("durable AI failure policy and private invocation records", () => {
     async (ending) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const firstAdapter = createScriptedAdapter({
         provider: "openai",
         moves: [invalid, failure({ code: "provider_auth" })],
@@ -382,7 +382,7 @@ describe("durable AI failure policy and private invocation records", () => {
   ])("preserves reported usage: $name", async ({ usage }) => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api, {
       openai: createScriptedAdapter({ provider: "openai", moves: [{ ...output("e2e4"), usage }] }),
     });
@@ -399,7 +399,7 @@ describe("durable AI failure policy and private invocation records", () => {
       const api = await harness.createApi();
       const other = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const entered = Promise.withResolvers<void>();
       const result = Promise.withResolvers<NormalizedMoveResponse>();
       const adapter = createScriptedAdapter({
@@ -452,7 +452,7 @@ describe("durable AI failure policy and private invocation records", () => {
     const api = await harness.createApi();
     const other = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gate = gatedAdapter();
     const gamesService = service(api, { openai: gate.adapter });
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
@@ -501,7 +501,7 @@ describe("durable AI failure policy and private invocation records", () => {
     async (ending) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const adapter = createScriptedAdapter({
         provider: "openai",
         moves: [
@@ -570,7 +570,7 @@ describe("durable AI failure policy and private invocation records", () => {
   it("rejects inconsistent persisted counters on private reads without changing records", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api, {
       openai: createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] }),
     });

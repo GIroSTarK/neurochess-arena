@@ -19,7 +19,8 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
-import type { GuestPrincipal } from "../guests/service.js";
+import type { Principal } from "../identity/principal.js";
+import { lockPrincipalForCleanup } from "../identity/validity.js";
 import {
   AI_MOVE_INSTRUCTIONS,
   type AiProviderAdapter,
@@ -44,7 +45,7 @@ interface PreparedCommand {
 
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;
 
-function aiSeat(principal: GuestPrincipal, prepared: PreparedCommand, step = false) {
+function aiSeat(principal: Principal, prepared: PreparedCommand, step = false) {
   const { stored, snapshot, configuration, participants } = prepared;
   authorizeGameControl(principal, stored);
   if (stored.state !== (step ? "paused" : "active")) {
@@ -85,7 +86,7 @@ export function createAiTurnExecutor(options: {
   readonly adapters: AiAdapters;
   readonly prepareCommand: (
     tx: GameTransaction,
-    principal: GuestPrincipal,
+    principal: Principal,
     command: AiTurnCommand,
   ) => Promise<PreparedCommand>;
 }) {
@@ -93,7 +94,7 @@ export function createAiTurnExecutor(options: {
   const adapters = { ...options.adapters };
 
   return async (
-    principal: GuestPrincipal,
+    principal: Principal,
     input: unknown,
     access: ListModelsInput,
   ): Promise<GameSnapshot> => {
@@ -321,7 +322,7 @@ export function createAiTurnExecutor(options: {
       try {
         await repository.write(async (tx) => {
           // Cleanup uses the server's attempt/fence identity, even if the principal has expired.
-          await tx.lockGuest(principal.guestSessionId);
+          await lockPrincipalForCleanup(tx, principal);
           await tx.lockGame(command.gameId);
           if (
             response &&

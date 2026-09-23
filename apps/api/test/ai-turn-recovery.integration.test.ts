@@ -35,7 +35,7 @@ describe("AI reservation invalidation and crash recovery", () => {
       const api = await harness.createApi();
       const other = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const gate = gatedAdapter();
       const gamesService = service(api, { openai: gate.adapter });
       const { snapshot } = await gamesService.createAi(principal, humanMatch);
@@ -80,7 +80,7 @@ describe("AI reservation invalidation and crash recovery", () => {
       const api = await harness.createApi();
       const other = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const oldGate = gatedAdapter();
       const newGate = gatedAdapter();
       const oldService = service(api, { openai: oldGate.adapter });
@@ -118,7 +118,7 @@ describe("AI reservation invalidation and crash recovery", () => {
   it("rejects a blocked reservation's result even at an unchanged revision", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gate = gatedAdapter();
     const gamesService = service(api, { openai: gate.adapter });
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
@@ -140,7 +140,7 @@ describe("AI reservation invalidation and crash recovery", () => {
   it("cancels before dispatch without a reservation, and interrupts an in-flight adapter without leaking the abort reason or accepting its late result", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const controller = new AbortController();
     const gate = gatedAdapter("openai", (input) => expect(input.signal).toBe(controller.signal));
     const gamesService = service(api, { openai: gate.adapter });
@@ -188,7 +188,7 @@ describe("AI reservation invalidation and crash recovery", () => {
     async (failure) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const adapter = createScriptedAdapter({
         provider: "openai",
         moves: [
@@ -239,7 +239,7 @@ describe("AI reservation invalidation and crash recovery", () => {
   it("rolls back a failed reservation insert without dispatching and permits a fresh execution", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
     const failing = service(
       api,
@@ -280,7 +280,7 @@ describe("AI reservation invalidation and crash recovery", () => {
     async (stage) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
       function failAt(written: typeof stage) {
         if (stage === written) throw new Error("Injected commit failure");
@@ -350,7 +350,7 @@ describe("AI reservation invalidation and crash recovery", () => {
   it("preserves a committed receipt when its acknowledgement is lost and suppresses redispatch after restart", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
     const failing = service(
       api,
@@ -402,7 +402,7 @@ describe("AI reservation invalidation and crash recovery", () => {
   it("keeps an uncertain reservation when failure cleanup cannot write, allowing only explicit lifecycle recovery", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({
       provider: "openai",
       moves: [
@@ -455,7 +455,7 @@ describe("AI reservation invalidation and crash recovery", () => {
     async (invalidFirst) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const { snapshot } = await service(api).createAi(principal, aiMatch);
       const cmd = turnCommand(snapshot);
       const child = fork(

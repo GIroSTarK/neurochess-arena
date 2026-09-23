@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-24
 
 ## Vision
 
@@ -59,6 +59,24 @@ A registered user can do everything a guest can and can also:
 - delete an individual game, clear all game history, or delete the account and associated data.
 
 Registration supports email/password, Google, and GitHub. Email verification and password reset are required for email/password accounts.
+
+### Identity changes and account linking
+
+Guest games remain separate from accounts. Signing in never imports or transfers guest games, their human seats, or their unfinished-game slot. Explain this before sign-in. The original guest session retains its existing access until expiry; an account does not gain that authority because the browser also holds a guest cookie.
+
+On public account-capable routes, a valid account session takes precedence over a guest session. An expired or invalid account operation fails authentication; it must not silently become a guest operation or create a replacement guest game. Starting or returning to guest play requires an explicit guest action after leaving the account context. Development Sandbox continues to use only its guest identity and independent slot.
+
+Sign-in, sign-out, and account switching end the old page's requests and controller heartbeats, clear page-owned provider keys and private state, and fence obsolete responses. They do not transfer or resume a game. Returning to an unfinished game, including on another device, recovers paused and requires explicit continuation.
+
+OAuth sign-in never implicitly merges accounts with matching email addresses. A conflicting sign-in provides a recoverable path through the existing sign-in method. Linking Google or GitHub requires an explicit action from an authenticated account, a fresh identity check, and successful verification of the provider identity. Never link a provider identity already attached to another account. Do not create a second account to bypass an email conflict.
+
+### Usernames and avatars
+
+All authentication methods require the same user-chosen username onboarding before starting account-owned play. Never derive a public username from an email address without the user's choice. Store a trimmed display value and an ASCII-lowercase normalized value; enforce uniqueness on the normalized value in PostgreSQL. Usernames have 3–24 ASCII characters, begin with a letter, and contain only letters, digits, and underscores. The normalized names `admin`, `administrator`, `api`, `auth`, `guest`, `help`, `moderator`, `neurochess`, `root`, `sandbox`, `security`, `support`, `system`, and `www` are reserved.
+
+Users may change their username under the same validation and uniqueness rules. A successful atomic change releases the old name; names are neither identity keys nor historical aliases. Games, seats, and permissions remain attached to the stable account ID.
+
+Avatars use initials from the chosen username or a validated HTTPS avatar URL supplied by Google or GitHub. Imported URLs must match the supported provider's approved avatar hosts; do not accept arbitrary user-supplied URLs or fetch images on the API server. Users can remove an imported avatar, and subsequent sign-in must preserve that choice. Custom uploads are outside the MVP.
 
 ## Game modes
 
@@ -191,6 +209,14 @@ The result page provides:
 
 Saved games are private in the MVP. There are no public game or live spectator links.
 
+### Private history and deletion
+
+Account history lists completed and aborted public games together, newest first, with explicit state/result labels. Unfinished-game recovery is separate. Sandbox and temporary guest games never enter account history. Phase 3 history covers account-owned AI games; registered room-participant history and shared-game retention belong to Phase 4.
+
+Individual game deletion and history clearing affect only terminal account-owned games and their associated moves, participants, command receipts, AI turns, invocations, reservations, and controller records. Active or paused games must first be stopped through the existing lifecycle controls. Clearing history preserves unfinished games, profiles, and saved credentials. Each deletion flow explains its exact scope and requires a distinct confirmation.
+
+Account deletion is a separate confirmed operation that removes the account, its saved credentials, profile, owned games (including unfinished games), associated application data, and authentication data. It invalidates sessions and fences in-flight work so late results cannot recreate deleted records. Separate guest identities and other accounts remain unaffected. Shared human-game deletion/retention must be decided before Phase 4; database deletion does not claim to remove external backups.
+
 ## Game lifecycle
 
 The canonical game states are:
@@ -204,6 +230,8 @@ configuring -> active <-> paused -> completed
 
 Only one game across the three public modes may be `active` or `paused` for a given authenticated user or guest session. The [development sandbox](#development-sandbox) has a separate limit.
 Paused games count toward this limit. Completion or abortion releases the slot. Completed and aborted games reject further moves; replay does not modify their accepted positions or result.
+
+Room joining must extend this invariant to non-owning participants before Phase 4 ships; an owner-only constraint is insufficient for that flow.
 
 ## Localization and responsive design
 
@@ -226,9 +254,8 @@ The MVP is ready when:
 
 ## Open product decisions
 
-- Avatar source and whether custom avatar uploads are included in the MVP
 - Exact retention period for an inactive guest game
 - Exact supported parameter matrix for each provider and model
-- Whether an aborted game should be visually grouped separately from completed history
+- Shared human-game deletion and retention for registered participants in Phase 4
 - Final deployment platform and production region
 - Repository license
