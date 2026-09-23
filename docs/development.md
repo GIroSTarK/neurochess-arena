@@ -10,6 +10,10 @@ npm ci
 
 Build, watch, and type-check commands use the native TypeScript 7 compiler through the `@typescript/native` npm alias, which provides `tsc`. Keep `typescript` aliased to `@typescript/typescript6` so ESLint and dependency-cruiser can use the TypeScript 6 compiler API. Retain both aliases when updating the toolchain; see the [upstream compatibility guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
 
+Retain the root `overrides` and `allowScripts` fields during dependency upgrades. Drizzle Kit's deprecated `@esbuild-kit/esm-loader` / `@esbuild-kit/core-utils` dependency chain still requests esbuild 0.18; the scoped override selects 0.25.12 to address [GHSA-67mh-4wv8-2f99](https://github.com/evanw/esbuild/security/advisories/GHSA-67mh-4wv8-2f99). The loader deprecation warnings remain until Drizzle Kit removes those dependencies. Recheck upstream before removing the override, and inspect audit recommendations before using `npm audit fix --force`, which may downgrade Drizzle Kit to an incompatible release.
+
+`allowScripts` approves esbuild's binary installation for the exact versions in the lockfile. After upgrading dependencies, inspect `npm approve-scripts --allow-scripts-pending` and review changed install scripts before updating those pins. Verify with `npm ci` and `npm audit`.
+
 Copy `.env.example` to `.env`. The committed values are local placeholders only; never place production credentials in the repository.
 
 Start PostgreSQL and wait for its health check:
