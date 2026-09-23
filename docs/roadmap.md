@@ -65,24 +65,20 @@ Exit condition: Sandbox uses the selected arena design, and the same presentatio
 
 **Status:** Completed
 
-Acceptance combines the configured verification baseline and full desktop/mobile E2E suite with the project owner's confirmation on 2026-09-22 that the live OpenAI, Anthropic, Google, and OpenRouter APIs work. Automated provider acceptance uses deterministic fixtures; live-provider confirmation comes from the owner's separate checks.
-
-Implementation sequence: [Phase 2 PR plan](phase-2-plan.md).
-
 Completed milestones: P2-01 establishes strict AI configuration/provider contracts, relational seat persistence, and private service creation/restoration. P2-02 adds authoritative execution with injected adapters, database-backed reservations, accepted-command deduplication, and explicit crash recovery. P2-03 adds durable logical-turn retry budgets, automatic invalid-output retries and technical losses, provider-error pauses, and private normalized invocation records linked to accepted moves. P2-04 adds protected discovery/create/turn/read routes, uncached request-scoped discovery, capability filtering, operational cancellation/deadlines, and a page-memory credential/client boundary. P2-05 registers the OpenAI adapter with dynamic model discovery, conservative capabilities, Responses API normalization, and a reusable HTTP adapter contract suite. P2-06 registers Anthropic with paginated discovery, advertised output/effort capabilities, persisted required output defaults, and Messages normalization through the same contract suite. P2-07 registers Google with paginated discovery, advertised generation methods and parameter bounds, candidate/usage normalization, and the same contract suite. P2-08 registers OpenRouter with account-filtered discovery, routed identifiers, advertised parameters and reasoning efforts, explicit fallback/compression controls, and router/upstream error and usage normalization through the same suite. PostgreSQL tests cover concurrent instances, late outcomes, authorization, atomic rollback, killed executors, recovery without budget resets, natural match outcomes, HTTP disconnects, credential redaction, and OpenAI/Anthropic/Google/OpenRouter turns through mocked upstream transport. Sandbox behavior and the independent unfinished-game limits are preserved. P2-09 adds independent White/Black setup, searchable dynamic model catalogs, capability-derived parameters, session-only secret fields, stale-response cancellation, and a credential-free creation/return handoff. Component/API and isolated desktop/mobile browser tests exercise setup through the real API with injected discovery fixtures. P2-10 connects setup and AI-versus-AI observation at `/` with serialized turns, Pause/Resume, atomic paused Next move, speed, confirmed Stop, private replay/PGN, and explicit paused recovery at authorized game URLs. Database-backed controller leases fence expired/competing tabs and late provider outcomes; the presence worker pauses abandoned games, including between calls and after restart. Keys remain page-owned and recovery requires missing keys plus explicit continuation. P2-11 adds AI-versus-human setup with either human color, AI-first opening, one AI reply per accepted human move, the shared keyboard/touch board and promotion dialog, and confirmed human-only resignation. It reuses versioned human commands, explicit uncertain-command retry, paused recovery, controller presence, and private replay while requiring only the key for the AI seat. API and desktop/mobile browser coverage exercise seat authority with Sandbox enabled/disabled, duplicate commands, natural completion, promotion, provider retry, and key loss. P2-12 fills Commentary, telemetry, and Events with normalized invocation records, links accepted-move details to replay, and distinguishes missing measurements from reported zero in totals that include every attempt. The ordered 4-by-4 provider matrix and all four providers against both human colors complete natural games through the real adapters, API, and PostgreSQL with deterministic upstream fixtures. Private completed/aborted replay and canonical PGN remain accessible after another game starts, while other guests are denied. Desktop/mobile acceptance covers retry history, technical loss, provider pause/manual retry, missing usage, key loss, controller absence, and Sandbox regressions.
 
 Deliverables:
 
-- mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
-- common provider adapter and runtime-validated move contract;
-- OpenAI, Anthropic, Google, and OpenRouter adapters;
-- live model discovery and capability-aware parameters;
-- session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
-- independent White and Black configuration;
-- AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
-- AI-versus-human mode with color choice;
-- invalid-output retries, technical loss, provider-error pause, and manual retry;
-- latency and token telemetry.
+- [x] mocked AI integration tests through the existing authoritative command service, followed by real provider adapters;
+- [x] common provider adapter and runtime-validated move contract;
+- [x] OpenAI, Anthropic, Google, and OpenRouter adapters;
+- [x] live model discovery and capability-aware parameters;
+- [x] session-only credential path with strict redaction, key loss on refresh/close, and key re-entry before resuming a recovered game;
+- [x] independent White and Black configuration;
+- [x] AI-versus-AI orchestration, pause, resume, next move, speed, and stop;
+- [x] AI-versus-human mode with color choice;
+- [x] invalid-output retries, technical loss, provider-error pause, and manual retry;
+- [x] latency and token telemetry.
 
 Exit condition: guests can complete both AI modes with any supported provider combination, and no model can bypass server-side move validation.
 
