@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
   push:
+    branches: [master]
 
 permissions:
   contents: read
@@ -12,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -63,11 +64,66 @@ jobs:
       - name: Verify workspace
         run: npm run verify
 
+      - name: Smoke-test built services
+        run: npm run smoke
+
+  e2e:
+    name: e2e-${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile-touch]
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: neurochess_test
+          POSTGRES_PASSWORD: neurochess_ci
+          POSTGRES_USER: neurochess
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U neurochess -d neurochess_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://neurochess:neurochess_ci@127.0.0.1:5432/neurochess_test
+      NODE_ENV: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: npm run build:packages
+
       - name: Install Chromium for browser tests
         run: npx playwright install --with-deps chromium
 
-      - name: Test the sandbox in desktop and mobile browsers
-        run: npm run test:e2e
+      - name: Test browser project
+        run: npm run test:e2e -- --project=${{ matrix.project }}
 
-      - name: Smoke-test built services
-        run: npm run smoke
+  verify:
+    if: ${{ always() }}
+    needs: [checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require all CI jobs to succeed
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          test "$CHECKS_RESULT" = success
+          test "$E2E_RESULT" = success
