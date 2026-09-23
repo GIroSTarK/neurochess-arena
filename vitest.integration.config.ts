@@ -8,7 +8,11 @@ export default defineConfig({
   test: {
     ...baseTestConfig,
     environment: "node",
-    include: ["apps/**/*.integration.test.ts", "packages/**/*.integration.test.ts"],
+    include: [
+      "apps/**/*.integration.test.ts",
+      "packages/**/*.integration.test.ts",
+      "test/e2e/**/*.integration.test.ts",
+    ],
     exclude: [...configDefaults.exclude],
     globalSetup: ["./test/integration-setup.ts"],
     fileParallelism: false,

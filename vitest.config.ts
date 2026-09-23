@@ -63,6 +63,7 @@ export default defineConfig({
             "apps/api/**/*.test.ts",
             "apps/web/*.test.ts",
             "packages/**/*.test.ts",
+            "test/e2e/**/*.test.ts",
             ...webNodeTestFiles,
           ],
         },

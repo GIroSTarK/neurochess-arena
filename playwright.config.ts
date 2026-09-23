@@ -15,6 +15,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 8_000 },
   reporter: "list",
+  globalSetup: "./test/e2e/global-setup.ts",
   outputDir: join(tmpdir(), "neurochess-playwright-results"),
   use: {
     baseURL: WEB_ORIGIN,
@@ -35,13 +36,4 @@ export default defineConfig({
       use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
     },
   ],
-  webServer: {
-    command: "node --conditions=development --import tsx test/e2e/server.ts",
-    url: WEB_ORIGIN,
-    timeout: 30_000,
-    reuseExistingServer: false,
-    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-    stdout: "pipe",
-    stderr: "pipe",
-  },
 });

@@ -18,6 +18,7 @@ import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { integrationDatabase } from "../database.js";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { closeResources, notifyParent, shutdownMessage } from "./lifecycle.js";
 import { setupHarness } from "./setup-harness.js";
 import { setupProviders } from "./setup-providers.js";
 
@@ -35,79 +36,118 @@ async function main() {
       return guest;
     },
   };
-  const app = await buildApp({
-    readiness: database,
-    webOrigin: WEB_ORIGIN,
-    gameApi: {
-      guests: createGuestService(repository, 86_400),
-      games: createGameService(repository, {
-        nodeEnv: "test",
-        sandboxEnabled: true,
-        aiAdapters: setupProviders(),
-      }),
-    },
-  });
-  process.env.VITE_API_BASE_URL = API_ORIGIN;
-  process.env.SANDBOX_ENABLED = "false";
-  const disabledWeb = await createServer({
-    cacheDir: join(tmpdir(), "neurochess-playwright-disabled-vite"),
-    root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
-    configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
-    mode: "test",
-    server: {
-      host: "localhost",
-      port: Number(new URL(DISABLED_WEB_ORIGIN).port),
-      strictPort: true,
-    },
-    logLevel: "error",
-  });
-  process.env.SANDBOX_ENABLED = "true";
-  const web = await createServer({
-    plugins: [setupHarness()],
-    root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
-    configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
-    mode: "test",
-    server: { host: "localhost", port: Number(new URL(WEB_ORIGIN).port), strictPort: true },
-    logLevel: "error",
-  });
+  let app: Awaited<ReturnType<typeof buildApp>> | undefined;
+  let web: Awaited<ReturnType<typeof createServer>> | undefined;
+  let disabledWeb: Awaited<ReturnType<typeof createServer>> | undefined;
   let closing: Promise<void> | undefined;
+  let stopping: Promise<void> | undefined;
+
   function close(): Promise<void> {
-    closing ??= (async () => {
-      await web.close();
-      await disabledWeb.close();
-      await app.close();
-      try {
-        if (guestIds.size > 0) {
-          await database.db.transaction(async (tx) => {
-            await tx.delete(games).where(inArray(games.ownerGuestSessionId, [...guestIds]));
-            await tx.delete(guestSessions).where(inArray(guestSessions.id, [...guestIds]));
-          });
-        }
-      } finally {
-        await database.close();
-      }
-    })();
+    closing ??= closeResources([
+      { name: "web", close: () => web?.close() },
+      { name: "disabled web", close: () => disabledWeb?.close() },
+      { name: "API", close: () => app?.close() },
+      {
+        name: "test guests",
+        close: async () => {
+          if (guestIds.size > 0) {
+            await database.db.transaction(async (tx) => {
+              await tx.delete(games).where(inArray(games.ownerGuestSessionId, [...guestIds]));
+              await tx.delete(guestSessions).where(inArray(guestSessions.id, [...guestIds]));
+            });
+          }
+        },
+      },
+      { name: "database pool", close: () => database.close() },
+    ]);
     return closing;
   }
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      void close().catch(() => {
+
+  function stop(): Promise<void> {
+    stopping ??= (async () => {
+      // Let startup settle so it cannot add resources after cleanup has passed them.
+      await startup.catch(() => undefined);
+      try {
+        await close();
+      } catch {
+        process.stderr.write("Browser test cleanup failed.\n");
         process.exitCode = 1;
-      });
-    });
+      }
+      try {
+        await notifyParent(process.exitCode ? "failed" : "stopped");
+      } catch {
+        process.exitCode = 1;
+      } finally {
+        if (process.connected) process.disconnect();
+      }
+    })();
+    return stopping;
   }
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => void stop());
+  }
+  process.on("message", (message: unknown) => {
+    if (!shutdownMessage.safeParse(message).success) process.exitCode = 1;
+    void stop();
+  });
+  process.once("disconnect", () => void stop());
+  const startup = start();
   try {
+    await startup;
+    if (!stopping) {
+      process.stdout.write("Sandbox browser test services ready.\n");
+      await notifyParent("ready");
+    }
+  } catch {
+    process.stderr.write(
+      "Browser test services could not start; check the disposable test database and test ports.\n",
+    );
+    process.exitCode = 1;
+    await stop();
+  }
+
+  async function start() {
+    app = await buildApp({
+      readiness: database,
+      webOrigin: WEB_ORIGIN,
+      gameApi: {
+        guests: createGuestService(repository, 86_400),
+        games: createGameService(repository, {
+          nodeEnv: "test",
+          sandboxEnabled: true,
+          aiAdapters: setupProviders(),
+        }),
+      },
+    });
+    process.env.VITE_API_BASE_URL = API_ORIGIN;
+    process.env.SANDBOX_ENABLED = "false";
+    disabledWeb = await createServer({
+      cacheDir: join(tmpdir(), "neurochess-playwright-disabled-vite"),
+      root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
+      configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
+      mode: "test",
+      server: {
+        host: "localhost",
+        port: Number(new URL(DISABLED_WEB_ORIGIN).port),
+        strictPort: true,
+      },
+      logLevel: "error",
+    });
+    process.env.SANDBOX_ENABLED = "true";
+    web = await createServer({
+      plugins: [setupHarness()],
+      root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
+      configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
+      mode: "test",
+      server: { host: "localhost", port: Number(new URL(WEB_ORIGIN).port), strictPort: true },
+      logLevel: "error",
+    });
     await database.check();
     await runMigrations(database);
     await app.listen({ host: "localhost", port: Number(new URL(API_ORIGIN).port) });
     await disabledWeb.listen();
     await web.listen();
-    process.stdout.write("Sandbox browser test services ready.\n");
-  } catch {
-    await close();
-    throw new Error(
-      "Browser test services could not start; check the disposable test database and test ports.",
-    );
   }
 }
 
