@@ -3,12 +3,9 @@ import { createHash, randomBytes } from "node:crypto";
 import type { GameRepository } from "@neurochess/database";
 
 import { GameRequestError } from "../games/errors.js";
+import type { GuestPrincipal } from "../identity/principal.js";
 
 export const GUEST_COOKIE_NAME = "__Host-neurochess_guest";
-
-export interface GuestPrincipal {
-  readonly guestSessionId: string;
-}
 
 export interface GuestIdentity {
   readonly principal: GuestPrincipal;
@@ -27,7 +24,7 @@ export function createGuestService(repository: GameRepository, ttlSeconds: numbe
   async function renew(token: string | undefined): Promise<GuestIdentity | undefined> {
     if (token === undefined || !tokenPattern.test(token)) return undefined;
     const guest = await repository.renewGuest(hashToken(token), ttlSeconds);
-    return guest ? { principal: { guestSessionId: guest.id }, token } : undefined;
+    return guest ? { principal: { kind: "guest", guestSessionId: guest.id }, token } : undefined;
   }
 
   return {
@@ -37,7 +34,7 @@ export function createGuestService(repository: GameRepository, ttlSeconds: numbe
       if (existing) return existing;
       const nextToken = randomBytes(32).toString("base64url");
       const guest = await repository.createGuest(hashToken(nextToken), ttlSeconds);
-      return { principal: { guestSessionId: guest.id }, token: nextToken };
+      return { principal: { kind: "guest", guestSessionId: guest.id }, token: nextToken };
     },
     async authenticate(token) {
       const identity = await renew(token);

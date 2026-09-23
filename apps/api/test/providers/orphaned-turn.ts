@@ -52,7 +52,7 @@ async function execute(message: unknown) {
       sandboxEnabled: false,
       aiAdapters: { openai: withTurnCatalog(adapter) },
     });
-    await service.aiTurn({ guestSessionId }, command, {
+    await service.aiTurn({ kind: "guest", guestSessionId }, command, {
       apiKey: "child-fixture-only",
       signal: new AbortController().signal,
     });

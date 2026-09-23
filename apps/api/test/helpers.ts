@@ -16,6 +16,7 @@ import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
+import type { GuestPrincipal } from "../src/identity/principal.js";
 
 export const WEB_ORIGIN = "http://localhost:5173";
 export const KNIGHT_CYCLE = ["g1f3", "g8f6", "f3g1", "f6g8"];
@@ -29,6 +30,7 @@ export interface TestApi {
 
 export interface TestGuest {
   readonly id: string;
+  readonly principal: GuestPrincipal;
   readonly cookie: string;
   readonly token: string;
 }
@@ -88,7 +90,12 @@ export class ApiHarness {
       .where(eq(guestSessions.tokenHash, tokenHash(token)));
     if (!record) throw new Error("Guest record missing");
     this.guestIds.add(record.id);
-    return { id: record.id, cookie: `${GUEST_COOKIE_NAME}=${token}`, token };
+    return {
+      id: record.id,
+      principal: { kind: "guest", guestSessionId: record.id },
+      cookie: `${GUEST_COOKIE_NAME}=${token}`,
+      token,
+    };
   }
 
   async close(api: TestApi): Promise<void> {

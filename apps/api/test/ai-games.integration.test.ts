@@ -63,7 +63,7 @@ describe("ordinary AI configuration through the real game service", () => {
     async ({ configuration }) => {
       const api = await harness.createApi({ sandboxEnabled: false });
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const first = service(api, false);
       const input = structuredClone(configuration);
       const created = await first.createAi(principal, input);
@@ -109,7 +109,7 @@ describe("ordinary AI configuration through the real game service", () => {
   it("preserves full Sandbox history, null legacy configuration, existing discovery and its HTTP shape", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const initial = await createSandbox(api, owner);
     const played = await play(api, owner, initial, ["e2e4", "e7e5", "g1f3"]);
     const paused = await service(api).lifecycle(principal, control(played, "pause"));
@@ -132,7 +132,7 @@ describe("ordinary AI configuration through the real game service", () => {
     async (humanColor) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const gamesService = service(api);
       const configuration = humanMatch(humanColor);
       let { snapshot } = await gamesService.createAi(principal, configuration);
@@ -170,7 +170,7 @@ describe("ordinary AI configuration through the real game service", () => {
   it("never gives an AI-versus-AI owner human move or resignation authority", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api);
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     await expect(gamesService.move(principal, command(snapshot, "e2e4"))).rejects.toMatchObject({
@@ -192,8 +192,8 @@ describe("ordinary AI configuration through the real game service", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
-    const other = { guestSessionId: stranger.id };
+    const principal = owner.principal;
+    const other = stranger.principal;
     const gamesService = service(api);
     const created = await gamesService.createAi(principal, aiMatch);
     const snapshot = await gamesService.lifecycle(principal, control(created.snapshot, "abort"));
@@ -234,7 +234,7 @@ describe("ordinary AI configuration through the real game service", () => {
   it("rejects untrusted configuration through service and HTTP without reserving a slot or persisting secrets", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api);
     for (const input of [
       { ...aiMatch, apiKey: "sentinel-key" },
@@ -275,7 +275,7 @@ describe("ordinary AI configuration through the real game service", () => {
   ])("keeps paused $name independent from Sandbox commands", async ({ configuration }) => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api);
     const created = await gamesService.createAi(principal, configuration);
     const paused = await gamesService.lifecycle(principal, control(created.snapshot, "pause"));
@@ -326,7 +326,7 @@ describe("ordinary AI configuration through the real game service", () => {
       harness.createApi(),
     ]);
     const owner = await harness.guest(apis[0]);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const results = await Promise.allSettled([
       service(apis[0])
         .createAi(principal, aiMatch)
@@ -394,20 +394,18 @@ describe("ordinary AI configuration through the real game service", () => {
       },
       { nodeEnv: "test", sandboxEnabled: true },
     );
-    await expect(failing.createAi({ guestSessionId: owner.id }, aiMatch)).rejects.toThrow(
+    await expect(failing.createAi(owner.principal, aiMatch)).rejects.toThrow(
       "Injected failure after insertion",
     );
     expect(await api.database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(0);
-    expect(
-      (await service(api).createAi({ guestSessionId: owner.id }, aiMatch)).snapshot.version,
-    ).toBe(0);
+    expect((await service(api).createAi(owner.principal, aiMatch)).snapshot.version).toBe(0);
   });
 
   it("rejects corrupt mode/seat combinations and reassigned humans before returning configuration or accepting commands", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api);
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     await api.database.db
@@ -437,8 +435,8 @@ describe("ordinary AI configuration through the real game service", () => {
     await expect(gamesService.details(principal, snapshot.gameId)).rejects.toBeInstanceOf(
       GameIntegrityError,
     );
-    await expect(
-      gamesService.details({ guestSessionId: stranger.id }, snapshot.gameId),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(gamesService.details(stranger.principal, snapshot.gameId)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
   });
 });

@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-19
+**Last updated:** 2026-09-24
 
 ## Architectural drivers
 
@@ -303,6 +303,14 @@ Missing commentary is not an error.
 
 Better Auth manages email/password, Google, GitHub, email verification, password reset, and authenticated sessions in PostgreSQL. Profiles add a unique username and avatar metadata.
 
+The API's server-only `identity` boundary supplies a discriminated principal independently of game permissions. Guest authentication resolves the cookie to the stored guest ID; `guests/http.ts` owns cookie renewal. Game services use centralized identity validity/locking checks before applying ownership, human-seat, and controller permissions. A principal is not proof of continued validity. Reads check expiry, commands lock the identity before the game, and AI dispatch/outcome paths recheck through command preparation. Trusted maintenance has a separate lock path that preserves ordering even after access expires; it cannot authorize a provider dispatch. See [ADR-0013](decisions/0013-principal-and-account-ownership.md).
+
+When account support is introduced, extend this boundary with a Better Auth-validated account/session principal and normalized relational account ownership/seat references. Keep exactly one owner, database-enforced unfinished slots, and identity-before-game lock ordering. Do not expose principal objects in shared request schemas or accept client account/guest IDs as authentication. Account-capable routes select one identity, following the [identity transition and linking policy](product.md#identity-changes-and-account-linking); Sandbox remains explicitly guest-only. Presence leases still require the selected owner's authority.
+
+Guest games never migrate at sign-in. Account requests cannot combine permissions from both cookies. Identity changes cancel the old page's controller activity and clear secrets/private state; account recovery retains the existing explicit paused-recovery protocol. The owner-based unfinished index must be extended for non-owning room participants in Phase 4 before joining is enabled.
+
+Profiles follow the [username and avatar contract](product.md#usernames-and-avatars). Authentication integrates an injected email sender with a configurable working transport (SMTP is the initial transport) and an isolated test mailbox. Verification/reset links are never logged, CI never requires outbound email, and production must reject test-only delivery configuration. OAuth account linking is explicitly configured rather than inherited from framework defaults.
+
 Guests explicitly bootstrap an opaque 256-bit token in a host-only Secure, HttpOnly, SameSite=Strict cookie before creating a game. Only its SHA-256 digest is stored with an internal guest UUID. Bootstrap reuses valid identities; other endpoints reject missing or expired identities rather than creating replacements. Valid activity renews the configured inactivity expiry without rotating the token (24 hours by default). Exact-Origin POST enforcement and credentialed CORS complement the cookie policy. See [ADR-0006](decisions/0006-guest-owned-game-commands.md).
 
 Temporary game metadata does not appear in durable history. Access expires now; automated deletion after inactivity and the production retention duration are follow-up work and must be resolved before production guest gameplay.
@@ -332,6 +340,8 @@ The independent setup adapter in `apps/web/src/setup` consumes that client and a
 4. The encryption key lives in deployment secret storage, separately from PostgreSQL.
 5. Reads return masked metadata only. Decryption occurs only for an authorized provider call.
 6. Users can revoke individual saved keys, clear credentials, or delete the account.
+
+Saved credentials are explicitly selected per AI seat, including after recovery; no provider-based automatic selection or persisted per-game credential preference is required. Revocation prevents subsequent authorized operations and is rechecked before each automatic retry. Already-dispatched provider work cannot be undone; its result may complete only while the principal, game, reservation, and controller remain authorized. Account deletion fences acceptance and cleanup so late work cannot recreate data. Neither saved keys nor account sessions permit background AI play.
 
 All request logging and exception reporting must redact credential fields, authorization headers, cookies, URLs with tokens, and provider secrets.
 
@@ -391,4 +401,4 @@ Phase 1 acceptance must additionally verify:
 
 The web app can be hosted as static assets. The API hosting environment must support a long-running Node.js Fastify process and persistent WebSocket connections. PostgreSQL should be managed or backed up appropriately and reached over TLS. Both applications should be containerizable.
 
-The exact providers, production region, email delivery service, object storage for custom avatars, observability service, and backup policy remain open decisions.
+The exact providers, production region, production email delivery vendor, observability service, and backup policy remain open decisions. Custom avatar uploads are outside the MVP.

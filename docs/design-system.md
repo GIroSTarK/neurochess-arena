@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-24
 
 ## Purpose and authority
 
@@ -216,15 +216,15 @@ While a pause/stop request is pending, show that the command is being applied an
 
 ## Supporting MVP patterns
 
-| Flow            | Design requirements                                                                                                                                                                                                                               |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI versus human | Reuse one AI configuration section plus the human color choice. Permit moves only on the authorized human turn. Human resignation uses explicit confirmation; no AI-resign control.                                                               |
-| Authentication  | Email/password, Google, GitHub, verification, and password-reset forms use the same controls. Allow paste and password managers. Give actionable field-level feedback and preserve a clear return path.                                           |
-| Private rooms   | Authenticated owner creates and chooses color. Invitation link/code is a join affordance, not a spectator/share-game feature. Guests may join, but room creation requires sign-in. Owner closing a room explicitly says the game will be stopped. |
-| History         | Private rows show players, mode, date, result/state, and replay access. Include empty and load-error states. Guest messaging explains the lack of durable account history. Separate grouping of aborted games remains an open product decision.   |
-| Credentials     | Provider, user label, masked metadata, and revoke action. No plaintext readback. Explain effects when a selected credential is revoked.                                                                                                           |
-| Deletion        | Separate individual game, all history, credential revocation, and account deletion confirmations. State the actual scope and irreversibility, focus Cancel initially, and prevent duplicate submission.                                           |
-| Identity        | Initials fallback and an existing safe avatar URL fit the same frame. Custom upload support remains an open product decision.                                                                                                                     |
+| Flow            | Design requirements                                                                                                                                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI versus human | Reuse one AI configuration section plus the human color choice. Permit moves only on the authorized human turn. Human resignation uses explicit confirmation; no AI-resign control.                                                                |
+| Authentication  | Email/password, Google, GitHub, verification, and password-reset forms use the same controls. Allow paste and password managers. Give actionable field-level feedback and preserve a clear return path.                                            |
+| Private rooms   | Authenticated owner creates and chooses color. Invitation link/code is a join affordance, not a spectator/share-game feature. Guests may join, but room creation requires sign-in. Owner closing a room explicitly says the game will be stopped.  |
+| History         | Private rows show players, mode, date, result/state, and replay access. List completed and aborted games together, newest first, with explicit state labels. Include empty/load-error states and guest guidance about the lack of durable history. |
+| Credentials     | Provider, user label, masked metadata, and revoke action. No plaintext readback. Explain effects when a selected credential is revoked.                                                                                                            |
+| Deletion        | Separate individual game, all history, credential revocation, and account deletion confirmations. State the actual scope and irreversibility, focus Cancel initially, and prevent duplicate submission.                                            |
+| Identity        | Initials and validated provider avatars fit the same frame; allow removal of an imported avatar. Explain guest/account separation before sign-in. All authentication methods use the same username onboarding. See the product identity policies.  |
 
 Do not add ratings, public games/spectators, clocks, chat, payments, custom model prompts, arbitrary starting positions, or background play. Guest retention and provider parameter matrices remain owned by the product/backend decisions.
 

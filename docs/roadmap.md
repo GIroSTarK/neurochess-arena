@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–2 and the Sandbox presentation remake completed
+**Status:** Phases 0–2 and the Sandbox presentation remake completed; Phase 3 in progress
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-24
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -84,8 +84,11 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
+**Status:** In progress. P3-01 establishes the server-derived identity boundary while preserving guest gameplay and records the account lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. Account authentication, ownership, credentials, and history remain pending.
+
 Deliverables:
 
+- [x] identity and lifecycle groundwork, including guest/account separation and preserved guest validity/locking;
 - Better Auth with email/password, Google, and GitHub;
 - email verification and password reset;
 - unique usernames and avatars;
