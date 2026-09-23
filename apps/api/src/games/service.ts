@@ -28,7 +28,7 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
-import type { Principal } from "../identity/principal.js";
+import type { GuestPrincipal as Principal } from "../identity/principal.js";
 import {
   lockActivePrincipal,
   lockPrincipalForCleanup,

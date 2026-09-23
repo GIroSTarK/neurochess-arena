@@ -16,6 +16,8 @@ Retain the root `overrides` and `allowScripts` fields during dependency upgrades
 
 Copy `.env.example` to `.env`. The committed values are local placeholders only; never place production credentials in the repository.
 
+Generate a private auth secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` and set `BETTER_AUTH_SECRET` in `.env`. Keep it stable across restarts and shared by API instances; replacing it invalidates signed account cookies. Store the production value in deployment secret storage. It is separate from the later provider-credential encryption key.
+
 Start PostgreSQL and wait for its health check:
 
 ```text
@@ -33,48 +35,53 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 
 ## Environment contract
 
-| Variable                    | Consumer   | Purpose                                                                   |
-| --------------------------- | ---------- | ------------------------------------------------------------------------- |
-| `NODE_ENV`                  | API        | `development`, `test`, or `production`                                    |
-| `API_HOST`                  | API        | Fastify listen address                                                    |
-| `API_PORT`                  | API        | Fastify listen port                                                       |
-| `WEB_ORIGIN`                | API        | Exact browser origin allowed by CORS                                      |
-| `DATABASE_URL`              | API, tools | PostgreSQL connection URL                                                 |
-| `LOG_LEVEL`                 | API        | Pino log level                                                            |
-| `SANDBOX_ENABLED`           | API, web   | Exactly `true` or `false`; defaults to false; production API rejects true |
-| `GUEST_SESSION_TTL_SECONDS` | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400                  |
-| `VITE_API_BASE_URL`         | web        | Public HTTP(S) API origin, without credentials, paths, query, or fragment |
-| `POSTGRES_*`                | Compose    | Local database name, user, password, and port                             |
-| `TEST_DATABASE_URL`         | Tests      | Explicit disposable PostgreSQL database ending in `_test`; no fallback    |
-| `TEST_POSTGRES_PORT`        | Compose    | Separate test-service port, defaults to 5433                              |
+| Variable                    | Consumer            | Purpose                                                                   |
+| --------------------------- | ------------------- | ------------------------------------------------------------------------- |
+| `NODE_ENV`                  | API                 | `development`, `test`, or `production`                                    |
+| `API_HOST`                  | API                 | Fastify listen address                                                    |
+| `API_PORT`                  | API                 | Fastify listen port                                                       |
+| `WEB_ORIGIN`                | API                 | Exact browser origin allowed by CORS                                      |
+| `BETTER_AUTH_URL`           | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path             |
+| `BETTER_AUTH_SECRET`        | API, auth generator | Required private random secret, 32–256 characters; no default             |
+| `DATABASE_URL`              | API, tools          | PostgreSQL connection URL                                                 |
+| `LOG_LEVEL`                 | API                 | Pino log level                                                            |
+| `SANDBOX_ENABLED`           | API, web            | Exactly `true` or `false`; defaults to false; production API rejects true |
+| `GUEST_SESSION_TTL_SECONDS` | API                 | Inactivity expiry, 1–31536000 seconds; defaults to 86400                  |
+| `VITE_API_BASE_URL`         | web                 | Public HTTP(S) API origin, without credentials, paths, query, or fragment |
+| `POSTGRES_*`                | Compose             | Local database name, user, password, and port                             |
+| `TEST_DATABASE_URL`         | Tests               | Explicit disposable PostgreSQL database ending in `_test`; no fallback    |
+| `TEST_POSTGRES_PORT`        | Compose             | Separate test-service port, defaults to 5433                              |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
+
+`WEB_ORIGIN` and `BETTER_AUTH_URL` accept exact HTTPS origins without credentials, wildcards, paths, trailing slashes, queries, or fragments. Development/test also allow `http://localhost` with an optional port; production requires HTTPS. Use a same-site web/API deployment for the Lax account cookie. Cross-site third-party cookies and client-supplied forwarding headers are unsupported. Fastify proxy trust stays disabled pending deployment configuration.
 
 Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_` variables. Both applications read the same root `.env`; no second Sandbox flag is needed. Restart development services after changing it, or rebuild the web bundle and restart the API when using `npm start`. The web value is fixed at Vite startup/build time; API checks still apply if the configurations differ.
 
 ## Root commands
 
-| Command                      | Purpose                                                          |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `npm run dev`                | Build shared packages, watch them, and run both applications     |
-| `npm run build`              | Build shared packages, the API, and the Vite production bundle   |
-| `npm start`                  | Run the built API and web preview                                |
-| `npm run lint`               | Run ESLint with zero warnings                                    |
-| `npm run typecheck`          | Type-check project references and tests                          |
-| `npm test`                   | Run unit, PostgreSQL integration, and dependency-boundary checks |
-| `npm run test:unit`          | Run database-free unit tests                                     |
-| `npm run test:integration`   | Run required PostgreSQL-backed tests; fail if unavailable        |
-| `npm run test:e2e`           | Run desktop/mobile browser gameplay and accessibility checks     |
-| `npm run format:check`       | Verify Prettier formatting                                       |
-| `npm run verify`             | Run formatting, lint, types, tests, and build                    |
-| `npm run smoke`              | Start and probe both built services                              |
-| `npm run infra:up`           | Start and health-check PostgreSQL                                |
-| `npm run infra:test:up`      | Start the isolated disposable test PostgreSQL service            |
-| `npm run infra:down`         | Stop PostgreSQL while preserving data                            |
-| `npm run db:generate -- ...` | Generate a named Drizzle migration                               |
-| `npm run db:check`           | Check migration metadata for consistency                         |
-| `npm run db:migrate`         | Apply pending migrations                                         |
-| `npm run db:studio`          | Open Drizzle Studio                                              |
+| Command                      | Purpose                                                            |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `npm run dev`                | Build shared packages, watch them, and run both applications       |
+| `npm run build`              | Build shared packages, the API, and the Vite production bundle     |
+| `npm start`                  | Run the built API and web preview                                  |
+| `npm run lint`               | Run ESLint with zero warnings                                      |
+| `npm run typecheck`          | Type-check project references and tests                            |
+| `npm test`                   | Run unit, PostgreSQL integration, and dependency-boundary checks   |
+| `npm run test:unit`          | Run database-free unit tests                                       |
+| `npm run test:integration`   | Run required PostgreSQL-backed tests; fail if unavailable          |
+| `npm run test:e2e`           | Run desktop/mobile browser gameplay and accessibility checks       |
+| `npm run format:check`       | Verify Prettier formatting                                         |
+| `npm run verify`             | Run formatting, lint, types, tests, and build                      |
+| `npm run smoke`              | Start and probe both built services                                |
+| `npm run infra:up`           | Start and health-check PostgreSQL                                  |
+| `npm run infra:test:up`      | Start the isolated disposable test PostgreSQL service              |
+| `npm run infra:down`         | Stop PostgreSQL while preserving data                              |
+| `npm run db:generate -- ...` | Generate a named Drizzle migration                                 |
+| `npm run db:check`           | Check migration metadata for consistency                           |
+| `npm run db:migrate`         | Apply pending migrations                                           |
+| `npm run db:studio`          | Open Drizzle Studio                                                |
+| `npm run auth:generate`      | Regenerate Better Auth's Drizzle schema from the API configuration |
 
 ## Dependency direction
 
@@ -128,6 +135,21 @@ Choose Human vs human, AI vs human with either human color, AI vs AI, or identic
 All sample identities, commentary, and measurements are explicitly labeled **Test data**. Human seats omit AI details; only the supplied human seat receives a resignation action. AI scenarios exercise commentary/telemetry slots and opt-in Moves/Analysis/Events tabs. Replay synchronizes sample details with the selected position. Missing commentary, missing usage/pricing, and the initial position have explicit empty/unavailable states. Analysis is a labeled extension slot; no Stockfish or provider is invoked.
 
 The reference adapter and data live in `apps/web/src/reference`; reusable composition lives in `arena/ArenaDetails.tsx` and `ui/DetailTabs.tsx`. Keep fixture data and adapters out of shared presentation components. Cover every scenario's seat/capability mapping in `apps/web/src/reference/ArenaReferenceScreen.test.tsx`; extend `test/e2e/arena-reference.spec.ts` when a new capability needs browser-specific geometry, scrolling, or native interaction coverage. This is a UI reuse check, not acceptance of real AI orchestration or room permissions.
+
+## Account session foundation
+
+Better Auth, its Drizzle adapter, and the `auth` generator are pinned together at 1.7.5. They use stable Drizzle ORM 0.45.3 and Kit 0.31.11. The generator reads `apps/api/auth.config.ts`, which uses the same factory as the server. [Better Auth's Drizzle integration](https://better-auth.com/docs/adapters/drizzle) generates schema only; Drizzle Kit owns SQL migration generation/application.
+
+| Endpoint                    | Request                        | Success                                                                                 |
+| --------------------------- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| `GET /api/auth/get-session` | No query fields                | `{ session: null }` or `{ session: { user: { id, email, emailVerified }, expiresAt } }` |
+| `POST /api/auth/sign-out`   | `{}`, JSON, exact `WEB_ORIGIN` | `{ success: true }` and separate cookie-clearing headers                                |
+
+Use credentialed requests. The host-only `__Secure-neurochess.session_token` cookie is Secure, HttpOnly, SameSite=Lax, and scoped to `/`. Only cookies carry the session token; application JSON never includes it. Sessions use PostgreSQL on every lookup, last seven days, and refresh after one day. Sign-out revokes the current session; other sessions remain valid. A failed revocation returns a safe error and preserves the browser cookie for retry. Errors use the English catalog with `AUTH_*` codes, `message`, and `requestId`; the browser should localize the code rather than display library messages.
+
+Only these two auth endpoints are mounted. Password registration/sign-in, verification/reset, OAuth, profile changes, and account deletion remain closed until their respective flows ship. No browser sign-in UI or account gameplay is enabled. Test-only factories create actual password accounts/sessions against disposable PostgreSQL without email or external providers. The account identity resolver is available for later routes; current guest APIs and Sandbox keep their guest authority.
+
+The auth limiter uses process memory: 60 session reads/minute/IP and 10 sign-outs/minute/IP, with a general 100/minute limit for future enabled endpoints. A `429` includes `Retry-After`. It is enabled in all environments, resets on restart, and does not coordinate across processes. It uses Fastify's client IP, overwriting the internal IP header; do not enable broad proxy trust to obtain forwarded addresses. Before exposing more endpoints, add their protections and contract tests.
 
 ## Sandbox API
 
@@ -311,7 +333,9 @@ Migration `0007_separate_sandbox_game_slot.sql` replaces the unfinished-owner in
 
 Migration `0006_ai_controller_presence.sql` adds the per-game controller UUID/expiry table and cascading foreign key. It does not rewrite existing games or Sandbox data. Stop old API writers, apply it, and restart the updated API; active ordinary AI games without a lease are then paused by the presence worker. Never expire a reservation into another provider dispatch. The [controller ADR](decisions/0011-ai-controller-presence-and-step.md) defines recovery and deployment behavior.
 
-Never edit an applied migration or use schema push as a substitute for reviewed SQL. Better Auth schema generation will feed this same migration history when authentication is implemented.
+Never edit an applied migration or use schema push as a substitute for reviewed SQL. To update auth persistence, first build shared packages and run `npm run auth:generate`, then format the generated schema and use `npm run db:generate -- --name <name>` and `npm run db:check`. Inspect generated SQL and metadata before applying it. Never run Better Auth's independent migration command or adopt beta/RC Drizzle APIs.
+
+Migration `0008_better_auth_foundation.sql` adds the generator's four auth tables, unique email/session-token constraints, and indexed user/verification lookups. It does not alter game ownership, seats, moves, receipts, or controller/reservation data. Stop API writers, apply the forward migration, configure the auth origin/secret, and restart the updated API. Populated upgrade tests preserve existing guest AI/Sandbox records and their unfinished limits. Keep the added tables when rolling application code back; do not edit the migration history or delete auth records as a rollback shortcut.
 
 Migration `0002_game_command_receipts.sql` creates the shared accepted-command receipts and backfills existing moves. Stop old API writers before applying it, then start the API version that writes receipts for every move and lifecycle action. See [ADR-0007](decisions/0007-lifecycle-recovery-and-private-replay.md). Integration tests exercise this backfill on a populated prior schema, receipt uniqueness, cascading deletion, and atomic rollback.
 
@@ -324,6 +348,8 @@ Migration `0005_ai_invocation_policy.sql` adds logical AI turns and normalized i
 ## Logging and errors
 
 The API logger omits request bodies, retains only method/path/request ID for requests, strips URL queries, and recursively redacts credential-like object fields. Raw exceptions are reduced to a safe name and non-secret code before serialization; the error serializer preserves only those diagnostic fields when it receives an already-sanitized record.
+
+Auth request paths are reduced to `/api/auth`, so even callback/reset tokens embedded in path segments cannot enter request logs. Better Auth's custom logger discards all library messages/arguments and forwards only a fixed diagnostic level; unhandled library errors are converted at the auth boundary without logging their names, codes, or payloads. Do not replace this sink with the library's console logger or enable adapter debug logs/telemetry.
 
 Idle PostgreSQL pool errors write a fixed, credential-free diagnostic to stderr without terminating the API. The pool remains available for new connections, and `/ready` checks current database availability on every request, returning `503` when its query fails.
 

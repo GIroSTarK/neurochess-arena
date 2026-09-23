@@ -3,6 +3,11 @@ export interface GuestPrincipal {
   readonly guestSessionId: string;
 }
 
-// Extend this union only with identities resolved by a server authenticator.
+export interface AccountPrincipal {
+  readonly kind: "account";
+  readonly userId: string;
+  readonly sessionId: string;
+}
+
 // A principal identifies the caller; it does not prove the session is still valid.
-export type Principal = GuestPrincipal;
+export type Principal = GuestPrincipal | AccountPrincipal;

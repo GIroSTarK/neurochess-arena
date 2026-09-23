@@ -7,6 +7,8 @@ const validEnvironment = {
   API_HOST: "127.0.0.1",
   API_PORT: "3001",
   WEB_ORIGIN: "http://localhost:5173",
+  BETTER_AUTH_URL: "http://localhost:3001",
+  BETTER_AUTH_SECRET: "test-only-auth-environment-secret-349829394",
   DATABASE_URL: "postgresql://user:password@localhost:5432/neurochess",
   LOG_LEVEL: "silent",
 };
@@ -31,10 +33,46 @@ describe("parseApiEnvironment", () => {
       parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "true" }),
     ).toThrow("SANDBOX_ENABLED");
     expect(
-      parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "false" })
-        .SANDBOX_ENABLED,
+      parseApiEnvironment({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        SANDBOX_ENABLED: "false",
+        WEB_ORIGIN: "https://arena.example.test",
+        BETTER_AUTH_URL: "https://api.example.test",
+      }).SANDBOX_ENABLED,
     ).toBe(false);
   });
+
+  it.each(["BETTER_AUTH_URL", "WEB_ORIGIN"])("requires an exact safe origin for %s", (key) => {
+    for (const value of [
+      "https://user:secret@example.test",
+      "https://example.test/path",
+      "https://example.test?token=canary",
+      "https://example.test/#fragment",
+      "https://*.example.test",
+      "https://example.test/",
+      "ftp://example.test",
+      "http://example.test",
+      "http://127.0.0.1:3001",
+    ]) {
+      expect(() => parseApiEnvironment({ ...validEnvironment, [key]: value })).toThrow(key);
+    }
+    expect(() => parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production" })).toThrow(key);
+  });
+
+  it.each([undefined, "", "auth-secret-canary", " ".repeat(32), "x".repeat(257)])(
+    "requires an auth secret without echoing it",
+    (BETTER_AUTH_SECRET) => {
+      expect(() => parseApiEnvironment({ ...validEnvironment, BETTER_AUTH_SECRET })).toThrow(
+        "BETTER_AUTH_SECRET",
+      );
+      try {
+        parseApiEnvironment({ ...validEnvironment, BETTER_AUTH_SECRET });
+      } catch (error) {
+        expect(String(error)).not.toContain("auth-secret-canary");
+      }
+    },
+  );
 
   it.each([
     { name: "uppercase string", SANDBOX_ENABLED: "TRUE" },

@@ -1,4 +1,6 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
+export { createAuthAdapter } from "./auth.js";
+export * as authSchema from "./schema/auth.js";
 export { runMigrations } from "./migrations.js";
 export {
   games,
