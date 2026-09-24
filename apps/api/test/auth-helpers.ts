@@ -3,7 +3,35 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseConnection } from "@neurochess/database";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 
+import type { AuthEmail, AuthEmailSender } from "../src/auth/email.js";
 import { AUTH_COOKIE_NAME, type AuthService, createAuth } from "../src/auth/service.js";
+
+export class TestMailbox implements AuthEmailSender {
+  readonly messages: AuthEmail[] = [];
+  failure = false;
+
+  async send(message: AuthEmail): Promise<void> {
+    if (this.failure) throw new Error("smtp-password-and-token-secret-canary");
+    this.messages.push(message);
+  }
+
+  link(email: string, kind: "verification" | "reset"): URL {
+    const message = this.messages.findLast(
+      (item) =>
+        item.to === email.toLowerCase() &&
+        item.subject.includes(kind === "verification" ? "Verify" : "Reset"),
+    );
+    const link = message?.text.match(/https?:\/\/\S+/)?.[0];
+    if (!link) throw new Error("Test mailbox link missing");
+    return new URL(link);
+  }
+
+  token(email: string, kind: "verification" | "reset"): string {
+    const token = new URLSearchParams(this.link(email, kind).hash.slice(1)).get("token");
+    if (!token) throw new Error("Test mailbox token missing");
+    return token;
+  }
+}
 
 export const AUTH_ENVIRONMENT = {
   WEB_ORIGIN: "http://localhost:5173",
@@ -16,10 +44,10 @@ export function fixtureAuth(
   environment = AUTH_ENVIRONMENT,
 ): AuthService {
   const foundation = createAuth(database, environment);
-  // Only test code can register fixtures; production has no enablement flag or registration route.
+  // Session/guest fixtures bypass email only in tests; lifecycle tests use the real verified flow.
   return betterAuth<BetterAuthOptions>({
     ...foundation.options,
-    emailAndPassword: { enabled: true, disableSignUp: false },
+    emailAndPassword: { enabled: true, disableSignUp: false, minPasswordLength: 12 },
   });
 }
 

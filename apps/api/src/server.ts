@@ -1,6 +1,7 @@
 import { createDatabase, createGameRepository } from "@neurochess/database";
 
 import { buildApp } from "./app.js";
+import { createSmtpEmailSender } from "./auth/email.js";
 import { createAuth } from "./auth/service.js";
 import { EnvironmentValidationError, parseApiEnvironment } from "./env.js";
 import { createGameService } from "./games/service.js";
@@ -22,8 +23,11 @@ async function main(): Promise<void> {
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
     authApi: {
-      auth: createAuth(database, environment, (level) => {
-        process.stderr.write(`Authentication diagnostic (${level}).\n`);
+      auth: createAuth(database, environment, {
+        emailSender: createSmtpEmailSender(environment),
+        diagnostic: (level) => {
+          process.stderr.write(`Authentication diagnostic (${level}).\n`);
+        },
       }),
       baseURL: environment.BETTER_AUTH_URL,
     },

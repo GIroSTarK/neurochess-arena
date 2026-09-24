@@ -60,6 +60,12 @@ A registered user can do everything a guest can and can also:
 
 Registration supports email/password, Google, and GitHub. Email verification and password reset are required for email/password accounts.
 
+### Email account lifecycle
+
+Email/password accounts must verify their address before signing in. Registration and verification never sign in automatically. Passwords have 12–128 characters, preserve spaces, and require no particular character classes. Resetting a password revokes every existing account session; the user must sign in again with the new password. A reset does not itself verify an unverified email address.
+
+Verification links expire after one hour; reopening an unexpired link is harmless and creates no session. Password-reset links expire after one hour and can be used only once. Registration, verification resend, and reset requests return generic acknowledgements without disclosing whether an address is registered. An acknowledgement does not promise delivery to an unknown or already-verified address. Delivery failures return a retryable error, and an unverified account can explicitly request another verification email. Sign-out revokes only the current session.
+
 ### Identity changes and account linking
 
 Guest games remain separate from accounts. Signing in never imports or transfers guest games, their human seats, or their unfinished-game slot. Explain this before sign-in. The original guest session retains its existing access until expiry; an account does not gain that authority because the browser also holds a guest cookie.

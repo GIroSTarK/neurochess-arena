@@ -33,6 +33,18 @@ const apiEnvironmentSchema = z
     WEB_ORIGIN: browserOriginSchema.default("http://localhost:5173"),
     BETTER_AUTH_URL: browserOriginSchema,
     BETTER_AUTH_SECRET: z.string().min(32).max(256).regex(/^\S+$/),
+    AUTH_EMAIL_TRANSPORT: z.enum(["disabled", "smtp"]).default("disabled"),
+    AUTH_EMAIL_FROM: z.email().max(254).optional(),
+    SMTP_HOST: z.hostname().max(253).optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
+    SMTP_SECURITY: z.enum(["tls", "starttls", "none"]).default("starttls"),
+    SMTP_USER: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[^\r\n]+$/)
+      .optional(),
+    SMTP_PASSWORD: z.string().min(1).max(1024).optional(),
     DATABASE_URL: postgresUrlSchema,
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -44,6 +56,25 @@ const apiEnvironmentSchema = z
     GUEST_SESSION_TTL_SECONDS: z.coerce.number().int().min(1).max(31_536_000).default(86_400),
   })
   .superRefine((environment, context) => {
+    if (environment.AUTH_EMAIL_TRANSPORT === "smtp") {
+      for (const key of ["AUTH_EMAIL_FROM", "SMTP_HOST"] as const) {
+        if (!environment[key]) context.addIssue({ code: "custom", path: [key] });
+      }
+      if (Boolean(environment.SMTP_USER) !== Boolean(environment.SMTP_PASSWORD)) {
+        context.addIssue({ code: "custom", path: ["SMTP_USER"] });
+        context.addIssue({ code: "custom", path: ["SMTP_PASSWORD"] });
+      }
+      if (
+        environment.SMTP_SECURITY === "none" &&
+        (environment.NODE_ENV === "production" ||
+          !["localhost", "127.0.0.1"].includes(environment.SMTP_HOST ?? ""))
+      ) {
+        context.addIssue({ code: "custom", path: ["SMTP_SECURITY"] });
+      }
+    }
+    if (environment.NODE_ENV === "production" && environment.AUTH_EMAIL_TRANSPORT !== "smtp") {
+      context.addIssue({ code: "custom", path: ["AUTH_EMAIL_TRANSPORT"] });
+    }
     if (environment.NODE_ENV === "production" && environment.SANDBOX_ENABLED) {
       context.addIssue({ code: "custom", path: ["SANDBOX_ENABLED"] });
     }
