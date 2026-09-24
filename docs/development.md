@@ -35,22 +35,27 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 
 ## Environment contract
 
-| Variable                    | Consumer            | Purpose                                                                   |
-| --------------------------- | ------------------- | ------------------------------------------------------------------------- |
-| `NODE_ENV`                  | API                 | `development`, `test`, or `production`                                    |
-| `API_HOST`                  | API                 | Fastify listen address                                                    |
-| `API_PORT`                  | API                 | Fastify listen port                                                       |
-| `WEB_ORIGIN`                | API                 | Exact browser origin allowed by CORS                                      |
-| `BETTER_AUTH_URL`           | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path             |
-| `BETTER_AUTH_SECRET`        | API, auth generator | Required private random secret, 32–256 characters; no default             |
-| `DATABASE_URL`              | API, tools          | PostgreSQL connection URL                                                 |
-| `LOG_LEVEL`                 | API                 | Pino log level                                                            |
-| `SANDBOX_ENABLED`           | API, web            | Exactly `true` or `false`; defaults to false; production API rejects true |
-| `GUEST_SESSION_TTL_SECONDS` | API                 | Inactivity expiry, 1–31536000 seconds; defaults to 86400                  |
-| `VITE_API_BASE_URL`         | web                 | Public HTTP(S) API origin, without credentials, paths, query, or fragment |
-| `POSTGRES_*`                | Compose             | Local database name, user, password, and port                             |
-| `TEST_DATABASE_URL`         | Tests               | Explicit disposable PostgreSQL database ending in `_test`; no fallback    |
-| `TEST_POSTGRES_PORT`        | Compose             | Separate test-service port, defaults to 5433                              |
+| Variable                     | Consumer            | Purpose                                                                                                |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `NODE_ENV`                   | API                 | `development`, `test`, or `production`                                                                 |
+| `API_HOST`                   | API                 | Fastify listen address                                                                                 |
+| `API_PORT`                   | API                 | Fastify listen port                                                                                    |
+| `WEB_ORIGIN`                 | API                 | Exact browser origin allowed by CORS                                                                   |
+| `BETTER_AUTH_URL`            | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path                                          |
+| `BETTER_AUTH_SECRET`         | API, auth generator | Required private random secret, 32–256 characters; no default                                          |
+| `AUTH_EMAIL_TRANSPORT`       | API, auth generator | `disabled` (development/test default) or `smtp`; production requires `smtp`                            |
+| `AUTH_EMAIL_FROM`            | API                 | Single sender email address, required for SMTP                                                         |
+| `SMTP_HOST`, `SMTP_PORT`     | API                 | SMTP host without a scheme/credentials; port defaults to 587                                           |
+| `SMTP_SECURITY`              | API                 | `starttls` (required upgrade, default), `tls` (implicit TLS), or loopback-only development/test `none` |
+| `SMTP_USER`, `SMTP_PASSWORD` | API                 | Optional SMTP credentials; supply both or neither                                                      |
+| `DATABASE_URL`               | API, tools          | PostgreSQL connection URL                                                                              |
+| `LOG_LEVEL`                  | API                 | Pino log level                                                                                         |
+| `SANDBOX_ENABLED`            | API, web            | Exactly `true` or `false`; defaults to false; production API rejects true                              |
+| `GUEST_SESSION_TTL_SECONDS`  | API                 | Inactivity expiry, 1–31536000 seconds; defaults to 86400                                               |
+| `VITE_API_BASE_URL`          | web                 | Public HTTP(S) API origin, without credentials, paths, query, or fragment                              |
+| `POSTGRES_*`                 | Compose             | Local database name, user, password, and port                                                          |
+| `TEST_DATABASE_URL`          | Tests               | Explicit disposable PostgreSQL database ending in `_test`; no fallback                                 |
+| `TEST_POSTGRES_PORT`         | Compose             | Separate test-service port, defaults to 5433                                                           |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
 
@@ -147,9 +152,47 @@ Better Auth, its Drizzle adapter, and the `auth` generator are pinned together a
 
 Use credentialed requests. The host-only `__Secure-neurochess.session_token` cookie is Secure, HttpOnly, SameSite=Lax, and scoped to `/`. Only cookies carry the session token; application JSON never includes it. Sessions use PostgreSQL on every lookup, last seven days, and refresh after one day. They are fresh for sensitive operations for one hour. Sign-out revokes the current session; other sessions remain valid. A failed revocation returns a safe error and preserves the browser cookie for retry. Errors use the English catalog with `AUTH_*` codes, `message`, and `requestId`; the browser should localize the code rather than display library messages.
 
-Only these two auth endpoints are mounted. Password registration/sign-in, verification/reset, OAuth, profile changes, and account deletion remain closed until their respective flows ship. No browser sign-in UI or account gameplay is enabled. Test-only factories create actual password accounts/sessions against disposable PostgreSQL without email or external providers. The account identity resolver is available for later routes; current guest APIs and Sandbox keep their guest authority.
+These session endpoints remain available with email delivery disabled. Configuring SMTP also enables the email lifecycle below. OAuth, profile changes, and account deletion remain closed. Browser authentication/profile UI and account gameplay are separate roadmap deliverables; current guest APIs and Sandbox keep their guest authority. The account identity resolver is available for later account routes. Test-only factories create session fixtures directly; lifecycle integration tests exercise the real verified flow against disposable PostgreSQL with an isolated mailbox.
 
-The auth limiter uses process memory: 60 session reads/minute/IP and 10 sign-outs/minute/IP, with a general 100/minute limit for future enabled endpoints. A `429` includes `Retry-After`. It is enabled in all environments, resets on restart, and does not coordinate across processes. It uses Fastify's client IP, overwriting the internal IP header; do not enable broad proxy trust to obtain forwarded addresses. Before exposing more endpoints, add their protections and contract tests.
+The auth limiter uses process memory: 60 session reads/minute/IP, 10 sign-outs/minute/IP, and the email limits below. A `429` includes `Retry-After`. It is enabled in all environments, resets on restart, and does not coordinate across processes. It uses Fastify's client IP, overwriting the internal IP header; do not enable broad proxy trust to obtain forwarded addresses. Before exposing more endpoints, add their protections and contract tests.
+
+### Email lifecycle API and delivery
+
+All endpoints below require JSON, an exact `Origin: WEB_ORIGIN`, and no query fields. Their success response is `{ status: true }`; only sign-in sets a session cookie. The shared contracts reject extra fields, including user IDs, verification flags, names/avatars, and callback/redirect URLs. Email addresses are normalized to lowercase. Passwords follow the [product policy](product.md#email-account-lifecycle). Better Auth's required name starts empty; a public username belongs to later profile onboarding.
+
+| POST endpoint under `/api/auth` | JSON body                | Limit per minute/IP                                 |
+| ------------------------------- | ------------------------ | --------------------------------------------------- |
+| `/sign-up/email`                | `{ email, password }`    | 5; verification delivery also uses the resend limit |
+| `/send-verification-email`      | `{ email }`              | 3                                                   |
+| `/verify-email`                 | `{ token }`              | 20                                                  |
+| `/sign-in/email`                | `{ email, password }`    | 10                                                  |
+| `/request-password-reset`       | `{ email }`              | 3                                                   |
+| `/reset-password`               | `{ token, newPassword }` | 10                                                  |
+
+Registration commits before attempting email delivery. A delivery error or throttled resend may therefore leave an unverified account; explicitly resend after the failure or `Retry-After`. Signing in before verification returns `AUTH_EMAIL_NOT_VERIFIED` and sends no extra mail. Incorrect credentials return `AUTH_INVALID_CREDENTIALS`. Expired/invalid links and consumed reset tokens return `AUTH_INVALID_TOKEN`. Reset revokes all existing sessions without creating a replacement. Verification is idempotent while its one-hour token remains valid and never creates a session.
+
+Acknowledgements for signup, resend, and reset are generic; they do not claim that mail was sent for every address. SMTP submission is awaited. A rejected recipient, connection/TLS failure, or other uncertain submission returns `503 AUTH_EMAIL_UNAVAILABLE`, without SMTP details, addresses, passwords, or tokens. SMTP acceptance is not proof of inbox delivery. Timing and transport outages are not concealed by a durable delivery queue; shared abuse controls and deployment mail monitoring remain release concerns.
+
+Mail contains these fixed destinations, built from validated `WEB_ORIGIN`:
+
+- `/auth/verify-email#token=<verification-token>`
+- `/auth/reset-password#token=<reset-token>`
+
+The browser forms at these paths belong to P3-07 and are not implemented yet. Their contract is to read the fragment into page memory, immediately remove it using `history.replaceState`, then POST the token in JSON to the API. Do not put tokens in query parameters, subsequent navigation, browser storage, telemetry, or logs. Public `GET /verify-email` and `GET /reset-password/:token` library callbacks are intentionally not exposed. API auth responses use `no-store` and `no-referrer`; client return navigation must remain token-free.
+
+To enable email locally, run an SMTP capture service bound to loopback and configure the API, for example:
+
+```dotenv
+AUTH_EMAIL_TRANSPORT=smtp
+AUTH_EMAIL_FROM=accounts@example.test
+SMTP_HOST=localhost
+SMTP_PORT=1025
+SMTP_SECURITY=none
+```
+
+Restart the API after editing `.env`. Use only disposable addresses/credentials in the local mailbox. Until the browser forms ship, exercise the API with JSON requests and take tokens from this private mailbox; never print links to API logs. Keep delivery disabled if you are only developing guest games. There is no environment-selectable in-memory or log-only sender.
+
+For production, configure an authorized sender and SMTP host, use `starttls` (usually port 587) or `tls` (usually port 465), and supply both `SMTP_USER` and `SMTP_PASSWORD` when required by the relay. TLS certificate validation is always enabled. Store credentials outside source control and never use `VITE_` variables. Production startup rejects disabled delivery and plaintext SMTP. Test verified TLS/authentication, sender-domain configuration, and actual inbox delivery with your chosen service before deployment. Default tests send only to injected mailboxes or a local disposable SMTP server; they make no outbound mail requests.
 
 ## Sandbox API
 

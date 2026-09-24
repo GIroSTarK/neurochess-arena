@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { authSessionResponseSchema, authSignOutRequestSchema } from "./auth.js";
+import {
+  authEmailRequestSchema,
+  authResetPasswordRequestSchema,
+  authSessionResponseSchema,
+  authSignOutRequestSchema,
+  authSignUpRequestSchema,
+  authVerifyEmailRequestSchema,
+} from "./auth.js";
 
 describe("account transport boundary", () => {
   it("accepts absent sessions and the minimal safe account projection", () => {
@@ -35,6 +42,37 @@ describe("account transport boundary", () => {
       { token: "secret" },
     ]) {
       expect(authSignOutRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+
+  it("normalizes email, preserves password text, and bounds lifecycle input", () => {
+    const input = { email: "Player@Example.Test", password: "  a long passphrase  " };
+    expect(authSignUpRequestSchema.parse(input)).toEqual({
+      ...input,
+      email: "player@example.test",
+    });
+    for (const password of ["short", "x".repeat(129)]) {
+      expect(authSignUpRequestSchema.safeParse({ ...input, password }).success).toBe(false);
+      expect(
+        authResetPasswordRequestSchema.safeParse({ token: "opaque-token", newPassword: password })
+          .success,
+      ).toBe(false);
+    }
+    expect(authSignUpRequestSchema.safeParse({ ...input, password: "x".repeat(12) }).success).toBe(
+      true,
+    );
+    expect(authSignUpRequestSchema.safeParse({ ...input, password: "x".repeat(128) }).success).toBe(
+      true,
+    );
+    for (const email of [
+      "bad-email",
+      "a@example.test\r\nBcc: other@example.test",
+      `${"a".repeat(254)}@example.test`,
+    ]) {
+      expect(authEmailRequestSchema.safeParse({ email }).success).toBe(false);
+    }
+    for (const token of ["", "a".repeat(2049), "token&callbackURL=//evil.test", "token\n"]) {
+      expect(authVerifyEmailRequestSchema.safeParse({ token }).success).toBe(false);
     }
   });
 });

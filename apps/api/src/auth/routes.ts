@@ -1,8 +1,15 @@
 import {
+  authEmailRequestSchema,
+  type AuthErrorCode,
   authErrorResponseSchema,
+  authResetPasswordRequestSchema,
   authSessionResponseSchema,
+  authSignInRequestSchema,
   authSignOutRequestSchema,
   authSignOutResponseSchema,
+  authSignUpRequestSchema,
+  authStatusResponseSchema,
+  authVerifyEmailRequestSchema,
   emptyQuerySchema,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -10,7 +17,13 @@ import { z } from "zod";
 
 import { authErrorMessages } from "../locales/en.js";
 
-import { authErrorCode, authErrorStatus, AuthRequestError } from "./errors.js";
+import {
+  authErrorCode,
+  authErrorStatus,
+  authFailureCode,
+  AuthRequestError,
+  libraryAuthErrorCode,
+} from "./errors.js";
 import { AUTH_BASE_PATH, AUTH_IP_HEADER, type AuthService } from "./service.js";
 
 export interface AuthRoutesOptions {
@@ -26,8 +39,22 @@ const librarySessionSchema = z
   })
   .nullable();
 
-function sendError(request: FastifyRequest, reply: FastifyReply, status: number) {
-  const code = authErrorCode(status);
+const postSchemas: Readonly<Record<string, z.ZodType>> = {
+  "/sign-out": authSignOutRequestSchema,
+  "/sign-up/email": authSignUpRequestSchema,
+  "/sign-in/email": authSignInRequestSchema,
+  "/send-verification-email": authEmailRequestSchema,
+  "/request-password-reset": authEmailRequestSchema,
+  "/reset-password": authResetPasswordRequestSchema,
+  "/verify-email": authVerifyEmailRequestSchema,
+};
+
+function sendError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  status: number,
+  code: AuthErrorCode = authErrorCode(status),
+) {
   if (status >= 500) request.log.error({ code }, "Authentication request failed");
   return reply.code(status).send(
     authErrorResponseSchema.parse({
@@ -72,24 +99,30 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
     bodyLimit: 16_384,
     async handler(request, reply) {
       try {
-        const path = request.url.split("?")[0];
-        const isSession = request.method === "GET" && path === `${AUTH_BASE_PATH}/get-session`;
-        const isSignOut = request.method === "POST" && path === `${AUTH_BASE_PATH}/sign-out`;
+        const path = (request.url.split("?")[0] ?? "").slice(AUTH_BASE_PATH.length);
+        const isSession = request.method === "GET" && path === "/get-session";
+        const isSignOut = request.method === "POST" && path === "/sign-out";
+        const bodySchema = request.method === "POST" ? postSchemas[path] : undefined;
         // New library endpoints must be reviewed before they become public product flows.
-        if (!isSession && !isSignOut) throw new AuthRequestError(404);
+        if (!isSession && !bodySchema) throw new AuthRequestError(404);
+        if (!isSession && !isSignOut && !options.auth.options.emailAndPassword?.enabled) {
+          throw new AuthRequestError(404);
+        }
         const origin = request.headers.origin;
-        if ((origin !== undefined && origin !== options.webOrigin) || (isSignOut && !origin)) {
+        if ((origin !== undefined && origin !== options.webOrigin) || (!isSession && !origin)) {
           throw new AuthRequestError(403);
         }
         if (!emptyQuerySchema.safeParse(request.query).success) throw new AuthRequestError(400);
         if (
-          isSignOut &&
-          (request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
-            "application/json" ||
-            !authSignOutRequestSchema.safeParse(request.body).success)
+          bodySchema &&
+          request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
+            "application/json"
         ) {
           throw new AuthRequestError(400);
         }
+        const parsed = bodySchema?.safeParse(request.body);
+        if (parsed && !parsed.success) throw new AuthRequestError(400);
+        const payload = parsed?.data;
 
         const headers = new Headers();
         for (const name of [
@@ -102,18 +135,48 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           const value = request.headers[name];
           if (typeof value === "string") headers.set(name, value);
         }
+        // Anonymous email operations must not act on an unrelated signed-in browser account.
+        if (!isSession && !isSignOut) headers.delete("cookie");
         // Fastify does not trust proxies. Never trust client-supplied forwarding/IP headers.
         headers.set(AUTH_IP_HEADER, request.ip);
-        const response = await options.auth.handler(
-          new Request(`${options.baseURL}${path}`, {
-            method: request.method,
-            headers,
-            ...(isSignOut ? { body: "{}" } : {}),
-          }),
-        );
+        const invoke = (libraryPath: string, body?: unknown) =>
+          options.auth.handler(
+            new Request(`${options.baseURL}${AUTH_BASE_PATH}${libraryPath}`, {
+              method: body === undefined ? "GET" : "POST",
+              headers,
+              ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
+          );
+        let libraryPath = path;
+        let libraryBody = payload;
+        if (path === "/verify-email") {
+          const query = new URLSearchParams(authVerifyEmailRequestSchema.parse(payload));
+          libraryPath = `/verify-email?${query.toString()}`;
+          libraryBody = undefined;
+        } else if (path === "/sign-up/email") {
+          // Better Auth requires a name; the user-chosen public profile belongs to onboarding.
+          libraryBody = { ...authSignUpRequestSchema.parse(payload), name: "" };
+        }
+        let response = await invoke(libraryPath, libraryBody);
+        if (response.ok && path === "/sign-up/email") {
+          z.object({ token: z.null(), user: z.object({ id: z.string() }) }).parse(
+            await response.json(),
+          );
+          response = await invoke(
+            "/send-verification-email",
+            authEmailRequestSchema.parse({
+              email: authSignUpRequestSchema.parse(payload).email,
+            }),
+          );
+        }
         if (!response.ok) {
           forwardAuthHeaders(response, reply);
-          return await sendError(request, reply, response.status);
+          return await sendError(
+            request,
+            reply,
+            response.status,
+            libraryAuthErrorCode(response.status, await response.json()),
+          );
         }
 
         const body: unknown = await response.json();
@@ -126,17 +189,28 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
             }),
           );
         }
-        // Better Auth's sign-out catches storage failures. Do not acknowledge an unrevoked session.
-        const remaining = await options.auth.api.getSession({
-          headers,
-          query: { disableCookieCache: true, disableRefresh: true },
-        });
-        if (remaining) throw new AuthRequestError(503);
-        const result = authSignOutResponseSchema.parse(body);
+        if (isSignOut) {
+          // Better Auth's sign-out catches storage failures. Do not acknowledge an unrevoked session.
+          const remaining = await options.auth.api.getSession({
+            headers,
+            query: { disableCookieCache: true, disableRefresh: true },
+          });
+          if (remaining) throw new AuthRequestError(503);
+          const result = authSignOutResponseSchema.parse(body);
+          forwardAuthHeaders(response, reply);
+          return await reply.code(response.status).send(result);
+        }
+        if (path === "/sign-in/email") {
+          z.object({ redirect: z.literal(false), token: z.string().min(1) }).parse(body);
+        } else {
+          z.object({ status: z.literal(true) }).parse(body);
+        }
         forwardAuthHeaders(response, reply);
-        return await reply.code(response.status).send(result);
+        return await reply
+          .code(response.status)
+          .send(authStatusResponseSchema.parse({ status: true }));
       } catch (error: unknown) {
-        return sendError(request, reply, authErrorStatus(error));
+        return sendError(request, reply, authErrorStatus(error), authFailureCode(error));
       }
     },
   });

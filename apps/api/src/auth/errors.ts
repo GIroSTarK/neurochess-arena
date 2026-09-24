@@ -2,10 +2,27 @@ import type { AuthErrorCode } from "@neurochess/contracts";
 import { isAPIError } from "better-auth/api";
 
 export class AuthRequestError extends Error {
-  constructor(readonly statusCode: number) {
+  constructor(
+    readonly statusCode: number,
+    readonly code: AuthErrorCode = authErrorCode(statusCode),
+  ) {
     super("AUTH_REQUEST_FAILED");
     this.name = "AuthRequestError";
   }
+}
+
+export function authFailureCode(error: unknown): AuthErrorCode {
+  if (error instanceof AuthRequestError) return error.code;
+  if (isAPIError(error)) return libraryAuthErrorCode(error.statusCode, error.body);
+  return authErrorCode(authErrorStatus(error));
+}
+
+export function libraryAuthErrorCode(status: number, body: unknown): AuthErrorCode {
+  const code = body && typeof body === "object" && "code" in body ? body.code : undefined;
+  if (code === "EMAIL_NOT_VERIFIED") return "AUTH_EMAIL_NOT_VERIFIED";
+  if (code === "INVALID_EMAIL_OR_PASSWORD") return "AUTH_INVALID_CREDENTIALS";
+  if (code === "INVALID_TOKEN" || code === "TOKEN_EXPIRED") return "AUTH_INVALID_TOKEN";
+  return authErrorCode(status);
 }
 
 export function authErrorStatus(error: unknown): number {

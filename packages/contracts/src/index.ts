@@ -1,4 +1,12 @@
 export {
+  authEmailSchema,
+  authPasswordSchema,
+  authSignUpRequestSchema,
+  authSignInRequestSchema,
+  authEmailRequestSchema,
+  authVerifyEmailRequestSchema,
+  authResetPasswordRequestSchema,
+  authStatusResponseSchema,
   authSessionResponseSchema,
   authSignOutRequestSchema,
   authSignOutResponseSchema,

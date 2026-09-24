@@ -39,6 +39,9 @@ describe("parseApiEnvironment", () => {
         SANDBOX_ENABLED: "false",
         WEB_ORIGIN: "https://arena.example.test",
         BETTER_AUTH_URL: "https://api.example.test",
+        AUTH_EMAIL_TRANSPORT: "smtp",
+        AUTH_EMAIL_FROM: "auth@example.test",
+        SMTP_HOST: "smtp.example.test",
       }).SANDBOX_ENABLED,
     ).toBe(false);
   });
@@ -118,6 +121,65 @@ describe("parseApiEnvironment", () => {
       expect((error as Error).message).toContain("API_PORT");
       expect((error as Error).message).toContain("DATABASE_URL");
       expect((error as Error).message).not.toContain(canary);
+    }
+  });
+
+  it("requires configured SMTP in production and never selects a test mailbox from the environment", () => {
+    const production = {
+      ...validEnvironment,
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://arena.example.test",
+      BETTER_AUTH_URL: "https://api.example.test",
+    };
+    for (const AUTH_EMAIL_TRANSPORT of [undefined, "disabled", "test", "memory"]) {
+      expect(() => parseApiEnvironment({ ...production, AUTH_EMAIL_TRANSPORT })).toThrow(
+        "AUTH_EMAIL_TRANSPORT",
+      );
+    }
+    const smtp = {
+      ...production,
+      AUTH_EMAIL_TRANSPORT: "smtp",
+      AUTH_EMAIL_FROM: "accounts@example.test",
+      SMTP_HOST: "smtp.example.test",
+    };
+    expect(parseApiEnvironment(smtp)).toMatchObject({ SMTP_SECURITY: "starttls", SMTP_PORT: 587 });
+    expect(() => parseApiEnvironment({ ...smtp, SMTP_SECURITY: "none" })).toThrow("SMTP_SECURITY");
+    expect(parseApiEnvironment({ ...smtp, SMTP_SECURITY: "tls", SMTP_PORT: "465" }).SMTP_PORT).toBe(
+      465,
+    );
+  });
+
+  it("validates sender, host, port, encryption, and paired SMTP credentials without echoing secrets", () => {
+    const smtp = {
+      ...validEnvironment,
+      AUTH_EMAIL_TRANSPORT: "smtp",
+      AUTH_EMAIL_FROM: "auth@example.test",
+      SMTP_HOST: "localhost",
+      SMTP_SECURITY: "none",
+      SMTP_PORT: "1025",
+    };
+    expect(parseApiEnvironment(smtp).SMTP_SECURITY).toBe("none");
+    for (const invalid of [
+      { AUTH_EMAIL_FROM: undefined },
+      { AUTH_EMAIL_FROM: "auth@example.test\r\nBcc: attacker@example.test" },
+      { SMTP_HOST: undefined },
+      { SMTP_HOST: "smtp://user:secret-canary@example.test" },
+      { SMTP_HOST: "smtp..example.test" },
+      { SMTP_HOST: "smtp.example.test" },
+      { SMTP_PORT: "0" },
+      { SMTP_PORT: "65536" },
+      { SMTP_SECURITY: "optional" },
+      { SMTP_USER: "user-secret-canary" },
+      { SMTP_PASSWORD: "password-secret-canary" },
+    ]) {
+      expect(() => parseApiEnvironment({ ...smtp, ...invalid })).toThrow(
+        EnvironmentValidationError,
+      );
+      try {
+        parseApiEnvironment({ ...smtp, ...invalid });
+      } catch (error) {
+        expect(String(error)).not.toContain("secret-canary");
+      }
     }
   });
 });
