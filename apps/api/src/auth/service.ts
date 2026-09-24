@@ -10,6 +10,15 @@ import type { ApiEnvironment } from "../env.js";
 
 import { type AuthEmailSender, sendAuthEmail } from "./email.js";
 import { AuthRequestError } from "./errors.js";
+import {
+  AUTH_FRESH_AGE_SECONDS,
+  discardedOAuthData,
+  OAUTH_COMPLETION_PATH,
+  type OAuthEnvironment,
+  oauthProtection,
+  oauthProviders,
+  validateOAuthIdentity,
+} from "./oauth.js";
 
 export const AUTH_BASE_PATH = "/api/auth";
 export const AUTH_COOKIE_NAME = "__Secure-neurochess.session_token";
@@ -17,10 +26,12 @@ export const AUTH_IP_HEADER = "x-neurochess-client-ip";
 
 export function createAuth(
   database: DatabaseConnection,
-  environment: Pick<ApiEnvironment, "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "WEB_ORIGIN">,
+  environment: Pick<ApiEnvironment, "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "WEB_ORIGIN"> &
+    OAuthEnvironment,
   options: {
     readonly diagnostic?: (level: "warn" | "error") => void;
     readonly emailSender?: AuthEmailSender | undefined;
+    readonly oauthFetch?: typeof fetch;
   } = {},
 ): Auth {
   const delivery = new AsyncLocalStorage<{ failed: boolean; resetAttempted: boolean }>();
@@ -42,6 +53,8 @@ export function createAuth(
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [environment.WEB_ORIGIN],
     database: createAuthAdapter(database),
+    socialProviders: oauthProviders(environment),
+    plugins: [oauthProtection(options.oauthFetch ?? fetch)],
     emailAndPassword: {
       enabled: Boolean(options.emailSender),
       disableSignUp: !options.emailSender,
@@ -73,16 +86,35 @@ export function createAuth(
           }
         : {}),
     },
-    user: { deleteUser: { enabled: false }, changeEmail: { enabled: false } },
+    user: {
+      deleteUser: { enabled: false },
+      changeEmail: { enabled: false },
+      validateUserInfo: validateOAuthIdentity,
+    },
     account: {
-      accountLinking: { enabled: false, disableImplicitLinking: true },
+      accountLinking: {
+        enabled: true,
+        disableImplicitLinking: true,
+        trustedProviders: [],
+        allowDifferentEmails: false,
+        updateUserInfoOnLink: false,
+      },
       encryptOAuthTokens: true,
       storeAccountCookie: false,
+      storeStateStrategy: "database",
+      skipStateCookieCheck: false,
+      updateAccountOnSignIn: false,
+    },
+    databaseHooks: {
+      account: {
+        create: { before: async (account) => ({ data: { ...account, ...discardedOAuthData } }) },
+        update: { before: async (account) => ({ data: { ...account, ...discardedOAuthData } }) },
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
       updateAge: 60 * 60 * 24,
-      freshAge: 60 * 60,
+      freshAge: AUTH_FRESH_AGE_SECONDS,
       cookieCache: { enabled: false },
     },
     advanced: {
@@ -106,6 +138,9 @@ export function createAuth(
         "/request-password-reset": { window: 60, max: 3 },
         "/reset-password": { window: 60, max: 10 },
         "/verify-email": { window: 60, max: 20 },
+        "/sign-in/social": { window: 60, max: 10 },
+        "/link-social": { window: 60, max: 10 },
+        "/callback/*": { window: 60, max: 20 },
       },
     },
     // Library messages and arguments can contain credentials, SQL, or callback tokens.
@@ -116,7 +151,7 @@ export function createAuth(
       },
     },
     telemetry: { enabled: false },
-    onAPIError: { throw: true },
+    onAPIError: { throw: true, errorURL: `${environment.WEB_ORIGIN}${OAUTH_COMPLETION_PATH}` },
   });
   return {
     ...auth,

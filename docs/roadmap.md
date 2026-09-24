@@ -84,14 +84,14 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
-**Status:** In progress. P3-01 establishes the server-derived identity boundary and accepted lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. P3-02 adds Better Auth's PostgreSQL/Drizzle persistence, protected session boundary, and account resolver. P3-03 adds verified email registration/sign-in, resend, password recovery with session revocation, configurable SMTP, and isolated mailbox coverage. OAuth, browser authentication/profile UI, account gameplay, credentials, and history remain pending.
+**Status:** In progress. P3-01 establishes the server-derived identity boundary and accepted lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. P3-02 adds Better Auth's PostgreSQL/Drizzle persistence, protected session boundary, and account resolver. P3-03 adds verified email registration/sign-in, resend, password recovery with session revocation, configurable SMTP, and isolated mailbox coverage. P3-04 adds Google/GitHub OAuth with verified identities, explicit same-email linking, protected callbacks, and injected transport coverage. Live provider-console checks remain deployment work. Browser authentication/profile UI, account gameplay, credentials, and history remain pending.
 
 Deliverables:
 
 - [x] identity and lifecycle groundwork, including guest/account separation and preserved guest validity/locking;
 - [x] Better Auth persistence and session foundation; account deletion remains disabled;
 - [x] email/password API, verification/resend, password reset, and configurable email delivery;
-- Google and GitHub authentication;
+- [x] Google and GitHub authentication API with explicit linking and provider-console setup instructions;
 - browser authentication/profile UI and identity transitions;
 - unique usernames and avatars;
 - encrypted opt-in provider credential storage;

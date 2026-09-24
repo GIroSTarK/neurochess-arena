@@ -14,6 +14,34 @@ const validEnvironment = {
 };
 
 describe("parseApiEnvironment", () => {
+  it.each(["GOOGLE", "GITHUB"])(
+    "requires paired, bounded %s OAuth credentials without echoing secrets",
+    (provider) => {
+      const id = `${provider}_CLIENT_ID`;
+      const secret = `${provider}_CLIENT_SECRET`;
+      expect(parseApiEnvironment(validEnvironment)).not.toHaveProperty(id);
+      expect(
+        parseApiEnvironment({ ...validEnvironment, [id]: "client-id", [secret]: "secret-canary" }),
+      ).toMatchObject({ [id]: "client-id" });
+      for (const values of [
+        { [id]: "client-id" },
+        { [secret]: "secret-canary" },
+        { [id]: "client-id", [secret]: "" },
+        { [id]: "client-id", [secret]: "secret-canary\r\n" },
+        { [id]: "client-id", [secret]: "x".repeat(513) },
+        { [id]: "client-id/path", [secret]: "secret-canary" },
+        { [id]: "client-id", [secret]: 123 },
+      ]) {
+        try {
+          parseApiEnvironment({ ...validEnvironment, ...values });
+          expect.fail("Invalid OAuth configuration accepted");
+        } catch (error) {
+          expect(error).toBeInstanceOf(EnvironmentValidationError);
+          expect(String(error).includes("secret-canary")).toBe(false);
+        }
+      }
+    },
+  );
   it("disables the sandbox by default and gives guests a 24-hour inactivity expiry", () => {
     expect(parseApiEnvironment(validEnvironment)).toMatchObject({
       SANDBOX_ENABLED: false,

@@ -12,6 +12,12 @@ export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
     "Verify your email before signing in. You can request another verification email.",
   AUTH_INVALID_CREDENTIALS: "The email or password is incorrect.",
   AUTH_INVALID_TOKEN: "This link is invalid or has expired. Please request a new link.",
+  AUTH_OAUTH_FAILED:
+    "Provider sign-in could not be completed. Please try again with a verified email.",
+  AUTH_OAUTH_CONFLICT:
+    "Sign in using your existing method, then explicitly link this provider with the same verified email.",
+  AUTH_REAUTHENTICATION_REQUIRED:
+    "Sign in again before linking a provider, then retry from that account.",
 };
 
 export const authEmailMessages = {

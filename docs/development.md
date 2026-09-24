@@ -35,27 +35,29 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 
 ## Environment contract
 
-| Variable                     | Consumer            | Purpose                                                                                                |
-| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| `NODE_ENV`                   | API                 | `development`, `test`, or `production`                                                                 |
-| `API_HOST`                   | API                 | Fastify listen address                                                                                 |
-| `API_PORT`                   | API                 | Fastify listen port                                                                                    |
-| `WEB_ORIGIN`                 | API                 | Exact browser origin allowed by CORS                                                                   |
-| `BETTER_AUTH_URL`            | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path                                          |
-| `BETTER_AUTH_SECRET`         | API, auth generator | Required private random secret, 32–256 characters; no default                                          |
-| `AUTH_EMAIL_TRANSPORT`       | API, auth generator | `disabled` (development/test default) or `smtp`; production requires `smtp`                            |
-| `AUTH_EMAIL_FROM`            | API                 | Single sender email address, required for SMTP                                                         |
-| `SMTP_HOST`, `SMTP_PORT`     | API                 | SMTP host without a scheme/credentials; port defaults to 587                                           |
-| `SMTP_SECURITY`              | API                 | `starttls` (required upgrade, default), `tls` (implicit TLS), or loopback-only development/test `none` |
-| `SMTP_USER`, `SMTP_PASSWORD` | API                 | Optional SMTP credentials; supply both or neither                                                      |
-| `DATABASE_URL`               | API, tools          | PostgreSQL connection URL                                                                              |
-| `LOG_LEVEL`                  | API                 | Pino log level                                                                                         |
-| `SANDBOX_ENABLED`            | API, web            | Exactly `true` or `false`; defaults to false; production API rejects true                              |
-| `GUEST_SESSION_TTL_SECONDS`  | API                 | Inactivity expiry, 1–31536000 seconds; defaults to 86400                                               |
-| `VITE_API_BASE_URL`          | web                 | Public HTTP(S) API origin, without credentials, paths, query, or fragment                              |
-| `POSTGRES_*`                 | Compose             | Local database name, user, password, and port                                                          |
-| `TEST_DATABASE_URL`          | Tests               | Explicit disposable PostgreSQL database ending in `_test`; no fallback                                 |
-| `TEST_POSTGRES_PORT`         | Compose             | Separate test-service port, defaults to 5433                                                           |
+| Variable                                   | Consumer            | Purpose                                                                                                |
+| ------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `NODE_ENV`                                 | API                 | `development`, `test`, or `production`                                                                 |
+| `API_HOST`                                 | API                 | Fastify listen address                                                                                 |
+| `API_PORT`                                 | API                 | Fastify listen port                                                                                    |
+| `WEB_ORIGIN`                               | API                 | Exact browser origin allowed by CORS                                                                   |
+| `BETTER_AUTH_URL`                          | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path                                          |
+| `BETTER_AUTH_SECRET`                       | API, auth generator | Required private random secret, 32–256 characters; no default                                          |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | API, auth generator | Optional paired Google OAuth web-client credentials; omit both to disable                              |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | API, auth generator | Optional paired GitHub OAuth App credentials; omit both to disable                                     |
+| `AUTH_EMAIL_TRANSPORT`                     | API, auth generator | `disabled` (development/test default) or `smtp`; production requires `smtp`                            |
+| `AUTH_EMAIL_FROM`                          | API                 | Single sender email address, required for SMTP                                                         |
+| `SMTP_HOST`, `SMTP_PORT`                   | API                 | SMTP host without a scheme/credentials; port defaults to 587                                           |
+| `SMTP_SECURITY`                            | API                 | `starttls` (required upgrade, default), `tls` (implicit TLS), or loopback-only development/test `none` |
+| `SMTP_USER`, `SMTP_PASSWORD`               | API                 | Optional SMTP credentials; supply both or neither                                                      |
+| `DATABASE_URL`                             | API, tools          | PostgreSQL connection URL                                                                              |
+| `LOG_LEVEL`                                | API                 | Pino log level                                                                                         |
+| `SANDBOX_ENABLED`                          | API, web            | Exactly `true` or `false`; defaults to false; production API rejects true                              |
+| `GUEST_SESSION_TTL_SECONDS`                | API                 | Inactivity expiry, 1–31536000 seconds; defaults to 86400                                               |
+| `VITE_API_BASE_URL`                        | web                 | Public HTTP(S) API origin, without credentials, paths, query, or fragment                              |
+| `POSTGRES_*`                               | Compose             | Local database name, user, password, and port                                                          |
+| `TEST_DATABASE_URL`                        | Tests               | Explicit disposable PostgreSQL database ending in `_test`; no fallback                                 |
+| `TEST_POSTGRES_PORT`                       | Compose             | Separate test-service port, defaults to 5433                                                           |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
 
@@ -152,7 +154,7 @@ Better Auth, its Drizzle adapter, and the `auth` generator are pinned together a
 
 Use credentialed requests. The host-only `__Secure-neurochess.session_token` cookie is Secure, HttpOnly, SameSite=Lax, and scoped to `/`. Only cookies carry the session token; application JSON never includes it. Sessions use PostgreSQL on every lookup, last seven days, and refresh after one day. They are fresh for sensitive operations for one hour. Sign-out revokes the current session; other sessions remain valid. A failed revocation returns a safe error and preserves the browser cookie for retry. Errors use the English catalog with `AUTH_*` codes, `message`, and `requestId`; the browser should localize the code rather than display library messages.
 
-These session endpoints remain available with email delivery disabled. Configuring SMTP also enables the email lifecycle below. OAuth, profile changes, and account deletion remain closed. Browser authentication/profile UI and account gameplay are separate roadmap deliverables; current guest APIs and Sandbox keep their guest authority. The account identity resolver is available for later account routes. Test-only factories create session fixtures directly; lifecycle integration tests exercise the real verified flow against disposable PostgreSQL with an isolated mailbox.
+These session endpoints remain available with email delivery disabled. Configuring SMTP enables the email lifecycle below; each configured OAuth credential pair independently enables that provider. Profile changes and account deletion remain closed. Browser authentication/profile UI and account gameplay are separate roadmap deliverables; current guest APIs and Sandbox keep their guest authority. The account identity resolver is available for later account routes. Test-only factories create session fixtures directly; lifecycle integration tests exercise the real verified flow against disposable PostgreSQL with an isolated mailbox.
 
 The auth limiter uses process memory: 60 session reads/minute/IP, 10 sign-outs/minute/IP, and the email limits below. A `429` includes `Retry-After`. It is enabled in all environments, resets on restart, and does not coordinate across processes. It uses Fastify's client IP, overwriting the internal IP header; do not enable broad proxy trust to obtain forwarded addresses. Before exposing more endpoints, add their protections and contract tests.
 
@@ -193,6 +195,30 @@ SMTP_SECURITY=none
 Restart the API after editing `.env`. Use only disposable addresses/credentials in the local mailbox. Until the browser forms ship, exercise the API with JSON requests and take tokens from this private mailbox; never print links to API logs. Keep delivery disabled if you are only developing guest games. There is no environment-selectable in-memory or log-only sender.
 
 For production, configure an authorized sender and SMTP host, use `starttls` (usually port 587) or `tls` (usually port 465), and supply both `SMTP_USER` and `SMTP_PASSWORD` when required by the relay. TLS certificate validation is always enabled. Store credentials outside source control and never use `VITE_` variables. Production startup rejects disabled delivery and plaintext SMTP. Test verified TLS/authentication, sender-domain configuration, and actual inbox delivery with your chosen service before deployment. Default tests send only to injected mailboxes or a local disposable SMTP server; they make no outbound mail requests.
+
+## Google and GitHub OAuth
+
+Set both credentials for each desired provider in `.env` or deployment secret storage, then restart the API. Empty, partial, malformed, or overlong pairs fail environment validation without echoing their values. Never use `VITE_` for credentials. Callback origins derive exclusively from `BETTER_AUTH_URL`; there is no request-supplied callback host or path. Production still requires the email transport for account recovery.
+
+| Endpoint                        | Request                                                                 | Success                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `POST /api/auth/sign-in/social` | Strict `{ provider: "google" \| "github" }`, exact-origin JSON          | `{ url, redirect: true }`; navigate to this provider authorization URL           |
+| `POST /api/auth/link-social`    | Same body, plus a verified account session created within the past hour | Same redirect response; consent links the provider without replacing the session |
+| `GET /api/auth/callback/google` | Provider's authorization-code/state response                            | Fixed completion redirect                                                        |
+| `GET /api/auth/callback/github` | Provider's authorization-code/state response                            | Fixed completion redirect                                                        |
+
+Starts and linking allow 10 requests/minute/IP each; callbacks allow 20/minute/IP per callback path. All other commands retain exact `WEB_ORIGIN` and JSON checks. Only GET callbacks accept cross-site navigation. The signed state cookie lasts five minutes; library state expires after ten minutes and is consumed on callback. Missing/mismatched/expired state, provider mismatch, and replay fail without signing in. A successful response carries the normal Secure/HttpOnly/Lax session cookie; no session or provider token is returned in JSON.
+
+Completion redirects go only to `WEB_ORIGIN/auth/complete#status=signed-in`, `#status=linked`, or `#error=<AUTH_* code>`. Error codes are `AUTH_OAUTH_FAILED`, `AUTH_OAUTH_CONFLICT`, and `AUTH_REAUTHENTICATION_REQUIRED`; raw provider errors, descriptions, callback codes, and state are discarded. Responses set `no-store` and `Referrer-Policy: no-referrer`. Auth request logs omit callback paths/queries; configure any reverse proxy/access telemetry to do the same. Browser forms and the completion screen ship with the authentication UI milestone; until then inspect the session API using a private browser/HTTP fixture. Do not expose unfinished account navigation in the Arena.
+
+Both providers require a verified email on every callback. GitHub reads the primary address from `/user/emails` even when `/user` hides it. Google uses its server-authenticated UserInfo endpoint. Matching an existing local email without an existing provider link returns `AUTH_OAUTH_CONFLICT`: sign in using the existing method, then explicitly link from that fresh session with the same verified email. A revoked, switched, or stale initiating session cannot complete a link. Provider subject IDs determine returning identity; a changed verified provider email never replaces the stored email or links another account. Provider names are ignored; approved initial avatars are limited to `lh3`–`lh6.googleusercontent.com` and `avatars.githubusercontent.com`. Missing/unsafe avatars use the later profile flow's initials fallback. Tokens, token expiry, scopes, and raw profiles are not retained.
+
+Provider-console setup:
+
+1. In [Google's OAuth setup](https://developers.google.com/identity/openid-connect/openid-connect), create a **Web application** OAuth client, configure its consent screen/audience and test users where required, and register `BETTER_AUTH_URL/api/auth/callback/google` as an exact authorized redirect URI (local default: `http://localhost:3001/api/auth/callback/google`). Store its client ID/secret in the paired Google variables. The app requests only `openid email profile`, for identity/email and the optional avatar; it requests online access and disables incremental scope expansion.
+2. Create a [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app), with homepage `WEB_ORIGIN` and authorization callback `BETTER_AUTH_URL/api/auth/callback/github` (local default: `http://localhost:3001/api/auth/callback/github`). Use separate development/production apps. Store its client ID/secret in the GitHub variables. The only requested [GitHub scope](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps) is `user:email`; repository, organization, and private-profile access are not requested.
+
+Before production, manually exercise both consent screens and registered HTTPS callbacks, a GitHub account with a private email, consent cancellation, repeated sign-in, same-email conflict recovery and explicit linking, and sign-out during consent. Confirm cookie/referrer behavior in the target browser/deployment and check application/proxy logs for callback secrets. Automated tests inject only the external HTTP transport while using real Better Auth, Fastify, and disposable PostgreSQL; they do not prove live provider-console consent, redirect registration, or provider availability.
 
 ## Sandbox API
 
@@ -376,7 +402,9 @@ Migration `0007_separate_sandbox_game_slot.sql` replaces the unfinished-owner in
 
 Migration `0006_ai_controller_presence.sql` adds the per-game controller UUID/expiry table and cascading foreign key. It does not rewrite existing games or Sandbox data. Stop old API writers, apply it, and restart the updated API; active ordinary AI games without a lease are then paused by the presence worker. Never expire a reservation into another provider dispatch. The [controller ADR](decisions/0011-ai-controller-presence-and-step.md) defines recovery and deployment behavior.
 
-Never edit an applied migration or use schema push as a substitute for reviewed SQL. To update auth persistence, first build shared packages and run `npm run auth:generate`, then format the generated schema and use `npm run db:generate -- --name <name>` and `npm run db:check`. Inspect generated SQL and metadata before applying it. Never run Better Auth's independent migration command or adopt beta/RC Drizzle APIs.
+Never edit an applied migration or use schema push as a substitute for reviewed SQL. To update auth persistence, first build shared packages and run `npm run auth:generate`, then retain the application-owned `account_provider_subject_unique` index in the generated schema, format it, and use `npm run db:generate -- --name <name>` and `npm run db:check`. Inspect generated SQL and metadata before applying it. Never run Better Auth's independent migration command or adopt beta/RC Drizzle APIs.
+
+Migration `0009_oauth_account_identity.sql` adds the unique `(provider_id, account_id)` index without changing existing users, credential accounts, sessions, verification records, or games. Stop API writers, apply the migration, and restart the updated API before enabling OAuth. Conflicting legacy provider bindings must be investigated rather than automatically merged or deleted; the migration fails if they exist. PostgreSQL tests cover upgrades from populated prior auth/game schemas and concurrent claims across account owners.
 
 Migration `0008_better_auth_foundation.sql` adds the generator's four auth tables, unique email/session-token constraints, and indexed user/verification lookups. It does not alter game ownership, seats, moves, receipts, or controller/reservation data. Stop API writers, apply the forward migration, configure the auth origin/secret, and restart the updated API. Populated upgrade tests preserve existing guest AI/Sandbox records and their unfinished limits. Keep the added tables when rolling application code back; do not edit the migration history or delete auth records as a rollback shortcut.
 
