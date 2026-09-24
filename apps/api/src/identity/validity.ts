@@ -2,7 +2,7 @@ import type { GameReader, GameTransaction } from "@neurochess/database";
 
 import { GameRequestError } from "../games/errors.js";
 
-import type { Principal } from "./principal.js";
+import type { GuestPrincipal as Principal } from "./principal.js";
 
 export async function requireActivePrincipal(
   reader: GameReader,

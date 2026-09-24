@@ -1,7 +1,7 @@
 import type { ChessColor } from "@neurochess/chess";
 import type { StoredGame, StoredParticipant } from "@neurochess/database";
 
-import type { Principal } from "../identity/principal.js";
+import type { GuestPrincipal as Principal } from "../identity/principal.js";
 
 import { GameRequestError } from "./errors.js";
 

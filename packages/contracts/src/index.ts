@@ -1,4 +1,13 @@
 export {
+  authSessionResponseSchema,
+  authSignOutRequestSchema,
+  authSignOutResponseSchema,
+  authErrorCodeSchema,
+  authErrorResponseSchema,
+  type AuthSessionResponse,
+  type AuthErrorCode,
+} from "./auth.js";
+export {
   invocationOutcomeSchema,
   modelInvocationSchema,
   aiTurnRecordSchema,

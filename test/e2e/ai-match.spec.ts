@@ -351,7 +351,8 @@ for (const during of ["inference", "delay"] as const) {
     await expect
       .poll(async () => (await read(page, game.gameId)).moves.length)
       .toBe(recovered.moves.length + 1);
-    expect(turnsWithOriginalKey.slice(count)).toEqual([false]);
+    // Direct API reads can finish before Playwright delivers the browser's request event.
+    await expect.poll(() => turnsWithOriginalKey.slice(count)).toEqual([false]);
     await expectPrivate();
     await stop(page);
   });

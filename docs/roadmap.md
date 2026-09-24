@@ -84,11 +84,12 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
-**Status:** In progress. P3-01 establishes the server-derived identity boundary while preserving guest gameplay and records the account lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. Account authentication, ownership, credentials, and history remain pending.
+**Status:** In progress. P3-01 establishes the server-derived identity boundary while preserving guest gameplay and records the account lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. P3-02 adds Better Auth's PostgreSQL/Drizzle foundation, reviewed forward migration, protected Fastify session/sign-out endpoints, safe session projection, and the account resolver. Database and desktop/mobile browser tests cover session validity, cookies, revocation, redaction, and preserved guest access. Complete email/OAuth lifecycles, account gameplay, credentials, and history remain pending.
 
 Deliverables:
 
 - [x] identity and lifecycle groundwork, including guest/account separation and preserved guest validity/locking;
+- [x] Better Auth persistence and session foundation with registration and account deletion disabled;
 - Better Auth with email/password, Google, and GitHub;
 - email verification and password reset;
 - unique usernames and avatars;

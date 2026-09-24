@@ -13,8 +13,10 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
+import { createAuth } from "../../apps/api/src/auth/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
+import { AUTH_ENVIRONMENT } from "../../apps/api/test/auth-helpers.js";
 import { integrationDatabase } from "../database.js";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
@@ -111,6 +113,14 @@ async function main() {
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
+      authApi: {
+        auth: createAuth(database, {
+          ...AUTH_ENVIRONMENT,
+          WEB_ORIGIN,
+          BETTER_AUTH_URL: API_ORIGIN,
+        }),
+        baseURL: API_ORIGIN,
+      },
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {

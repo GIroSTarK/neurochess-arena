@@ -17,6 +17,7 @@
     "apps/web"
   ],
   "scripts": {
+    "auth:generate": "auth generate --config apps/api/auth.config.ts --output packages/database/src/schema/auth.ts --yes",
     "predev": "npm run build:packages",
     "dev": "concurrently --kill-others-on-fail --names contracts,chess,database,api,web \"tsc -b packages/contracts --watch --preserveWatchOutput\" \"tsc -b packages/chess --watch --preserveWatchOutput\" \"tsc -b packages/database --watch --preserveWatchOutput\" \"node --watch --watch-preserve-output --conditions=development --import tsx apps/api/src/server.ts\" \"vite apps/web\"",
     "build:packages": "tsc -b packages/contracts packages/chess packages/database",
@@ -55,9 +56,10 @@
     "@types/react-dom": "19.3.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitejs/plugin-react": "6.1.1",
+    "auth": "1.7.5",
     "concurrently": "10.0.5",
     "dependency-cruiser": "18.4.0",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.7",

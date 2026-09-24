@@ -44,7 +44,11 @@ export function createLoggerOptions(level: string): LoggerOptions {
         return {
           id: stringValue(record.id),
           method: stringValue(record.method) ?? stringValue(raw.method),
-          path: rawUrl === undefined ? undefined : stripQuery(rawUrl),
+          path: rawUrl?.startsWith("/api/auth")
+            ? "/api/auth"
+            : rawUrl === undefined
+              ? undefined
+              : stripQuery(rawUrl),
         };
       },
       res(response: unknown) {
