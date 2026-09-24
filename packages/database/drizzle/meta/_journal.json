@@ -64,6 +64,13 @@
       "when": 1790206380181,
       "tag": "0008_better_auth_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790274155977,
+      "tag": "0009_oauth_account_identity",
+      "breakpoints": true
     }
   ]
 }

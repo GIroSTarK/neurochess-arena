@@ -33,6 +33,30 @@ const apiEnvironmentSchema = z
     WEB_ORIGIN: browserOriginSchema.default("http://localhost:5173"),
     BETTER_AUTH_URL: browserOriginSchema,
     BETTER_AUTH_SECRET: z.string().min(32).max(256).regex(/^\S+$/),
+    GOOGLE_CLIENT_ID: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .optional(),
+    GOOGLE_CLIENT_SECRET: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[\x21-\x7e]+$/)
+      .optional(),
+    GITHUB_CLIENT_ID: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .optional(),
+    GITHUB_CLIENT_SECRET: z
+      .string()
+      .min(1)
+      .max(512)
+      .regex(/^[\x21-\x7e]+$/)
+      .optional(),
     AUTH_EMAIL_TRANSPORT: z.enum(["disabled", "smtp"]).default("disabled"),
     AUTH_EMAIL_FROM: z.email().max(254).optional(),
     SMTP_HOST: z.hostname().max(253).optional(),
@@ -56,6 +80,15 @@ const apiEnvironmentSchema = z
     GUEST_SESSION_TTL_SECONDS: z.coerce.number().int().min(1).max(31_536_000).default(86_400),
   })
   .superRefine((environment, context) => {
+    for (const [id, secret] of [
+      ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+      ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],
+    ] as const) {
+      if (Boolean(environment[id]) !== Boolean(environment[secret])) {
+        context.addIssue({ code: "custom", path: [id] });
+        context.addIssue({ code: "custom", path: [secret] });
+      }
+    }
     if (environment.AUTH_EMAIL_TRANSPORT === "smtp") {
       for (const key of ["AUTH_EMAIL_FROM", "SMTP_HOST"] as const) {
         if (!environment[key]) context.addIssue({ code: "custom", path: [key] });

@@ -2,6 +2,8 @@ import {
   authEmailRequestSchema,
   type AuthErrorCode,
   authErrorResponseSchema,
+  authOAuthCallbackQuerySchema,
+  authOAuthRequestSchema,
   authResetPasswordRequestSchema,
   authSessionResponseSchema,
   authSignInRequestSchema,
@@ -24,6 +26,8 @@ import {
   AuthRequestError,
   libraryAuthErrorCode,
 } from "./errors.js";
+import { OAUTH_COMPLETION_PATH } from "./oauth.js";
+import { oauthCallbackLocation, oauthCompletion, oauthStartResponse } from "./oauth-http.js";
 import { AUTH_BASE_PATH, AUTH_IP_HEADER, type AuthService } from "./service.js";
 
 export interface AuthRoutesOptions {
@@ -47,6 +51,8 @@ const postSchemas: Readonly<Record<string, z.ZodType>> = {
   "/request-password-reset": authEmailRequestSchema,
   "/reset-password": authResetPasswordRequestSchema,
   "/verify-email": authVerifyEmailRequestSchema,
+  "/sign-in/social": authOAuthRequestSchema,
+  "/link-social": authOAuthRequestSchema,
 };
 
 function sendError(
@@ -98,21 +104,39 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
     url: `${AUTH_BASE_PATH}/*`,
     bodyLimit: 16_384,
     async handler(request, reply) {
+      const path = (request.url.split("?")[0] ?? "").slice(AUTH_BASE_PATH.length);
+      const isCallback = request.method === "GET" && /^\/callback\/(google|github)$/.test(path);
       try {
-        const path = (request.url.split("?")[0] ?? "").slice(AUTH_BASE_PATH.length);
         const isSession = request.method === "GET" && path === "/get-session";
         const isSignOut = request.method === "POST" && path === "/sign-out";
+        const isOAuthStart =
+          request.method === "POST" && (path === "/sign-in/social" || path === "/link-social");
         const bodySchema = request.method === "POST" ? postSchemas[path] : undefined;
         // New library endpoints must be reviewed before they become public product flows.
-        if (!isSession && !bodySchema) throw new AuthRequestError(404);
-        if (!isSession && !isSignOut && !options.auth.options.emailAndPassword?.enabled) {
+        if (!isSession && !bodySchema && !isCallback) throw new AuthRequestError(404);
+        if (isOAuthStart && !Object.keys(options.auth.options.socialProviders ?? {}).length) {
+          throw new AuthRequestError(404);
+        }
+        if (
+          !isSession &&
+          !isSignOut &&
+          !isOAuthStart &&
+          !isCallback &&
+          !options.auth.options.emailAndPassword?.enabled
+        ) {
           throw new AuthRequestError(404);
         }
         const origin = request.headers.origin;
-        if ((origin !== undefined && origin !== options.webOrigin) || (!isSession && !origin)) {
+        if (
+          !isCallback &&
+          ((origin !== undefined && origin !== options.webOrigin) || (!isSession && !origin))
+        ) {
           throw new AuthRequestError(403);
         }
-        if (!emptyQuerySchema.safeParse(request.query).success) throw new AuthRequestError(400);
+        const query = (isCallback ? authOAuthCallbackQuerySchema : emptyQuerySchema).safeParse(
+          request.query,
+        );
+        if (!query.success) throw new AuthRequestError(400);
         if (
           bodySchema &&
           request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
@@ -123,6 +147,17 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
         const parsed = bodySchema?.safeParse(request.body);
         if (parsed && !parsed.success) throw new AuthRequestError(400);
         const payload = parsed?.data;
+        const oauthProvider = isOAuthStart
+          ? authOAuthRequestSchema.parse(payload).provider
+          : undefined;
+        const configuredProvider =
+          oauthProvider ?? (isCallback ? path.slice("/callback/".length) : undefined);
+        if (
+          configuredProvider &&
+          !Object.hasOwn(options.auth.options.socialProviders ?? {}, configuredProvider)
+        ) {
+          throw new AuthRequestError(404);
+        }
 
         const headers = new Headers();
         for (const name of [
@@ -135,8 +170,10 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           const value = request.headers[name];
           if (typeof value === "string") headers.set(name, value);
         }
-        // Anonymous email operations must not act on an unrelated signed-in browser account.
-        if (!isSession && !isSignOut) headers.delete("cookie");
+        // Anonymous sign-in/email operations must not act on an unrelated browser account.
+        if (!isSession && !isSignOut && !isCallback && path !== "/link-social") {
+          headers.delete("cookie");
+        }
         // Fastify does not trust proxies. Never trust client-supplied forwarding/IP headers.
         headers.set(AUTH_IP_HEADER, request.ip);
         const invoke = (libraryPath: string, body?: unknown) =>
@@ -149,7 +186,24 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           );
         let libraryPath = path;
         let libraryBody = payload;
-        if (path === "/verify-email") {
+        if (isCallback) {
+          const callback = authOAuthCallbackQuerySchema.parse(query.data);
+          const params = new URLSearchParams();
+          for (const key of ["state", "code", "error", "iss"] as const) {
+            if (callback[key] !== undefined) params.set(key, callback[key]);
+          }
+          libraryPath = `${path}?${params.toString()}`;
+        } else if (isOAuthStart) {
+          libraryBody = {
+            provider: oauthProvider,
+            disableRedirect: true,
+            callbackURL: oauthCompletion(
+              options.webOrigin,
+              path === "/link-social" ? "linked" : "signed-in",
+            ),
+            errorCallbackURL: `${options.webOrigin}${OAUTH_COMPLETION_PATH}`,
+          };
+        } else if (path === "/verify-email") {
           const query = new URLSearchParams(authVerifyEmailRequestSchema.parse(payload));
           libraryPath = `/verify-email?${query.toString()}`;
           libraryBody = undefined;
@@ -158,6 +212,11 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           libraryBody = { ...authSignUpRequestSchema.parse(payload), name: "" };
         }
         let response = await invoke(libraryPath, libraryBody);
+        if (isCallback) {
+          const location = oauthCallbackLocation(response, options.webOrigin);
+          forwardAuthHeaders(response, reply);
+          return await reply.redirect(location);
+        }
         if (response.ok && path === "/sign-up/email") {
           z.object({ token: z.null(), user: z.object({ id: z.string() }) }).parse(
             await response.json(),
@@ -180,6 +239,11 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
         }
 
         const body: unknown = await response.json();
+        if (oauthProvider) {
+          const result = oauthStartResponse(body, oauthProvider);
+          forwardAuthHeaders(response, reply);
+          return await reply.code(response.status).send(result);
+        }
         if (isSession) {
           const result = librarySessionSchema.parse(body);
           forwardAuthHeaders(response, reply);
@@ -210,6 +274,9 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           .code(response.status)
           .send(authStatusResponseSchema.parse({ status: true }));
       } catch (error: unknown) {
+        if (isCallback) {
+          return reply.redirect(oauthCompletion(options.webOrigin, "AUTH_OAUTH_FAILED"));
+        }
         return sendError(request, reply, authErrorStatus(error), authFailureCode(error));
       }
     },

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   authEmailRequestSchema,
+  authOAuthCallbackQuerySchema,
+  authOAuthRequestSchema,
   authResetPasswordRequestSchema,
   authSessionResponseSchema,
   authSignOutRequestSchema,
@@ -10,6 +12,24 @@ import {
 } from "./auth.js";
 
 describe("account transport boundary", () => {
+  it("bounds OAuth callback data and accepts only a provider choice at initiation", () => {
+    expect(authOAuthRequestSchema.parse({ provider: "github" })).toEqual({ provider: "github" });
+    for (const input of [
+      { provider: "facebook" },
+      { provider: "google", scopes: ["repo"] },
+      { provider: "google", callbackURL: "/" },
+    ]) {
+      expect(authOAuthRequestSchema.safeParse(input).success).toBe(false);
+    }
+    for (const input of [
+      { state: ["one", "two"] },
+      { code: "x".repeat(4097) },
+      { code: "new\nline" },
+      { state: "state", callbackURL: "https://attacker.test" },
+    ]) {
+      expect(authOAuthCallbackQuerySchema.safeParse(input).success).toBe(false);
+    }
+  });
   it("accepts absent sessions and the minimal safe account projection", () => {
     expect(authSessionResponseSchema.parse({ session: null })).toEqual({ session: null });
     expect(

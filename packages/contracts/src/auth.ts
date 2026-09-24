@@ -21,6 +21,35 @@ export const authResetPasswordRequestSchema = z.strictObject({
 });
 export const authStatusResponseSchema = z.strictObject({ status: z.literal(true) });
 
+export const authOAuthProviderSchema = z.enum(["google", "github"]);
+export type AuthOAuthProvider = z.infer<typeof authOAuthProviderSchema>;
+export const authOAuthRequestSchema = z.strictObject({ provider: authOAuthProviderSchema });
+export const authOAuthStartResponseSchema = z.strictObject({
+  url: z.url(),
+  redirect: z.literal(true),
+});
+const callbackValue = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((value) =>
+    Array.from(value).every(
+      (character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127,
+    ),
+  );
+export const authOAuthCallbackQuerySchema = z.strictObject({
+  state: callbackValue.optional(),
+  code: callbackValue.optional(),
+  error: callbackValue.optional(),
+  error_description: callbackValue.optional(),
+  error_uri: callbackValue.optional(),
+  iss: callbackValue.optional(),
+  scope: callbackValue.optional(),
+  authuser: callbackValue.optional(),
+  prompt: callbackValue.optional(),
+  hd: callbackValue.optional(),
+});
+
 export const authSessionResponseSchema = z.strictObject({
   session: z
     .strictObject({
@@ -47,6 +76,9 @@ export const authErrorCodeSchema = z.enum([
   "AUTH_EMAIL_NOT_VERIFIED",
   "AUTH_INVALID_CREDENTIALS",
   "AUTH_INVALID_TOKEN",
+  "AUTH_OAUTH_FAILED",
+  "AUTH_OAUTH_CONFLICT",
+  "AUTH_REAUTHENTICATION_REQUIRED",
 ]);
 export const authErrorResponseSchema = z.strictObject({
   code: authErrorCodeSchema,

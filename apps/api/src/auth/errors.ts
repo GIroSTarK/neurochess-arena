@@ -22,6 +22,7 @@ export function libraryAuthErrorCode(status: number, body: unknown): AuthErrorCo
   if (code === "EMAIL_NOT_VERIFIED") return "AUTH_EMAIL_NOT_VERIFIED";
   if (code === "INVALID_EMAIL_OR_PASSWORD") return "AUTH_INVALID_CREDENTIALS";
   if (code === "INVALID_TOKEN" || code === "TOKEN_EXPIRED") return "AUTH_INVALID_TOKEN";
+  if (code === "AUTH_REAUTHENTICATION_REQUIRED") return "AUTH_REAUTHENTICATION_REQUIRED";
   return authErrorCode(status);
 }
 

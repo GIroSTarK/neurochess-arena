@@ -348,8 +348,9 @@ describe("Better Auth PostgreSQL foundation", () => {
     });
     expect(api.auth.options.user?.deleteUser?.enabled).toBe(false);
     expect(api.auth.options.account?.accountLinking).toMatchObject({
-      enabled: false,
+      enabled: true,
       disableImplicitLinking: true,
+      allowDifferentEmails: false,
     });
   });
 
