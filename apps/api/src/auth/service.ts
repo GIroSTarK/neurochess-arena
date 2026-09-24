@@ -1,7 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { authEmailRequestSchema } from "@neurochess/contracts";
 import { createAuthAdapter, type DatabaseConnection } from "@neurochess/database";
 import type { Auth } from "better-auth";
+import { generateRandomString } from "better-auth/crypto";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 
 import type { ApiEnvironment } from "../env.js";
@@ -21,13 +23,14 @@ export function createAuth(
     readonly emailSender?: AuthEmailSender | undefined;
   } = {},
 ): Auth {
-  const delivery = new AsyncLocalStorage<{ failed: boolean }>();
+  const delivery = new AsyncLocalStorage<{ failed: boolean; resetAttempted: boolean }>();
   const send = async (kind: "verification" | "reset", email: string, token: string) => {
     if (!options.emailSender) throw new AuthRequestError(404);
+    const scope = delivery.getStore();
+    if (kind === "reset" && scope) scope.resetAttempted = true;
     try {
       await sendAuthEmail(options.emailSender, environment.WEB_ORIGIN, kind, email, token);
     } catch {
-      const scope = delivery.getStore();
       if (scope) scope.failed = true;
       throw new AuthRequestError(503, "AUTH_EMAIL_UNAVAILABLE");
     }
@@ -118,11 +121,22 @@ export function createAuth(
   return {
     ...auth,
     handler(request) {
-      const scope = { failed: false };
+      const scope = { failed: false, resetAttempted: false };
+      const resetRequest =
+        request.method === "POST" &&
+        new URL(request.url).pathname === `${AUTH_BASE_PATH}/request-password-reset`
+          ? request.clone()
+          : undefined;
       return delivery.run(scope, async () => {
         const response = await auth.handler(request);
         // Better Auth 1.7.5 swallows awaited reset-mail errors. Never acknowledge failed delivery.
         if (scope.failed) throw new AuthRequestError(503, "AUTH_EMAIL_UNAVAILABLE");
+        if (resetRequest && response.ok && !scope.resetAttempted) {
+          // Unknown accounts must exercise submission too, or SMTP errors disclose membership.
+          // This token is never persisted and cannot authorize a password reset.
+          const { email } = authEmailRequestSchema.parse(await resetRequest.json());
+          await send("reset", email, generateRandomString(24, "a-z", "A-Z", "0-9"));
+        }
         return response;
       });
     },

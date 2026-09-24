@@ -212,7 +212,7 @@ describe("verified email/password lifecycle through Fastify and Better Auth", ()
       expect(missing.json()).toEqual(known.json());
       expect(known.json()).toEqual({ status: true });
     }
-    expect(api.mailbox.messages).toHaveLength(2);
+    expect(api.mailbox.messages).toHaveLength(3);
     await signIn(api, email);
     expect((await readSession(api, cookie)).json()).not.toEqual({ session: null });
   });
@@ -306,7 +306,10 @@ describe("verified email/password lifecycle through Fastify and Better Auth", ()
       post(api, "request-password-reset", { email }, "192.0.2.85"),
       post(api, "request-password-reset", { email: newEmail() }, "192.0.2.86"),
     ]);
-    expect(parallel.map(({ statusCode }) => statusCode)).toEqual([503, 200]);
+    expect(parallel.map(({ statusCode }) => statusCode)).toEqual([503, 503]);
+    for (const response of parallel) {
+      expect(response.json()).toMatchObject({ code: "AUTH_EMAIL_UNAVAILABLE" });
+    }
     expect(api.logs.join("")).not.toContain("smtp-password-and-token-secret-canary");
     api.mailbox.failure = false;
     expect((await post(api, "send-verification-email", { email }, "192.0.2.84")).statusCode).toBe(
@@ -315,6 +318,88 @@ describe("verified email/password lifecycle through Fastify and Better Auth", ()
     await post(api, "verify-email", { token: api.mailbox.token(email, "verification") });
     await signIn(api, email);
     expect((await post(api, "request-password-reset", { email })).statusCode).toBe(200);
+  });
+
+  it.each([true, false])(
+    "awaits reset submission and permits delivery retry (registered: %s)",
+    async (registered) => {
+      const api = await setup();
+      const email = registered ? await registerVerified(api) : newEmail();
+      const entered = Promise.withResolvers<void>();
+      const submission = Promise.withResolvers<void>();
+      const send = api.mailbox.send.bind(api.mailbox);
+      const spy = vi.spyOn(api.mailbox, "send").mockImplementation(async (message) => {
+        entered.resolve();
+        await submission.promise;
+        await send(message);
+      });
+      let settled = false;
+      const pending = post(api, "request-password-reset", { email }).then((response) => {
+        settled = true;
+        return response;
+      });
+      await entered.promise;
+      expect(settled).toBe(false);
+      api.mailbox.failure = true;
+      submission.resolve();
+      const failed = await pending;
+      expect(failed.statusCode).toBe(503);
+      expect(failed.json()).toMatchObject({ code: "AUTH_EMAIL_UNAVAILABLE" });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(failed.body).not.toContain("smtp-password-and-token-secret-canary");
+      spy.mockRestore();
+      api.mailbox.failure = false;
+      const retried = await post(api, "request-password-reset", { email });
+      expect(retried.statusCode).toBe(200);
+      expect(retried.json()).toEqual({ status: true });
+      const token = api.mailbox.token(email, "reset");
+      expect(await api.database.db.$count(authSchema.user, eq(authSchema.user.email, email))).toBe(
+        registered ? 1 : 0,
+      );
+      expect(
+        await api.database.db.$count(
+          authSchema.verification,
+          eq(authSchema.verification.identifier, `reset-password:${token}`),
+        ),
+      ).toBe(registered ? 1 : 0);
+      if (!registered) {
+        expect((await post(api, "reset-password", { token, newPassword })).json()).toMatchObject({
+          code: "AUTH_INVALID_TOKEN",
+        });
+        await post(api, "sign-up/email", { email, password });
+        expect((await post(api, "reset-password", { token, newPassword })).json()).toMatchObject({
+          code: "AUTH_INVALID_TOKEN",
+        });
+      }
+    },
+  );
+
+  it("does not submit fallback reset mail for rejected or throttled requests", async () => {
+    const api = await setup();
+    const email = newEmail();
+    for (const request of [
+      { headers: {}, payload: { email } },
+      {
+        headers: { origin: WEB_ORIGIN },
+        payload: { email, redirectTo: "https://attacker.example" },
+      },
+      { headers: { origin: WEB_ORIGIN }, payload: { email: "invalid" } },
+    ]) {
+      const response = await api.app.inject({
+        method: "POST",
+        url: "/api/auth/request-password-reset",
+        ...request,
+      });
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    }
+    expect(api.mailbox.messages).toHaveLength(0);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect((await post(api, "request-password-reset", { email })).statusCode).toBe(200);
+    }
+    const limited = await post(api, "request-password-reset", { email });
+    expect(limited.statusCode).toBe(429);
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+    expect(api.mailbox.messages).toHaveLength(3);
   });
 
   it("sends mail only after signup commits, uses fixed fragment destinations, and rejects redirects and forged fields", async () => {

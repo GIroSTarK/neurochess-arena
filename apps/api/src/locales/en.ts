@@ -23,7 +23,7 @@ export const authEmailMessages = {
   reset: {
     subject: "Reset your Neurochess Arena password",
     text: (url: string) =>
-      `Choose a new password for Neurochess Arena:\n\n${url}\n\nThis link expires in one hour and can be used once. Resetting your password signs out all your sessions. If you did not request this, ignore this email.`,
+      `If you have a Neurochess Arena account for this address, use this link to choose a new password:\n\n${url}\n\nFor an existing account, this link expires in one hour and can be used once. Resetting your password signs out all your sessions. If you did not request this, ignore this email.`,
   },
 };
 
