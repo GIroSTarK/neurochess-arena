@@ -22,11 +22,13 @@ import {
   unfinishedGameDetailsSchema,
   unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { createGuestRequestIdentity } from "../guests/http.js";
 import type { GuestService } from "../guests/service.js";
+import type { createAccountIdentityResolver } from "../identity/account.js";
+import { createPublicGameIdentity } from "../identity/game-request.js";
 import { gameErrorMessages } from "../locales/en.js";
 import {
   AI_TURN_TIMEOUT_MS,
@@ -41,6 +43,7 @@ import type { GameService } from "./service.js";
 export interface GameApiOptions {
   readonly games: GameService;
   readonly guests: GuestService;
+  readonly accountIdentity?: ReturnType<typeof createAccountIdentityResolver>;
   readonly webOrigin: string;
   readonly providerTimeouts?: { readonly discoveryMs?: number; readonly turnMs?: number };
 }
@@ -73,7 +76,16 @@ export async function registerGameRoutes(
 ): Promise<void> {
   const routes = app.withTypeProvider<ZodTypeProvider>();
   const guestIdentity = createGuestRequestIdentity(options.guests);
-  const principalFor = guestIdentity.authenticate;
+  const publicPrincipalFor = createPublicGameIdentity(guestIdentity, options.accountIdentity);
+  const principalFor = async (request: FastifyRequest, reply: FastifyReply) => {
+    const gameId = (request.params as { gameId?: string }).gameId;
+    // Shared resource routes select Sandbox authority only from the stored server-owned marker.
+    if (gameId && (await options.games.isSandboxGame(gameId))) {
+      if (!options.games.sandboxEnabled) throw new GameRequestError("NOT_FOUND");
+      return guestIdentity.authenticate(request, reply);
+    }
+    return publicPrincipalFor(request, reply);
+  };
   let sweeping: Promise<void> | undefined;
   const sweep = () => {
     sweeping ??= options.games
@@ -294,7 +306,7 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      const principal = await principalFor(request, reply);
+      const principal = await guestIdentity.authenticate(request, reply);
       const snapshot = await options.games.createSandbox(principal);
       return reply.code(201).send(snapshot);
     },
@@ -311,7 +323,8 @@ export async function registerGameRoutes(
         response: { 200: unfinishedGameResponseSchema, ...errorResponses },
       },
     },
-    async (request, reply) => options.games.unfinished(await principalFor(request, reply)),
+    async (request, reply) =>
+      options.games.unfinished(await guestIdentity.authenticate(request, reply)),
   );
 
   routes.post(

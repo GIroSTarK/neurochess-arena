@@ -39,7 +39,7 @@ export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   ILLEGAL_MOVE: "The move is not legal in the current position.",
   INVALID_GAME_STATE: "The game cannot accept a move in its current state.",
   GAME_CONFLICT: "The game has changed. Use the current snapshot.",
-  UNAUTHORIZED: "A valid guest session is required.",
+  UNAUTHORIZED: "A valid session is required.",
   FORBIDDEN: "This action is not allowed.",
   NOT_FOUND: "The requested resource was not found.",
   INTERNAL_SERVER_ERROR: "The server could not complete the request.",

@@ -65,7 +65,9 @@ export const test = base.extend({
             .select({ id: games.ownerGuestSessionId })
             .from(games)
             .where(inArray(games.id, [...createdGames]));
-          const guestIds = [...new Set(owners.map((owner) => owner.id))];
+          const guestIds = [
+            ...new Set(owners.map((owner) => owner.id).filter((id) => id !== null)),
+          ];
           if (guestIds.length > 0) {
             await database.db.transaction(async (tx) => {
               await tx.delete(games).where(inArray(games.ownerGuestSessionId, guestIds));

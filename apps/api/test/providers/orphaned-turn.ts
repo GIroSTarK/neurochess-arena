@@ -20,10 +20,17 @@ process.once("message", (message: unknown) => {
 async function execute(message: unknown) {
   const database = integrationDatabase();
   try {
-    const { command, guestSessionId, invalidFirst } = z
+    const { command, principal, invalidFirst } = z
       .strictObject({
         command: aiControlledTurnCommandSchema,
-        guestSessionId: gameIdSchema,
+        principal: z.discriminatedUnion("kind", [
+          z.strictObject({ kind: z.literal("guest"), guestSessionId: gameIdSchema }),
+          z.strictObject({
+            kind: z.literal("account"),
+            userId: z.string().min(1),
+            sessionId: z.string().min(1),
+          }),
+        ]),
         invalidFirst: z.boolean().default(false),
       })
       .parse(message);
@@ -52,7 +59,7 @@ async function execute(message: unknown) {
       sandboxEnabled: false,
       aiAdapters: { openai: withTurnCatalog(adapter) },
     });
-    await service.aiTurn({ kind: "guest", guestSessionId }, command, {
+    await service.aiTurn(principal, command, {
       apiKey: "child-fixture-only",
       signal: new AbortController().signal,
     });

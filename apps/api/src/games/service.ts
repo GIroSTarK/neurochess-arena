@@ -20,6 +20,7 @@ import {
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
 import type {
+  GameOwner,
   GameReader,
   GameRepository,
   GameTransaction,
@@ -28,7 +29,7 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
-import type { GuestPrincipal as Principal } from "../identity/principal.js";
+import type { Principal } from "../identity/principal.js";
 import {
   lockActivePrincipal,
   lockPrincipalForCleanup,
@@ -46,6 +47,7 @@ import { GameConflictError, GameIntegrityError, GameRequestError } from "./error
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
   expireControllers(): Promise<void>;
   readonly sandboxEnabled: boolean;
@@ -91,7 +93,7 @@ export function createGameService(
 
   async function restoreAuthorized(
     reader: GameReader,
-    principal: Principal,
+    principal: GameOwner,
     stored: StoredGame,
   ): Promise<RestoredGame> {
     const participants = await reader.getParticipants(stored.id);
@@ -159,6 +161,7 @@ export function createGameService(
   async function prepareCommand(tx: GameTransaction, principal: Principal, command: AiTurnCommand) {
     await lockActivePrincipal(tx, principal);
     const stored = await tx.lockGame(command.gameId);
+    await requireActivePrincipal(tx, principal);
     if (!stored) throw new GameRequestError("NOT_FOUND");
     const restored = await restoreAuthorized(tx, principal, stored);
     // Accepted IDs span every command kind, including retries after completion.
@@ -240,14 +243,17 @@ export function createGameService(
     configuration: AiGameConfiguration | null,
   ): Promise<GameDetails> {
     return repository.write(async (tx) => {
-      if (configuration === null && !sandboxEnabled) throw new GameRequestError("NOT_FOUND");
+      if (configuration === null && (!sandboxEnabled || principal.kind !== "guest")) {
+        throw new GameRequestError("NOT_FOUND");
+      }
       await lockActivePrincipal(tx, principal);
       const occupied = await tx.findUnfinishedGame(
-        principal.guestSessionId,
+        principal,
         configuration === null ? "sandbox" : "ordinary",
       );
       if (occupied) {
         const locked = await tx.lockGame(occupied.id);
+        await requireActivePrincipal(tx, principal);
         if (!locked) throw new GameIntegrityError();
         throw new GameConflictError((await restoreAuthorized(tx, principal, locked)).snapshot);
       }
@@ -257,12 +263,13 @@ export function createGameService(
       await tx.insertGame(
         {
           id: snapshot.gameId,
-          ownerGuestSessionId: principal.guestSessionId,
+          ownerGuestSessionId: principal.kind === "guest" ? principal.guestSessionId : null,
+          ownerUserId: principal.kind === "account" ? principal.userId : null,
           isSandbox: configuration === null,
           mode: configuration?.mode ?? null,
           ...positionOf(snapshot),
         },
-        participantsFor(snapshot.gameId, principal.guestSessionId, configuration),
+        participantsFor(snapshot.gameId, principal, configuration),
       );
       if (configuration) await tx.setAiController(snapshot.gameId, null, leaseMs);
       return { snapshot, configuration };
@@ -270,6 +277,8 @@ export function createGameService(
   }
 
   return {
+    isSandboxGame: (gameId) =>
+      repository.read(async (reader) => (await reader.getGame(gameId))?.isSandbox === true),
     async controller(principal, input) {
       const parsed = aiControllerRequestSchema.safeParse(input);
       if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
@@ -277,6 +286,7 @@ export function createGameService(
       return repository.write(async (tx) => {
         await lockActivePrincipal(tx, principal);
         const stored = await tx.lockGame(command.gameId);
+        await requireActivePrincipal(tx, principal);
         if (!stored) throw new GameRequestError("NOT_FOUND");
         const { snapshot } = await restoreAuthorized(tx, principal, stored);
         authorizeGameControl(principal, stored);
@@ -317,7 +327,7 @@ export function createGameService(
     async expireControllers() {
       for (const candidate of await repository.expiredAiControllers()) {
         await repository.write(async (tx) => {
-          const owner: Principal = { kind: "guest", guestSessionId: candidate.guestId };
+          const owner = candidate.owner;
           await lockPrincipalForCleanup(tx, owner);
           const stored = await tx.lockGame(candidate.gameId);
           if (!stored?.mode) return;
@@ -345,7 +355,12 @@ export function createGameService(
         await requireActivePrincipal(reader, principal);
       });
       const adapter = adapters[provider];
-      return discoverModels(adapter?.provider === provider ? adapter : undefined, access);
+      const result = await discoverModels(
+        adapter?.provider === provider ? adapter : undefined,
+        access,
+      );
+      await repository.read((reader) => requireActivePrincipal(reader, principal));
+      return result;
     },
     async createSandbox(principal) {
       return (await createOwnedGame(principal, null)).snapshot;
@@ -359,7 +374,7 @@ export function createGameService(
     unfinishedGame: (principal) =>
       repository.read(async (reader) => {
         await requireActivePrincipal(reader, principal);
-        const stored = await reader.findUnfinishedGame(principal.guestSessionId, "ordinary");
+        const stored = await reader.findUnfinishedGame(principal, "ordinary");
         if (!stored) return { game: null };
         const { snapshot, configuration } = await restoreAuthorized(reader, principal, stored);
         return { game: { snapshot, configuration } };
@@ -392,9 +407,9 @@ export function createGameService(
     },
     unfinished: (principal) =>
       repository.read(async (reader) => {
-        if (!sandboxEnabled) throw new GameRequestError("NOT_FOUND");
+        if (!sandboxEnabled || principal.kind !== "guest") throw new GameRequestError("NOT_FOUND");
         await requireActivePrincipal(reader, principal);
-        const stored = await reader.findUnfinishedGame(principal.guestSessionId, "sandbox");
+        const stored = await reader.findUnfinishedGame(principal, "sandbox");
         return {
           snapshot: stored ? (await restoreAuthorized(reader, principal, stored)).snapshot : null,
         };

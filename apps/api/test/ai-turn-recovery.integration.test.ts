@@ -474,7 +474,7 @@ describe("AI reservation invalidation and crash recovery", () => {
             throw new Error("Executor exited before dispatch");
           }),
         ]);
-        child.send({ command: cmd, guestSessionId: owner.id, invalidFirst });
+        child.send({ command: cmd, principal: owner.principal, invalidFirst });
         expect(await dispatched).toEqual(["dispatched", undefined]);
       } finally {
         child.kill("SIGKILL");

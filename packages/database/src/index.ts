@@ -17,6 +17,7 @@ export {
 export {
   createGameRepository,
   type GameRepository,
+  type GameOwner,
   type GameReader,
   type GameTransaction,
   type StoredGuestSession,

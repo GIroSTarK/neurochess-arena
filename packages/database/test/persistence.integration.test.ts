@@ -64,7 +64,7 @@ async function game() {
   const owner = await guest();
   const [created] = await database.db.insert(games).values(gameValues(owner.id)).returning();
   if (!created) throw new Error("Fixture insertion failed");
-  return created;
+  return { ...created, ownerGuestSessionId: owner.id };
 }
 
 function moveValues(gameId: string): NewMove {
@@ -177,6 +177,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0007_separate_sandbox_game_slot",
         "0008_better_auth_foundation",
         "0009_oauth_account_identity",
+        "0010_account_owned_games",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -335,6 +336,55 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       expect((await tx.execute(sql`select * from game_commands order by game_id`)).rows).toEqual(
         afterReservations[3]!.rows,
       );
+      const previous = new Map<string, unknown[]>();
+      const tables = [
+        "games",
+        "game_participants",
+        "moves",
+        "game_commands",
+        "ai_controllers",
+        "ai_turn_reservations",
+        "user",
+        "account",
+        "session",
+        "verification",
+      ];
+      for (const table of tables) {
+        previous.set(
+          table,
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[9]!);
+      for (const table of tables) {
+        const omitted =
+          table === "games"
+            ? "owner_user_id"
+            : table === "game_participants"
+              ? "user_id"
+              : "__absent__";
+        expect(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) - ${omitted} as value from ${sql.identifier(table)} t order by (to_jsonb(t) - ${omitted})::text`,
+            )
+          ).rows,
+        ).toEqual(previous.get(table));
+      }
+      await tx.execute(
+        sql`insert into games(owner_user_id, state, result, fen, pgn) values ('existing-user', 'active', '*', 'account-position', 'account-history')`,
+      );
+      expect(
+        (
+          await tx.execute(
+            sql`select owner_guest_session_id, owner_user_id from games where owner_user_id is not null`,
+          )
+        ).rows,
+      ).toEqual([{ owner_guest_session_id: null, owner_user_id: "existing-user" }]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });
