@@ -16,6 +16,8 @@ import { PgnActions } from "../arena/panels/PgnActions";
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
 import { ReplayControls } from "../arena/panels/ReplayControls";
 import { StatusSummary } from "../arena/StatusSummary";
+import { AccountAccess } from "../auth/AccountAccess";
+import { useAccount } from "../auth/context";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
@@ -36,7 +38,17 @@ export function MatchScreen({
   readonly sandboxEnabled: boolean;
 }) {
   const { t } = useTranslation();
-  const [controller] = useState(() => new MatchController(createAiApi(apiBaseUrl)));
+  const account = useAccount();
+  const [controller] = useState(
+    () =>
+      new MatchController(
+        createAiApi(apiBaseUrl, {
+          identity: account?.state.session ? "account" : "guest",
+          lifetime: account?.controller.signal,
+          onUnauthorized: account?.state.session ? account.controller.expired : undefined,
+        }),
+      ),
+  );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => controller.connect(), [controller]);
   const helpId = useId();
@@ -128,7 +140,7 @@ export function MatchScreen({
       identity:
         seat?.type === "ai"
           ? { kind: "ai", provider: t(`setup.providers.${seat.provider}`), model: seat.modelId }
-          : { kind: "human", name: t("players.guest") },
+          : { kind: "human", name: account?.state.profile?.username ?? t("players.guest") },
       activity: {
         label: activity,
         variants: [
@@ -153,9 +165,9 @@ export function MatchScreen({
     <AppShell
       mainId="arena-match"
       skipLabel={t("app.skipLink")}
-      context={t("setup.session")}
+      context={<AccountAccess />}
       navigation={<AppNavigation page="arena" sandboxEnabled={sandboxEnabled} />}
-      footer={t("match.private")}
+      footer={t(account?.state.session ? "auth.private" : "match.private")}
       announcement={
         snapshot ? `${moveAnnouncement} ${issueText ?? ""}` : (issueText ?? t("match.loading"))
       }

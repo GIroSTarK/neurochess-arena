@@ -23,6 +23,10 @@ export const authStatusResponseSchema = z.strictObject({ status: z.literal(true)
 
 export const authOAuthProviderSchema = z.enum(["google", "github"]);
 export type AuthOAuthProvider = z.infer<typeof authOAuthProviderSchema>;
+export const authMethodsResponseSchema = z.strictObject({
+  email: z.boolean(),
+  providers: z.array(authOAuthProviderSchema).max(2),
+});
 export const authOAuthRequestSchema = z.strictObject({ provider: authOAuthProviderSchema });
 export const authOAuthStartResponseSchema = z.strictObject({
   url: z.url(),

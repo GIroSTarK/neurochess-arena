@@ -18,6 +18,7 @@ describe("Arena and Sandbox routes", () => {
   let http: ReturnType<typeof createHttpMock>;
   beforeEach(() => {
     http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: null }),
       "GET /games/unfinished": () => jsonResponse({ game: null }),
       [`GET /games/${GAME_ID}/details`]: () =>
         jsonResponse({ snapshot: snapshot(), configuration: null }),
@@ -43,7 +44,9 @@ describe("Arena and Sandbox routes", () => {
       expect(screen.queryByRole("grid")).not.toBeInTheDocument();
       expect(
         http.fetch.mock.calls.every(
-          ([url, options]) => requestPath(url) === "/games/unfinished" && options?.method === "GET",
+          ([url, options]) =>
+            ["/games/unfinished", "/api/auth/get-session"].includes(requestPath(url)) &&
+            options?.method === "GET",
         ),
       ).toBe(true);
     },
@@ -128,7 +131,9 @@ describe("Arena and Sandbox routes", () => {
       expect(
         http.fetch.mock.calls.every(
           ([url, options]) =>
-            requestPath(url) === "/games/" + GAME_ID + "/details" && options?.method === "GET",
+            ["/games/" + GAME_ID + "/details", "/api/auth/get-session"].includes(
+              requestPath(url),
+            ) && options?.method === "GET",
         ),
       ).toBe(true);
     },

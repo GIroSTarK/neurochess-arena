@@ -25,6 +25,30 @@ const command = {
 const signal = () => new AbortController().signal;
 
 describe("AI HTTP client", () => {
+  it("uses the account context without guest bootstrap and cancels on identity loss", async () => {
+    const lifetime = new AbortController();
+    const pending = Promise.withResolvers<Response>();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockReturnValue(pending.promise);
+    const expired = vi.fn();
+    const api = createAiApi("http://localhost:3001", {
+      fetch,
+      identity: "account",
+      lifetime: lifetime.signal,
+      onUnauthorized: expired,
+    });
+    await api.bootstrap(signal());
+    expect(fetch).not.toHaveBeenCalled();
+    const read = api.unfinished(signal());
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("X-Neurochess-Identity")).toBe(
+      "account",
+    );
+    lifetime.abort();
+    pending.resolve(
+      jsonResponse({ code: "UNAUTHORIZED", message: "safe", requestId: "request" }, 401),
+    );
+    await expect(read).rejects.toMatchObject({ kind: "cancelled" });
+    expect(expired).not.toHaveBeenCalled();
+  });
   it("requires explicit bootstrap and transmits keys only in discovery and inference bodies", async () => {
     const details = { configuration, snapshot: snapshot() };
     const calls: { url: string; body: unknown; init: RequestInit | undefined }[] = [];

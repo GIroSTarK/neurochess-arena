@@ -89,6 +89,24 @@ function accountRequest(cookie: string) {
 }
 
 describe("Better Auth PostgreSQL foundation", () => {
+  it("reports configured sign-in methods without exposing secrets and validates origin/query", async () => {
+    const api = await setup();
+    const response = await api.app.inject({ method: "GET", url: "/api/auth/methods" });
+    expect(response.json()).toEqual({ email: false, providers: [] });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(
+      (await api.app.inject({ method: "GET", url: "/api/auth/methods?extra=x" })).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await api.app.inject({
+          method: "GET",
+          url: "/api/auth/methods",
+          headers: { origin: "https://other.test" },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
   it("persists actual users, accounts, sessions and verification records, projects only safe fields, and revokes sessions", async () => {
     const api = await setup();
     const account = await api.register();

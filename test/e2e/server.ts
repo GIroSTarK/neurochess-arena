@@ -14,13 +14,12 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
-import { createAuth } from "../../apps/api/src/auth/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
-import { AUTH_ENVIRONMENT } from "../../apps/api/test/auth-helpers.js";
 import { integrationDatabase } from "../database.js";
 
+import { authHarness } from "./auth-harness.js";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
 import { closeResources, notifyParent, shutdownMessage } from "./lifecycle.js";
 import { setupHarness } from "./setup-harness.js";
@@ -44,6 +43,7 @@ async function main() {
   let web: Awaited<ReturnType<typeof createServer>> | undefined;
   let disabledWeb: Awaited<ReturnType<typeof createServer>> | undefined;
   let closing: Promise<void> | undefined;
+  let accounts: Awaited<ReturnType<typeof authHarness>> | undefined;
   let stopping: Promise<void> | undefined;
 
   function close(): Promise<void> {
@@ -51,6 +51,7 @@ async function main() {
       { name: "web", close: () => web?.close() },
       { name: "disabled web", close: () => disabledWeb?.close() },
       { name: "API", close: () => app?.close() },
+      { name: "test accounts", close: () => accounts?.close() },
       {
         name: "test guests",
         close: async () => {
@@ -112,16 +113,13 @@ async function main() {
   }
 
   async function start() {
+    accounts = await authHarness(database);
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
       profileApi: { profiles: createProfileService(createProfileRepository(database)) },
       authApi: {
-        auth: createAuth(database, {
-          ...AUTH_ENVIRONMENT,
-          WEB_ORIGIN,
-          BETTER_AUTH_URL: API_ORIGIN,
-        }),
+        auth: accounts.auth,
         baseURL: API_ORIGIN,
       },
       gameApi: {
@@ -133,6 +131,7 @@ async function main() {
         }),
       },
     });
+    accounts.install(app);
     process.env.VITE_API_BASE_URL = API_ORIGIN;
     process.env.SANDBOX_ENABLED = "false";
     disabledWeb = await createServer({

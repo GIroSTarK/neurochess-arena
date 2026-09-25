@@ -1,4 +1,124 @@
 export const en = {
+  auth: {
+    documentTitle: "Account · Neurochess Arena",
+    account: "Account",
+    signIn: "Sign in",
+    signUp: "Create account",
+    signOut: "Sign out",
+    switchAccount: "Switch account",
+    guest: "Continue as guest",
+    back: "Back to Arena",
+    continue: "Continue to Arena",
+    retry: "Check session again",
+    navigation: "Account navigation",
+    private: "Your account and games are private.",
+    setupFooter:
+      "Keys are used only for model discovery and moves. They stay in page memory and are cleared on refresh, navigation, or sign-out.",
+    checking: "Checking your account…",
+    pending: "Please wait…",
+    email: "Email",
+    password: "Password",
+    newPassword: "New password",
+    showPassword: "Show",
+    hidePassword: "Hide",
+    emailInvalid: "Enter a valid email address.",
+    passwordHint: "Use 12–128 characters. Spaces are allowed; no special character rules.",
+    guestSeparation:
+      "Guest games stay with the original guest session. Signing in does not transfer them. Your current play stops and session-only provider keys are cleared; returning to a game requires explicit continuation.",
+    forgot: "Forgot password?",
+    resend: "Resend verification email",
+    freshReset: "Request a new reset link",
+    verifyHint: "Confirm your email address. Verification does not sign you in.",
+    expiredLink:
+      "This link is missing, invalid, expired, or already used. Request a fresh link below.",
+    emailDisabled: "Email sign-in is not configured on this installation.",
+    methodsError: "Sign-in methods could not be loaded. Try again.",
+    sessionError:
+      "Your session could not be confirmed. Play has stopped and page-owned keys have been cleared. Check again or sign out.",
+    sessionEnded:
+      "You are signed out or your session has ended. Page-owned keys and private data have been cleared. Sign in to recover your game paused, or explicitly continue as a guest.",
+    signedIn:
+      "Signed in. Continue to finish your profile or return to Arena. Games remain paused until you continue.",
+    linked: "Sign-in method linked. You can return to your profile.",
+    retryAfter: "Try again in {{seconds}} seconds.",
+    onboarding: "Choose your arena identity",
+    profile: "Your profile",
+    profileSaved: "Profile saved.",
+    onboardingHint:
+      "Choose a unique username before starting an account game. The same profile works with email, Google, and GitHub.",
+    profileHint:
+      "Your username identifies you in the arena. Changing it keeps your games and permissions. Your email stays private.",
+    username: "Username",
+    usernameHint:
+      "3–24 letters, digits, or underscores; start with a letter. Names are unique regardless of case. Reserved names are unavailable.",
+    avatar: "Avatar",
+    initials: "Use initials (remove provider avatar)",
+    providerAvatar: "Use imported provider avatar",
+    initialsOnly: "Your avatar uses initials from your username. No provider image is available.",
+    finishProfile: "Save and continue",
+    saveProfile: "Save profile",
+    linkAccounts: "Link a sign-in method",
+    linkHint:
+      "Link only your own Google or GitHub identity with the same verified email. Sign in again if your session is more than one hour old.",
+    providers: { google: "Continue with Google", github: "Continue with GitHub" },
+    link: { google: "Link Google", github: "Link GitHub" },
+    titles: {
+      "sign-in": "Sign in to Arena",
+      "sign-up": "Create your account",
+      "verify-email": "Verify your email",
+      resend: "Resend verification",
+      "forgot-password": "Reset your password",
+      "reset-password": "Choose a new password",
+      complete: "Account connection",
+    },
+    actions: {
+      "sign-in": "Sign in",
+      "sign-up": "Create account",
+      "verify-email": "Verify email",
+      resend: "Send verification email",
+      "forgot-password": "Send reset email",
+      "reset-password": "Save new password",
+      complete: "Continue",
+    },
+    success: {
+      "sign-in": "Signed in.",
+      "sign-up":
+        "If this address can be registered, a verification email has been submitted. Check your inbox before signing in. You can request another verification email below.",
+      "verify-email": "Email verified. You can now sign in.",
+      resend:
+        "If this address needs verification, a verification email has been submitted. Check your inbox.",
+      "forgot-password":
+        "A reset email has been submitted. Follow it if you have an account with this address.",
+      "reset-password":
+        "Password reset. All previous sessions have been revoked. Sign in with your new password.",
+      complete: "Account connected.",
+    },
+    errors: {
+      AUTH_UNAUTHORIZED: "Your session has ended. Sign in again.",
+      AUTH_FORBIDDEN: "This account request was not allowed. Return to Arena and try again.",
+      AUTH_INVALID_REQUEST: "Check the entered values and try again.",
+      AUTH_NOT_FOUND: "This sign-in method is not available on this installation.",
+      AUTH_RATE_LIMITED: "Too many attempts. Wait before trying again.",
+      AUTH_UNAVAILABLE: "The account service is unavailable. Try again.",
+      AUTH_EMAIL_UNAVAILABLE:
+        "The email could not be submitted. Try sending it again; registration may already have created an unverified account.",
+      AUTH_EMAIL_NOT_VERIFIED:
+        "Verify your email before signing in. You can resend the verification email below.",
+      AUTH_INVALID_CREDENTIALS: "The email or password is incorrect.",
+      AUTH_INVALID_TOKEN: "This link is invalid, expired, or already used. Request a fresh link.",
+      AUTH_OAUTH_FAILED: "The provider sign-in was canceled or could not be completed. Try again.",
+      AUTH_OAUTH_CONFLICT:
+        "An account already uses this email. Sign in with its existing method, then explicitly link this provider from your profile.",
+      AUTH_REAUTHENTICATION_REQUIRED: "Sign in again, then retry linking from your profile.",
+      PROFILE_UNAUTHORIZED: "Your session has ended. Sign in again.",
+      PROFILE_FORBIDDEN: "This profile request was not allowed.",
+      PROFILE_INVALID_REQUEST: "Check your username and avatar selection.",
+      USERNAME_UNAVAILABLE: "That username is unavailable. Choose another.",
+      AVATAR_UNAVAILABLE: "That provider avatar is unavailable. Choose initials instead.",
+      PROFILE_UNAVAILABLE: "Your profile could not be loaded or saved. Try again.",
+      NETWORK: "The service could not be reached. Check your connection and try again.",
+    },
+  },
   telemetry: {
     commentary: "Commentary & move details",
     read: "Read",

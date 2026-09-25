@@ -1,10 +1,15 @@
-export type AppPage = "arena" | "sandbox" | "reference" | "not-found";
+import { type AuthPage, authPaths } from "../auth/navigation";
+
+export type AppPage = "arena" | "sandbox" | "reference" | "not-found" | "account" | AuthPage;
 
 export function readAppPage(): AppPage {
   const { pathname } = window.location;
   if (pathname === "/dev/arena" || pathname === "/dev/arena/") return "reference";
   if (pathname === "/sandbox" || pathname === "/sandbox/") return "sandbox";
   if (pathname === "/") return "arena";
+  if (pathname === "/account") return "account";
+  const authPage = authPaths.find((page) => pathname === "/auth/" + page);
+  if (authPage) return authPage;
   return "not-found";
 }
 

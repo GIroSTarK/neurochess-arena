@@ -14,7 +14,9 @@ export function DocumentMetadata({ page = "arena" }: { readonly page?: AppPage }
           ? t("sandbox.documentTitle")
           : page === "not-found"
             ? t("notFound.documentTitle")
-            : t("app.title");
+            : page === "arena"
+              ? t("app.title")
+              : t("auth.documentTitle");
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute(
