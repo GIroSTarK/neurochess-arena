@@ -99,6 +99,7 @@ for (const human of [undefined, "white", "black"] as const) {
       });
     const before = await geometry();
     if (human === "white") {
+      await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
       await square(page, "f2").click();
       await square(page, "f3").click();
     }
