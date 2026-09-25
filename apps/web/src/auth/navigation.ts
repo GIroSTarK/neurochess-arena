@@ -48,6 +48,7 @@ export function consumeAuthEntry(): AuthEntry {
     return parsed.success ? parsed.data : {};
   }
   if (pathname === "/auth/complete") {
+    if (!hash.slice(1)) return {};
     const result = fragment.get("status");
     if (result === "signed-in" || result === "linked") return { result };
     const error = fragment.get("error");

@@ -3,6 +3,32 @@ import { describe, expect, it } from "vitest";
 import { consumeAuthEntry, safeReturn } from "./navigation";
 
 describe("account navigation", () => {
+  it.each(["/auth/complete", "/auth/complete#"])(
+    "does not infer an OAuth failure from an empty completion URL: %s",
+    (url) => {
+      window.history.replaceState(null, "", url);
+      expect(consumeAuthEntry()).toEqual({});
+      expect(window.location.hash).toBe("");
+    },
+  );
+  it.each([
+    ["#status=signed-in", { result: "signed-in" }],
+    ["#status=linked", { result: "linked" }],
+    ["#error=AUTH_OAUTH_CONFLICT", { error: "AUTH_OAUTH_CONFLICT" }],
+    ["#error=AUTH_REAUTHENTICATION_REQUIRED", { error: "AUTH_REAUTHENTICATION_REQUIRED" }],
+    ["#error=AUTH_OAUTH_FAILED", { error: "AUTH_OAUTH_FAILED" }],
+    ["#error=", { error: "AUTH_OAUTH_FAILED" }],
+    ["#status=unknown", { error: "AUTH_OAUTH_FAILED" }],
+  ] as const)("preserves non-empty OAuth completion handling for %s", (hash, expected) => {
+    window.history.replaceState(null, "", "/auth/complete" + hash);
+    expect(consumeAuthEntry()).toEqual(expected);
+    expect(window.location.hash).toBe("");
+  });
+  it("does not turn an already consumed OAuth success into a failure", () => {
+    window.history.replaceState(null, "", "/auth/complete#status=signed-in");
+    expect(consumeAuthEntry()).toEqual({ result: "signed-in" });
+    expect(consumeAuthEntry()).toEqual({});
+  });
   it("consumes callback fragments and removes unrelated query data before rendering", () => {
     window.history.replaceState(
       null,
