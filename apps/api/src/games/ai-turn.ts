@@ -19,7 +19,7 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
-import type { GuestPrincipal as Principal } from "../identity/principal.js";
+import type { Principal } from "../identity/principal.js";
 import { lockPrincipalForCleanup } from "../identity/validity.js";
 import {
   AI_MOVE_INSTRUCTIONS,
@@ -184,6 +184,7 @@ export function createAiTurnExecutor(options: {
     let response: NormalizedMoveResponse | undefined;
     try {
       // Discovery shares the reservation fence with inference, but never holds database locks.
+      await repository.write(recheck);
       const discoveryStarted = performance.now();
       const discovery = await discoverModels(reserved.adapter, access);
       const discoveryDurationMs = Math.max(0, Math.round(performance.now() - discoveryStarted));

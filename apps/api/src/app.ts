@@ -15,6 +15,7 @@ import {
 
 import { type AuthRoutesOptions, registerAuthRoutes } from "./auth/routes.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
+import { createAccountIdentityResolver } from "./identity/account.js";
 
 export interface ReadinessProbe {
   check(): Promise<void>;
@@ -77,7 +78,13 @@ export async function buildApp(options: BuildAppOptions) {
   );
 
   if (options.gameApi) {
-    await app.register(registerGameRoutes, { ...options.gameApi, webOrigin: options.webOrigin });
+    await app.register(registerGameRoutes, {
+      ...options.gameApi,
+      ...(options.authApi
+        ? { accountIdentity: createAccountIdentityResolver(options.authApi.auth) }
+        : {}),
+      webOrigin: options.webOrigin,
+    });
   }
   if (options.authApi) {
     await app.register(registerAuthRoutes, { ...options.authApi, webOrigin: options.webOrigin });

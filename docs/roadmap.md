@@ -84,7 +84,7 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
-**Status:** In progress. P3-01 establishes the server-derived identity boundary and accepted lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. P3-02 adds Better Auth's PostgreSQL/Drizzle persistence, protected session boundary, and account resolver. P3-03 adds verified email registration/sign-in, resend, password recovery with session revocation, configurable SMTP, and isolated mailbox coverage. P3-04 adds Google/GitHub OAuth with verified identities, explicit same-email linking, protected callbacks, and injected transport coverage. Live provider-console checks remain deployment work. Browser authentication/profile UI, account gameplay, credentials, and history remain pending.
+**Status:** In progress. P3-01 establishes the server-derived identity boundary and accepted lifecycle policies in [ADR-0013](decisions/0013-principal-and-account-ownership.md) and the product specification. P3-02 adds Better Auth's PostgreSQL/Drizzle persistence, protected session boundary, and account resolver. P3-03 adds verified email registration/sign-in, resend, password recovery with session revocation, configurable SMTP, and isolated mailbox coverage. P3-04 adds Google/GitHub OAuth with verified identities, explicit same-email linking, protected callbacks, and injected transport coverage. P3-05 adds account-owned game APIs, human-seat authority, database-enforced account limits, and cross-device paused recovery with session/controller fencing. Live provider-console checks remain deployment work. Browser authentication/profile onboarding and identity transitions, credentials, and history remain pending.
 
 Deliverables:
 
@@ -95,7 +95,7 @@ Deliverables:
 - browser authentication/profile UI and identity transitions;
 - unique usernames and avatars;
 - encrypted opt-in provider credential storage;
-- extend guest-session ownership, single-game limits, and paused recovery to authenticated accounts;
+- [x] extend game ownership, single-game limits, and paused recovery to authenticated accounts, preserving separate guest games and Sandbox;
 - durable private game history and result pages;
 - individual game deletion, history clearing, credential revocation, and account deletion;
 - authenticated recovery using re-entered session-only keys or explicitly saved encrypted credentials.

@@ -11,6 +11,8 @@ import {
   guestSessions,
   modelInvocations,
   moves,
+  session,
+  user,
 } from "./schema/index.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
@@ -55,15 +57,20 @@ export type GamePositionUpdate = Pick<
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
 >;
 
+export type GameOwner =
+  | { readonly kind: "guest"; readonly guestSessionId: string }
+  | { readonly kind: "account"; readonly userId: string };
+
 export interface GameReader {
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
+  hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
   getMoves(gameId: string): Promise<StoredMove[]>;
   getAiTurns(gameId: string): Promise<StoredAiTurn[]>;
   getModelInvocations(gameId: string): Promise<StoredModelInvocation[]>;
   findUnfinishedGame(
-    guestId: string,
+    owner: GameOwner,
     scope: "ordinary" | "sandbox",
   ): Promise<StoredGame | undefined>;
 }
@@ -76,6 +83,8 @@ export interface GameTransaction extends GameReader {
   renewAiController(gameId: string, controllerId: string, leaseMs: number): Promise<boolean>;
   clearAiController(gameId: string): Promise<void>;
   lockGuest(id: string): Promise<StoredGuestSession | undefined>;
+  lockAccount(userId: string): Promise<void>;
+  lockAccountSession(userId: string, sessionId: string): Promise<boolean>;
   lockGame(id: string): Promise<StoredGame | undefined>;
   hasCommand(gameId: string, commandId: string): Promise<boolean>;
   appendCommand(command: NewGameCommand): Promise<void>;
@@ -103,7 +112,7 @@ export interface GameTransaction extends GameReader {
 }
 
 export interface GameRepository {
-  expiredAiControllers(): Promise<{ gameId: string; guestId: string }[]>;
+  expiredAiControllers(): Promise<{ gameId: string; owner: GameOwner }[]>;
   createGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession>;
   renewGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession | undefined>;
   read<T>(action: (reader: GameReader) => Promise<T>): Promise<T>;
@@ -114,6 +123,20 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    async hasAccountSession(userId, sessionId) {
+      // Better Auth stores UTC in timestamp-without-time-zone columns.
+      const [active] = await db
+        .select({ id: session.id })
+        .from(session)
+        .where(
+          and(
+            eq(session.id, sessionId),
+            eq(session.userId, userId),
+            gt(session.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`),
+          ),
+        );
+      return active !== undefined;
+    },
     async getGuest(id) {
       const [guest] = await db
         .select()
@@ -146,13 +169,15 @@ function readerFor(db: Executor): GameReader {
           ),
         )
         .orderBy(asc(modelInvocations.attemptNumber)),
-    async findUnfinishedGame(guestId, scope) {
+    async findUnfinishedGame(owner, scope) {
       const [game] = await db
         .select()
         .from(games)
         .where(
           and(
-            eq(games.ownerGuestSessionId, guestId),
+            owner.kind === "guest"
+              ? eq(games.ownerGuestSessionId, owner.guestSessionId)
+              : eq(games.ownerUserId, owner.userId),
             inArray(games.state, ["active", "paused"]),
             eq(games.isSandbox, scope === "sandbox"),
           ),
@@ -165,9 +190,9 @@ function readerFor(db: Executor): GameReader {
 export function createGameRepository(connection: DatabaseConnection): GameRepository {
   const { db } = connection;
   return {
-    expiredAiControllers: () =>
-      db
-        .select({ gameId: games.id, guestId: games.ownerGuestSessionId })
+    async expiredAiControllers() {
+      const candidates = await db
+        .select({ gameId: games.id, guestId: games.ownerGuestSessionId, userId: games.ownerUserId })
         .from(games)
         .leftJoin(aiControllers, eq(aiControllers.gameId, games.id))
         .where(
@@ -180,7 +205,15 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           ),
         )
         .orderBy(asc(games.updatedAt))
-        .limit(100),
+        .limit(100);
+      return candidates.map(({ gameId, guestId, userId }) => {
+        if (guestId !== null) {
+          return { gameId, owner: { kind: "guest" as const, guestSessionId: guestId } };
+        }
+        if (userId !== null) return { gameId, owner: { kind: "account" as const, userId } };
+        throw new Error("Game owner missing");
+      });
+    },
     async createGuest(tokenHash, ttlSeconds) {
       const [guest] = await db
         .insert(guestSessions)
@@ -219,6 +252,19 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            async lockAccount(userId) {
+              await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+            },
+            async lockAccountSession(userId, sessionId) {
+              // Serialize all sessions of an owner before fencing this session's revocation.
+              await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+              await tx
+                .select({ id: session.id })
+                .from(session)
+                .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
+                .for("share");
+              return reader.hasAccountSession(userId, sessionId);
+            },
             async getAiController(gameId) {
               const [lease] = await tx
                 .select({

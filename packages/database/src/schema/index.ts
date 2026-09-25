@@ -17,6 +17,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { user } from "./auth.js";
+
 // Database literals are intentionally independent of the chess and transport leaves.
 export const gameState = pgEnum("game_state", [
   "configuring",
@@ -76,9 +78,8 @@ export const games = pgTable(
   "games",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    ownerGuestSessionId: uuid("owner_guest_session_id")
-      .notNull()
-      .references(() => guestSessions.id),
+    ownerGuestSessionId: uuid("owner_guest_session_id").references(() => guestSessions.id),
+    ownerUserId: text("owner_user_id").references(() => user.id),
     isSandbox: boolean("is_sandbox").notNull().default(false),
     // Null preserves pre-AI records without assigning them a public AI mode.
     mode: aiGameMode("mode"),
@@ -93,6 +94,15 @@ export const games = pgTable(
   },
   (table) => [
     index("games_owner_idx").on(table.ownerGuestSessionId),
+    index("games_owner_user_idx").on(table.ownerUserId),
+    uniqueIndex("games_one_unfinished_per_account")
+      .on(table.ownerUserId)
+      .where(sql`${table.state} in ('active', 'paused')`),
+    check(
+      "games_owner_check",
+      sql`num_nonnulls(${table.ownerGuestSessionId}, ${table.ownerUserId}) = 1`,
+    ),
+    check("games_sandbox_owner_check", sql`not ${table.isSandbox} or ${table.ownerUserId} is null`),
     uniqueIndex("games_one_unfinished_per_guest_scope")
       .on(table.ownerGuestSessionId, table.isSandbox)
       .where(sql`${table.state} in ('active', 'paused')`),
@@ -124,6 +134,7 @@ export const gameParticipants = pgTable(
     color: chessColor("color").notNull(),
     seatType: seatType("seat_type").notNull(),
     guestSessionId: uuid("guest_session_id").references(() => guestSessions.id),
+    userId: text("user_id").references(() => user.id),
     provider: aiProvider("provider"),
     modelId: text("model_id"),
     parameters: jsonb("parameters").$type<StoredAiParameters>(),
@@ -133,9 +144,12 @@ export const gameParticipants = pgTable(
     uniqueIndex("game_participants_color_unique").on(table.gameId, table.color),
     uniqueIndex("game_participants_guest_unique").on(table.gameId, table.guestSessionId),
     index("game_participants_guest_idx").on(table.guestSessionId),
+    uniqueIndex("game_participants_user_unique").on(table.gameId, table.userId),
+    index("game_participants_user_idx").on(table.userId),
     check(
       "game_participants_identity_check",
-      sql`${table.seatType} = 'human' or ${table.guestSessionId} is null`,
+      sql`num_nonnulls(${table.guestSessionId}, ${table.userId}) <= 1
+        and (${table.seatType} = 'human' or (${table.guestSessionId} is null and ${table.userId} is null))`,
     ),
     check(
       "game_participants_configuration_check",

@@ -53,7 +53,7 @@ describe("durable AI failure policy and private invocation records", () => {
       const owner = await harness.guest(api);
       const principal = owner.principal;
       const controller = new AbortController();
-      let locks = 0;
+      let returnedInvalidOutputs = 0;
       const repository: GameRepository = {
         ...api.repository,
         write: (action) =>
@@ -62,7 +62,7 @@ describe("durable AI failure policy and private invocation records", () => {
               ...tx,
               async lockGame(gameId) {
                 const game = await tx.lockGame(gameId);
-                if (++locks === 2 * invalidNumber + 1) {
+                if (returnedInvalidOutputs === invalidNumber) {
                   controller.abort("transport-secret-sentinel");
                 }
                 return game;
@@ -72,11 +72,13 @@ describe("durable AI failure policy and private invocation records", () => {
       };
       const adapter = createScriptedAdapter({
         provider: "openai",
-        moves: [invalid, invalid, invalid],
+        moves: [invalid, invalid, invalid].map((response) => () => {
+          returnedInvalidOutputs++;
+          return response;
+        }),
       });
       const gamesService = service(api, { openai: adapter }, repository);
       const { snapshot } = await gamesService.createAi(principal, aiMatch);
-      locks = 0;
       const result = await gamesService.aiTurn(
         principal,
         turnCommand(snapshot),

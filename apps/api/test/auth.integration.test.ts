@@ -243,7 +243,7 @@ describe("Better Auth PostgreSQL foundation", () => {
     ).toBe(0);
   });
 
-  it("keeps game authorization and the Sandbox guest-only when both cookies exist", async () => {
+  it("keeps Sandbox authorization guest-only when both cookies exist", async () => {
     const api = await setup();
     const account = await api.register();
     const guest = await harness.guest(api);
