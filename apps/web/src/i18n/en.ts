@@ -396,6 +396,7 @@ export const en = {
     invalidUci: "The move could not be read.",
     illegalMove: "That move is no longer legal.",
     invalidGameState: "This game cannot accept that command.",
+    profileRequired: "Choose a username before starting an account game.",
     conflict:
       "The game changed. The current position is now shown; your previous command was not repeated.",
     server: "The service could not complete the request. Please try again.",

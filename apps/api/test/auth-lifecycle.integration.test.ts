@@ -13,6 +13,7 @@ import {
 } from "../src/auth/service.js";
 import { createLoggerOptions } from "../src/logger.js";
 
+import { aiMatch } from "./ai-turn-helpers.js";
 import { AUTH_ENVIRONMENT, TestMailbox } from "./auth-helpers.js";
 import { ApiHarness, type TestApi, WEB_ORIGIN } from "./helpers.js";
 
@@ -121,6 +122,53 @@ async function registerVerified(api: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("verified email/password lifecycle through Fastify and Better Auth", () => {
+  it("requires user-chosen profile onboarding after verified password sign-in", async () => {
+    const api = await setup();
+    const email = await registerVerified(api);
+    const cookie = await signIn(api, email);
+    const read = () => api.app.inject({ url: "/api/profile", headers: { cookie } });
+    const before = await read();
+    expect(before.statusCode).toBe(200);
+    expect(before.json()).toMatchObject({
+      username: null,
+      onboardingRequired: true,
+      avatar: { source: "initials", initials: null },
+    });
+    expect(before.body).not.toContain(email);
+    const blocked = await api.app.inject({
+      method: "POST",
+      url: "/games",
+      payload: aiMatch,
+      headers: { cookie, origin: WEB_ORIGIN },
+    });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json()).toMatchObject({ code: "PROFILE_REQUIRED" });
+    const username = "Email_" + randomUUID().replaceAll("-", "").slice(0, 18);
+    const completed = await api.app.inject({
+      method: "POST",
+      url: "/api/profile/onboarding",
+      payload: { username },
+      headers: { cookie, origin: WEB_ORIGIN },
+    });
+    expect(completed.statusCode).toBe(200);
+    expect((await read()).json()).toMatchObject({ username, onboardingRequired: false });
+    const changed = "Changed_" + randomUUID().replaceAll("-", "").slice(0, 16);
+    expect(
+      (
+        await api.app.inject({
+          method: "POST",
+          url: "/api/profile",
+          payload: { username: changed },
+          headers: { cookie, origin: WEB_ORIGIN },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await read()).json()).toMatchObject({
+      username: changed,
+      avatar: { source: "initials", initials: "CH" },
+    });
+  });
+
   it("registers, verifies, signs in, resets all sessions, rejects the old password, and signs out", async () => {
     const api = await setup();
     const email = newEmail();

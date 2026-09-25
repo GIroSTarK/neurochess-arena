@@ -1,4 +1,8 @@
-import { createDatabase, createGameRepository } from "@neurochess/database";
+import {
+  createDatabase,
+  createGameRepository,
+  createProfileRepository,
+} from "@neurochess/database";
 
 import { buildApp } from "./app.js";
 import { createSmtpEmailSender } from "./auth/email.js";
@@ -8,6 +12,7 @@ import { createGameService } from "./games/service.js";
 import { createGuestService } from "./guests/service.js";
 import { loadRootEnvironment } from "./load-root-environment.js";
 import { createLoggerOptions } from "./logger.js";
+import { createProfileService } from "./profiles/service.js";
 import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
@@ -22,6 +27,7 @@ async function main(): Promise<void> {
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
+    profileApi: { profiles: createProfileService(createProfileRepository(database)) },
     authApi: {
       auth: createAuth(database, environment, {
         emailSender: createSmtpEmailSender(environment),

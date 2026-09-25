@@ -1,4 +1,6 @@
-import { authSessionResponseSchema } from "@neurochess/contracts";
+import { randomUUID } from "node:crypto";
+
+import { authSessionResponseSchema, profileResponseSchema } from "@neurochess/contracts";
 import { authSchema } from "@neurochess/database";
 import { eq } from "drizzle-orm";
 
@@ -9,7 +11,7 @@ import { integrationDatabase } from "../database";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, startSandbox, test } from "./fixtures";
 
-test("secure account cookies refresh and sign out without affecting the guest game", async ({
+test("secure account cookies support private profile onboarding, refresh and sign-out alongside guest play", async ({
   page,
   context,
   isMobile,
@@ -57,7 +59,42 @@ test("secure account cookies refresh and sign out without affecting the guest ga
     expect((cookie?.expires ?? 0) > Date.now() / 1000 + 6 * 86_400).toBe(true);
     expect(await page.evaluate(() => document.cookie.includes("session_token"))).toBe(false);
     expect(JSON.stringify(read.body).includes(account.token)).toBe(false);
+    const username = "Browser_" + randomUUID().replaceAll("-", "").slice(0, 16);
+    const profile = await page.evaluate(
+      async ({ origin, username }) => {
+        const before = await fetch(`${origin}/api/profile`, { credentials: "include" });
+        const beforeBody: unknown = await before.json();
+        const response = await fetch(`${origin}/api/profile/onboarding`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username, avatar: "initials" }),
+        });
+        return {
+          before: beforeBody,
+          status: response.status,
+          body: (await response.json()) as unknown,
+        };
+      },
+      { origin: API_ORIGIN, username },
+    );
+    expect(profileResponseSchema.parse(profile.before).onboardingRequired).toBe(true);
+    expect(profile.status).toBe(200);
+    expect(profileResponseSchema.parse(profile.body)).toMatchObject({
+      username,
+      onboardingRequired: false,
+      avatar: { source: "initials", initials: "BR" },
+    });
+    expect(JSON.stringify(profile).includes(account.email)).toBe(false);
     await page.reload();
+    const persisted = await page.evaluate(async (origin) => {
+      const response = await fetch(`${origin}/api/profile`, { credentials: "include" });
+      return (await response.json()) as unknown;
+    }, API_ORIGIN);
+    expect(profileResponseSchema.parse(persisted)).toMatchObject({
+      username,
+      onboardingRequired: false,
+    });
     const signOut = await page.evaluate(async (origin) => {
       const response = await fetch(`${origin}/api/auth/sign-out`, {
         method: "POST",
@@ -74,6 +111,7 @@ test("secure account cookies refresh and sign out without affecting the guest ga
     expect(
       await database.db.$count(authSchema.session, eq(authSchema.session.userId, userId)),
     ).toBe(0);
+    expect((await context.request.get(`${API_ORIGIN}/api/profile`)).status()).toBe(401);
     const guestRead = await page.evaluate(
       async ({ origin, gameId }) => {
         const response = await fetch(`${origin}/games/${gameId}`, { credentials: "include" });

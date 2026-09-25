@@ -1,4 +1,13 @@
-import type { AuthErrorCode, GameErrorCode } from "@neurochess/contracts";
+import type { AuthErrorCode, GameErrorCode, ProfileErrorCode } from "@neurochess/contracts";
+
+export const profileErrorMessages: Readonly<Record<ProfileErrorCode, string>> = {
+  PROFILE_UNAUTHORIZED: "A valid account session is required.",
+  PROFILE_FORBIDDEN: "This profile request is not allowed.",
+  PROFILE_INVALID_REQUEST: "The profile request could not be accepted.",
+  USERNAME_UNAVAILABLE: "This username is already in use. Choose another username.",
+  AVATAR_UNAVAILABLE: "No supported provider avatar is available. Use initials instead.",
+  PROFILE_UNAVAILABLE: "Your profile is temporarily unavailable. Please try again.",
+};
 
 export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
   AUTH_UNAUTHORIZED: "A valid account session is required.",
@@ -41,6 +50,7 @@ export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   GAME_CONFLICT: "The game has changed. Use the current snapshot.",
   UNAUTHORIZED: "A valid session is required.",
   FORBIDDEN: "This action is not allowed.",
+  PROFILE_REQUIRED: "Choose a username before starting an account game.",
   NOT_FOUND: "The requested resource was not found.",
   INTERNAL_SERVER_ERROR: "The server could not complete the request.",
 };

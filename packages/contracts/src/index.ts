@@ -140,3 +140,4 @@ export {
   type AiRequestErrorCode,
 } from "./ai-http.js";
 export * from "./game-identity.js";
+export * from "./profile.js";

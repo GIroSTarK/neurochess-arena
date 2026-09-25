@@ -1,5 +1,11 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { createAuthAdapter } from "./auth.js";
+export { profiles } from "./schema/profiles.js";
+export {
+  createProfileRepository,
+  type ProfileRepository,
+  type StoredProfileState,
+} from "./profile-repository.js";
 export * as authSchema from "./schema/auth.js";
 export { runMigrations } from "./migrations.js";
 export {

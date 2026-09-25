@@ -74,8 +74,9 @@ The client is not authoritative for legal moves, game results, authorization, pa
 Recommended modules:
 
 ```text
-auth          Better Auth integration and profile lifecycle
-users         usernames, avatars, deletion, and history ownership
+auth          Better Auth integration and account lifecycle
+profiles      private username onboarding and provider-avatar preferences
+users         deletion and history ownership
 credentials   session credential handling and encrypted saved credentials
 providers     OpenAI, Anthropic, Google, and OpenRouter adapters
 games         game commands, reads, lifecycle, replay, and PGN
@@ -319,7 +320,11 @@ Account commands lock the user row, then the calling session row, then the game.
 
 Guest games never migrate at sign-in. Account requests cannot combine permissions from both cookies. Identity changes cancel the old page's controller activity and clear secrets/private state; account recovery retains the existing explicit paused-recovery protocol. The owner-based unfinished index must be extended for non-owning room participants in Phase 4 before joining is enabled.
 
-Profiles follow the [username and avatar contract](product.md#usernames-and-avatars). Authentication integrates an injected email sender with a configurable working transport (SMTP is the initial transport) and an isolated test mailbox. Verification/reset links are never logged, CI never requires outbound email, and production must reject test-only delivery configuration. OAuth account linking is explicitly configured rather than inherited from framework defaults.
+Profiles follow the [username and avatar contract](product.md#usernames-and-avatars). A private `profiles` row, keyed by the stable auth user ID, stores the chosen display/normalized username and avatar preference. PostgreSQL checks the ASCII shape, reserved names, and exact normalization, and uniquely indexes the normalized name. The row is created on the first profile update; absent rows and null usernames require onboarding. New account-game creation checks completion under the user lock, independently of authentication method. Existing games retain their stable ownership, seat assignments, and recovery authority.
+
+Profile reads and writes use user-before-session locks and recheck session expiry after lock waits; writes also recheck after a potentially blocked username claim. Username and avatar changes commit together. The initial provider URL remains in Better Auth's `user.image`; the profile response revalidates it against the approved hosts and a matching linked provider. Only the stored candidate can be explicitly reselected; an initials preference persists across sign-in. Invalid/missing candidates fall back to initials derived solely from the chosen username (null before onboarding). The API never fetches images; the browser must use the supplied initials if an image fails to load. Profile responses omit email, auth names, tokens, and user IDs and have no directory or arbitrary-account route. See the [profile API](development.md#private-profile-api).
+
+Authentication integrates an injected email sender with a configurable working transport (SMTP is the initial transport) and an isolated test mailbox. Verification/reset links are never logged, CI never requires outbound email, and production must reject test-only delivery configuration. OAuth account linking is explicitly configured rather than inherited from framework defaults.
 
 The Fastify boundary completes registration before requesting verification delivery through Better Auth, keeping SMTP outside the registration transaction. It awaits email submission and tracks delivery failures per request because Better Auth 1.7.5 suppresses errors from its reset-email callback. Failed sends cannot produce a success acknowledgement; signup may already have committed an unverified account, which can retry. The SMTP adapter suppresses transport diagnostics and requires verified TLS outside a loopback development/test mailbox. Only the test harness supplies an in-memory sender.
 

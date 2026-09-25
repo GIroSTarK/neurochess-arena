@@ -8,6 +8,7 @@ const noticeKeys = {
   "sandbox-unavailable": "notices.sandboxUnavailable",
   UNAUTHORIZED: "notices.unauthorized",
   FORBIDDEN: "notices.forbidden",
+  PROFILE_REQUIRED: "notices.profileRequired",
   NOT_FOUND: "notices.notFound",
   INVALID_REQUEST: "notices.invalidRequest",
   INVALID_UCI: "notices.invalidUci",
