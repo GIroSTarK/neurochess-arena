@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   createGameRepository,
+  createProfileRepository,
   type GameRepository,
   games,
   guestSessions,
@@ -16,6 +17,7 @@ import { buildApp } from "../../apps/api/src/app.js";
 import { createAuth } from "../../apps/api/src/auth/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
+import { createProfileService } from "../../apps/api/src/profiles/service.js";
 import { AUTH_ENVIRONMENT } from "../../apps/api/test/auth-helpers.js";
 import { integrationDatabase } from "../database.js";
 
@@ -113,6 +115,7 @@ async function main() {
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
+      profileApi: { profiles: createProfileService(createProfileRepository(database)) },
       authApi: {
         auth: createAuth(database, {
           ...AUTH_ENVIRONMENT,

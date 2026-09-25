@@ -257,6 +257,9 @@ export function createGameService(
         if (!locked) throw new GameIntegrityError();
         throw new GameConflictError((await restoreAuthorized(tx, principal, locked)).snapshot);
       }
+      if (principal.kind === "account" && !(await tx.hasCompletedProfile(principal.userId))) {
+        throw new GameRequestError("PROFILE_REQUIRED");
+      }
       const started = createGame().start();
       if (!started.ok) throw new GameIntegrityError();
       const snapshot = transportSnapshot(randomUUID(), 0, started.value);

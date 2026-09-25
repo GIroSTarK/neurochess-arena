@@ -178,6 +178,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0008_better_auth_foundation",
         "0009_oauth_account_identity",
         "0010_account_owned_games",
+        "0011_account_profiles",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -385,6 +386,37 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
           )
         ).rows,
       ).toEqual([{ owner_guest_session_id: null, owner_user_id: "existing-user" }]);
+      await tx.execute(
+        sql`update "user" set image = 'https://lh3.googleusercontent.com/a/legacy' where id = 'existing-user'`,
+      );
+      const beforeProfiles = new Map<string, unknown[]>();
+      for (const table of tables) {
+        beforeProfiles.set(
+          table,
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[10]!);
+      for (const table of tables) {
+        expect(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        ).toEqual(beforeProfiles.get(table));
+      }
+      expect((await tx.execute(sql`select * from profiles`)).rows).toEqual([]);
+      await tx.execute(
+        sql`insert into profiles(user_id, username, username_normalized) values ('existing-user', 'Chosen_Name', 'chosen_name')`,
+      );
+      expect(
+        (await tx.execute(sql`select username, avatar_preference from profiles`)).rows,
+      ).toEqual([{ username: "Chosen_Name", avatar_preference: "provider" }]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

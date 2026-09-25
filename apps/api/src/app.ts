@@ -16,6 +16,7 @@ import {
 import { type AuthRoutesOptions, registerAuthRoutes } from "./auth/routes.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 import { createAccountIdentityResolver } from "./identity/account.js";
+import { type ProfileApiOptions, registerProfileRoutes } from "./profiles/routes.js";
 
 export interface ReadinessProbe {
   check(): Promise<void>;
@@ -27,6 +28,7 @@ export interface BuildAppOptions {
   readonly webOrigin: string;
   readonly gameApi?: Omit<GameApiOptions, "webOrigin">;
   readonly authApi?: Omit<AuthRoutesOptions, "webOrigin">;
+  readonly profileApi?: Pick<ProfileApiOptions, "profiles">;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -88,6 +90,13 @@ export async function buildApp(options: BuildAppOptions) {
   }
   if (options.authApi) {
     await app.register(registerAuthRoutes, { ...options.authApi, webOrigin: options.webOrigin });
+    if (options.profileApi) {
+      await app.register(registerProfileRoutes, {
+        ...options.profileApi,
+        accountIdentity: createAccountIdentityResolver(options.authApi.auth),
+        webOrigin: options.webOrigin,
+      });
+    }
   }
 
   app.setNotFoundHandler((request, reply) => {

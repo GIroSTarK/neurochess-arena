@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { authSchema, games } from "@neurochess/database";
 import { inArray } from "drizzle-orm";
 
@@ -15,10 +17,16 @@ export class AccountGameHarness extends ApiHarness {
     return super.createApi({ auth: (db) => createAuth(db, AUTH_ENVIRONMENT), ...options });
   }
 
-  async account(api: TestApi) {
+  async account(api: TestApi, completeProfile = true) {
     const auth = fixtureAuth(api.database);
     const account = await registerFixture(auth);
     this.userIds.add(account.userId);
+    if (completeProfile) {
+      const response = await post(api, account.cookie, "/api/profile/onboarding", {
+        username: "User_" + randomUUID().replaceAll("-", "").slice(0, 19),
+      });
+      if (response.statusCode !== 200) throw new Error("Profile fixture creation failed");
+    }
     const principal = await principalFor(auth, account.cookie);
     return { ...account, principal };
   }

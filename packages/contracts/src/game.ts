@@ -156,6 +156,7 @@ export const gamePgnResponseSchema = z.strictObject({
 });
 
 export const gameErrorCodeSchema = z.enum([
+  "PROFILE_REQUIRED",
   "INVALID_REQUEST",
   "INVALID_UCI",
   "ILLEGAL_MOVE",

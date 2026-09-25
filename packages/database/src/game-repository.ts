@@ -1,5 +1,6 @@
-import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
+import { hasAccountSession, lockAccountSession } from "./account-session.js";
 import type { DatabaseConnection } from "./client.js";
 import {
   aiControllers,
@@ -11,7 +12,7 @@ import {
   guestSessions,
   modelInvocations,
   moves,
-  session,
+  profiles,
   user,
 } from "./schema/index.js";
 
@@ -64,6 +65,7 @@ export type GameOwner =
 export interface GameReader {
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
   hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
+  hasCompletedProfile(userId: string): Promise<boolean>;
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
   getMoves(gameId: string): Promise<StoredMove[]>;
@@ -123,19 +125,13 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
-    async hasAccountSession(userId, sessionId) {
-      // Better Auth stores UTC in timestamp-without-time-zone columns.
-      const [active] = await db
-        .select({ id: session.id })
-        .from(session)
-        .where(
-          and(
-            eq(session.id, sessionId),
-            eq(session.userId, userId),
-            gt(session.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`),
-          ),
-        );
-      return active !== undefined;
+    hasAccountSession: (userId, sessionId) => hasAccountSession(db, userId, sessionId),
+    async hasCompletedProfile(userId) {
+      const [profile] = await db
+        .select({ id: profiles.userId })
+        .from(profiles)
+        .where(and(eq(profiles.userId, userId), isNotNull(profiles.username)));
+      return profile !== undefined;
     },
     async getGuest(id) {
       const [guest] = await db
@@ -255,16 +251,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
             async lockAccount(userId) {
               await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
             },
-            async lockAccountSession(userId, sessionId) {
-              // Serialize all sessions of an owner before fencing this session's revocation.
-              await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
-              await tx
-                .select({ id: session.id })
-                .from(session)
-                .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
-                .for("share");
-              return reader.hasAccountSession(userId, sessionId);
-            },
+            lockAccountSession: (userId, sessionId) => lockAccountSession(tx, userId, sessionId),
             async getAiController(gameId) {
               const [lease] = await tx
                 .select({

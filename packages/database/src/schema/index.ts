@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 export * from "./auth.js";
+export * from "./profiles.js";
 import {
   bigint,
   boolean,

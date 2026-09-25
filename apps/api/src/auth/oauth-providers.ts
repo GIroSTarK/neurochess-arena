@@ -1,4 +1,8 @@
-import { authEmailSchema, type AuthOAuthProvider } from "@neurochess/contracts";
+import {
+  authEmailSchema,
+  type AuthOAuthProvider,
+  safeProviderAvatar as safeOAuthAvatar,
+} from "@neurochess/contracts";
 import { getOAuthState } from "better-auth/api";
 import { authorizationCodeRequest, type OAuthProvider } from "better-auth/oauth2";
 import { z } from "zod";
@@ -35,29 +39,7 @@ const githubEmailsSchema = z
   )
   .max(100);
 
-export function safeOAuthAvatar(provider: AuthOAuthProvider, value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length > 2048) return undefined;
-  try {
-    const url = new URL(value);
-    const approvedHost =
-      provider === "google"
-        ? /^lh[3-6]\.googleusercontent\.com$/.test(url.hostname)
-        : url.hostname === "avatars.githubusercontent.com";
-    if (
-      url.protocol === "https:" &&
-      approvedHost &&
-      !url.username &&
-      !url.password &&
-      !url.port &&
-      !url.hash
-    ) {
-      return url.href;
-    }
-  } catch {
-    /* Invalid avatars use initials during profile onboarding. */
-  }
-  return undefined;
-}
+export { safeOAuthAvatar };
 
 async function requestJson(
   fetcher: typeof fetch,

@@ -1,6 +1,10 @@
 import { randomInt, randomUUID } from "node:crypto";
 
-import { type AuthOAuthProvider, authOAuthStartResponseSchema } from "@neurochess/contracts";
+import {
+  type AuthOAuthProvider,
+  authOAuthStartResponseSchema,
+  profileResponseSchema,
+} from "@neurochess/contracts";
 import { authSchema } from "@neurochess/database";
 import { eq, inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +13,7 @@ import { integrationDatabase } from "../../../test/database.js";
 import { AUTH_COOKIE_NAME, type AuthService, createAuth } from "../src/auth/service.js";
 import { createLoggerOptions } from "../src/logger.js";
 
+import { aiMatch } from "./ai-turn-helpers.js";
 import { AUTH_ENVIRONMENT, fixtureAuth, registerFixture } from "./auth-helpers.js";
 import { ApiHarness, createSandbox, type TestApi, WEB_ORIGIN } from "./helpers.js";
 import { OAUTH_ENVIRONMENT, type OAuthGrant, TestOAuthTransport } from "./oauth-transport.js";
@@ -145,6 +150,77 @@ function failed(response: Awaited<ReturnType<typeof callback>>, code = "AUTH_OAU
 }
 
 describe("Google and GitHub OAuth through Better Auth and PostgreSQL", () => {
+  it.each(["google", "github"] as const)(
+    "completes the same profile onboarding for %s and preserves avatar removal on returning sign-in",
+    async (provider) => {
+      const api = await setup();
+      const person = identity();
+      const signedIn = await callback(api, await start(api, provider), person);
+      const sessionCookie = (response: typeof signedIn) => {
+        const item = response.cookies.find((entry) => entry.name === AUTH_COOKIE_NAME)!;
+        return `${item.name}=${encodeURIComponent(item.value)}`;
+      };
+      const cookie = sessionCookie(signedIn);
+      const update = (payload: object, activeCookie = cookie, path = "/api/profile") =>
+        api.app.inject({
+          method: "POST",
+          url: path,
+          payload,
+          headers: { origin: WEB_ORIGIN, cookie: activeCookie },
+        });
+      const read = async (activeCookie = cookie) => {
+        const response = await api.app.inject({
+          url: "/api/profile",
+          headers: { cookie: activeCookie },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.body).not.toContain(person.email);
+        expect(response.body).not.toContain("private-provider-name-canary");
+        return profileResponseSchema.parse(response.json());
+      };
+      const initial = await read();
+      expect(initial).toMatchObject({
+        username: null,
+        onboardingRequired: true,
+        avatar: { source: provider, initials: null },
+      });
+      const blocked = await api.app.inject({
+        method: "POST",
+        url: "/games",
+        payload: aiMatch,
+        headers: { cookie, origin: WEB_ORIGIN },
+      });
+      expect(blocked.statusCode).toBe(403);
+      expect(blocked.json()).toMatchObject({ code: "PROFILE_REQUIRED" });
+      const username = "OAuth_" + randomUUID().replaceAll("-", "").slice(0, 18);
+      expect((await update({ username }, cookie, "/api/profile/onboarding")).statusCode).toBe(200);
+      expect((await update({ avatar: "initials" })).statusCode).toBe(200);
+      expect(await read()).toMatchObject({
+        username,
+        onboardingRequired: false,
+        avatar: { source: "initials", initials: "OA" },
+      });
+      await post(api, "/sign-out", {}, cookie);
+      const returned = await callback(api, await start(api, provider), person);
+      const returningCookie = sessionCookie(returned);
+      expect(await read(returningCookie)).toMatchObject({
+        username,
+        avatar: { source: "initials", initials: "OA" },
+      });
+      expect((await update({ avatar: "provider" }, returningCookie)).statusCode).toBe(200);
+      expect((await read(returningCookie)).avatar).toMatchObject({
+        source: provider,
+        url: initial.providerAvatar!.url,
+      });
+      const changed = "Changed_" + randomUUID().replaceAll("-", "").slice(0, 16);
+      expect((await update({ username: changed }, returningCookie)).statusCode).toBe(200);
+      expect(await read(returningCookie)).toMatchObject({
+        username: changed,
+        avatar: { initials: "CH" },
+      });
+    },
+  );
+
   it("enforces provider/subject uniqueness across concurrent account owners in PostgreSQL", async () => {
     const api = await setup();
     const owners = await Promise.all([api.register(), api.register()]);
