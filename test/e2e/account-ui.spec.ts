@@ -199,13 +199,27 @@ for (const provider of ["google", "github"] as const) {
 test("account forms support keyboard, password paste, long copy and missing links", async ({
   page,
 }, testInfo) => {
+  // Title focus precedes method discovery; hold every request because Strict Mode can replay it.
+  const methods = Promise.withResolvers<void>();
+  await page.route("**/api/auth/methods", async (route) => {
+    await methods.promise;
+    await route.continue();
+  });
   await page.goto("/auth/sign-up?returnTo=https://untrusted.test/#token=discard-me");
   const heading = page.getByRole("heading", { name: "Create your account" });
+  const email = page.getByLabel("Email", { exact: true });
+  try {
+    await expect(heading).toBeFocused();
+    await expect(email).toHaveCount(0);
+  } finally {
+    methods.resolve();
+  }
+  await expect(email).toBeVisible();
   await expect(heading).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Email", { exact: true })).toBeFocused();
+  await expect(email).toBeFocused();
   await page.getByRole("button", { name: "Create account", exact: true }).click();
-  await expect(page.getByLabel("Email", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(email).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute(
     "autocomplete",
     "new-password",
