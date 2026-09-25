@@ -124,6 +124,7 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 function readerFor(db: Executor): GameReader {
   return {
     async hasAccountSession(userId, sessionId) {
+      // Better Auth stores UTC in timestamp-without-time-zone columns.
       const [active] = await db
         .select({ id: session.id })
         .from(session)
@@ -131,7 +132,7 @@ function readerFor(db: Executor): GameReader {
           and(
             eq(session.id, sessionId),
             eq(session.userId, userId),
-            gt(session.expiresAt, sql`clock_timestamp()`),
+            gt(session.expiresAt, sql`(clock_timestamp() at time zone 'UTC')`),
           ),
         );
       return active !== undefined;

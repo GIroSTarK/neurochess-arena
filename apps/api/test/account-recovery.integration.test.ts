@@ -201,7 +201,9 @@ describe("account recovery and identity fences", () => {
           // Session revocation is locked during a command; time can still pass at a game lock.
           await api.database.db
             .update(authSchema.session)
-            .set({ expiresAt: sql`clock_timestamp() + interval '200 milliseconds'` })
+            .set({
+              expiresAt: sql`(clock_timestamp() at time zone 'UTC') + interval '200 milliseconds'`,
+            })
             .where(eq(authSchema.session.id, owner.principal.sessionId));
         }
         pending = guarded

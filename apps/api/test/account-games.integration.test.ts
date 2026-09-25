@@ -8,7 +8,7 @@ import {
 } from "@neurochess/contracts";
 import { authSchema, gameParticipants, games, guestSessions } from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AUTH_COOKIE_NAME } from "../src/auth/service.js";
 import { createGameService } from "../src/games/service.js";
@@ -32,6 +32,46 @@ const harness = new AccountGameHarness();
 afterEach(() => harness.dispose());
 
 describe("account-owned public games", () => {
+  it.each(["UTC", "America/Los_Angeles", "Asia/Tokyo"])(
+    "checks account session expiry using UTC under database TimeZone %s",
+    async (timeZone) => {
+      const api = await harness.createApi();
+      const owner = await harness.account(api);
+      const transaction = api.database.db.transaction.bind(api.database.db);
+      const configuredTransactions = vi
+        .spyOn(api.database.db, "transaction")
+        .mockImplementation((action, config) =>
+          transaction(async (tx) => {
+            await tx.execute(sql`select set_config('TimeZone', ${timeZone}, true)`);
+            return action(tx);
+          }, config),
+        );
+      try {
+        for (const [offsetMs, active] of [
+          [60_000, true],
+          [-60_000, false],
+        ] as const) {
+          await api.database.db
+            .update(authSchema.session)
+            .set({ expiresAt: new Date(Date.now() + offsetMs) })
+            .where(eq(authSchema.session.id, owner.principal.sessionId));
+          expect(
+            await api.repository.read((reader) =>
+              reader.hasAccountSession(owner.userId, owner.principal.sessionId),
+            ),
+          ).toBe(active);
+          expect(
+            await api.repository.write((tx) =>
+              tx.lockAccountSession(owner.userId, owner.principal.sessionId),
+            ),
+          ).toBe(active);
+        }
+      } finally {
+        configuredTransactions.mockRestore();
+      }
+    },
+  );
+
   it("serializes creation across two real sessions and API instances, keeping public and guest Sandbox slots independent", async () => {
     const first = await harness.createApi();
     const second = await harness.createApi();
@@ -213,7 +253,7 @@ describe("account-owned public games", () => {
     const count = await api.database.db.$count(guestSessions);
     await api.database.db
       .update(authSchema.session)
-      .set({ expiresAt: sql`clock_timestamp() - interval '1 second'` })
+      .set({ expiresAt: sql`(clock_timestamp() at time zone 'UTC') - interval '1 second'` })
       .where(eq(authSchema.session.id, owner.principal.sessionId));
     for (const [cookie, headers] of [
       [both, {}],
