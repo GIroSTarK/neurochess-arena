@@ -72,7 +72,15 @@ function snapshotFor(snapshot: GameSnapshot, gameId?: string): GameSnapshot {
   return snapshot;
 }
 
-export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch } = {}): AiApi {
+export function createAiApi(
+  apiBaseUrl: string,
+  options: {
+    fetch?: typeof fetch;
+    identity?: "account" | "guest";
+    lifetime?: AbortSignal | undefined;
+    onUnauthorized?: (() => void) | undefined;
+  } = {},
+): AiApi {
   const origin = new URL(apiBaseUrl);
   if (
     origin.protocol !== "https:" &&
@@ -99,6 +107,7 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
     timeoutMs = 10_000,
     gameId?: string,
   ): Promise<T> {
+    if (options.lifetime) signal = AbortSignal.any([signal, options.lifetime]);
     const isCancelled = () => signal.aborted;
     if (isCancelled()) throw new ApiFailure("cancelled");
     const controller = new AbortController();
@@ -113,6 +122,7 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
         redirect: "error",
         headers: {
           accept: "application/json",
+          ...(options.identity ? { "X-Neurochess-Identity": options.identity } : {}),
           ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -124,7 +134,9 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
       } catch {
         throw new ApiFailure("malformed");
       }
+      if (isCancelled()) throw new ApiFailure("cancelled");
       if (!response.ok) {
+        if (response.status === 401 && !isCancelled()) options.onUnauthorized?.();
         const error = validated(aiErrorResponseSchema, payload);
         if (!("message" in error)) throw new AiRequestFailure(error.code);
         throw new ApiFailure(
@@ -155,6 +167,7 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
 
   return {
     async bootstrap(signal) {
+      if (options.identity === "account") return;
       await request("/guest-session", guestSessionResponseSchema, signal, {});
     },
     async snapshot(gameId, signal) {

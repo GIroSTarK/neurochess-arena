@@ -10,7 +10,10 @@ import { App } from "./app/App";
 import { ConfigurationError } from "./app/ConfigurationError";
 import { parseWebEnvironment } from "./app/env";
 import { ErrorBoundary } from "./app/ErrorBoundary";
+import { consumeAuthEntry } from "./auth/navigation";
 import { i18n } from "./i18n";
+
+const authEntry = consumeAuthEntry();
 
 const rootElement = document.querySelector<HTMLDivElement>("#root");
 
@@ -30,6 +33,7 @@ try {
       <I18nextProvider i18n={i18n}>
         <ErrorBoundary>
           <App
+            authEntry={authEntry}
             apiBaseUrl={environment.VITE_API_BASE_URL}
             sandboxEnabled={environment.SANDBOX_ENABLED}
           />

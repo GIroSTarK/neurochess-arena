@@ -178,7 +178,7 @@ export class SetupController {
     this.seat(color, { parameters: { ...seat.parameters, [name]: value } });
   }
 
-  private ensureGuest(): Promise<void> {
+  private ensureSession(): Promise<void> {
     const lifetime = this.lifetime;
     if (!lifetime || lifetime.signal.aborted) return Promise.reject(new ApiFailure("cancelled"));
     // Two explicit seat discoveries can share bootstrap, but never each other's catalog or key.
@@ -210,7 +210,7 @@ export class SetupController {
       issue: null,
     });
     try {
-      await this.ensureGuest();
+      await this.ensureSession();
       if (isCancelled()) return;
       const result = await this.api.discover(
         {
@@ -286,7 +286,7 @@ export class SetupController {
         const seat = configuration.seats[color];
         if (seat.type === "ai") this.credentials.require(color, seat.provider);
       }
-      await this.ensureGuest();
+      await this.ensureSession();
       if (isCancelled()) return null;
       const game = await this.api.create(configuration, request.signal);
       if (isCancelled()) return null;

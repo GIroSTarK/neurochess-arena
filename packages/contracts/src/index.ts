@@ -8,6 +8,7 @@ export {
   authResetPasswordRequestSchema,
   authStatusResponseSchema,
   authOAuthProviderSchema,
+  authMethodsResponseSchema,
   authOAuthRequestSchema,
   authOAuthStartResponseSchema,
   authOAuthCallbackQuerySchema,

@@ -1,6 +1,7 @@
-import { lazy, Suspense, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
 
-import { MatchScreen } from "../match/MatchScreen";
+import { AccountApp } from "../auth/AccountApp";
+import { type AuthEntry, consumeAuthEntry } from "../auth/navigation";
 
 import { DocumentMetadata } from "./DocumentMetadata";
 import { readAppPage, subscribeToNavigation } from "./navigation";
@@ -31,9 +32,24 @@ const ArenaReferenceScreen =
 export interface AppProps {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
+  readonly authEntry?: AuthEntry;
 }
 
-export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
+export function App({ apiBaseUrl, sandboxEnabled, authEntry = {} }: AppProps) {
+  const [callback, setCallback] = useState({ entry: authEntry, revision: 0 });
+  useEffect(() => {
+    const consume = () => {
+      if (
+        window.location.pathname.startsWith("/auth/") &&
+        /^#(?:token|status|error)=/.test(window.location.hash)
+      ) {
+        const entry = consumeAuthEntry();
+        setCallback((previous) => ({ entry, revision: previous.revision + 1 }));
+      }
+    };
+    window.addEventListener("hashchange", consume);
+    return () => window.removeEventListener("hashchange", consume);
+  }, []);
   const requestedPage = useSyncExternalStore(subscribeToNavigation, readAppPage);
   if (
     import.meta.env.DEV &&
@@ -60,13 +76,17 @@ export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
       </>
     );
   }
-  const page = requestedPage === "arena" ? "arena" : "not-found";
+  const page =
+    requestedPage === "sandbox" || requestedPage === "reference" ? "not-found" : requestedPage;
 
   return (
     <>
       <DocumentMetadata page={page} />
-      {page === "arena" ? (
-        <MatchScreen
+      {page !== "not-found" ? (
+        <AccountApp
+          page={page}
+          entry={callback.entry}
+          entryRevision={callback.revision}
           apiBaseUrl={apiBaseUrl}
           sandboxEnabled={sandboxEnabled && SandboxScreen !== null}
         />

@@ -14,8 +14,9 @@ import { API_ORIGIN } from "./environment";
 
 export { expect } from "@playwright/test";
 
-export const test = base.extend({
-  page: async ({ page }, use) => {
+export const test = base.extend<{ allowIdentityLoss: boolean }>({
+  allowIdentityLoss: [false, { option: true }],
+  page: async ({ page, allowIdentityLoss }, use) => {
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
@@ -47,8 +48,29 @@ export const test = base.extend({
           ["/sandbox/games/unfinished", "/games/unfinished"].some(
             (path) => message.location().url === API_ORIGIN + path,
           ) && message.text().includes("401 (Unauthorized)");
-        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery) {
-          errors.push("Application console " + message.type());
+        const accountRejection =
+          message.location().url.startsWith(API_ORIGIN + "/api/") &&
+          /\/(auth|profile)(\/|$)/.test(new URL(message.location().url).pathname) &&
+          /(?:400|401|403|409|429) \(/.test(message.text());
+        const expectedIdentityLoss =
+          allowIdentityLoss &&
+          ["/games", "/providers"].some((path) =>
+            message.location().url.startsWith(API_ORIGIN + path),
+          ) &&
+          message.text().includes("401 (Unauthorized)");
+        if (
+          !message.text().includes("409 (Conflict)") &&
+          !anonymousDiscovery &&
+          !accountRejection &&
+          !expectedIdentityLoss
+        ) {
+          const category = message.location().url.startsWith(API_ORIGIN + "/games")
+            ? "games"
+            : message.location().url.startsWith(API_ORIGIN + "/providers")
+              ? "providers"
+              : "application";
+          const code = /\b[45]\d\d\b|net::ERR_[A-Z_]+/.exec(message.text())?.[0] ?? "unknown";
+          errors.push(`Application console ${message.type()} (${category}, ${code})`);
         }
       }
     });

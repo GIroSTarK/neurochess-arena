@@ -2,6 +2,7 @@ import {
   authEmailRequestSchema,
   type AuthErrorCode,
   authErrorResponseSchema,
+  authMethodsResponseSchema,
   authOAuthCallbackQuerySchema,
   authOAuthRequestSchema,
   authResetPasswordRequestSchema,
@@ -108,17 +109,19 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
       const isCallback = request.method === "GET" && /^\/callback\/(google|github)$/.test(path);
       try {
         const isSession = request.method === "GET" && path === "/get-session";
+        const isMethods = request.method === "GET" && path === "/methods";
         const isSignOut = request.method === "POST" && path === "/sign-out";
         const isOAuthStart =
           request.method === "POST" && (path === "/sign-in/social" || path === "/link-social");
         const bodySchema = request.method === "POST" ? postSchemas[path] : undefined;
         // New library endpoints must be reviewed before they become public product flows.
-        if (!isSession && !bodySchema && !isCallback) throw new AuthRequestError(404);
+        if (!isSession && !isMethods && !bodySchema && !isCallback) throw new AuthRequestError(404);
         if (isOAuthStart && !Object.keys(options.auth.options.socialProviders ?? {}).length) {
           throw new AuthRequestError(404);
         }
         if (
           !isSession &&
+          !isMethods &&
           !isSignOut &&
           !isOAuthStart &&
           !isCallback &&
@@ -129,7 +132,8 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
         const origin = request.headers.origin;
         if (
           !isCallback &&
-          ((origin !== undefined && origin !== options.webOrigin) || (!isSession && !origin))
+          ((origin !== undefined && origin !== options.webOrigin) ||
+            (!isSession && !isMethods && !origin))
         ) {
           throw new AuthRequestError(403);
         }
@@ -137,6 +141,16 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           request.query,
         );
         if (!query.success) throw new AuthRequestError(400);
+        if (isMethods) {
+          return await reply.send(
+            authMethodsResponseSchema.parse({
+              email: Boolean(options.auth.options.emailAndPassword?.enabled),
+              providers: ["google", "github"].filter((provider) =>
+                Object.hasOwn(options.auth.options.socialProviders ?? {}, provider),
+              ),
+            }),
+          );
+        }
         if (
           bodySchema &&
           request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
