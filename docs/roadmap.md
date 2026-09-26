@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–2 and the Sandbox presentation remake completed; Phase 3 in progress
 
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
