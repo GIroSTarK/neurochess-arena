@@ -1,6 +1,13 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { createAuthAdapter } from "./auth.js";
 export { profiles } from "./schema/profiles.js";
+export { providerCredentials } from "./schema/credentials.js";
+export {
+  createCredentialRepository,
+  type CredentialRepository,
+  type StoredCredentialMetadata,
+  type NewProviderCredential,
+} from "./credential-repository.js";
 export {
   createProfileRepository,
   type ProfileRepository,

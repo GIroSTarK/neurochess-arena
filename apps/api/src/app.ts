@@ -14,6 +14,7 @@ import {
 } from "fastify-type-provider-zod";
 
 import { type AuthRoutesOptions, registerAuthRoutes } from "./auth/routes.js";
+import { type CredentialApiOptions, registerCredentialRoutes } from "./credentials/routes.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 import { createAccountIdentityResolver } from "./identity/account.js";
 import { type ProfileApiOptions, registerProfileRoutes } from "./profiles/routes.js";
@@ -29,6 +30,7 @@ export interface BuildAppOptions {
   readonly gameApi?: Omit<GameApiOptions, "webOrigin">;
   readonly authApi?: Omit<AuthRoutesOptions, "webOrigin">;
   readonly profileApi?: Pick<ProfileApiOptions, "profiles">;
+  readonly credentialApi?: Pick<CredentialApiOptions, "credentials">;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -90,6 +92,13 @@ export async function buildApp(options: BuildAppOptions) {
   }
   if (options.authApi) {
     await app.register(registerAuthRoutes, { ...options.authApi, webOrigin: options.webOrigin });
+    if (options.credentialApi) {
+      await app.register(registerCredentialRoutes, {
+        ...options.credentialApi,
+        accountIdentity: createAccountIdentityResolver(options.authApi.auth),
+        webOrigin: options.webOrigin,
+      });
+    }
     if (options.profileApi) {
       await app.register(registerProfileRoutes, {
         ...options.profileApi,

@@ -14,6 +14,51 @@ const validEnvironment = {
 };
 
 describe("parseApiEnvironment", () => {
+  it("requires a valid bounded encryption keyring and active key together, without echoing values", () => {
+    const key = Buffer.alloc(32, 17).toString("base64");
+    const configuration = {
+      CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: "test-v1",
+      CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({ "test-v1": key }),
+    };
+    expect(parseApiEnvironment({ ...validEnvironment, ...configuration })).toMatchObject({
+      CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: "test-v1",
+      CREDENTIAL_ENCRYPTION_KEYS: { "test-v1": key },
+    });
+    expect(parseApiEnvironment(validEnvironment).CREDENTIAL_ENCRYPTION_KEYS).toBeUndefined();
+    for (const patch of [
+      { CREDENTIAL_ENCRYPTION_KEYS: undefined },
+      { CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: undefined },
+      { CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: "missing" },
+      { CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: "" },
+      { CREDENTIAL_ENCRYPTION_KEYS: "" },
+      { CREDENTIAL_ENCRYPTION_KEYS: "secret-canary" },
+      { CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({ "test-v1": "secret-canary" }) },
+      {
+        CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({
+          "test-v1": Buffer.alloc(31).toString("base64"),
+        }),
+      },
+      { CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({ "test-v1": key + "\n" }) },
+      { CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({ "test-v1": key.slice(0, -1) }) },
+      { CREDENTIAL_ENCRYPTION_KEYS: "{}" },
+      { CREDENTIAL_ENCRYPTION_KEYS: "[]" },
+      {
+        CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify(
+          Object.fromEntries(Array.from({ length: 9 }, (_, n) => [`key${n}`, key])),
+        ),
+      },
+      { CREDENTIAL_ENCRYPTION_KEYS: JSON.stringify({ "bad/key": key, "test-v1": key }) },
+    ]) {
+      try {
+        parseApiEnvironment({ ...validEnvironment, ...configuration, ...patch });
+        expect.fail("Invalid encryption configuration accepted");
+      } catch (error) {
+        expect(error).toBeInstanceOf(EnvironmentValidationError);
+        expect(String(error)).not.toContain("secret-canary");
+        expect(String(error)).not.toContain(key);
+      }
+    }
+  });
   it.each(["GOOGLE", "GITHUB"])(
     "requires paired, bounded %s OAuth credentials without echoing secrets",
     (provider) => {

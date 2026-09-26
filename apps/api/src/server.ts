@@ -1,4 +1,5 @@
 import {
+  createCredentialRepository,
   createDatabase,
   createGameRepository,
   createProfileRepository,
@@ -7,6 +8,8 @@ import {
 import { buildApp } from "./app.js";
 import { createSmtpEmailSender } from "./auth/email.js";
 import { createAuth } from "./auth/service.js";
+import { createCredentialCipher } from "./credentials/encryption.js";
+import { createCredentialService } from "./credentials/service.js";
 import { EnvironmentValidationError, parseApiEnvironment } from "./env.js";
 import { createGameService } from "./games/service.js";
 import { createGuestService } from "./guests/service.js";
@@ -27,6 +30,17 @@ async function main(): Promise<void> {
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
+    credentialApi: {
+      credentials: createCredentialService(
+        createCredentialRepository(database),
+        environment.CREDENTIAL_ENCRYPTION_KEYS
+          ? createCredentialCipher({
+              activeKeyId: environment.CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID,
+              keys: environment.CREDENTIAL_ENCRYPTION_KEYS,
+            })
+          : undefined,
+      ),
+    },
     profileApi: { profiles: createProfileService(createProfileRepository(database)) },
     authApi: {
       auth: createAuth(database, environment, {

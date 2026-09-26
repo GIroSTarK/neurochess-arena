@@ -30,7 +30,7 @@ export async function lockAccountSession(
   sessionId: string,
   mode: "update" | "share" = "update",
 ): Promise<boolean> {
-  // Keep user-before-session ordering across profile and game commands; fence revocation.
+  // Keep user-before-session ordering across account commands; fence revocation.
   await db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for(mode);
   await db
     .select({ id: session.id })
