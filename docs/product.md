@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 
 ## Vision
 
@@ -222,6 +222,8 @@ Saved games are private in the MVP. There are no public game or live spectator l
 Account history lists completed and aborted public games together, newest finish first, with explicit state/result labels. Unfinished-game recovery is separate. Sandbox and temporary guest games never enter account history. Phase 3 history covers account-owned AI games; registered room-participant history and shared-game retention belong to Phase 4. History and terminal replay are read-only: opening them never acquires control, resumes play, or asks for a provider key. Starting another game or signing in on another device preserves private access to earlier results.
 
 Individual game deletion and history clearing affect only terminal account-owned games and their associated moves, participants, command receipts, AI turns, invocations, reservations, and controller records. Active or paused games must first be stopped through the existing lifecycle controls. Clearing history preserves unfinished games, profiles, and saved credentials. Each deletion flow explains its exact scope and requires a distinct confirmation.
+
+Clear history removes all eligible games when the server acquires the account's command lock, across every history page. A concurrent completion committed before that boundary is included; a later completion remains. Each confirmed clear, including an explicit retry, establishes a new boundary; clearing an empty history succeeds. Repeating individual deletion returns the same unavailable response as an unknown or inaccessible game. The browser refreshes history after success; an uncertain response requires checking history before another explicit attempt. Deleted game URLs cannot serve new details, replay, invocation, or PGN reads after commit. An already-started read can finish with its consistent prior snapshot; deletion cannot retract an already-delivered or downloaded copy.
 
 Account deletion is a separate confirmed operation that removes the account, its saved credentials, profile, owned games (including unfinished games), associated application data, and authentication data. It invalidates sessions and fences in-flight work so late results cannot recreate deleted records. Separate guest identities and other accounts remain unaffected. Shared human-game deletion/retention must be decided before Phase 4; database deletion does not claim to remove external backups.
 

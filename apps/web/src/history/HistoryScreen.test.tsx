@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,134 @@ function renderApp() {
 }
 
 describe("private history navigation", () => {
+  it("confirms one game with Cancel focused, prevents duplicate submissions and refreshes the list", async () => {
+    let deleted = false;
+    let submissions = 0;
+    const response = Promise.withResolvers<Response>();
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),
+      "GET /api/profile": () => jsonResponse(profile("Alice")),
+      "GET /games/history": () => jsonResponse({ games: deleted ? [] : [item], nextCursor: null }),
+      [`POST /games/${id}/delete`]: (options) => {
+        expect(options?.body).toBe(JSON.stringify({ confirm: true }));
+        expect(new Headers(options?.headers).get("X-Neurochess-Identity")).toBe("account");
+        submissions++;
+        return response.promise;
+      },
+    });
+    renderApp();
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole("button", { name: "Delete game" });
+    await user.click(trigger);
+    let dialog = screen.getByRole("dialog", { name: "Delete this game?" });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(dialog).toHaveTextContent("untrusted-model");
+    expect(dialog).toHaveTextContent(/moves.*commentary.*invocation/i);
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(submissions).toBe(0);
+    await user.click(trigger);
+    dialog = screen.getByRole("dialog");
+    await user.dblClick(within(dialog).getByRole("button", { name: "Delete game" }));
+    expect(submissions).toBe(1);
+    await user.keyboard("{Escape}");
+    expect(dialog).toBeVisible();
+    deleted = true;
+    await act(async () => response.resolve(jsonResponse({ success: true })));
+    expect(await screen.findByText("You have no completed or aborted games yet.")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Game deleted.")).toHaveAttribute("role", "status");
+    expect(screen.getByText("Game deleted.")).toHaveFocus();
+  });
+
+  it("keeps history on a failed clear, explains uncertain outcomes and requires an explicit retry", async () => {
+    let cleared = false;
+    let attempts = 0;
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),
+      "GET /api/profile": () => jsonResponse(profile("Alice")),
+      "GET /games/history": () => jsonResponse({ games: cleared ? [] : [item], nextCursor: null }),
+      "POST /games/history/clear": () => {
+        if (++attempts === 1) throw new Error("private-database-error");
+        cleared = true;
+        return jsonResponse({ success: true });
+      },
+    });
+    renderApp();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Clear history" }));
+    let dialog = screen.getByRole("dialog", { name: "Clear all game history?" });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(dialog).toHaveTextContent(/active.*paused/i);
+    expect(dialog).toHaveTextContent(/saved.*credentials/i);
+    expect(dialog).toHaveTextContent(/completed.*after/i);
+    await user.click(within(dialog).getByRole("button", { name: "Clear history" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/could not confirm/i);
+    expect(document.body).not.toHaveTextContent("private-database-error");
+    expect(screen.getByRole("link", { name: "Replay game" })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Clear history" }));
+    dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Clear history" }));
+    expect(await screen.findByText("You have no completed or aborted games yet.")).toBeVisible();
+    expect(attempts).toBe(2);
+  });
+
+  it("refreshes unavailable games without offering an automatic destructive retry", async () => {
+    let missing = false;
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),
+      "GET /api/profile": () => jsonResponse(profile("Alice")),
+      "GET /games/history": () => jsonResponse({ games: missing ? [] : [item], nextCursor: null }),
+      [`POST /games/${id}/delete`]: () => {
+        missing = true;
+        return jsonResponse({ code: "NOT_FOUND", message: "private", requestId: "test" }, 404);
+      },
+    });
+    renderApp();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete game" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete game" }),
+    );
+    expect(await screen.findByText("You have no completed or aborted games yet.")).toBeVisible();
+    expect(screen.getByText(/This game is already unavailable/)).toHaveAttribute("role", "status");
+  });
+
+  it("cancels a pending deletion and discards its result after switching accounts", async () => {
+    let name = "Alice";
+    let signal: AbortSignal | null | undefined;
+    const response = Promise.withResolvers<Response>();
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session(name) }),
+      "GET /api/profile": () => jsonResponse(profile(name)),
+      "GET /games/history": () =>
+        jsonResponse({ games: name === "Alice" ? [item] : [], nextCursor: null }),
+      [`POST /games/${id}/delete`]: (options) => {
+        signal = options?.signal;
+        return response.promise;
+      },
+    });
+    renderApp();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete game" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete game" }),
+    );
+    await waitFor(() => expect(signal).toBeDefined());
+    name = "Bobby";
+    await act(() =>
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: "neurochess.identity-change", newValue: "changed" }),
+      ),
+    );
+    expect(await screen.findByText("You have no completed or aborted games yet.")).toBeVisible();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => response.resolve(jsonResponse({ success: true })));
+    expect(screen.queryByText("Game deleted.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("labels a legacy unnamed human seat without requiring onboarding for read-only history", async () => {
     http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),

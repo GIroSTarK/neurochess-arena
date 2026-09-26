@@ -11,6 +11,7 @@ import { authHref } from "../auth/navigation";
 import { Button } from "../ui/Button";
 
 import { loadHistory } from "./client";
+import { type DeletionNotice, HistoryDeletionDialog } from "./HistoryDeletionDialog";
 
 export function HistoryScreen({
   apiBaseUrl,
@@ -67,6 +68,12 @@ interface PageRequest {
 function HistoryList({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const { controller } = useRequiredAccount();
+  const [confirmation, setConfirmation] = useState<GameHistoryItem | "all" | null>(null);
+  const [notice, setNotice] = useState<DeletionNotice | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (notice) noticeRef.current?.focus();
+  }, [notice]);
   const [request, setRequest] = useState<PageRequest>({ cursor: null, previous: [] });
   const [response, setResponse] = useState<{
     request: PageRequest;
@@ -94,6 +101,32 @@ function HistoryList({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       <a href="/" className="flex min-h-11 w-fit items-center text-accent underline">
         {t("history.arena")}
       </a>
+      {notice ? (
+        <p ref={noticeRef} role="status" tabIndex={-1}>
+          {t(`history.deletion.${notice}`)}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="secondary"
+          aria-disabled={pending}
+          onClick={() => setRequest({ cursor: null, previous: [] })}
+        >
+          {t("history.refresh")}
+        </Button>
+        <Button
+          variant="quiet-danger"
+          aria-disabled={
+            pending || !page || (page.games.length === 0 && request.previous.length === 0)
+          }
+          onClick={() => {
+            setNotice(null);
+            setConfirmation("all");
+          }}
+        >
+          {t("history.deletion.clear")}
+        </Button>
+      </div>
       {pending ? (
         <p role="status">{t("history.loading")}</p>
       ) : !page ? (
@@ -108,7 +141,14 @@ function HistoryList({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       ) : (
         <ul className="grid min-w-0 gap-4" aria-label={t("history.title")}>
           {page.games.map((game) => (
-            <HistoryRow key={game.gameId} game={game} />
+            <HistoryRow
+              key={game.gameId}
+              game={game}
+              onDelete={() => {
+                setNotice(null);
+                setConfirmation(game);
+              }}
+            />
           ))}
         </ul>
       )}
@@ -140,11 +180,29 @@ function HistoryList({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
           {t("history.older")}
         </Button>
       </div>
+      {confirmation ? (
+        <HistoryDeletionDialog
+          apiBaseUrl={apiBaseUrl}
+          target={confirmation}
+          onCancel={() => setConfirmation(null)}
+          onDeleted={(result) => {
+            setConfirmation(null);
+            setNotice(result);
+            setRequest({ cursor: null, previous: [] });
+          }}
+        />
+      ) : null}
     </>
   );
 }
 
-function HistoryRow({ game }: { readonly game: GameHistoryItem }) {
+function HistoryRow({
+  game,
+  onDelete,
+}: {
+  readonly game: GameHistoryItem;
+  readonly onDelete: () => void;
+}) {
   const { t, i18n } = useTranslation();
   const result =
     game.state === "aborted"
@@ -199,12 +257,17 @@ function HistoryRow({ game }: { readonly game: GameHistoryItem }) {
           </time>
         </p>
       </div>
-      <a
-        href={`/?game=${game.gameId}`}
-        className="flex min-h-11 items-center justify-center rounded-control border border-control-border px-4 py-2 text-label font-semibold text-accent hover:bg-surface-raised"
-      >
-        {t("history.replay")}
-      </a>
+      <div className="grid gap-2">
+        <a
+          href={`/?game=${game.gameId}`}
+          className="flex min-h-11 items-center justify-center rounded-control border border-control-border px-4 py-2 text-label font-semibold text-accent hover:bg-surface-raised"
+        >
+          {t("history.replay")}
+        </a>
+        <Button variant="quiet-danger" onClick={onDelete}>
+          {t("history.deletion.game")}
+        </Button>
+      </div>
     </li>
   );
 }

@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 
 ## Architectural drivers
 
@@ -169,6 +169,10 @@ The game service's `createAi`, `details`, and `unfinishedGame` methods create an
 `GET /games/history` requires a valid account session and lists only that account's terminal public AI games. The repository reads bounded summaries and their participants in a read-only `REPEATABLE READ` transaction; it does not load moves or PGN for a list. Pagination orders by terminal `updated_at` and game UUID descending. Cursors preserve PostgreSQL microseconds, so ties and sub-millisecond finishes cannot lose rows. Newer finishes appear on a fresh first-page read; they do not shift later pages. Human labels use the current chosen username, consistent with the policy that usernames are not historical aliases. Older accounts with no chosen username retain history access and receive a localized owning-player fallback.
 
 The `/history` screen binds requests and private rows to the account lifetime and clears them on identity loss/change. It links to the existing private `/?game=<uuid>` details, replay, invocation, and canonical PGN paths. History reads never recover unfinished games or acquire a controller. Unfinished discovery remains separate. See the [history API](development.md#private-history-api) for bounds and wire behavior.
+
+Individual deletion and history clearing use strict confirmed account commands with exact-origin enforcement. Both take the user/session locks used by game commands before deleting only owned, non-Sandbox, terminal public AI games. Individual deletion validates the ID independently of clear scope and rejects unfinished games. Clear uses one scoped SQL delete, independent of list pagination. Existing foreign-key cascades remove participants, moves, receipts, logical turns, invocation attempts, reservations and controllers in the same transaction. Identity expiry is rechecked after deletion lock waits so failure rolls back all cascades. No new schema or deletion tombstones are needed.
+
+The owner lock serializes clear/delete with creation, lifecycle completion and provider outcomes. Clear includes terminal games visible after that lock is acquired; later completions survive. Snapshot reads already underway can return the prior complete game; reads starting after commit cannot. Late provider cleanup finds no game and cannot recreate its dependent data. The browser's separate confirmations focus Cancel, guard duplicate activation, cancel obsolete requests on identity changes, and return to the first history page after success or an unavailable-game response. Failed/uncertain deletion keeps rows and offers explicit refresh rather than automatic mutation retries. See the [product deletion policy](product.md#private-history-and-deletion).
 
 ### AI failure policy and invocation records
 

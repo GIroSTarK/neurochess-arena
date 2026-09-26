@@ -63,6 +63,9 @@ export const gameHistoryPageSchema = z.strictObject({
   nextCursor: gameHistoryCursorSchema.nullable(),
 });
 
+export const gameDeletionRequestSchema = z.strictObject({ confirm: z.literal(true) });
+export const gameDeletionResponseSchema = z.strictObject({ success: z.literal(true) });
+
 export type GameHistoryQuery = z.infer<typeof gameHistoryQuerySchema>;
 export type GameHistoryItem = z.infer<typeof gameHistoryItemSchema>;
 export type GameHistoryPage = z.infer<typeof gameHistoryPageSchema>;
