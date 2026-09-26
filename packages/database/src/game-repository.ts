@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "
 
 import { hasAccountSession, lockAccountSession } from "./account-session.js";
 import type { DatabaseConnection } from "./client.js";
+import { readProviderCredential } from "./credential-repository.js";
 import {
   aiControllers,
   aiTurnReservations,
@@ -78,6 +79,11 @@ export interface GameReader {
 }
 
 export interface GameTransaction extends GameReader {
+  getProviderCredential(
+    userId: string,
+    id: string,
+    provider: NonNullable<StoredParticipant["provider"]>,
+  ): ReturnType<typeof readProviderCredential>;
   getAiController(
     gameId: string,
   ): Promise<{ controllerId: string | null; expired: boolean } | undefined>;
@@ -248,6 +254,8 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            getProviderCredential: (userId, id, provider) =>
+              readProviderCredential(tx, userId, id, provider),
             async lockAccount(userId) {
               await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
             },

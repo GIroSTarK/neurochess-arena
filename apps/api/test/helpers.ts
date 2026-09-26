@@ -15,6 +15,7 @@ import { expect } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AuthService } from "../src/auth/service.js";
+import type { CredentialCipher } from "../src/credentials/encryption.js";
 import type { CredentialService } from "../src/credentials/service.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
@@ -52,6 +53,7 @@ export class ApiHarness {
       logger?: BuildAppOptions["logger"];
       auth?: (database: DatabaseConnection) => AuthService;
       credentials?: (database: DatabaseConnection) => CredentialService;
+      credentialCipher?: CredentialCipher;
       aiAdapters?: AiAdapters;
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
     } = {},
@@ -75,6 +77,7 @@ export class ApiHarness {
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,
           aiAdapters: options.aiAdapters ?? {},
+          ...(options.credentialCipher ? { credentialCipher: options.credentialCipher } : {}),
         }),
         guests: createGuestService(repository, options.ttlSeconds ?? 86_400),
         providerTimeouts: options.providerTimeouts ?? {},
