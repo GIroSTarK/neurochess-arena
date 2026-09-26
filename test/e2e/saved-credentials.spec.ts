@@ -194,7 +194,7 @@ test("settings opt-in, masked metadata, Cancel-first revoke/clear and responsive
 for (const sources of ["raw/raw", "saved/saved", "saved/raw", "raw/saved"] as const) {
   test(`${sources} independent AI seats use exclusive sources; refresh requires explicit selection and step`, async ({
     page,
-  }, testInfo) => {
+  }) => {
     const f = await fixture();
     try {
       await login(page, f.accounts[0]!);
@@ -252,10 +252,6 @@ for (const sources of ["raw/raw", "saved/saved", "saved/raw", "raw/saved"] as co
       expect((await readSnapshot(page, gameId)).state).toBe("paused");
       await Promise.all(responseReads);
       expect(leaks).toBe(false);
-      await page.screenshot({
-        path: testInfo.outputPath("saved-credential-recovery.png"),
-        fullPage: true,
-      });
     } finally {
       await f.close();
     }
