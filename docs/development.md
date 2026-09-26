@@ -16,7 +16,7 @@ Retain the root `overrides` and `allowScripts` fields during dependency upgrades
 
 Copy `.env.example` to `.env`. The committed values are local placeholders only; never place production credentials in the repository.
 
-Generate a private auth secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` and set `BETTER_AUTH_SECRET` in `.env`. Keep it stable across restarts and shared by API instances; replacing it invalidates signed account cookies. Store the production value in deployment secret storage. It is separate from the later provider-credential encryption key.
+Generate a private auth secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` and set `BETTER_AUTH_SECRET` in `.env`. Keep it stable across restarts and shared by API instances; replacing it invalidates signed account cookies. Store the production value in deployment secret storage. It is separate from the [provider-credential encryption keyring](#saved-provider-credentials).
 
 Start PostgreSQL and wait for its health check:
 
@@ -43,6 +43,8 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 | `WEB_ORIGIN`                               | API                 | Exact browser origin allowed by CORS                                                                   |
 | `BETTER_AUTH_URL`                          | API, auth generator | Exact public API origin; auth uses the fixed `/api/auth` path                                          |
 | `BETTER_AUTH_SECRET`                       | API, auth generator | Required private random secret, 32–256 characters; no default                                          |
+| `CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID`      | API                 | Active saved-key encryption ID; configure together with the keyring                                    |
+| `CREDENTIAL_ENCRYPTION_KEYS`               | API                 | Private JSON keyring of 1–8 IDs and base64-encoded 32-byte keys; no default                            |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | API, auth generator | Optional paired Google OAuth web-client credentials; omit both to disable                              |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | API, auth generator | Optional paired GitHub OAuth App credentials; omit both to disable                                     |
 | `AUTH_EMAIL_TRANSPORT`                     | API, auth generator | `disabled` (development/test default) or `smtp`; production requires `smtp`                            |
@@ -296,6 +298,75 @@ Use a new command UUID for each move or lifecycle action and reuse the identical
 
 Requests cannot select FEN, history, owner, seat, public mode, or sandbox authority; unknown body/query fields are rejected. Missing or expired sessions receive `401`; inaccessible games receive `404` without snapshots. Replay and export reject unfinished games with `409 INVALID_GAME_STATE`. Completed and aborted records remain private and readable until guest access expires. Pausing occurs only through an authorized POST, never as a side effect of a read.
 
+## Saved provider credentials
+
+Configure `CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID` and `CREDENTIAL_ENCRYPTION_KEYS`
+on the API only. The latter is a JSON object mapping 1–8 key IDs to canonical
+base64-encoded, cryptographically random 32-byte keys. IDs have 1–32 ASCII letters,
+digits, underscores, or hyphens; the active ID must be present. Generate keys with
+a CSPRNG and provision them through deployment secret storage, separately from
+PostgreSQL, backups of PostgreSQL, and `BETTER_AUTH_SECRET`. Never use `VITE_`
+variables or commit actual keys. Both settings absent disables saves with
+`503 CREDENTIAL_STORAGE_DISABLED`; partial/malformed configuration prevents
+startup without echoing values. Listing and removal remain available without keys.
+
+All endpoints require a current Better Auth account session; a guest cookie never
+grants credential access. Commands require the exact `WEB_ORIGIN` and JSON,
+reject extra fields and query parameters, and return `Cache-Control: no-store`.
+An untrusted Origin is rejected on reads too. Metadata contains only
+`credentialId`, `provider`, `label`, `maskedSuffix`, and ISO `createdAt`.
+There is no single-record plaintext read or reveal endpoint.
+
+| Endpoint                                     | Request                                   | Success                       |
+| -------------------------------------------- | ----------------------------------------- | ----------------------------- |
+| `POST /api/credentials`                      | `{ save: true, provider, label, apiKey }` | `201`, masked metadata        |
+| `GET /api/credentials?after=<uuid>`          | Optional UUID cursor                      | `{ credentials, nextCursor }` |
+| `POST /api/credentials/:credentialId/revoke` | `{}`                                      | `{ success: true }`           |
+| `POST /api/credentials/clear`                | `{ confirm: true }`                       | `{ success: true }`           |
+
+Labels are trimmed to 1–64 characters, reject control/format characters and angle
+brackets, and may not contain the submitted key. Keys retain the session-only
+transport's 1–4096 printable ASCII constraint; management performs no provider call
+to verify them. The suffix is the final four ASCII letters/digits/underscores/hyphens
+only for keys of at least eight characters; otherwise it is null. Treat labels as
+untrusted text and render the suffix with a masking prefix in future UI.
+
+Lists return at most 50 records in ascending UUID order; `nextCursor` is null at
+the end. Deleting a cursor record does not break paging. A concurrent save can sort
+before the current cursor; restart listing to refresh the complete collection.
+Each explicit save creates a new ID, even for identical inputs. Saves do not
+overwrite, deduplicate, or retry automatically. An uncertain acknowledgement may
+have committed: list before choosing whether to save again. Transaction failures
+roll back the entire operation.
+
+Revoke deletes the encrypted record and returns the same `404 CREDENTIAL_NOT_FOUND`
+for unknown, foreign, and already-revoked IDs. Clear is account-scoped, atomic, and
+repeatable. Saves and clear serialize across sessions on the account row: clear
+removes earlier committed saves, while a save ordered after clear survives.
+Session invalidation/expiry is checked under locks and after SQL waits. Other
+accounts, profiles, games, and separate guest identities remain untouched.
+
+The [versioned format](decisions/0014-provider-credential-encryption.md) uses
+[Node crypto's authenticated encryption APIs](https://nodejs.org/docs/latest-v24.x/api/crypto.html).
+To rotate, retain the old key IDs, add a new independent key, and switch the active
+ID for new saves. Existing rows retain their original ID until re-encrypted.
+There is no production rotation job in this milestone: a future reviewed procedure
+must stop writers, authenticate/decrypt each row under its existing context,
+re-encrypt with a fresh nonce and the new ID, verify the result, and update atomically.
+Do not edit IDs, owner, provider, version, nonce, or tag independently. Retire old
+keys only after verifying all live rows and the required backup/restore path.
+Never reuse an ID for different key bytes.
+
+Loss of a required encryption key is unrecoverable without a separately protected
+key backup: revoke unusable rows and explicitly save replacement provider keys.
+On compromise, rotate/revoke keys at their providers as well as replacing storage
+encryption keys. Database deletion does not erase external backups; retention and
+secret-store backup procedures remain deployment responsibilities.
+
+Provider discovery and AI turns still accept only session-only keys. Saved-key
+selection, authorized decryption during provider operations, and settings/recovery
+UI follow the [roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
+
 ## AI provider and game API
 
 These routes use the [account/guest identity selection](#account-owned-game-api), exact-Origin POST checks, private ownership, strict schemas, and `Cache-Control: no-store`. Guests bootstrap explicitly before commands. Keys are accepted only in discovery and turn JSON bodies. Use HTTPS outside localhost development. The public Arena at `/` uses these boundaries for both AI modes. Provider registration is explicit in `apps/api/src/server.ts`; tests inject mocked upstream transport without paid calls.
@@ -436,6 +507,13 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 ## Migrations
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
+
+Migration `0012_encrypted_provider_credentials.sql` adds only the credential table,
+its bounded envelope constraints, owner/cursor index, and cascading account foreign
+key. It leaves populated auth/profile/game schemas unchanged. Stop API writers,
+apply the reviewed forward migration, provision encryption configuration, and restart
+the updated API. Keep the forward schema if rolling application code back. Account
+deletion remains disabled until its complete application/auth cleanup flow exists.
 
 Migration `0007_separate_sandbox_game_slot.sql` replaces the unfinished-owner index with a unique `(owner_guest_session_id, is_sandbox)` index for active/paused games. It does not rewrite game data. Stop old API writers, apply it, and restart the updated API so creation and discovery consistently use their own group. See [ADR-0012](decisions/0012-independent-sandbox-game-slot.md) for the contract and rollback constraint.
 

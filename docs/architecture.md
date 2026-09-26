@@ -362,6 +362,17 @@ The independent setup adapter in `apps/web/src/setup` consumes that client and a
 5. Reads return masked metadata only. Decryption occurs only for an authorized provider call.
 6. Users can revoke individual saved keys, clear credentials, or delete the account.
 
+The storage API uses versioned AES-256-GCM envelopes with authenticated owner,
+provider, and record context; [ADR-0014](decisions/0014-provider-credential-encryption.md)
+specifies the format and keyring boundary. The database repository accepts encrypted
+material only. Metadata reads never select ciphertext and never decrypt, including
+when an encryption key is unavailable. Save/revoke/clear take the user update lock,
+then the session share lock; reads use user/session share locks. Every operation
+rechecks session validity after SQL waits, rolling back expired writes. Clear removes
+all credentials visible under that account lock; a later serialized save survives.
+All HTTP commands require exact-origin JSON and reject caller-supplied ownership.
+See [credential setup and operations](development.md#saved-provider-credentials).
+
 Saved credentials are explicitly selected per AI seat, including after recovery; no provider-based automatic selection or persisted per-game credential preference is required. Revocation prevents subsequent authorized operations and is rechecked before each automatic retry. Already-dispatched provider work cannot be undone; its result may complete only while the principal, game, reservation, and controller remain authorized. Account deletion fences acceptance and cleanup so late work cannot recreate data. Neither saved keys nor account sessions permit background AI play.
 
 All request logging and exception reporting must redact credential fields, authorization headers, cookies, URLs with tokens, and provider secrets.

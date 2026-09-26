@@ -142,3 +142,4 @@ export {
 } from "./ai-http.js";
 export * from "./game-identity.js";
 export * from "./profile.js";
+export * from "./credential.js";

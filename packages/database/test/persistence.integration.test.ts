@@ -179,6 +179,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0009_oauth_account_identity",
         "0010_account_owned_games",
         "0011_account_profiles",
+        "0012_encrypted_provider_credentials",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -417,6 +418,29 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       expect(
         (await tx.execute(sql`select username, avatar_preference from profiles`)).rows,
       ).toEqual([{ username: "Chosen_Name", avatar_preference: "provider" }]);
+      const credentialUpgradeTables = [...tables, "profiles"];
+      const beforeCredentials = new Map<string, unknown>();
+      for (const table of credentialUpgradeTables) {
+        beforeCredentials.set(
+          table,
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[11]!);
+      for (const table of credentialUpgradeTables) {
+        expect(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        ).toEqual(beforeCredentials.get(table));
+      }
+      expect((await tx.execute(sql`select * from provider_credentials`)).rows).toEqual([]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

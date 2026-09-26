@@ -15,6 +15,7 @@ import { expect } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AuthService } from "../src/auth/service.js";
+import type { CredentialService } from "../src/credentials/service.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
@@ -50,6 +51,7 @@ export class ApiHarness {
       repository?: (repository: GameRepository) => GameRepository;
       logger?: BuildAppOptions["logger"];
       auth?: (database: DatabaseConnection) => AuthService;
+      credentials?: (database: DatabaseConnection) => CredentialService;
       aiAdapters?: AiAdapters;
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
     } = {},
@@ -62,6 +64,9 @@ export class ApiHarness {
       readiness: database,
       webOrigin: WEB_ORIGIN,
       profileApi: { profiles: createProfileService(createProfileRepository(database)) },
+      ...(options.credentials
+        ? { credentialApi: { credentials: options.credentials(database) } }
+        : {}),
       ...(options.auth
         ? { authApi: { auth: options.auth(database), baseURL: "http://localhost:3001" } }
         : {}),

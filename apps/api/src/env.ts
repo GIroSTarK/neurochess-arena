@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { credentialKeyIdSchema, credentialKeyringEnvironmentSchema } from "./credentials/config.js";
+
 const postgresUrlSchema = z
   .string()
   .min(1)
@@ -33,6 +35,8 @@ const apiEnvironmentSchema = z
     WEB_ORIGIN: browserOriginSchema.default("http://localhost:5173"),
     BETTER_AUTH_URL: browserOriginSchema,
     BETTER_AUTH_SECRET: z.string().min(32).max(256).regex(/^\S+$/),
+    CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID: credentialKeyIdSchema.optional(),
+    CREDENTIAL_ENCRYPTION_KEYS: credentialKeyringEnvironmentSchema.optional(),
     GOOGLE_CLIENT_ID: z
       .string()
       .min(1)
@@ -80,6 +84,15 @@ const apiEnvironmentSchema = z
     GUEST_SESSION_TTL_SECONDS: z.coerce.number().int().min(1).max(31_536_000).default(86_400),
   })
   .superRefine((environment, context) => {
+    const activeKeyId = environment.CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID;
+    const encryptionKeys = environment.CREDENTIAL_ENCRYPTION_KEYS;
+    if (
+      (activeKeyId !== undefined || encryptionKeys !== undefined) &&
+      (!activeKeyId || !encryptionKeys || !Object.hasOwn(encryptionKeys, activeKeyId))
+    ) {
+      context.addIssue({ code: "custom", path: ["CREDENTIAL_ENCRYPTION_ACTIVE_KEY_ID"] });
+      context.addIssue({ code: "custom", path: ["CREDENTIAL_ENCRYPTION_KEYS"] });
+    }
     for (const [id, secret] of [
       ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
       ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"],

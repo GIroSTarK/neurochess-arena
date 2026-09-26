@@ -1,4 +1,19 @@
-import type { AuthErrorCode, GameErrorCode, ProfileErrorCode } from "@neurochess/contracts";
+import type {
+  AuthErrorCode,
+  CredentialErrorCode,
+  GameErrorCode,
+  ProfileErrorCode,
+} from "@neurochess/contracts";
+
+export const credentialErrorMessages: Readonly<Record<CredentialErrorCode, string>> = {
+  CREDENTIAL_UNAUTHORIZED: "A valid account session is required.",
+  CREDENTIAL_FORBIDDEN: "This credential request is not allowed.",
+  CREDENTIAL_INVALID_REQUEST: "The credential request could not be accepted.",
+  CREDENTIAL_NOT_FOUND: "The saved credential was not found.",
+  CREDENTIAL_STORAGE_DISABLED:
+    "Saving credentials is temporarily unavailable. Use a session-only key.",
+  CREDENTIAL_UNAVAILABLE: "Your credentials are temporarily unavailable. Please try again.",
+};
 
 export const profileErrorMessages: Readonly<Record<ProfileErrorCode, string>> = {
   PROFILE_UNAUTHORIZED: "A valid account session is required.",

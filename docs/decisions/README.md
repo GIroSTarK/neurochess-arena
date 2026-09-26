@@ -19,6 +19,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0011](0011-ai-controller-presence-and-step.md)       | Accepted   | Controller presence fencing and atomic paused AI steps         |
 | [0012](0012-independent-sandbox-game-slot.md)         | Accepted   | Independent unfinished-game slots for Sandbox and public modes |
 | [0013](0013-principal-and-account-ownership.md)       | Accepted   | Server-derived principals and separate account ownership       |
+| [0014](0014-provider-credential-encryption.md)        | Accepted   | Versioned authenticated provider credential encryption         |
 
 ## Status values
 
