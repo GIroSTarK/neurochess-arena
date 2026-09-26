@@ -28,6 +28,74 @@ afterEach(() => {
 });
 
 describe("account forms and identity boundary", () => {
+  it("confirms account deletion separately, focuses Cancel and clears private state while submitting only once", async () => {
+    window.history.replaceState(null, "", "/account");
+    const result = Promise.withResolvers<Response>();
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),
+      "GET /api/profile": () => jsonResponse(profile("Alice")),
+      "GET /api/auth/methods": () => jsonResponse({ email: true, providers: [] }),
+      "GET /api/credentials": () => jsonResponse({ credentials: [], nextCursor: null }),
+      "POST /api/auth/delete-account": () => result.promise,
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Delete account" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Delete your account?" }));
+    expect(dialog.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(dialog.getByText(/including active and paused games/)).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete account" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Delete account" }));
+    await user.dblClick(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete account" }),
+    );
+    expect(await screen.findByText("Deleting your account…")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Alice" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete account" })).not.toBeInTheDocument();
+    const calls = http.fetch.mock.calls.filter(([url]) =>
+      requestPath(url).endsWith("/delete-account"),
+    );
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(requestBody(calls[0]![1]))).toEqual({
+      confirm: true,
+      expectedUserId: "Alice",
+    });
+    await act(async () => result.resolve(jsonResponse({ status: true })));
+    expect(await screen.findByText(/Your account and associated data were deleted/)).toBeVisible();
+    expect(window.location.pathname).toBe("/");
+    expect(document.body).not.toHaveTextContent("Alice");
+  });
+
+  it("does not claim deletion after a lost acknowledgement and requires checking the session before another confirmation", async () => {
+    window.history.replaceState(null, "", "/account");
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse({ session: session("Alice") }),
+      "GET /api/profile": () => jsonResponse(profile("Alice")),
+      "GET /api/auth/methods": () => jsonResponse({ email: true, providers: [] }),
+      "GET /api/credentials": () => jsonResponse({ credentials: [], nextCursor: null }),
+      "POST /api/auth/delete-account": () => Promise.reject(new TypeError("private-network-error")),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete account" }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete account" }),
+    );
+    expect(
+      await screen.findByText(/We could not confirm whether your account was deleted/),
+    ).toBeVisible();
+    expect(document.body).not.toHaveTextContent("private-network-error");
+    expect(
+      screen.queryByText(/Your account and associated data were deleted/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete account" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Check session/ }));
+    expect(await screen.findByRole("button", { name: "Delete account" })).toBeVisible();
+  });
+
   it("posts a consumed verification token once under Strict Mode and keeps it out of navigation", async () => {
     window.history.replaceState(null, "", "/auth/verify-email#token=private-verification");
     const entry = consumeAuthEntry();

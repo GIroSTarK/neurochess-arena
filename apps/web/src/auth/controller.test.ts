@@ -33,6 +33,56 @@ afterEach(() => {
 });
 
 describe("account identity lifetime", () => {
+  it("clears the old lifetime immediately and sends the displayed identity with deletion", async () => {
+    const { api, controller } = setup();
+    await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+    vi.mocked(api.session).mockResolvedValue({ session: session("alice") });
+    await controller.check();
+    const response = Promise.withResolvers<{ status: true }>();
+    const deletion = vi.spyOn(api, "deleteAccount").mockReturnValue(response.promise);
+    const old = controller.signal;
+    const pending = controller.deleteAccount();
+    expect(old.aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "checking",
+      deletion: "pending",
+      session: null,
+      profile: null,
+    });
+    await controller.deleteAccount();
+    expect(deletion).toHaveBeenCalledExactlyOnceWith("alice", expect.any(AbortSignal));
+    response.resolve({ status: true });
+    await pending;
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ended",
+      deletion: "deleted",
+      session: null,
+    });
+    expect(localStorage.getItem("neurochess.account-context")).toBe("account");
+  });
+
+  it("discards an obsolete deletion acknowledgement after another tab switches identity", async () => {
+    const { api, controller } = setup();
+    await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+    vi.mocked(api.session).mockResolvedValue({ session: session("alice") });
+    await controller.check();
+    const response = Promise.withResolvers<{ status: true }>();
+    vi.spyOn(api, "deleteAccount").mockReturnValue(response.promise);
+    const pending = controller.deleteAccount();
+    vi.mocked(api.session).mockResolvedValue({ session: session("bob") });
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: "neurochess.identity-change", newValue: "switch" }),
+    );
+    await vi.waitFor(() => expect(controller.getSnapshot().session?.user.id).toBe("bob"));
+    response.resolve({ status: true });
+    await pending;
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      deletion: null,
+      session: { user: { id: "bob" } },
+    });
+  });
+
   it("does not read an old session while a sign-in mutation is in progress", async () => {
     const { api, controller } = setup();
     await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));

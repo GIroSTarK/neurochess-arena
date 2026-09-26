@@ -3,11 +3,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { authEmailRequestSchema } from "@neurochess/contracts";
 import { createAuthAdapter, type DatabaseConnection } from "@neurochess/database";
 import type { Auth } from "better-auth";
-import { generateRandomString } from "better-auth/crypto";
+import { generateRandomString, signJWT } from "better-auth/crypto";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 
 import type { ApiEnvironment } from "../env.js";
 
+import { accountDeletion } from "./account-deletion.js";
+import { accountEmailVerification } from "./account-email-verification.js";
 import { type AuthEmailSender, sendAuthEmail } from "./email.js";
 import { AuthRequestError } from "./errors.js";
 import {
@@ -19,6 +21,8 @@ import {
   oauthProviders,
   validateOAuthIdentity,
 } from "./oauth.js";
+import { createOAuthDeletionFence } from "./oauth-deletion-fence.js";
+import { verificationOwner } from "./verification-owner.js";
 
 export const AUTH_BASE_PATH = "/api/auth";
 export const AUTH_COOKIE_NAME = "__Secure-neurochess.session_token";
@@ -33,7 +37,8 @@ export function createAuth(
     readonly emailSender?: AuthEmailSender | undefined;
     readonly oauthFetch?: typeof fetch;
   } = {},
-): Auth {
+): Auth & { cleanupDeletionMarkers(): Promise<void> } {
+  const deletionFence = createOAuthDeletionFence(database, environment.BETTER_AUTH_SECRET);
   const delivery = new AsyncLocalStorage<{ failed: boolean; resetAttempted: boolean }>();
   const send = async (kind: "verification" | "reset", email: string, token: string) => {
     if (!options.emailSender) throw new AuthRequestError(404);
@@ -54,7 +59,11 @@ export function createAuth(
     trustedOrigins: [environment.WEB_ORIGIN],
     database: createAuthAdapter(database),
     socialProviders: oauthProviders(environment),
-    plugins: [oauthProtection(options.oauthFetch ?? fetch)],
+    plugins: [
+      oauthProtection(options.oauthFetch ?? fetch, deletionFence),
+      accountDeletion(database, deletionFence.fingerprint),
+      accountEmailVerification(database),
+    ],
     emailAndPassword: {
       enabled: Boolean(options.emailSender),
       disableSignUp: !options.emailSender,
@@ -80,7 +89,12 @@ export function createAuth(
       expiresIn: 3600,
       ...(options.emailSender
         ? {
-            sendVerificationEmail: async ({ user, token }) => {
+            sendVerificationEmail: async ({ user }) => {
+              const token = await signJWT(
+                { email: user.email.toLowerCase(), sub: user.id },
+                environment.BETTER_AUTH_SECRET,
+                3600,
+              );
               await send("verification", user.email, token);
             },
           }
@@ -89,7 +103,7 @@ export function createAuth(
     user: {
       deleteUser: { enabled: false },
       changeEmail: { enabled: false },
-      validateUserInfo: validateOAuthIdentity,
+      validateUserInfo: validateOAuthIdentity(deletionFence),
     },
     account: {
       accountLinking: {
@@ -106,6 +120,11 @@ export function createAuth(
       updateAccountOnSignIn: false,
     },
     databaseHooks: {
+      verification: {
+        create: {
+          before: async (record) => ({ data: { ...record, userId: verificationOwner(record) } }),
+        },
+      },
       account: {
         create: { before: async (account) => ({ data: { ...account, ...discardedOAuthData } }) },
         update: { before: async (account) => ({ data: { ...account, ...discardedOAuthData } }) },
@@ -116,6 +135,18 @@ export function createAuth(
       updateAge: 60 * 60 * 24,
       freshAge: AUTH_FRESH_AGE_SECONDS,
       cookieCache: { enabled: false },
+    },
+    verification: {
+      additionalFields: {
+        userId: {
+          type: "string",
+          required: false,
+          input: false,
+          returned: false,
+          references: { model: "user", field: "id", onDelete: "cascade" },
+          index: true,
+        },
+      },
     },
     advanced: {
       useSecureCookies: true,
@@ -132,6 +163,7 @@ export function createAuth(
       customRules: {
         "/get-session": { window: 60, max: 60 },
         "/sign-out": { window: 60, max: 10 },
+        "/delete-account": { window: 60, max: 5 },
         "/sign-up/email": { window: 60, max: 5 },
         "/sign-in/email": { window: 60, max: 10 },
         "/send-verification-email": { window: 60, max: 3 },
@@ -155,6 +187,7 @@ export function createAuth(
   });
   return {
     ...auth,
+    cleanupDeletionMarkers: deletionFence.cleanup,
     handler(request) {
       const scope = { failed: false, resetAttempted: false };
       const resetRequest =

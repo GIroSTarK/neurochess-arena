@@ -71,14 +71,26 @@ export function AccountApp({
         >
           {state.phase !== "checking" ? (
             <>
-              <p>{t(state.phase === "error" ? "auth.sessionError" : "auth.sessionEnded")}</p>
+              <p role={state.deletion ? "status" : undefined}>
+                {t(
+                  state.deletion === "deleted"
+                    ? "auth.deletion.deleted"
+                    : state.deletion === "uncertain"
+                      ? "auth.deletion.uncertain"
+                      : state.phase === "error"
+                        ? "auth.sessionError"
+                        : "auth.sessionEnded",
+                )}
+              </p>
               {state.issue ? <p role="alert">{t(`auth.errors.${state.issue}`)}</p> : null}
               <a href={authHref("sign-in")} className="text-accent underline">
                 {t("auth.signIn")}
               </a>
-              <Button variant="secondary" onClick={() => void controller.check()}>
-                {t("auth.retry")}
-              </Button>
+              {state.deletion !== "deleted" ? (
+                <Button variant="secondary" onClick={() => void controller.check()}>
+                  {t("auth.retry")}
+                </Button>
+              ) : null}
               <Button variant="quiet" onClick={() => void controller.signOut(true)}>
                 {t("auth.guest")}
               </Button>
@@ -89,7 +101,9 @@ export function AccountApp({
               ) : null}
             </>
           ) : (
-            <p role="status">{t("auth.checking")}</p>
+            <p role="status">
+              {t(state.deletion === "pending" ? "auth.deletion.pending" : "auth.checking")}
+            </p>
           )}
         </AccountLayout>
       )}

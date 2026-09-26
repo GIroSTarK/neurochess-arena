@@ -15,6 +15,7 @@ export {
   type AuthOAuthProvider,
   authSessionResponseSchema,
   authSignOutRequestSchema,
+  authDeleteAccountRequestSchema,
   authSignOutResponseSchema,
   authErrorCodeSchema,
   authErrorResponseSchema,

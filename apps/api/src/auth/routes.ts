@@ -1,4 +1,5 @@
 import {
+  authDeleteAccountRequestSchema,
   authEmailRequestSchema,
   type AuthErrorCode,
   authErrorResponseSchema,
@@ -45,6 +46,7 @@ const librarySessionSchema = z
   .nullable();
 
 const postSchemas: Readonly<Record<string, z.ZodType>> = {
+  "/delete-account": authDeleteAccountRequestSchema,
   "/sign-out": authSignOutRequestSchema,
   "/sign-up/email": authSignUpRequestSchema,
   "/sign-in/email": authSignInRequestSchema,
@@ -81,6 +83,30 @@ function forwardAuthHeaders(response: Response, reply: FastifyReply): void {
 }
 
 export async function registerAuthRoutes(app: FastifyInstance, options: AuthRoutesOptions) {
+  let cleaning: Promise<void> | undefined;
+  const cleanup = () => {
+    cleaning ??= options.auth
+      .cleanupDeletionMarkers()
+      .catch(() => {
+        app.log.error(
+          { code: "AUTH_CLEANUP_UNAVAILABLE" },
+          "Account deletion marker cleanup failed",
+        );
+      })
+      .finally(() => {
+        cleaning = undefined;
+      });
+    return cleaning;
+  };
+  const cleanupTimer = setInterval(() => {
+    void cleanup();
+  }, 60_000);
+  cleanupTimer.unref();
+  app.addHook("onReady", cleanup);
+  app.addHook("onClose", async () => {
+    clearInterval(cleanupTimer);
+    await cleaning;
+  });
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("cache-control", "no-store");
     reply.header("pragma", "no-cache");
@@ -111,6 +137,7 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
         const isSession = request.method === "GET" && path === "/get-session";
         const isMethods = request.method === "GET" && path === "/methods";
         const isSignOut = request.method === "POST" && path === "/sign-out";
+        const isDeletion = request.method === "POST" && path === "/delete-account";
         const isOAuthStart =
           request.method === "POST" && (path === "/sign-in/social" || path === "/link-social");
         const bodySchema = request.method === "POST" ? postSchemas[path] : undefined;
@@ -123,6 +150,7 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           !isSession &&
           !isMethods &&
           !isSignOut &&
+          !isDeletion &&
           !isOAuthStart &&
           !isCallback &&
           !options.auth.options.emailAndPassword?.enabled
@@ -185,7 +213,7 @@ export async function registerAuthRoutes(app: FastifyInstance, options: AuthRout
           if (typeof value === "string") headers.set(name, value);
         }
         // Anonymous sign-in/email operations must not act on an unrelated browser account.
-        if (!isSession && !isSignOut && !isCallback && path !== "/link-social") {
+        if (!isSession && !isSignOut && !isDeletion && !isCallback && path !== "/link-social") {
           headers.delete("cookie");
         }
         // Fastify does not trust proxies. Never trust client-supplied forwarding/IP headers.

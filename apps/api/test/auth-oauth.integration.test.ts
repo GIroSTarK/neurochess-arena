@@ -5,8 +5,8 @@ import {
   authOAuthStartResponseSchema,
   profileResponseSchema,
 } from "@neurochess/contracts";
-import { authSchema } from "@neurochess/database";
-import { eq, inArray } from "drizzle-orm";
+import { accountDeletionMarkers, authSchema } from "@neurochess/database";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
@@ -55,7 +55,7 @@ async function setup() {
       auth = createAuth(
         database,
         { ...AUTH_ENVIRONMENT, ...OAUTH_ENVIRONMENT },
-        { oauthFetch: transport.fetch },
+        { oauthFetch: (input, init) => transport.fetch(input, init) },
       );
       return auth;
     },
@@ -150,6 +150,157 @@ function failed(response: Awaited<ReturnType<typeof callback>>, code = "AUTH_OAU
 }
 
 describe("Google and GitHub OAuth through Better Auth and PostgreSQL", () => {
+  it("preserves unrelated OAuth flows, blocks stored pre-deletion state across instances, and cleans only expired keyed-hash markers", async () => {
+    const api = await setup();
+    const existing = await api.register();
+    const pending = await start(api, "google");
+    const unrelated = await start(api, "github");
+    const before = new Set(
+      (await api.database.db.select().from(accountDeletionMarkers)).map((row) => row.fingerprint),
+    );
+    expect(
+      (
+        await post(
+          api,
+          "/delete-account",
+          { confirm: true, expectedUserId: existing.userId },
+          existing.cookie,
+        )
+      ).statusCode,
+    ).toBe(200);
+    const markers = (await api.database.db.select().from(accountDeletionMarkers)).filter(
+      (row) => !before.has(row.fingerprint),
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(Object.keys(markers[0]!).sort()).toEqual(["cutoff", "expiresAt", "fingerprint"]);
+    expect(markers[0]!.expiresAt.getTime() - markers[0]!.cutoff.getTime()).toBeGreaterThanOrEqual(
+      600_000,
+    );
+    expect(JSON.stringify(markers)).not.toContain(existing.email);
+    expect(JSON.stringify(markers)).not.toContain(existing.userId);
+    const restarted = await setup();
+    failed(await callback(restarted, pending, identity(existing.email)));
+    const unrelatedLogin = await callback(restarted, unrelated, identity());
+    await sessionUser(restarted, unrelatedLogin);
+    const staleFlow = await start(restarted, "google");
+    await api.database.db
+      .update(authSchema.verification)
+      .set({
+        value: sql`jsonb_set(value::jsonb, '{serverContext,startedAt}', to_jsonb(to_char(clock_timestamp() at time zone 'UTC' - interval '11 minutes', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')))::text`,
+      })
+      .where(eq(authSchema.verification.identifier, staleFlow.state));
+    await api.database.db
+      .update(accountDeletionMarkers)
+      .set({
+        cutoff: sql`clock_timestamp() - interval '11 minutes'`,
+        expiresAt: sql`clock_timestamp() - interval '1 second'`,
+      })
+      .where(eq(accountDeletionMarkers.fingerprint, markers[0]!.fingerprint));
+    const cleanupInstance = await setup();
+    await cleanupInstance.app.ready();
+    expect(
+      await api.database.db.$count(
+        accountDeletionMarkers,
+        eq(accountDeletionMarkers.fingerprint, markers[0]!.fingerprint),
+      ),
+    ).toBe(0);
+    // Callback state can be consumed before a slow transport finishes: enforce lifetime again at identity admission.
+    failed(await callback(restarted, staleFlow, identity(existing.email)));
+  });
+
+  it.each(["google", "github"] as const)(
+    "rejects an in-flight %s sign-in after deletion, but permits a newly initiated flow",
+    async (provider) => {
+      const api = await setup();
+      const user = identity();
+      const first = await callback(api, await start(api, provider), user);
+      const owner = await sessionUser(api, first);
+      const cookie = first.cookies.find((entry) => entry.name === AUTH_COOKIE_NAME)!;
+      const flow = await start(api, provider);
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const transport = api.transport.fetch;
+      vi.spyOn(api.transport, "fetch").mockImplementationOnce(async (input, init) => {
+        entered.resolve();
+        await release.promise;
+        return transport(input, init);
+      });
+      const pending = callback(api, flow, user).then((response) => response);
+      await entered.promise;
+      try {
+        expect(
+          (
+            await post(
+              api,
+              "/delete-account",
+              { confirm: true, expectedUserId: owner.id },
+              `${cookie.name}=${cookie.value}`,
+            )
+          ).statusCode,
+        ).toBe(200);
+      } finally {
+        release.resolve();
+      }
+      failed(await pending);
+      expect(
+        await api.database.db.$count(authSchema.user, eq(authSchema.user.email, user.email)),
+      ).toBe(0);
+      const restarted = await setup();
+      const next = await callback(restarted, await start(restarted, provider), user);
+      expect((await sessionUser(restarted, next)).id).not.toBe(owner.id);
+    },
+  );
+
+  it.each(["google", "github"] as const)(
+    "deletes a fresh %s identity and pending link state, rejects stale sessions and old callbacks",
+    async (provider) => {
+      const api = await setup();
+      const user = identity();
+      const login = await callback(api, await start(api, provider), user);
+      const owner = await sessionUser(api, login);
+      const sessionCookie = login.cookies.find((entry) => entry.name === AUTH_COOKIE_NAME)!;
+      const cookie = `${sessionCookie.name}=${sessionCookie.value}`;
+      await api.database.db
+        .update(authSchema.session)
+        .set({ createdAt: new Date(Date.now() - 3_601_000) })
+        .where(eq(authSchema.session.userId, owner.id));
+      expect(
+        (
+          await post(api, "/delete-account", { confirm: true, expectedUserId: owner.id }, cookie)
+        ).json(),
+      ).toMatchObject({
+        code: "AUTH_REAUTHENTICATION_REQUIRED",
+      });
+      const freshLogin = await callback(api, await start(api, provider), user);
+      const freshCookie = freshLogin.cookies.find((entry) => entry.name === AUTH_COOKIE_NAME)!;
+      const fresh = `${freshCookie.name}=${freshCookie.value}`;
+      const linkProvider = provider === "google" ? "github" : "google";
+      const linking = await start(api, linkProvider, fresh, true);
+      expect(
+        await api.database.db.$count(
+          authSchema.verification,
+          eq(authSchema.verification.userId, owner.id),
+        ),
+      ).toBe(1);
+      expect(
+        (await post(api, "/delete-account", { confirm: true, expectedUserId: owner.id }, fresh))
+          .statusCode,
+      ).toBe(200);
+      for (const table of [authSchema.session, authSchema.account, authSchema.verification]) {
+        expect(await api.database.db.$count(table, eq(table.userId, owner.id))).toBe(0);
+      }
+      failed(await callback(api, linking, user));
+      expect(await api.database.db.$count(authSchema.user, eq(authSchema.user.id, owner.id))).toBe(
+        0,
+      );
+      expect(
+        (await post(api, "/delete-account", { confirm: true, expectedUserId: owner.id }, cookie))
+          .statusCode,
+      ).toBe(401);
+    },
+  );
+
   it.each(["google", "github"] as const)(
     "completes the same profile onboarding for %s and preserves avatar removal on returning sign-in",
     async (provider) => {

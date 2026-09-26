@@ -92,6 +92,27 @@
       "when": 1790439626401,
       "tag": "0012_encrypted_provider_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790460267097,
+      "tag": "0013_account_verification_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790460329935,
+      "tag": "0014_backfill_account_verifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790461512608,
+      "tag": "0015_account_deletion_markers",
+      "breakpoints": true
     }
   ]
 }

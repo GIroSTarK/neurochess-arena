@@ -45,10 +45,13 @@ export function fixtureAuth(
 ): AuthService {
   const foundation = createAuth(database, environment);
   // Session/guest fixtures bypass email only in tests; lifecycle tests use the real verified flow.
-  return betterAuth<BetterAuthOptions>({
-    ...foundation.options,
-    emailAndPassword: { enabled: true, disableSignUp: false, minPasswordLength: 12 },
-  });
+  return {
+    ...betterAuth<BetterAuthOptions>({
+      ...foundation.options,
+      emailAndPassword: { enabled: true, disableSignUp: false, minPasswordLength: 12 },
+    }),
+    cleanupDeletionMarkers: () => foundation.cleanupDeletionMarkers(),
+  };
 }
 
 export async function registerFixture(auth: AuthService) {

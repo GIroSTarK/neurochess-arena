@@ -23,6 +23,7 @@ export function libraryAuthErrorCode(status: number, body: unknown): AuthErrorCo
   if (code === "INVALID_EMAIL_OR_PASSWORD") return "AUTH_INVALID_CREDENTIALS";
   if (code === "INVALID_TOKEN" || code === "TOKEN_EXPIRED") return "AUTH_INVALID_TOKEN";
   if (code === "AUTH_REAUTHENTICATION_REQUIRED") return "AUTH_REAUTHENTICATION_REQUIRED";
+  if (code === "AUTH_ACCOUNT_CHANGED") return "AUTH_ACCOUNT_CHANGED";
   return authErrorCode(status);
 }
 

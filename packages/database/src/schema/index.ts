@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 export * from "./auth.js";
 export * from "./profiles.js";
 export * from "./credentials.js";
+export * from "./account-deletion.js";
 import {
   bigint,
   boolean,

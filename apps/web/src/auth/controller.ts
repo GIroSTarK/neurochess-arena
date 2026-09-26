@@ -10,6 +10,7 @@ export interface AccountState {
   profile: ProfileResponse | null;
   epoch: number;
   issue: AccountFailure["code"] | null;
+  deletion: "pending" | "deleted" | "uncertain" | null;
 }
 const contextKey = "neurochess.account-context";
 const changeKey = "neurochess.identity-change";
@@ -36,6 +37,7 @@ export class AccountController {
     profile: null,
     epoch: 0,
     issue: null,
+    deletion: null,
   };
   private readonly listeners = new Set<() => void>();
   private scope = new AbortController();
@@ -83,6 +85,7 @@ export class AccountController {
     this.expectedAccount = true;
     rememberContext(true);
     this.invalidate(phase);
+    this.publish({ deletion: null });
     this.broadcast();
   };
   readonly changed = async () => {
@@ -97,6 +100,8 @@ export class AccountController {
   };
   private readonly storage = (event: StorageEvent) => {
     if (event.key !== changeKey && event.key !== contextKey) return;
+    this.mutation?.abort();
+    this.mutation = null;
     this.changing = false;
     this.expectedAccount ||= accountContext() || this.state.session !== null;
     this.invalidate();
@@ -159,7 +164,7 @@ export class AccountController {
         const scope = this.scope.signal;
         const profile = await this.api.profile(AbortSignal.any([scope, request.signal]));
         if (scope.aborted || cancelled()) return;
-        this.publish({ phase: "ready", session, profile });
+        this.publish({ phase: "ready", session, profile, deletion: null });
       }
       clearTimeout(this.expiry);
       this.expiry = setTimeout(
@@ -181,6 +186,36 @@ export class AccountController {
   };
   setProfile(profile: ProfileResponse, signal: AbortSignal) {
     if (!signal.aborted && signal === this.scope.signal) this.publish({ profile });
+  }
+  async deleteAccount() {
+    if (this.mutation || !this.state.session) return;
+    const expectedUserId = this.state.session.user.id;
+    this.beginChange("checking");
+    const request = new AbortController();
+    this.mutation = request;
+    this.publish({ deletion: "pending" });
+    try {
+      await this.api.deleteAccount(expectedUserId, request.signal);
+      if (request.signal.aborted) return;
+      this.invalidate("ended");
+      this.publish({ deletion: "deleted" });
+      this.broadcast();
+      navigateAccount("/");
+    } catch (error) {
+      if (!request.signal.aborted) {
+        const issue = error instanceof AccountFailure ? error.code : "NETWORK";
+        this.publish({
+          phase: "error",
+          issue,
+          deletion: issue === "NETWORK" || issue === "AUTH_UNAVAILABLE" ? "uncertain" : null,
+        });
+      }
+    } finally {
+      if (this.mutation === request) {
+        this.mutation = null;
+        this.changing = false;
+      }
+    }
   }
   async signOut(guest = false) {
     if (this.mutation) return;

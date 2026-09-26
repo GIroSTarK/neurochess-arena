@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import type { ApiEnvironment } from "../env.js";
 
+import type { OAuthDeletionFence } from "./oauth-deletion-fence.js";
 import { protectOAuthTransport } from "./oauth-providers.js";
 
 export type OAuthEnvironment = Pick<
@@ -70,29 +71,49 @@ async function freshAccount(context: AuthContext) {
   return result;
 }
 
-export const validateOAuthIdentity: NonNullable<
-  NonNullable<BetterAuthOptions["user"]>["validateUserInfo"]
-> = async ({ source, user }, context) => {
-  if (source.method !== "oauth") return;
-  const state = await getOAuthState();
-  if (state?.serverContext?.provider !== source.oauth?.providerId || user.emailVerified !== true) {
-    return { error: "AUTH_OAUTH_FAILED" };
-  }
-  if (source.action === "link-account") {
-    const current = await freshAccount(context);
-    if (!current) return { error: "AUTH_REAUTHENTICATION_REQUIRED" };
+export function validateOAuthIdentity(
+  fence: OAuthDeletionFence,
+): NonNullable<NonNullable<BetterAuthOptions["user"]>["validateUserInfo"]> {
+  return async ({ source, user }, context) => {
+    if (source.method !== "oauth") return;
+    const state = await getOAuthState();
     if (
-      state?.serverContext?.sessionId !== current.session.id ||
-      state.link?.userId !== current.user.id ||
-      state.link.email.toLowerCase() !== current.user.email.toLowerCase() ||
-      user.email !== current.user.email.toLowerCase()
+      state?.serverContext?.provider !== source.oauth?.providerId ||
+      user.emailVerified !== true
     ) {
-      return { error: "AUTH_OAUTH_CONFLICT" };
+      return { error: "AUTH_OAUTH_FAILED" };
     }
-  }
-};
+    if (
+      !source.oauth ||
+      typeof user.email !== "string" ||
+      !(await fence.allows(
+        source.oauth.providerId,
+        source.oauth.profile,
+        user.email,
+        state?.serverContext?.startedAt,
+      ))
+    ) {
+      return { error: "AUTH_OAUTH_FAILED" };
+    }
+    if (source.action === "link-account") {
+      const current = await freshAccount(context);
+      if (!current) return { error: "AUTH_REAUTHENTICATION_REQUIRED" };
+      if (
+        state?.serverContext?.sessionId !== current.session.id ||
+        state.link?.userId !== current.user.id ||
+        state.link.email.toLowerCase() !== current.user.email.toLowerCase() ||
+        user.email !== current.user.email.toLowerCase()
+      ) {
+        return { error: "AUTH_OAUTH_CONFLICT" };
+      }
+    }
+  };
+}
 
-export function oauthProtection(fetcher: typeof fetch): BetterAuthPlugin {
+export function oauthProtection(
+  fetcher: typeof fetch,
+  fence: OAuthDeletionFence,
+): BetterAuthPlugin {
   return {
     id: "arena-oauth-policy",
     init(context) {
@@ -126,6 +147,7 @@ export function oauthProtection(fetcher: typeof fetch): BetterAuthPlugin {
             }
             await addOAuthServerContext({
               provider,
+              startedAt: await fence.start(),
               ...(current ? { sessionId: current.session.id } : {}),
             });
           }),
