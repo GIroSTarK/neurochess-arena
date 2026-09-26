@@ -8,6 +8,8 @@ import {
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameHistoryPageSchema,
+  gameHistoryQuerySchema,
   gameInvocationsSchema,
   gameParamsSchema,
   gamePgnResponseSchema,
@@ -199,6 +201,18 @@ export async function registerGameRoutes(
       const game = await options.games.createAi(await principalFor(request, reply), request.body);
       return reply.code(201).send(game);
     },
+  );
+
+  routes.get(
+    "/games/history",
+    {
+      schema: {
+        querystring: gameHistoryQuerySchema,
+        response: { 200: gameHistoryPageSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.history(await publicPrincipalFor(request, reply), request.query),
   );
 
   routes.get(

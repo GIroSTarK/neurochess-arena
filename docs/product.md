@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 
 ## Vision
 
@@ -219,7 +219,7 @@ Saved games are private in the MVP. There are no public game or live spectator l
 
 ### Private history and deletion
 
-Account history lists completed and aborted public games together, newest first, with explicit state/result labels. Unfinished-game recovery is separate. Sandbox and temporary guest games never enter account history. Phase 3 history covers account-owned AI games; registered room-participant history and shared-game retention belong to Phase 4.
+Account history lists completed and aborted public games together, newest finish first, with explicit state/result labels. Unfinished-game recovery is separate. Sandbox and temporary guest games never enter account history. Phase 3 history covers account-owned AI games; registered room-participant history and shared-game retention belong to Phase 4. History and terminal replay are read-only: opening them never acquires control, resumes play, or asks for a provider key. Starting another game or signing in on another device preserves private access to earlier results.
 
 Individual game deletion and history clearing affect only terminal account-owned games and their associated moves, participants, command receipts, AI turns, invocations, reservations, and controller records. Active or paused games must first be stopped through the existing lifecycle controls. Clearing history preserves unfinished games, profiles, and saved credentials. Each deletion flow explains its exact scope and requires a distinct confirmation.
 

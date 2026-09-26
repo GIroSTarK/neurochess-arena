@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-26
 
 ## Architectural drivers
 
@@ -163,6 +163,12 @@ Snapshot reads use a read-only `REPEATABLE READ` transaction so history and vers
 The game service's `createAi`, `details`, and `unfinishedGame` methods create and restore these games through identity locks, scoped unfinished-owner constraints, and full-history verification. Details combine an unchanged chess snapshot with its private configuration in one read transaction. Every unfinished-game lookup requires an explicit ordinary or Sandbox scope: ordinary creation/discovery excludes Sandbox, and Sandbox creation/discovery excludes ordinary games. Creation conflicts return only the occupied game's snapshot from that scope. Ordinary AI reads are owner-only, and ownership grants no human move or resignation authority over an AI seat. Configuration restoration rejects inconsistent mode, seat, or owner assignment before any command is accepted.
 
 `games.mode` stores the ordinary AI mode. Legacy records retain null mode and their original `is_sandbox` value; null mode grants no additional authority. AI provider and model ID are typed participant columns, with bounded, closed parameter metadata in `jsonb`. Human seats have null AI fields. Parameter schemas supply structural bounds; provider capability validation and filtering belong at the discovery/inference boundary. See the [migration instructions](development.md#migrations) and [roadmap](roadmap.md#phase-2--ai-arena-core).
+
+### Private account history
+
+`GET /games/history` requires a valid account session and lists only that account's terminal public AI games. The repository reads bounded summaries and their participants in a read-only `REPEATABLE READ` transaction; it does not load moves or PGN for a list. Pagination orders by terminal `updated_at` and game UUID descending. Cursors preserve PostgreSQL microseconds, so ties and sub-millisecond finishes cannot lose rows. Newer finishes appear on a fresh first-page read; they do not shift later pages. Human labels use the current chosen username, consistent with the policy that usernames are not historical aliases. Older accounts with no chosen username retain history access and receive a localized owning-player fallback.
+
+The `/history` screen binds requests and private rows to the account lifetime and clears them on identity loss/change. It links to the existing private `/?game=<uuid>` details, replay, invocation, and canonical PGN paths. History reads never recover unfinished games or acquire a controller. Unfinished discovery remains separate. See the [history API](development.md#private-history-api) for bounds and wire behavior.
 
 ### AI failure policy and invocation records
 

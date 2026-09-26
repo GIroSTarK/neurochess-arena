@@ -4,6 +4,11 @@ import { hasAccountSession, lockAccountSession } from "./account-session.js";
 import type { DatabaseConnection } from "./client.js";
 import { readProviderCredential } from "./credential-repository.js";
 import {
+  type HistoryBoundary,
+  readAccountHistory,
+  type StoredHistoryGame,
+} from "./history-repository.js";
+import {
   aiControllers,
   aiTurnReservations,
   aiTurns,
@@ -64,6 +69,11 @@ export type GameOwner =
   | { readonly kind: "account"; readonly userId: string };
 
 export interface GameReader {
+  accountHistory(
+    userId: string,
+    limit: number,
+    cursor?: HistoryBoundary,
+  ): Promise<StoredHistoryGame[]>;
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
   hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
   hasCompletedProfile(userId: string): Promise<boolean>;
@@ -131,6 +141,7 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    accountHistory: (userId, limit, cursor) => readAccountHistory(db, userId, limit, cursor),
     hasAccountSession: (userId, sessionId) => hasAccountSession(db, userId, sessionId),
     async hasCompletedProfile(userId) {
       const [profile] = await db

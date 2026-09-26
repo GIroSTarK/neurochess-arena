@@ -145,3 +145,4 @@ export {
 export * from "./game-identity.js";
 export * from "./profile.js";
 export * from "./credential.js";
+export * from "./history.js";

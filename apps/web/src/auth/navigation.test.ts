@@ -47,8 +47,11 @@ describe("account navigation", () => {
     "/?game=no",
     "/?game=04306f87-f39e-4ad3-87c0-f7e69d2cfbda&token=secret",
     "/#token=x",
+    "/history?token=secret",
+    "/history#token=x",
   ])("rejects unsafe return %s", (value) => expect(safeReturn(value)).toBe("/"));
-  it("accepts only a private UUID game or Arena", () => {
+  it("accepts only a private UUID game, history or Arena", () => {
+    expect(safeReturn("/history")).toBe("/history");
     expect(safeReturn("/?game=04306f87-f39e-4ad3-87c0-f7e69d2cfbda")).toBe(
       "/?game=04306f87-f39e-4ad3-87c0-f7e69d2cfbda",
     );

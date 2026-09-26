@@ -9,7 +9,7 @@ import type {
 import { GameIntegrityError } from "./errors.js";
 
 export function configurationOf(
-  stored: StoredGame,
+  stored: Pick<StoredGame, "mode" | "isSandbox" | "ownerGuestSessionId" | "ownerUserId">,
   participants: readonly StoredParticipant[],
 ): AiGameConfiguration | null {
   if (stored.mode === null) return null;

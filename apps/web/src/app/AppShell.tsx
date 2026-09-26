@@ -48,7 +48,7 @@ export function AppShell({
         </p>
         {navigation ? (
           <nav
-            className="order-3 flex basis-full gap-6 self-stretch md:order-none md:mr-auto md:ml-8 md:basis-auto"
+            className="order-3 flex basis-full flex-wrap gap-x-6 self-stretch md:order-none md:mr-auto md:ml-8 md:basis-auto"
             aria-label={t("app.navigation")}
           >
             {navigation}
