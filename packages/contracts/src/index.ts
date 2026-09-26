@@ -133,6 +133,8 @@ export {
 export {
   sessionApiKeySchema,
   modelDiscoveryRequestSchema,
+  providerCredentialSourceSchema,
+  type ProviderCredentialSource,
   aiTurnRequestSchema,
   aiRequestErrorCodeSchema,
   aiErrorResponseSchema,

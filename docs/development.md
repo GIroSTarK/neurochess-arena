@@ -363,26 +363,46 @@ On compromise, rotate/revoke keys at their providers as well as replacing storag
 encryption keys. Database deletion does not erase external backups; retention and
 secret-store backup procedures remain deployment responsibilities.
 
-Provider discovery and AI turns still accept only session-only keys. Saved-key
-selection, authorized decryption during provider operations, and settings/recovery
+Provider discovery and AI turns accept exactly one credential source: `apiKey` for
+a session-only key or `credentialId` for an explicitly selected saved UUID. Mixed,
+missing, and malformed sources fail body validation. Saved references require an
+account; guests receive `403 FORBIDDEN`. Settings and credential selection/recovery
 UI follow the [roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
+
+Saved references are resolved under the current account/session lock, after game,
+seat, reservation, and controller authorization for turns. The lookup matches the
+owner and selected provider before API-only decryption. Each discovery or inference
+dispatch resolves again, including automatic invalid-output retries; no plaintext
+or reference is cached or stored in game data. External calls run outside database
+transactions. Missing, revoked, foreign, provider-mismatched, and undecryptable
+credentials share `provider_auth`, without revealing whether a record exists.
+Discovery returns that safe failure; a turn records a provider-error attempt with
+unknown usage and pauses without consuming the invalid-output budget. Provider
+authentication rejections retain the same recovery behavior. Local failures never
+dispatch and their attempt record does not imply upstream billing.
+
+Revocation blocks subsequent dispatches. Work already dispatched may finish only
+while its principal, game, reservation, and controller remain authorized; revoking
+a credential alone does not discard that result. Saved keys never acquire a
+controller, resume a game, or authorize background play. Re-select a usable source
+and explicitly Resume or Next move after recovery.
 
 ## AI provider and game API
 
 These routes use the [account/guest identity selection](#account-owned-game-api), exact-Origin POST checks, private ownership, strict schemas, and `Cache-Control: no-store`. Guests bootstrap explicitly before commands. Keys are accepted only in discovery and turn JSON bodies. Use HTTPS outside localhost development. The public Arena at `/` uses these boundaries for both AI modes. Provider registration is explicit in `apps/api/src/server.ts`; tests inject mocked upstream transport without paid calls.
 
-| Endpoint                         | Request                                                               | Success                                                       |
-| -------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `POST /providers/models`         | `{ provider, apiKey }`                                                | `200 { ok: true, models }` or `{ ok: false, error }`          |
-| `POST /games`                    | Strict `{ mode, seats: { white, black } }` AI configuration, no keys  | `201 { snapshot, configuration }`                             |
-| `GET /games/unfinished`          | No query fields                                                       | `200 { game }`, private details or `null`                     |
-| `GET /games/:gameId/details`     | UUID, no query fields                                                 | `200 { snapshot, configuration }`                             |
-| `GET /games/:gameId/invocations` | UUID, no query fields                                                 | `200 { gameId, version, turns }`                              |
-| `POST /games/:gameId/ai-turn`    | `{ gameId, expectedVersion, commandId, controllerId, step?, apiKey }` | `200` authoritative snapshot, including provider-error pauses |
+| Endpoint                         | Request                                                                                                                      | Success                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /providers/models`         | `{ provider, apiKey }` or `{ provider, credentialId }`                                                                       | `200 { ok: true, models }` or `{ ok: false, error }`          |
+| `POST /games`                    | Strict `{ mode, seats: { white, black } }` AI configuration, no keys                                                         | `201 { snapshot, configuration }`                             |
+| `GET /games/unfinished`          | No query fields                                                                                                              | `200 { game }`, private details or `null`                     |
+| `GET /games/:gameId/details`     | UUID, no query fields                                                                                                        | `200 { snapshot, configuration }`                             |
+| `GET /games/:gameId/invocations` | UUID, no query fields                                                                                                        | `200 { gameId, version, turns }`                              |
+| `POST /games/:gameId/ai-turn`    | `{ gameId, expectedVersion, commandId, controllerId, step?, ...source }`, where source is `{ apiKey }` or `{ credentialId }` | `200` authoritative snapshot, including provider-error pauses |
 
-Ordinary AI games reuse the existing snapshot, human-move, lifecycle, replay, and PGN routes; owning a game does not authorize a human move on an AI seat. A turn's provider/model/settings always come from persisted seat configuration. Its key is used for fresh discovery and inference and never enters a receipt, reservation, or stored record. Invocation reads expose normalized provider failure codes for localization; discovery returns the same safe codes without upstream prose. Empty catalogs are successful discovery results.
+Ordinary AI games reuse the existing snapshot, human-move, lifecycle, replay, and PGN routes; owning a game does not authorize a human move on an AI seat. A turn's provider/model/settings always come from persisted seat configuration. Its credential source is used for fresh discovery and inference; neither plaintext nor the reference enters a receipt, reservation, snapshot, or game record. Invocation reads expose normalized provider failure codes for localization; discovery returns the same safe codes without upstream prose. Empty catalogs are successful discovery results.
 
-`409` AI errors include `AI_TURN_IN_PROGRESS`, `AI_TURN_RECOVERY_REQUIRED`, `AI_TURN_CANCELLED`, and `AI_ADAPTER_UNAVAILABLE`. `422 AI_PARAMETERS_INVALID` means the game was paused because an advertised range or enumeration no longer accepts the saved settings; no inference attempt was dispatched. AI-specific errors contain only `code` and `requestId`. Ordinary game errors retain their existing envelopes. Missing keys fail strict body validation before dispatch. Reads never pause or resume a game.
+`409` AI errors include `AI_TURN_IN_PROGRESS`, `AI_TURN_RECOVERY_REQUIRED`, `AI_TURN_CANCELLED`, and `AI_ADAPTER_UNAVAILABLE`. `422 AI_PARAMETERS_INVALID` means the game was paused because an advertised range or enumeration no longer accepts the saved settings; no inference attempt was dispatched. AI-specific errors contain only `code` and `requestId`. Ordinary game errors retain their existing envelopes. Missing credential sources fail strict body validation before dispatch. Reads never pause or resume a game.
 
 See the [AI turn transport policy](architecture.md#ai-turns) for cancellation, deadlines, and uncertain outcomes, and the [provider boundary](architecture.md#ai-provider-boundary) for capability filtering. The page-memory client modules are intentionally separate from the Sandbox controller. Their owner must cancel outstanding requests, clear credentials on access loss, and perform explicit paused recovery before enabling continuation controls.
 

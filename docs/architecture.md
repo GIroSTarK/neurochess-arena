@@ -375,6 +375,17 @@ See [credential setup and operations](development.md#saved-provider-credentials)
 
 Saved credentials are explicitly selected per AI seat, including after recovery; no provider-based automatic selection or persisted per-game credential preference is required. Revocation prevents subsequent authorized operations and is rechecked before each automatic retry. Already-dispatched provider work cannot be undone; its result may complete only while the principal, game, reservation, and controller remain authorized. Account deletion fences acceptance and cleanup so late work cannot recreate data. Neither saved keys nor account sessions permit background AI play.
 
+Provider operations accept an exclusive session-only key or saved reference. The
+API resolves the reference through an owner/provider-scoped encrypted lookup in
+the existing short account-before-game transaction, after operation authorization.
+Decryption and session revalidation occur within that scope; database locks end
+before the external call. Resolve independently before discovery, inference, and
+each automatic retry, and release plaintext after each operation. Missing,
+foreign, mismatched, revoked, or undecryptable credentials normalize to
+`provider_auth`; turn execution records a recoverable provider error with unknown
+usage and pauses without consuming the invalid-output budget. Neither source nor
+plaintext belongs in durable game configuration, receipts, or telemetry.
+
 All request logging and exception reporting must redact credential fields, authorization headers, cookies, URLs with tokens, and provider secrets.
 
 ## Realtime rooms

@@ -10,6 +10,7 @@ import {
   type AiTurnCommand,
   type GameSnapshot,
   type NormalizedMoveResponse,
+  type ProviderFailure,
 } from "@neurochess/contracts";
 import type {
   GameRepository,
@@ -19,13 +20,15 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
+import type { CredentialCipher } from "../credentials/encryption.js";
+import {
+  type ProviderOperationAccess,
+  resolveProviderCredential,
+  validateProviderAccess,
+} from "../credentials/provider-access.js";
 import type { Principal } from "../identity/principal.js";
 import { lockPrincipalForCleanup } from "../identity/validity.js";
-import {
-  AI_MOVE_INSTRUCTIONS,
-  type AiProviderAdapter,
-  type ListModelsInput,
-} from "../providers/adapter.js";
+import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapter.js";
 import { discoverModels, effectiveParameters } from "../providers/discovery.js";
 import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
@@ -81,9 +84,14 @@ function invocationResult(response: NormalizedMoveResponse, discarded = false): 
   };
 }
 
+function preparationFailure(error: ProviderFailure, durationMs: number): NormalizedMoveResponse {
+  return { ok: false, error, durationMs, usage: null, providerRequestId: null };
+}
+
 export function createAiTurnExecutor(options: {
   readonly repository: GameRepository;
   readonly adapters: AiAdapters;
+  readonly credentialCipher?: CredentialCipher;
   readonly prepareCommand: (
     tx: GameTransaction,
     principal: Principal,
@@ -96,10 +104,11 @@ export function createAiTurnExecutor(options: {
   return async (
     principal: Principal,
     input: unknown,
-    access: ListModelsInput,
+    access: ProviderOperationAccess,
   ): Promise<GameSnapshot> => {
     const parsed = aiControlledTurnCommandSchema.safeParse(input);
     if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
+    validateProviderAccess(principal, access);
     const command = {
       ...parsed.data,
       gameId: parsed.data.gameId.toLowerCase(),
@@ -184,9 +193,29 @@ export function createAiTurnExecutor(options: {
     let response: NormalizedMoveResponse | undefined;
     try {
       // Discovery shares the reservation fence with inference, but never holds database locks.
-      await repository.write(recheck);
       const discoveryStarted = performance.now();
-      const discovery = await discoverModels(reserved.adapter, access);
+      const discovery = await (async () => {
+        const credential = await repository.write(async (tx) => {
+          await recheck(tx);
+          return resolveProviderCredential(
+            tx,
+            principal,
+            reserved.selected.seat.provider,
+            access,
+            options.credentialCipher,
+          );
+        });
+        try {
+          return credential.ok
+            ? await discoverModels(reserved.adapter, {
+                apiKey: credential.apiKey,
+                signal: access.signal,
+              })
+            : credential;
+        } finally {
+          if (credential.ok) credential.apiKey = "";
+        }
+      })();
       const discoveryDurationMs = Math.max(0, Math.round(performance.now() - discoveryStarted));
       const model = discovery.ok
         ? discovery.models.find((entry) => entry.id === reserved.selected.seat.modelId)
@@ -207,33 +236,51 @@ export function createAiTurnExecutor(options: {
         throw new AiTurnError("AI_PARAMETERS_INVALID");
       }
       const invocation = { ...reserved.invocation, effectiveParameters: parameters };
-      attempt = await repository.write(async (tx) => {
-        await recheck(tx);
-        return tx.beginModelInvocation(invocation);
-      });
       const preparationError = !discovery.ok
         ? discovery.error
         : !model || model.capabilities.moveGeneration === "unsupported"
           ? ({ code: "provider_unavailable", reason: "unsupported_model" } as const)
           : null;
+      async function beginInvocation(tx: GameTransaction) {
+        const attempt = await tx.beginModelInvocation(invocation);
+        const credential = preparationError
+          ? undefined
+          : await resolveProviderCredential(
+              tx,
+              principal,
+              reserved.selected.seat.provider,
+              access,
+              options.credentialCipher,
+            );
+        return { attempt, credential };
+      }
+      const first = await repository.write(async (tx) => {
+        await recheck(tx);
+        return beginInvocation(tx);
+      });
+      attempt = first.attempt;
+      let credential = first.credential;
       for (;;) {
-        response = preparationError
-          ? {
-              ok: false,
-              error: preparationError,
-              durationMs: discoveryDurationMs,
-              usage: null,
-              providerRequestId: null,
-            }
-          : await invokeMove(reserved.adapter, {
-              apiKey: access.apiKey,
-              signal: access.signal,
-              instructions: AI_MOVE_INSTRUCTIONS,
-              modelId: reserved.selected.seat.modelId,
-              parameters: { ...invocation.effectiveParameters },
-              ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
-              context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
-            });
+        try {
+          if (preparationError) {
+            response = preparationFailure(preparationError, discoveryDurationMs);
+          } else if (!credential) throw new GameIntegrityError();
+          else {
+            response = credential.ok
+              ? await invokeMove(reserved.adapter, {
+                  apiKey: credential.apiKey,
+                  signal: access.signal,
+                  instructions: AI_MOVE_INSTRUCTIONS,
+                  modelId: reserved.selected.seat.modelId,
+                  parameters: { ...invocation.effectiveParameters },
+                  ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
+                  context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+                })
+              : preparationFailure(credential.error, 0);
+          }
+        } finally {
+          if (credential?.ok) credential.apiKey = "";
+        }
         const currentAttempt = attempt;
         const received = response;
         const snapshot = await repository.write(async (tx) => {
@@ -314,10 +361,11 @@ export function createAiTurnExecutor(options: {
               ),
             };
           }
-          return { attempt: await tx.beginModelInvocation(invocation) };
+          return beginInvocation(tx);
         });
-        if (next.snapshot) return next.snapshot;
+        if ("snapshot" in next) return next.snapshot;
         attempt = next.attempt;
+        credential = next.credential;
       }
     } catch (error: unknown) {
       try {

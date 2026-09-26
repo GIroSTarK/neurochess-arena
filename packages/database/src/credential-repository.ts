@@ -19,6 +19,33 @@ export type NewProviderCredential = Omit<
   typeof providerCredentials.$inferInsert,
   "userId" | "createdAt"
 >;
+const encryptedMaterial = {
+  version: providerCredentials.version,
+  keyId: providerCredentials.keyId,
+  nonce: providerCredentials.nonce,
+  authTag: providerCredentials.authTag,
+  ciphertext: providerCredentials.ciphertext,
+};
+
+// The caller holds the account/session locks shared with save, revoke, and clear.
+export async function readProviderCredential(
+  db: Pick<DatabaseConnection["db"], "select">,
+  userId: string,
+  id: string,
+  provider: typeof providerCredentials.$inferSelect.provider,
+) {
+  const [record] = await db
+    .select(encryptedMaterial)
+    .from(providerCredentials)
+    .where(
+      and(
+        eq(providerCredentials.userId, userId),
+        eq(providerCredentials.id, id),
+        eq(providerCredentials.provider, provider),
+      ),
+    );
+  return record;
+}
 export interface CredentialRepository {
   save(
     userId: string,

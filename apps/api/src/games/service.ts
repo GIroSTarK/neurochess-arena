@@ -29,13 +29,18 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
+import type { CredentialCipher } from "../credentials/encryption.js";
+import {
+  type ProviderOperationAccess,
+  resolveProviderCredential,
+  validateProviderAccess,
+} from "../credentials/provider-access.js";
 import type { Principal } from "../identity/principal.js";
 import {
   lockActivePrincipal,
   lockPrincipalForCleanup,
   requireActivePrincipal,
 } from "../identity/validity.js";
-import type { ListModelsInput } from "../providers/adapter.js";
 import { discoverModels } from "../providers/discovery.js";
 
 import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
@@ -54,7 +59,7 @@ export interface GameService {
   models(
     principal: Principal,
     provider: AiProvider,
-    access: ListModelsInput,
+    access: ProviderOperationAccess,
   ): Promise<ModelDiscoveryResult>;
   createSandbox(principal: Principal): Promise<GameSnapshot>;
   createAi(principal: Principal, configuration: unknown): Promise<GameDetails>;
@@ -63,7 +68,11 @@ export interface GameService {
   unfinishedGame(principal: Principal): Promise<UnfinishedGameDetails>;
   snapshot(principal: Principal, gameId: string): Promise<GameSnapshot>;
   move(principal: Principal, command: MoveCommand): Promise<GameSnapshot>;
-  aiTurn(principal: Principal, command: unknown, access: ListModelsInput): Promise<GameSnapshot>;
+  aiTurn(
+    principal: Principal,
+    command: unknown,
+    access: ProviderOperationAccess,
+  ): Promise<GameSnapshot>;
   lifecycle(principal: Principal, command: LifecycleCommand): Promise<GameSnapshot>;
   unfinished(principal: Principal): Promise<UnfinishedGameResponse>;
   replay(principal: Principal, gameId: string): Promise<GameReplayResponse>;
@@ -84,6 +93,7 @@ export function createGameService(
     readonly nodeEnv: "development" | "test" | "production";
     readonly sandboxEnabled: boolean;
     readonly aiAdapters?: AiAdapters;
+    readonly credentialCipher?: CredentialCipher;
     readonly controllerLeaseMs?: number;
   },
 ): GameService {
@@ -354,16 +364,24 @@ export function createGameService(
     },
     sandboxEnabled,
     async models(principal, provider, access) {
-      await repository.read(async (reader) => {
-        await requireActivePrincipal(reader, principal);
+      validateProviderAccess(principal, access);
+      const credential = await repository.write(async (tx) => {
+        await lockActivePrincipal(tx, principal);
+        return resolveProviderCredential(tx, principal, provider, access, options.credentialCipher);
       });
-      const adapter = adapters[provider];
-      const result = await discoverModels(
-        adapter?.provider === provider ? adapter : undefined,
-        access,
-      );
-      await repository.read((reader) => requireActivePrincipal(reader, principal));
-      return result;
+      try {
+        const adapter = adapters[provider];
+        const result = credential.ok
+          ? await discoverModels(adapter?.provider === provider ? adapter : undefined, {
+              apiKey: credential.apiKey,
+              signal: access.signal,
+            })
+          : credential;
+        await repository.read((reader) => requireActivePrincipal(reader, principal));
+        return result;
+      } finally {
+        if (credential.ok) credential.apiKey = "";
+      }
     },
     async createSandbox(principal) {
       return (await createOwnedGame(principal, null)).snapshot;
@@ -396,6 +414,7 @@ export function createGameService(
       repository,
       adapters,
       prepareCommand,
+      ...(options.credentialCipher ? { credentialCipher: options.credentialCipher } : {}),
     }),
     lifecycle: mutate,
     async replay(principal, gameId) {

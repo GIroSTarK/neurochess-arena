@@ -15,7 +15,45 @@ const command = {
   expectedVersion: 0,
 };
 
-describe("session-only HTTP credential contracts", () => {
+describe("HTTP credential source contracts", () => {
+  it("accepts exactly one session key or saved reference for discovery and turns", () => {
+    const credentialId = "a442b196-0613-4ff6-bf86-49186f0bb2a4";
+    for (const source of [{ apiKey: "key-sentinel" }, { credentialId }]) {
+      expect(modelDiscoveryRequestSchema.parse({ provider: "openai", ...source })).toEqual({
+        provider: "openai",
+        ...source,
+      });
+      expect(aiTurnRequestSchema.parse({ ...command, ...source })).toEqual({
+        ...command,
+        ...source,
+      });
+    }
+    for (const source of [
+      {},
+      { apiKey: "key-sentinel", credentialId },
+      { credentialId: "invalid" },
+      { credentialId: null },
+      { credentialId, userId: "caller-owned" },
+      { credentialId, apiKey: "" },
+    ]) {
+      expect(modelDiscoveryRequestSchema.safeParse({ provider: "openai", ...source }).success).toBe(
+        false,
+      );
+      expect(aiTurnRequestSchema.safeParse({ ...command, ...source }).success).toBe(false);
+    }
+    expect(aiTurnCommandSchema.safeParse({ ...command, credentialId }).success).toBe(false);
+    const seat = {
+      type: "ai",
+      provider: "openai",
+      modelId: "dynamic-model",
+      parameters: {},
+      credentialId,
+    };
+    expect(
+      aiGameConfigurationSchema.safeParse({ mode: "ai_vs_ai", seats: { white: seat, black: seat } })
+        .success,
+    ).toBe(false);
+  });
   it("validates controller actions without accepting credentials or client-defined expiry", () => {
     const acquire = {
       gameId: command.gameId,
