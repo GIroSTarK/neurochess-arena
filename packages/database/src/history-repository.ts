@@ -24,6 +24,28 @@ export type StoredHistoryGame = Pick<
   participants: (typeof gameParticipants.$inferSelect)[];
 };
 
+function terminalHistoryScope(userId: string) {
+  return and(
+    eq(games.ownerUserId, userId),
+    eq(games.isSandbox, false),
+    inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
+    inArray(games.state, ["completed", "aborted"]),
+  );
+}
+
+// Caller holds the account lock, which serializes creation, completion and deletion.
+export async function deleteAccountHistory(
+  db: Pick<DatabaseConnection["db"], "delete">,
+  userId: string,
+  gameId?: string,
+): Promise<void> {
+  await db
+    .delete(games)
+    .where(
+      and(terminalHistoryScope(userId), gameId === undefined ? undefined : eq(games.id, gameId)),
+    );
+}
+
 export async function readAccountHistory(
   db: Pick<DatabaseConnection["db"], "select">,
   userId: string,
@@ -48,10 +70,7 @@ export async function readAccountHistory(
     .leftJoin(profiles, eq(profiles.userId, games.ownerUserId))
     .where(
       and(
-        eq(games.ownerUserId, userId),
-        eq(games.isSandbox, false),
-        inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
-        inArray(games.state, ["completed", "aborted"]),
+        terminalHistoryScope(userId),
         cursor
           ? sql`(${games.updatedAt}, ${games.id}) < (${cursor.finishedAt}::timestamptz, ${cursor.gameId}::uuid)`
           : undefined,

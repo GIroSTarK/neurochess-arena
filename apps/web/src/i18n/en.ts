@@ -12,6 +12,26 @@ export const en = {
     loading: "Loading history…",
     error: "History could not be loaded. Try again.",
     retry: "Retry history",
+    refresh: "Refresh history",
+    deletion: {
+      game: "Delete game",
+      clear: "Clear history",
+      cancel: "Cancel",
+      gameTitle: "Delete this game?",
+      clearTitle: "Clear all game history?",
+      gameDescription:
+        "Permanently delete this game, its players, moves, result, commentary, invocation history and all associated game data. Its replay and PGN will no longer be available. This cannot be undone. Your other games, profile and saved credentials are kept.",
+      clearDescription:
+        "Permanently delete all your completed and aborted games across every history page, including players, moves, results, commentary, invocation history and all associated game data. Their replay and PGN will no longer be available. This cannot be undone. Active and paused games, your profile and saved credentials are kept. Only games finished when the server processes this request are removed. Games completed afterward are kept; confirming again also clears games completed since the previous request.",
+      pending: "Deleting…",
+      failed:
+        "We could not confirm deletion. It may have completed. Cancel and refresh history before trying again.",
+      unfinished:
+        "This game is still active or paused. Return to the game and stop it before deleting it.",
+      deleted: "Game deleted.",
+      cleared: "History cleared. Any games completed afterward are kept.",
+      unavailable: "This game is already unavailable. History has been refreshed.",
+    },
     empty: "You have no completed or aborted games yet.",
     pagination: "History pages",
     older: "Older games",

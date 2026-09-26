@@ -4,6 +4,7 @@ import { hasAccountSession, lockAccountSession } from "./account-session.js";
 import type { DatabaseConnection } from "./client.js";
 import { readProviderCredential } from "./credential-repository.js";
 import {
+  deleteAccountHistory,
   type HistoryBoundary,
   readAccountHistory,
   type StoredHistoryGame,
@@ -89,6 +90,7 @@ export interface GameReader {
 }
 
 export interface GameTransaction extends GameReader {
+  deleteAccountHistory(userId: string, gameId?: string): Promise<void>;
   getProviderCredential(
     userId: string,
     id: string,
@@ -265,6 +267,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            deleteAccountHistory: (userId, gameId) => deleteAccountHistory(tx, userId, gameId),
             getProviderCredential: (userId, id, provider) =>
               readProviderCredential(tx, userId, id, provider),
             async lockAccount(userId) {

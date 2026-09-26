@@ -50,10 +50,12 @@ import { persistCommand, positionOf, transportSnapshot } from "./command-persist
 import { configurationOf, participantsFor } from "./configuration.js";
 import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
-import { readHistory } from "./history.js";
+import { deleteHistory, readHistory } from "./history.js";
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  deleteGame(principal: Principal, gameId: string, input: unknown): Promise<void>;
+  clearHistory(principal: Principal, input: unknown): Promise<void>;
   history(principal: Principal, query: unknown): Promise<GameHistoryPage>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
@@ -395,6 +397,9 @@ export function createGameService(
       return createOwnedGame(principal, configuration.data);
     },
     history: (principal, query) => readHistory(repository, principal, query),
+    deleteGame: (principal, gameId, input) =>
+      deleteHistory(repository, principal, input, { gameId }),
+    clearHistory: (principal, input) => deleteHistory(repository, principal, input, "all"),
     details: readDetails,
     unfinishedGame: (principal) =>
       repository.read(async (reader) => {

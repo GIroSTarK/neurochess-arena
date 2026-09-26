@@ -253,7 +253,7 @@ Two sessions of one account share one public unfinished-game slot. A second crea
 
 ### Browser account flows
 
-Arena exposes sign-in and account navigation. `/auth/sign-up`, `/auth/sign-in`, `/auth/resend`, `/auth/forgot-password`, the email-link paths above, and `/auth/complete` use localized forms. Passwords support paste/password managers and preserve spaces. All methods lead to the same username onboarding before account play. `/account` edits the profile, manages saved provider keys, links an available OAuth method explicitly, and offers account switching. History and deletion remain separate milestones.
+Arena exposes sign-in and account navigation. `/auth/sign-up`, `/auth/sign-in`, `/auth/resend`, `/auth/forgot-password`, the email-link paths above, and `/auth/complete` use localized forms. Passwords support paste/password managers and preserve spaces. All methods lead to the same username onboarding before account play. `/account` edits the profile, manages saved provider keys, links an available OAuth method explicitly, and offers account switching. `/history` lists private completed/aborted games and supports individual game deletion and history clearing. Only account deletion remains pending; see the [Phase 3 roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
 
 Email sign-in accepts only Arena, `/history`, or a validated `/?game=<uuid>` return destination. OAuth completion returns to Arena (or the profile after linking). Neither path resumes play. Sign-out, switching, expiry, reset invalidation, and other-tab changes cancel the old identity's requests, remove keys/private UI, and stop heartbeats. Public account requests send the account context header and never bootstrap a guest. Sign-out requires a successful revocation acknowledgement; a failed revocation provides retry. Returning to guest play requires **Continue as guest**, which clears any remaining account cookie first.
 
@@ -265,7 +265,16 @@ The browser stores only a non-secret account/guest context marker and random cha
 
 Rows sort by finish timestamp and UUID descending. Treat the cursor as an opaque boundary: its UTC timestamp retains all six fractional digits. `nextCursor: null` marks the final page. Concurrent newer finishes are visible after returning to the first page; they do not shift subsequent pages. The query uses the existing account-owner index and needs no schema migration.
 
-The localized `/history` page shows 20 games at a time, newer/older navigation, empty/error states, and guest guidance. Replay links use `/?game=<uuid>` and existing private terminal APIs. Listing/opening terminal history does not pause, resume, or control another game. Read privacy remains independent of whether another game has started. Deletion remains a separate delivery.
+The localized `/history` page shows 20 games at a time, newer/older navigation, empty/error states, and guest guidance. Replay links use `/?game=<uuid>` and existing private terminal APIs. Listing/opening terminal history does not pause, resume, or control another game. Read privacy remains independent of whether another game has started. Each row offers Delete game; Clear history covers all pages. Separate confirmations explain scope, focus Cancel first, and block duplicate submission. Success reloads the first page; failed or uncertain requests retain the list and direct the user to Cancel and Refresh history.
+
+| POST endpoint           | JSON body             | Success                   |
+| ----------------------- | --------------------- | ------------------------- |
+| `/games/:gameId/delete` | `{ "confirm": true }` | `200 { "success": true }` |
+| `/games/history/clear`  | `{ "confirm": true }` | `200 { "success": true }` |
+
+Both require an account session, exact `Origin: WEB_ORIGIN`, no query fields, and a strict confirmation body (maximum 1024 bytes); responses use `no-store`. The account identity header continues to prevent guest fallback. Missing/invalid sessions and guests receive `401`, wrong origins `403`, malformed IDs/payloads `400`, unavailable/foreign/previously deleted IDs `404 NOT_FOUND`, and owned active/paused games `409 INVALID_GAME_STATE`. Use Stop before deleting an unfinished game. A clear on empty history succeeds. Each clear retry is a new operation at the [documented transaction boundary](product.md#private-history-and-deletion), not a replay of a previous deletion set. There is no automatic destructive retry or public tombstone lookup. Existing cascade constraints suffice; no migration is required.
+
+Run `npm run test:integration -- apps/api/test/history-deletion.integration.test.ts apps/api/test/history-deletion-races.integration.test.ts` for PostgreSQL cascade/rollback, authorization, repeated requests, lock-wait expiry, clear/delete/create/read races, concurrent completion boundaries and late provider outcomes. These fixtures use real auth/game services and injected provider responses.
 
 ## Sandbox API
 
@@ -505,7 +514,7 @@ CI uses its own ephemeral `neurochess_test` database and runs integration tests 
 
 ## Browser tests
 
-Run `npm run test:e2e -- test/e2e/history.spec.ts` for account history pagination, cross-session result access, account/guest privacy, replay-linked commentary and canonical PGN, read-only behavior with an unfinished game, and guest/empty/retry states. Desktop and mobile cases include keyboard focus, axe, enlarged text, and expanded localization. Fixtures use disposable PostgreSQL and injected provider responses.
+Run `npm run test:e2e -- test/e2e/history.spec.ts` for account history pagination, cross-session result access, account/guest privacy, replay-linked commentary and canonical PGN, read-only behavior with an unfinished game, and guest/empty/retry states. It also covers individual/all-page deletion confirmations, pagination reset, unavailable deleted URLs, unfinished-game preservation, failed requests and lost acknowledgements. Desktop and mobile cases include keyboard focus, axe, enlarged text, and expanded localization. Fixtures use disposable PostgreSQL and injected provider responses.
 
 Run `npm run test:e2e -- test/e2e/saved-credentials.spec.ts` for account credential
 management, independent raw/saved/mixed seats, both human colors, refresh and

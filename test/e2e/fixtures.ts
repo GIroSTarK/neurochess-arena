@@ -14,9 +14,10 @@ import { API_ORIGIN } from "./environment";
 
 export { expect } from "@playwright/test";
 
-export const test = base.extend<{ allowIdentityLoss: boolean }>({
+export const test = base.extend<{ allowIdentityLoss: boolean; allowMissingGames: boolean }>({
   allowIdentityLoss: [false, { option: true }],
-  page: async ({ page, allowIdentityLoss }, use) => {
+  allowMissingGames: [false, { option: true }],
+  page: async ({ page, allowIdentityLoss, allowMissingGames }, use) => {
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
@@ -58,11 +59,19 @@ export const test = base.extend<{ allowIdentityLoss: boolean }>({
             message.location().url.startsWith(API_ORIGIN + path),
           ) &&
           message.text().includes("401 (Unauthorized)");
+        const expectedMissingGame =
+          allowMissingGames &&
+          message.location().url.startsWith(API_ORIGIN + "/games/") &&
+          /^\/games\/[0-9a-f-]{36}(?:\/(?:details|replay|pgn|invocations))?$/.test(
+            new URL(message.location().url).pathname,
+          ) &&
+          message.text().includes("404 (Not Found)");
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
           !accountRejection &&
-          !expectedIdentityLoss
+          !expectedIdentityLoss &&
+          !expectedMissingGame
         ) {
           const category = message.location().url.startsWith(API_ORIGIN + "/games")
             ? "games"
