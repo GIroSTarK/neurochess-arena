@@ -2,6 +2,7 @@ import { type AuthOAuthProvider, usernameSchema } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CredentialSettings } from "../credentials/Settings";
 import { Button } from "../ui/Button";
 
 import { AccountLayout } from "./AccountLayout";
@@ -162,6 +163,7 @@ export function ProfileScreen({ sandboxEnabled }: { readonly sandboxEnabled: boo
       </form>
       {!profile.onboardingRequired ? (
         <>
+          <CredentialSettings />
           {providers.length ? (
             <div className="grid gap-3 border-t border-divider pt-5">
               <h2 className="text-section font-semibold">{t("auth.linkAccounts")}</h2>

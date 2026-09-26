@@ -10,6 +10,7 @@ import { SeatSetup } from "../arena/setup/SeatSetup";
 import { AccountAccess } from "../auth/AccountAccess";
 import { useAccount } from "../auth/context";
 import { PieceIcon } from "../board/PieceIcon";
+import { CredentialSelector } from "../credentials/Selector";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
 
@@ -54,6 +55,9 @@ export function ArenaSetupScreen({
   const seatMessage = (color: "white" | "black") => {
     if (state.mode === "ai_vs_human" && state.humanColor === color) return t("setup.humanSeat");
     const seat = state.seats[color];
+    if (seat.source === "saved" && seat.issue?.code === "provider_auth") {
+      return t("credentials.rejected");
+    }
     if (seat.issue) return issueMessage(seat.issue);
     if (seat.discovery === "loading") return t("setup.loading");
     if (seat.modelId) return t("setup.selected");
@@ -155,6 +159,17 @@ export function ArenaSetupScreen({
                 key={color}
                 color={color}
                 {...seat}
+                saved={seat.source === "saved"}
+                credentialSelection={
+                  <CredentialSelector
+                    provider={seat.provider}
+                    source={seat.source}
+                    credentialId={seat.credentialId}
+                    disabled={state.phase !== "editing"}
+                    onSource={(source) => controller.setSource(color, source)}
+                    onSaved={(id) => controller.setSaved(color, id)}
+                  />
+                }
                 disabled={state.phase !== "editing"}
                 loading={seat.discovery === "loading"}
                 loaded={seat.discovery === "loaded"}

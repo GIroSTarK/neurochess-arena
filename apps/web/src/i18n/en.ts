@@ -1,4 +1,67 @@
 export const en = {
+  credentials: {
+    title: "Saved provider keys",
+    persistence:
+      "Saving is optional. Your API key is encrypted by the server and stored in your private account until you revoke it. Saved keys cannot be revealed or downloaded.",
+    saveHint:
+      "Choose a label without secrets. Saving does not check whether the provider accepts the key. Use a key for this tab in Arena if you do not want to save it.",
+    optIn: "Save this key to my account",
+    label: "Label",
+    save: "Save key",
+    invalid:
+      "Choose a provider, enter a key and a 1–64 character label without secrets or angle brackets, and explicitly opt in to saving.",
+    loading: "Loading saved keys…",
+    pending: "Applying your change…",
+    empty: "You have no saved provider keys.",
+    noProviderKeys:
+      "No keys for this provider are in the loaded list. Load more, refresh, save a key in your account, or use a key for this tab.",
+    masked: "Key hidden",
+    created: "Saved {{date}}",
+    revoke: "Revoke key",
+    revokeLabel: "Revoke {{label}}",
+    clear: "Clear all saved keys",
+    cancel: "Cancel",
+    revokeDescription:
+      "Remove “{{label}}” from your account permanently? Future discovery and moves using this key will fail until you select another key. A provider request already sent may still finish. This does not revoke the key at the provider or delete games.",
+    clearDescription:
+      "Permanently remove every saved provider key from this account? Games and your profile remain. Future discovery and moves need another key; requests already sent may still finish. This does not revoke keys at their providers.",
+    refresh: "Refresh saved keys",
+    more: "Load more saved keys",
+    source: "Credential source",
+    savedSource: "Use a saved key",
+    savedKey: "Saved key",
+    choose: "Select a saved key…",
+    unlisted: "Selected key is not in the loaded list",
+    referenceHint:
+      "Only the selected key’s reference is sent. The server uses the encrypted key for authorized provider requests.",
+    manage: "Manage saved keys",
+    guest: "Saving keys requires an account. Guests use keys for this tab only.",
+    recoveryTitle: "Choose keys to continue",
+    recoveryDescription:
+      "Your game is paused. For each listed AI seat, enter a key for this tab or explicitly select a saved key. Then choose Resume or Next move.",
+    rejected:
+      "This credential could not be used. It may have been revoked, deleted, become unreadable, or been rejected by the provider. Enter a replacement key or select a usable saved key, then explicitly continue.",
+    required: "Enter or select keys for the listed AI seats before continuing.",
+    errors: {
+      CREDENTIAL_UNAUTHORIZED: "Your account session ended. Sign in again to manage saved keys.",
+      CREDENTIAL_FORBIDDEN: "This request was not allowed. Return to your account and try again.",
+      CREDENTIAL_INVALID_REQUEST: "Check the provider, label, key, and explicit save choice.",
+      CREDENTIAL_NOT_FOUND:
+        "This saved key is no longer available. Refresh the list and choose another.",
+      CREDENTIAL_STORAGE_DISABLED:
+        "Saving keys is unavailable on this installation. You can still use a key for this tab, list saved keys, or remove them.",
+      CREDENTIAL_UNAVAILABLE:
+        "Saved keys could not be updated or loaded. Refresh the list to check the current state before trying again.",
+      NETWORK: "The request could not be confirmed. Refresh the list before trying again.",
+      SAVE_UNCERTAIN:
+        "The key may have been saved, but confirmation was lost. Refresh the saved-key list before deciding whether to save it again.",
+    },
+    results: {
+      saved: "Key saved. Select it explicitly in Arena to use it.",
+      revoked: "Saved key revoked.",
+      cleared: "All saved keys cleared.",
+    },
+  },
   auth: {
     documentTitle: "Account · Neurochess Arena",
     account: "Account",
@@ -13,7 +76,7 @@ export const en = {
     navigation: "Account navigation",
     private: "Your account and games are private.",
     setupFooter:
-      "Keys are used only for model discovery and moves. They stay in page memory and are cleared on refresh, navigation, or sign-out.",
+      "Keys are used for model discovery and moves. Session-only keys are cleared on refresh, navigation, or sign-out. Saved keys stay encrypted in your account until revoked.",
     checking: "Checking your account…",
     pending: "Please wait…",
     email: "Email",

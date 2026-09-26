@@ -88,6 +88,25 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("does not resume or dispatch when saved credentials are selected after recovery", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    h.controller.setSaved("white", GAME_ID);
+    h.controller.setKey("black", "tab-key");
+    expect(h.api.turn).not.toHaveBeenCalled();
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    h.api.turn.mockResolvedValue(
+      snapshot(["e2e4"], { version: 2, state: "paused", legalMoves: [] }),
+    );
+    await h.controller.continue(true);
+    expect(h.api.turn).toHaveBeenCalledWith(
+      expect.objectContaining({ step: true }),
+      { credentialId: GAME_ID },
+      expect.any(AbortSignal),
+    );
+    window.dispatchEvent(new Event("pagehide"));
+    expect(h.controller.getSnapshot().keys).toEqual({ white: false, black: false });
+  });
   it("does not restore an earlier provider-pause notice while an explicit retry is in flight", async () => {
     const game = { ...details, snapshot: snapshot([], { state: "paused", legalMoves: [] }) };
     const h = harness(game);

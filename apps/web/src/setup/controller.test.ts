@@ -45,6 +45,36 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it("selects saved and raw sources independently and cancels stale discovery on source changes", async () => {
+    const { controller, api, credentials } = await fixture();
+    const credentialId = "11111111-1111-4111-8111-111111111111";
+    controller.setSource("white", "saved");
+    expect(controller.getSnapshot().seats.white.keyReady).toBe(false);
+    controller.setSaved("white", credentialId);
+    controller.setKey("black", "black-sentinel-key");
+    await controller.discover("black");
+    controller.setModel("black", "fixture/model-a");
+    const old = deferred<ModelDiscoveryResult>();
+    api.discover.mockReturnValueOnce(old.promise);
+    const discovery = controller.discover("white");
+    await vi.waitFor(() => expect(api.discover).toHaveBeenCalledTimes(2));
+    expect(api.discover.mock.calls[1]?.[0]).toEqual({ provider: "openai", credentialId });
+    controller.setSource("white", "session");
+    expect(api.discover.mock.calls[1]?.[1].aborted).toBe(true);
+    old.resolve({ ok: true, models: setupModels("openai") });
+    await discovery;
+    expect(controller.getSnapshot().seats.white.models).toEqual([]);
+    expect(() => credentials.require("white", "openai")).toThrow();
+    expect(controller.getSnapshot().seats.black.modelId).toBe("fixture/model-a");
+    controller.setSource("white", "saved");
+    controller.setSaved("white", credentialId);
+    await controller.discover("white");
+    controller.setModel("white", "fixture/model-a");
+    const game = await controller.start();
+    expect(game).not.toBeNull();
+    expect(JSON.stringify(api.create.mock.calls)).not.toContain(credentialId);
+    expect(JSON.stringify(api.create.mock.calls)).not.toContain("black-sentinel-key");
+  });
   it.each(["white", "black"] as const)(
     "creates a %s human with only the opponent's key",
     async (humanColor) => {
@@ -114,7 +144,7 @@ describe("independent AI setup", () => {
       JSON.stringify({ state: controller.getSnapshot(), game, creation: api.create.mock.calls }),
     ).not.toContain("sentinel-key");
     disconnect();
-    expect(credentials.require("white", "openai")).toBe("white-sentinel-key");
+    expect(credentials.require("white", "openai")).toEqual({ apiKey: "white-sentinel-key" });
   });
 
   it("shares only bootstrap between simultaneous discoveries and suppresses duplicate clicks", async () => {
@@ -150,7 +180,7 @@ describe("independent AI setup", () => {
       await request;
       expect(controller.getSnapshot().seats.white.models).toEqual([]);
       if (change === "provider") expect(() => credentials.require("white", "openai")).toThrow();
-      else expect(credentials.require("white", "openai")).toBe("replacement-key");
+      else expect(credentials.require("white", "openai")).toEqual({ apiKey: "replacement-key" });
     },
   );
 

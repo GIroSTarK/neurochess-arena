@@ -5,7 +5,7 @@ import {
   type ChessColor,
   type ModelDescriptor,
 } from "@neurochess/contracts";
-import { useId, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PieceIcon } from "../../board/PieceIcon";
@@ -16,6 +16,8 @@ import { StableText } from "../../ui/StableText";
 import { ModelPicker, setupFieldClass } from "./ModelPicker";
 
 export interface SeatSetupProps {
+  readonly credentialSelection?: ReactNode;
+  readonly saved?: boolean;
   readonly color: ChessColor;
   readonly provider: AiProvider;
   readonly keyEpoch: number;
@@ -66,7 +68,10 @@ export function SeatSetup(props: SeatSetupProps) {
           ))}
         </Select>
       </div>
-      <SecretField key={props.keyEpoch} {...props} descriptionId={`${id}-status`} />
+      {props.credentialSelection}
+      {!props.saved ? (
+        <SecretField key={props.keyEpoch} {...props} descriptionId={`${id}-status`} />
+      ) : null}
       <div className="grid gap-2">
         <Button
           variant="secondary"

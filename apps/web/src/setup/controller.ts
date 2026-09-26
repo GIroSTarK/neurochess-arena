@@ -158,6 +158,28 @@ export class SetupController {
     });
   }
 
+  setSource(color: ChessColor, source: "session" | "saved") {
+    if (!this.canEdit(color) || this.state.seats[color].source === source) return;
+    this.discovery[color]?.abort();
+    this.credentials.remove(color);
+    const seat = this.state.seats[color];
+    this.seat(color, { ...emptySeat(seat.provider, seat.keyEpoch + 1), source });
+  }
+
+  setSaved(color: ChessColor, credentialId: string) {
+    if (!this.canEdit(color) || this.state.seats[color].source !== "saved") return;
+    this.discovery[color]?.abort();
+    this.credentials.remove(color);
+    const seat = this.state.seats[color];
+    if (credentialId) this.credentials.setSaved(color, seat.provider, credentialId);
+    this.seat(color, {
+      ...emptySeat(seat.provider, seat.keyEpoch + 1),
+      source: "saved",
+      credentialId,
+      keyReady: Boolean(credentialId),
+    });
+  }
+
   validateKey(color: ChessColor) {
     if (!this.canEdit(color)) return;
     if (!this.state.seats[color].keyReady) this.seat(color, { issue: { code: "key_format" } });
@@ -215,7 +237,7 @@ export class SetupController {
       const result = await this.api.discover(
         {
           provider: seat.provider,
-          apiKey: this.credentials.require(color, seat.provider),
+          ...this.credentials.require(color, seat.provider),
         },
         request.signal,
       );

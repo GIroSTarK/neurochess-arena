@@ -349,9 +349,9 @@ After refresh, an AI game is restored as paused and requires explicit resume. Se
 3. The API uses it within that request and does not persist or log it.
 4. Refreshing or closing the tab removes it; a restored game remains paused until re-entry.
 
-The AI client's credential store is a page-owned closure with independent color/provider entries. Replacement, explicit clearing, owner cancellation, and `pagehide` remove entries; even a page restored from the browser's back/forward cache requires re-entry. It exposes no serializable credential state and uses no browser persistence. Configuration and command receipts never contain credentials; the HTTP turn body adds a key only for that operation. Client destinations require HTTPS except for local development on `localhost`. Loading or constructing the client never bootstraps a guest.
+The AI client's credential store is a page-owned closure with independent color/provider entries, each holding an exclusive raw key or explicitly selected saved reference. Replacement, explicit clearing, owner cancellation, and `pagehide` remove entries; even a page restored from the browser's back/forward cache requires re-entry or selection. It exposes no serializable credential state and uses no browser persistence. Configuration and command receipts never contain credentials; the HTTP turn body adds its credential source only for that operation. Client destinations require HTTPS except for local development on `localhost`. Loading or constructing the client never bootstraps a guest.
 
-The independent setup adapter in `apps/web/src/setup` consumes that client and a page-owned credential store. It reads unfinished-game discovery on mount; only explicit Load models or Start actions may bootstrap a guest. Each seat cancels and discards obsolete discovery on key/provider changes, clears model/parameter selections before refreshing capabilities, and submits only supported, valid parameters. Reusable `arena/setup` controls receive data and callbacks, without importing API clients or mode controllers. Creation hands private game details to the page owner, which retains the credential lifetime; Return to game hands over only the authorized game ID. Setup itself neither dispatches turns nor performs recovery; its page owner handles those operations. An uncertain creation response requires explicit unfinished-game discovery before another creation attempt. The page-owned `match` controller connects this handoff to the public Arena and owns recovery, controller heartbeats, and serialized turns.
+The independent setup adapter in `apps/web/src/setup` consumes that client and a page-owned credential store. It reads unfinished-game discovery on mount; only explicit Load models or Start actions may bootstrap a guest. Each seat cancels and discards obsolete discovery on key/provider/source changes, clears model/parameter selections before refreshing capabilities, and submits only supported, valid parameters. Reusable `arena/setup` controls receive data and callbacks, without importing API clients or mode controllers. Creation hands private game details to the page owner, which retains the credential lifetime; Return to game hands over only the authorized game ID. Setup itself neither dispatches turns nor performs recovery; its page owner handles those operations. An uncertain creation response requires explicit unfinished-game discovery before another creation attempt. The page-owned `match` controller connects this handoff to the public Arena and owns recovery, controller heartbeats, and serialized turns.
 
 ### Saved credential
 
@@ -372,6 +372,14 @@ rechecks session validity after SQL waits, rolling back expired writes. Clear re
 all credentials visible under that account lock; a later serialized save survives.
 All HTTP commands require exact-origin JSON and reject caller-supplied ownership.
 See [credential setup and operations](development.md#saved-provider-credentials).
+
+The account UI keeps paginated masked metadata in the current identity's memory,
+separate from the page-owned seat credential store. Identity changes cancel reads
+and mutations and fence late replies. Saving requires an unchecked-by-default
+opt-in and explicit submission; the submitted raw field is cleared immediately.
+An uncertain save requires refreshing metadata before another explicit save.
+Revoke and clear have separate confirmations that explain future-operation and
+in-flight effects. Neither management nor selection requests plaintext readback.
 
 Saved credentials are explicitly selected per AI seat, including after recovery; no provider-based automatic selection or persisted per-game credential preference is required. Revocation prevents subsequent authorized operations and is rechecked before each automatic retry. Already-dispatched provider work cannot be undone; its result may complete only while the principal, game, reservation, and controller remain authorized. Account deletion fences acceptance and cleanup so late work cannot recreate data. Neither saved keys nor account sessions permit background AI play.
 

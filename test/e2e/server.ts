@@ -1,8 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  createCredentialRepository,
   createGameRepository,
   createProfileRepository,
   type GameRepository,
@@ -14,6 +16,8 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
+import { createCredentialCipher } from "../../apps/api/src/credentials/encryption.js";
+import { createCredentialService } from "../../apps/api/src/credentials/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
@@ -114,10 +118,20 @@ async function main() {
 
   async function start() {
     accounts = await authHarness(database);
+    const credentialCipher = createCredentialCipher({
+      activeKeyId: "browser-test",
+      keys: { "browser-test": randomBytes(32).toString("base64") },
+    });
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
       profileApi: { profiles: createProfileService(createProfileRepository(database)) },
+      credentialApi: {
+        credentials: createCredentialService(
+          createCredentialRepository(database),
+          credentialCipher,
+        ),
+      },
       authApi: {
         auth: accounts.auth,
         baseURL: API_ORIGIN,
@@ -128,6 +142,7 @@ async function main() {
           nodeEnv: "test",
           sandboxEnabled: true,
           aiAdapters: setupProviders(),
+          credentialCipher,
         }),
       },
     });

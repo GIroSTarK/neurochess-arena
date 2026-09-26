@@ -253,7 +253,7 @@ Two sessions of one account share one public unfinished-game slot. A second crea
 
 ### Browser account flows
 
-Arena exposes sign-in and account navigation. `/auth/sign-up`, `/auth/sign-in`, `/auth/resend`, `/auth/forgot-password`, the email-link paths above, and `/auth/complete` use localized forms. Passwords support paste/password managers and preserve spaces. All methods lead to the same username onboarding before account play. `/account` edits the profile, links an available OAuth method explicitly, and offers account switching. History, saved credentials, and deletion remain separate milestones.
+Arena exposes sign-in and account navigation. `/auth/sign-up`, `/auth/sign-in`, `/auth/resend`, `/auth/forgot-password`, the email-link paths above, and `/auth/complete` use localized forms. Passwords support paste/password managers and preserve spaces. All methods lead to the same username onboarding before account play. `/account` edits the profile, manages saved provider keys, links an available OAuth method explicitly, and offers account switching. History and deletion remain separate milestones.
 
 Email sign-in accepts only Arena or a validated `/?game=<uuid>` return destination. OAuth completion returns to Arena (or the profile after linking). Neither path resumes play. Sign-out, switching, expiry, reset invalidation, and other-tab changes cancel the old identity's requests, remove keys/private UI, and stop heartbeats. Public account requests send the account context header and never bootstrap a guest. Sign-out requires a successful revocation acknowledgement; a failed revocation provides retry. Returning to guest play requires **Continue as guest**, which clears any remaining account cookie first.
 
@@ -329,7 +329,7 @@ brackets, and may not contain the submitted key. Keys retain the session-only
 transport's 1–4096 printable ASCII constraint; management performs no provider call
 to verify them. The suffix is the final four ASCII letters/digits/underscores/hyphens
 only for keys of at least eight characters; otherwise it is null. Treat labels as
-untrusted text and render the suffix with a masking prefix in future UI.
+untrusted text and render the suffix with a masking prefix.
 
 Lists return at most 50 records in ascending UUID order; `nextCursor` is null at
 the end. Deleting a cursor record does not break paging. A concurrent save can sort
@@ -366,8 +366,18 @@ secret-store backup procedures remain deployment responsibilities.
 Provider discovery and AI turns accept exactly one credential source: `apiKey` for
 a session-only key or `credentialId` for an explicitly selected saved UUID. Mixed,
 missing, and malformed sources fail body validation. Saved references require an
-account; guests receive `403 FORBIDDEN`. Settings and credential selection/recovery
-UI follow the [roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
+account; guests receive `403 FORBIDDEN`.
+
+Use **Manage saved keys** in Arena or the saved-key section of `/account` to save
+with an explicit checkbox, list masked metadata, revoke one key, or confirm clearing
+all keys. A lost save acknowledgement requires **Refresh saved keys** before another
+save; it is never retried automatically. Lists offer explicit pagination and refresh.
+Each AI seat defaults to **Use for this tab**; **Use a saved key** requires an explicit
+provider-matching selection. Refresh/navigation/sign-out clear raw values and seat
+selections. Recovery identifies the affected AI seats and accepts either source,
+then waits for **Resume** or **Next move**. A revoked or unusable key follows the same
+recoverable provider-auth failure contract below. Refresh metadata after changes
+from another page; its next provider operation always rechecks availability.
 
 Saved references are resolved under the current account/session lock, after game,
 seat, reservation, and controller authorization for turns. The lookup matches the
@@ -486,6 +496,13 @@ The test service binds loopback port 5433 and uses tmpfs instead of the developm
 CI uses its own ephemeral `neurochess_test` database and runs integration tests through `npm test`. Unit tests and architecture checks remain runnable without PostgreSQL. Keep `TEST_DATABASE_URL` pointed only at a dedicated disposable database, never shared or production data.
 
 ## Browser tests
+
+Run `npm run test:e2e -- test/e2e/saved-credentials.spec.ts` for account credential
+management, independent raw/saved/mixed seats, both human colors, refresh and
+explicit continuation, revoked/undecryptable/rejected keys, account switching,
+and browser storage/network privacy assertions. The disposable server uses the
+real encrypted credential service with an ephemeral test keyring and injected
+provider transports; no live credentials or external provider calls are required.
 
 Run `npm run test:e2e -- test/e2e/account-ui.spec.ts test/e2e/account-transitions.spec.ts` for email registration/verification/resend/reset, OAuth success/failure, onboarding/profile/avatar changes, account play and paused recovery, guest separation, cross-tab switching, delayed-response fencing, and session loss. The disposable server injects a private mailbox and OAuth transport into the real auth service; its `/__test__/mail` and `/__test__/oauth` helpers exist only in `test/e2e`, never in the application API. Browser tests disable the shared loopback auth limiter; integration tests retain and verify the actual endpoint limits. Test-account/game cleanup is scoped to the fixture identities. These checks do not establish live inbox delivery or provider-console configuration.
 

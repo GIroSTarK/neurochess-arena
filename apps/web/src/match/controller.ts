@@ -252,6 +252,13 @@ export class MatchController {
     }
     this.refreshKeys();
   }
+  setSaved(color: ChessColor, credentialId: string) {
+    const seat = this.state.details?.configuration?.seats[color];
+    if (seat?.type !== "ai" || !this.credentials || this.state.thinking || this.state.busy) return;
+    this.credentials.remove(color);
+    if (credentialId) this.credentials.setSaved(color, seat.provider, credentialId);
+    this.refreshKeys();
+  }
   setSpeed(speed: number) {
     if (![500, 1500, 5000].includes(speed)) return;
     this.publish({ speed });

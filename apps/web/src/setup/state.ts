@@ -21,6 +21,8 @@ export type SetupIssue =
 
 export interface SeatSetupState {
   readonly provider: AiProvider;
+  readonly source: "session" | "saved";
+  readonly credentialId: string;
   readonly keyReady: boolean;
   readonly keyEpoch: number;
   readonly discovery: "idle" | "loading" | "loaded" | "error";
@@ -42,6 +44,8 @@ export interface SetupState {
 export function emptySeat(provider: AiProvider, keyEpoch = 0): SeatSetupState {
   return {
     provider,
+    source: "session",
+    credentialId: "",
     keyReady: false,
     keyEpoch,
     discovery: "idle",
