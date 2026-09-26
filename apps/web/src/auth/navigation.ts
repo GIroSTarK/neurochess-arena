@@ -17,6 +17,7 @@ export interface AuthEntry {
 }
 
 export function safeReturn(value: string | null): string {
+  if (value === "/history") return value;
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
   const match = /^\/\?game=([a-fA-F0-9-]+)$/.exec(value);
   return match?.[1] && gameParamsSchema.safeParse({ gameId: match[1] }).success

@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CredentialProvider } from "../credentials/Provider";
+import { HistoryScreen } from "../history/HistoryScreen";
 import { MatchScreen } from "../match/MatchScreen";
 import { Button } from "../ui/Button";
 
@@ -22,7 +23,7 @@ export function AccountApp({
 }: {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
-  readonly page: "arena" | "account" | AuthPage;
+  readonly page: "arena" | "account" | "history" | AuthPage;
   readonly entry: AuthEntry;
   readonly entryRevision: number;
 }) {
@@ -32,13 +33,15 @@ export function AccountApp({
   useEffect(() => controller.connect(), [controller]);
   return (
     <AccountContext value={{ controller, state }}>
-      {page !== "arena" && page !== "account" ? (
+      {page !== "arena" && page !== "account" && page !== "history" ? (
         <AuthScreen
           key={`${page}:${entryRevision}`}
           page={page}
           entry={entry}
           sandboxEnabled={sandboxEnabled}
         />
+      ) : state.phase === "ready" && page === "history" ? (
+        <HistoryScreen key={state.epoch} apiBaseUrl={apiBaseUrl} sandboxEnabled={sandboxEnabled} />
       ) : state.phase === "ready" &&
         state.session &&
         (state.profile?.onboardingRequired || page === "account") ? (

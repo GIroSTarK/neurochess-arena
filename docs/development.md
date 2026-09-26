@@ -255,9 +255,17 @@ Two sessions of one account share one public unfinished-game slot. A second crea
 
 Arena exposes sign-in and account navigation. `/auth/sign-up`, `/auth/sign-in`, `/auth/resend`, `/auth/forgot-password`, the email-link paths above, and `/auth/complete` use localized forms. Passwords support paste/password managers and preserve spaces. All methods lead to the same username onboarding before account play. `/account` edits the profile, manages saved provider keys, links an available OAuth method explicitly, and offers account switching. History and deletion remain separate milestones.
 
-Email sign-in accepts only Arena or a validated `/?game=<uuid>` return destination. OAuth completion returns to Arena (or the profile after linking). Neither path resumes play. Sign-out, switching, expiry, reset invalidation, and other-tab changes cancel the old identity's requests, remove keys/private UI, and stop heartbeats. Public account requests send the account context header and never bootstrap a guest. Sign-out requires a successful revocation acknowledgement; a failed revocation provides retry. Returning to guest play requires **Continue as guest**, which clears any remaining account cookie first.
+Email sign-in accepts only Arena, `/history`, or a validated `/?game=<uuid>` return destination. OAuth completion returns to Arena (or the profile after linking). Neither path resumes play. Sign-out, switching, expiry, reset invalidation, and other-tab changes cancel the old identity's requests, remove keys/private UI, and stop heartbeats. Public account requests send the account context header and never bootstrap a guest. Sign-out requires a successful revocation acknowledgement; a failed revocation provides retry. Returning to guest play requires **Continue as guest**, which clears any remaining account cookie first.
 
 The browser stores only a non-secret account/guest context marker and random change notification in local storage, never account identifiers, profiles, tokens, passwords, keys, or game data. Storage events fence other tabs immediately; focus, visibility, a 30-second visible-page session check, and the known expiry deadline provide additional revalidation. With storage disabled, focus/polling and unauthorized API responses still detect changes. Remote revocation is detected by those checks or the next rejected account operation; it is not a server-pushed notification. Guest games retain their original guest ownership.
+
+## Private history API
+
+`GET /games/history` requires an account session and returns `{ games, nextCursor }` with `Cache-Control: no-store`. Only owned, completed/aborted public AI games are included. Guests receive `401`; an account cookie never adds guest-game authority. Optional `limit` is an integer from 1–50 (default 20); optional `cursor` is the previous page's `nextCursor`, URL-encoded. Other query fields are rejected. Each summary contains `gameId`, `mode`, `players` (White/Black provider/model or current username, nullable for accounts predating profile onboarding), `finishedAt`, `state`, `result`, and `terminationReason`; it contains no credentials, email, moves, or PGN.
+
+Rows sort by finish timestamp and UUID descending. Treat the cursor as an opaque boundary: its UTC timestamp retains all six fractional digits. `nextCursor: null` marks the final page. Concurrent newer finishes are visible after returning to the first page; they do not shift subsequent pages. The query uses the existing account-owner index and needs no schema migration.
+
+The localized `/history` page shows 20 games at a time, newer/older navigation, empty/error states, and guest guidance. Replay links use `/?game=<uuid>` and existing private terminal APIs. Listing/opening terminal history does not pause, resume, or control another game. Read privacy remains independent of whether another game has started. Deletion remains a separate delivery.
 
 ## Sandbox API
 
@@ -496,6 +504,8 @@ The test service binds loopback port 5433 and uses tmpfs instead of the developm
 CI uses its own ephemeral `neurochess_test` database and runs integration tests through `npm test`. Unit tests and architecture checks remain runnable without PostgreSQL. Keep `TEST_DATABASE_URL` pointed only at a dedicated disposable database, never shared or production data.
 
 ## Browser tests
+
+Run `npm run test:e2e -- test/e2e/history.spec.ts` for account history pagination, cross-session result access, account/guest privacy, replay-linked commentary and canonical PGN, read-only behavior with an unfinished game, and guest/empty/retry states. Desktop and mobile cases include keyboard focus, axe, enlarged text, and expanded localization. Fixtures use disposable PostgreSQL and injected provider responses.
 
 Run `npm run test:e2e -- test/e2e/saved-credentials.spec.ts` for account credential
 management, independent raw/saved/mixed seats, both human colors, refresh and

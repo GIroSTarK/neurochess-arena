@@ -1,4 +1,26 @@
 export const en = {
+  history: {
+    navigation: "History",
+    title: "Game history",
+    documentTitle: "Private game history — Neurochess Arena",
+    description:
+      "Your completed and aborted games, newest finished first. Replays, commentary and PGN remain private to your account.",
+    guest:
+      "Guests have no durable game history. Sign in to view your account’s completed and aborted games. Guest games stay separate and are not imported.",
+    signIn: "Sign in to view history",
+    arena: "Go to Arena for a new or unfinished game",
+    loading: "Loading history…",
+    error: "History could not be loaded. Try again.",
+    retry: "Retry history",
+    empty: "You have no completed or aborted games yet.",
+    pagination: "History pages",
+    older: "Older games",
+    newer: "Newer games",
+    replay: "Replay game",
+    finished: "Finished",
+    states: { completed: "Completed", aborted: "Aborted" },
+    modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human" },
+  },
   credentials: {
     title: "Saved provider keys",
     persistence:

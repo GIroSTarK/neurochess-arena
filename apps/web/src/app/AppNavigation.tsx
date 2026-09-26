@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { useAccount } from "../auth/context";
 import { cx } from "../ui/cx";
 
 import type { AppPage } from "./navigation";
@@ -12,8 +13,12 @@ export function AppNavigation({
   readonly sandboxEnabled: boolean;
 }) {
   const { t } = useTranslation();
+  const account = useAccount();
   const links = [
     { page: "arena", href: "/", label: t("app.arena") },
+    ...(account?.state.phase === "ready" && account.state.session
+      ? [{ page: "history", href: "/history", label: t("history.navigation") }]
+      : []),
     ...(sandboxEnabled ? [{ page: "sandbox", href: "/sandbox", label: t("sandbox.title") }] : []),
   ];
   return links.map((link) => (

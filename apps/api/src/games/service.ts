@@ -8,6 +8,7 @@ import {
   type AiProvider,
   type AiTurnCommand,
   type GameDetails,
+  type GameHistoryPage,
   type GameInvocations,
   gameLifecycleSchema,
   type GamePgnResponse,
@@ -49,9 +50,11 @@ import { persistCommand, positionOf, transportSnapshot } from "./command-persist
 import { configurationOf, participantsFor } from "./configuration.js";
 import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+import { readHistory } from "./history.js";
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  history(principal: Principal, query: unknown): Promise<GameHistoryPage>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
   expireControllers(): Promise<void>;
@@ -391,6 +394,7 @@ export function createGameService(
       if (!configuration.success) throw new GameRequestError("INVALID_REQUEST");
       return createOwnedGame(principal, configuration.data);
     },
+    history: (principal, query) => readHistory(repository, principal, query),
     details: readDetails,
     unfinishedGame: (principal) =>
       repository.read(async (reader) => {

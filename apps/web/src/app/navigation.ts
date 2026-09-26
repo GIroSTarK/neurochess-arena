@@ -1,6 +1,7 @@
 import { type AuthPage, authPaths } from "../auth/navigation";
 
-export type AppPage = "arena" | "sandbox" | "reference" | "not-found" | "account" | AuthPage;
+export type AppPage =
+  "arena" | "sandbox" | "reference" | "not-found" | "account" | "history" | AuthPage;
 
 export function readAppPage(): AppPage {
   const { pathname } = window.location;
@@ -8,6 +9,7 @@ export function readAppPage(): AppPage {
   if (pathname === "/sandbox" || pathname === "/sandbox/") return "sandbox";
   if (pathname === "/") return "arena";
   if (pathname === "/account") return "account";
+  if (pathname === "/history" || pathname === "/history/") return "history";
   const authPage = authPaths.find((page) => pathname === "/auth/" + page);
   if (authPage) return authPage;
   return "not-found";
