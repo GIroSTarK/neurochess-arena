@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CredentialProvider } from "../credentials/Provider";
 import { MatchScreen } from "../match/MatchScreen";
 import { Button } from "../ui/Button";
 
@@ -41,9 +42,25 @@ export function AccountApp({
       ) : state.phase === "ready" &&
         state.session &&
         (state.profile?.onboardingRequired || page === "account") ? (
-        <ProfileScreen key={state.epoch} sandboxEnabled={sandboxEnabled} />
+        <CredentialProvider
+          key={state.epoch}
+          apiBaseUrl={apiBaseUrl}
+          enabled
+          lifetime={controller.signal}
+          onUnauthorized={controller.expired}
+        >
+          <ProfileScreen sandboxEnabled={sandboxEnabled} />
+        </CredentialProvider>
       ) : state.phase === "ready" && page === "arena" ? (
-        <MatchScreen key={state.epoch} apiBaseUrl={apiBaseUrl} sandboxEnabled={sandboxEnabled} />
+        <CredentialProvider
+          key={state.epoch}
+          apiBaseUrl={apiBaseUrl}
+          enabled={state.session !== null}
+          lifetime={controller.signal}
+          onUnauthorized={controller.expired}
+        >
+          <MatchScreen apiBaseUrl={apiBaseUrl} sandboxEnabled={sandboxEnabled} />
+        </CredentialProvider>
       ) : (
         <AccountLayout
           title={t(state.phase === "checking" ? "auth.checking" : "auth.account")}

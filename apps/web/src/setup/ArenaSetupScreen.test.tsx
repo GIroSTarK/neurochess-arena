@@ -190,8 +190,8 @@ describe("Arena setup presentation and validated API handoff", () => {
       },
     });
     expect(JSON.stringify(onCreated.mock.calls)).not.toContain("sentinel");
-    expect(credentials.require("white", "openai")).toBe("White-key-sentinel");
-    expect(credentials.require("black", "openai")).toBe("Black-key-sentinel");
+    expect(credentials.require("white", "openai")).toEqual({ apiKey: "White-key-sentinel" });
+    expect(credentials.require("black", "openai")).toEqual({ apiKey: "Black-key-sentinel" });
     for (const [input, init] of fetch.mock.calls) {
       expect(input instanceof Request ? input.url : input.toString()).not.toContain("sentinel");
       if (requestPath(input) !== "/providers/models") {

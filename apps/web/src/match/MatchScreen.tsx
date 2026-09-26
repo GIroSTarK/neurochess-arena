@@ -344,6 +344,7 @@ export function MatchScreen({
               disabled={state.thinking || state.busy}
               canContinue={canContinue}
               onKeyChange={(color, value) => controller.setKey(color, value)}
+              onSavedChange={(color, id) => controller.setSaved(color, id)}
               onResume={() => {
                 void controller.continue(false);
               }}

@@ -33,6 +33,7 @@ describe("account forms and identity boundary", () => {
     const entry = consumeAuthEntry();
     const verified = Promise.withResolvers<Response>();
     http = createHttpMock({
+      "GET /api/credentials": () => jsonResponse({ credentials: [], nextCursor: null }),
       "GET /api/auth/get-session": () => jsonResponse({ session: null }),
       "GET /api/auth/methods": () => jsonResponse({ email: true, providers: [] }),
       "POST /api/auth/verify-email": () => verified.promise,
@@ -58,6 +59,7 @@ describe("account forms and identity boundary", () => {
   it("accepts password paste, retains the email on failure and never displays upstream diagnostics", async () => {
     window.history.replaceState(null, "", "/auth/sign-in");
     http = createHttpMock({
+      "GET /api/credentials": () => jsonResponse({ credentials: [], nextCursor: null }),
       "GET /api/auth/get-session": () => jsonResponse({ session: null }),
       "GET /api/auth/methods": () => jsonResponse({ email: true, providers: [] }),
       "POST /api/auth/sign-in/email": () =>
@@ -94,6 +96,7 @@ describe("account forms and identity boundary", () => {
     const delayed = Promise.withResolvers<Response>();
     let discoverySignal: AbortSignal | null | undefined;
     http = createHttpMock({
+      "GET /api/credentials": () => jsonResponse({ credentials: [], nextCursor: null }),
       "GET /api/auth/get-session": () => jsonResponse({ session: session(id) }),
       "GET /api/profile": () => jsonResponse(profile(id)),
       "GET /games/unfinished": () => jsonResponse({ game: null }),

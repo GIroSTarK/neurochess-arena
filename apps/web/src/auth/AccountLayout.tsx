@@ -31,7 +31,7 @@ export function AccountLayout({
       announcement={announcement}
       navigation={<AppNavigation page="account" sandboxEnabled={sandboxEnabled} />}
     >
-      <section className="mx-auto my-8 grid w-full max-w-[560px] min-w-0 gap-6 rounded-panel border border-divider bg-surface p-4 md:my-12 md:p-8">
+      <section className="mx-auto my-8 grid w-full max-w-[560px] min-w-0 gap-6 rounded-panel border border-divider bg-surface p-4 max-sm:p-[min(1rem,16px)] md:my-12 md:p-8">
         <h1
           ref={heading}
           tabIndex={-1}
