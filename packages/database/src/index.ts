@@ -1,5 +1,7 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
-export { createAuthAdapter } from "./auth.js";
+export { createAuthAdapter, currentAuthTransaction, type AuthTransaction } from "./auth.js";
+export { createAccountRepository, type AccountDeletionResult } from "./account-repository.js";
+export { accountDeletionMarkers } from "./schema/account-deletion.js";
 export { profiles } from "./schema/profiles.js";
 export { providerCredentials } from "./schema/credentials.js";
 export {

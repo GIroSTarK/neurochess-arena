@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { CredentialSettings } from "../credentials/Settings";
 import { Button } from "../ui/Button";
 
+import { AccountDeletion } from "./AccountDeletion";
 import { AccountLayout } from "./AccountLayout";
 import { Avatar } from "./Avatar";
 import { AccountFailure } from "./client";
@@ -188,6 +189,7 @@ export function ProfileScreen({ sandboxEnabled }: { readonly sandboxEnabled: boo
           </a>
         </>
       ) : null}
+      <AccountDeletion />
     </AccountLayout>
   );
 }

@@ -105,6 +105,26 @@ export const en = {
     },
   },
   auth: {
+    deletion: {
+      title: "Delete account",
+      action: "Delete account",
+      hint: "Permanently remove your account and all associated application data.",
+      confirmTitle: "Delete your account?",
+      scope:
+        "This permanently deletes your profile, saved provider keys, all owned games including active and paused games, moves, commentary, and sign-in data. Every device will lose access. This cannot be undone.",
+      recheck:
+        "You must have signed in within the last hour. If asked, sign in again with email, Google, or GitHub, then return here and confirm.",
+      limits:
+        "Separate guest games and other accounts are unaffected. This removes live database records; external backups, downloaded copies and requests already sent to providers cannot be recalled.",
+      cancel: "Cancel",
+      pending: "Deleting your account…",
+      retention:
+        "Temporary keyed hashes of your sign-in identities block older sign-in attempts for ten minutes, then are removed by cleanup. They contain no raw identity, keys or game data.",
+      deleted:
+        "Your account and associated data were deleted. You are signed out, and page-owned keys and private data have been cleared.",
+      uncertain:
+        "We could not confirm whether your account was deleted. Play has stopped and page-owned keys and private data have been cleared. Check your session or sign in again before making another explicit attempt. A signed-out session alone does not confirm deletion.",
+    },
     documentTitle: "Account · Neurochess Arena",
     account: "Account",
     signIn: "Sign in",
@@ -214,7 +234,10 @@ export const en = {
       AUTH_OAUTH_FAILED: "The provider sign-in was canceled or could not be completed. Try again.",
       AUTH_OAUTH_CONFLICT:
         "An account already uses this email. Sign in with its existing method, then explicitly link this provider from your profile.",
-      AUTH_REAUTHENTICATION_REQUIRED: "Sign in again, then retry linking from your profile.",
+      AUTH_REAUTHENTICATION_REQUIRED:
+        "Sign in again, then return to your profile and confirm the action.",
+      AUTH_ACCOUNT_CHANGED:
+        "Your account changed. Check your session, then confirm for the intended account.",
       PROFILE_UNAUTHORIZED: "Your session has ended. Sign in again.",
       PROFILE_FORBIDDEN: "This profile request was not allowed.",
       PROFILE_INVALID_REQUEST: "Check your username and avatar selection.",

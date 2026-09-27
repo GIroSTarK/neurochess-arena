@@ -180,6 +180,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0010_account_owned_games",
         "0011_account_profiles",
         "0012_encrypted_provider_credentials",
+        "0013_account_verification_ownership",
+        "0014_backfill_account_verifications",
+        "0015_account_deletion_markers",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -441,6 +444,26 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         ).toEqual(beforeCredentials.get(table));
       }
       expect((await tx.execute(sql`select * from provider_credentials`)).rows).toEqual([]);
+      await tx.execute(sql`insert into verification (id, identifier, value, expires_at) values
+        ('reset-owned', 'reset-password:owned', 'existing-user', now() + interval '1 hour'),
+        ('reset-orphan', 'reset-password:orphan', 'missing-user', now() + interval '1 hour'),
+        ('link-owned', 'oauth-link', '{"link":{"userId":"existing-user"}}', now() + interval '1 hour'),
+        ('link-orphan', 'oauth-orphan', '{"link":{"userId":"missing-user"}}', now() + interval '1 hour'),
+        ('anonymous-state', 'oauth-sign-in', '{"provider":"google"}', now() + interval '1 hour'),
+        ('unrelated', 'other-purpose', 'existing-user', now() + interval '1 hour')`);
+      await applyMigration(migrationFiles[12]!);
+      await applyMigration(migrationFiles[13]!);
+      await applyMigration(migrationFiles[14]!);
+      expect((await tx.execute(sql`select * from account_deletion_markers`)).rows).toEqual([]);
+      expect(
+        (await tx.execute(sql`select id, user_id from verification order by id`)).rows,
+      ).toEqual([
+        { id: "anonymous-state", user_id: null },
+        { id: "existing-verification", user_id: null },
+        { id: "link-owned", user_id: "existing-user" },
+        { id: "reset-owned", user_id: "existing-user" },
+        { id: "unrelated", user_id: null },
+      ]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

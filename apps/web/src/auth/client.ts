@@ -1,4 +1,5 @@
 import {
+  authDeleteAccountRequestSchema,
   authEmailRequestSchema,
   authErrorResponseSchema,
   authMethodsResponseSchema,
@@ -101,6 +102,13 @@ export function createAccountApi(baseUrl: string, fetcher = globalThis.fetch.bin
       post("reset-password", authResetPasswordRequestSchema, input, signal),
     signOut: (signal: AbortSignal) =>
       request("/api/auth/sign-out", authSignOutResponseSchema, signal, {}),
+    deleteAccount: (expectedUserId: string, signal: AbortSignal) =>
+      post(
+        "delete-account",
+        authDeleteAccountRequestSchema,
+        { confirm: true, expectedUserId },
+        signal,
+      ),
     async oauth(provider: AuthOAuthProvider, link: boolean, signal: AbortSignal) {
       const result = await request(
         "/api/auth/" + (link ? "link-social" : "sign-in/social"),

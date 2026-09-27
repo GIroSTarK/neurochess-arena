@@ -227,6 +227,10 @@ Clear history removes all eligible games when the server acquires the account's 
 
 Account deletion is a separate confirmed operation that removes the account, its saved credentials, profile, owned games (including unfinished games), associated application data, and authentication data. It invalidates sessions and fences in-flight work so late results cannot recreate deleted records. Separate guest identities and other accounts remain unaffected. Shared human-game deletion/retention must be decided before Phase 4; database deletion does not claim to remove external backups.
 
+Deletion requires a currently valid session created within the last hour for every sign-in method. A stale session must sign in again with email/password, Google, or GitHub and confirm again; reauthentication never itself deletes data. Confirmation is bound to the displayed account and rejects a changed browser identity. Successful deletion signs out every device. Repeating the command with an old cookie fails authentication. A failed transaction preserves the account and its data; an uncertain browser response must not claim deletion or automatically retry. Clearing page-owned keys/private state is immediate, and checking a now-signed-out session alone cannot prove that deletion succeeded. Already-delivered copies and already-dispatched provider work cannot be recalled. Verification/reset links for the deleted identity cannot authorize a later account registered with the same email.
+
+To prevent a previously started OAuth callback from recreating an account, deletion retains temporary keyed-hash markers for its email and linked provider subjects, with no raw identity, credentials, or game data. They reject only older flows for ten minutes; a newly initiated sign-in may create a new empty account. Expired markers are removed on API startup and the next minute's cleanup, so downtime or database unavailability can delay physical cleanup. Expiry never permits an older OAuth callback to finish: the full flow lifetime is checked again before admitting an identity.
+
 ## Game lifecycle
 
 The canonical game states are:

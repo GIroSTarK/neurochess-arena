@@ -40,8 +40,9 @@ export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
     "Provider sign-in could not be completed. Please try again with a verified email.",
   AUTH_OAUTH_CONFLICT:
     "Sign in using your existing method, then explicitly link this provider with the same verified email.",
-  AUTH_REAUTHENTICATION_REQUIRED:
-    "Sign in again before linking a provider, then retry from that account.",
+  AUTH_REAUTHENTICATION_REQUIRED: "Sign in again, then confirm the action from that account.",
+  AUTH_ACCOUNT_CHANGED:
+    "The signed-in account changed. Check your session before confirming again.",
 };
 
 export const authEmailMessages = {

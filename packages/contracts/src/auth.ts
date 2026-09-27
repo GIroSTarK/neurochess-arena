@@ -68,6 +68,10 @@ export const authSessionResponseSchema = z.strictObject({
 });
 
 export const authSignOutRequestSchema = z.strictObject({});
+export const authDeleteAccountRequestSchema = z.strictObject({
+  confirm: z.literal(true),
+  expectedUserId: z.string().min(1).max(128),
+});
 export const authSignOutResponseSchema = z.strictObject({ success: z.literal(true) });
 export const authErrorCodeSchema = z.enum([
   "AUTH_UNAUTHORIZED",
@@ -83,6 +87,7 @@ export const authErrorCodeSchema = z.enum([
   "AUTH_OAUTH_FAILED",
   "AUTH_OAUTH_CONFLICT",
   "AUTH_REAUTHENTICATION_REQUIRED",
+  "AUTH_ACCOUNT_CHANGED",
 ]);
 export const authErrorResponseSchema = z.strictObject({
   code: authErrorCodeSchema,

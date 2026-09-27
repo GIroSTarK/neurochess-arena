@@ -122,6 +122,64 @@ async function registerVerified(api: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("verified email/password lifecycle through Fastify and Better Auth", () => {
+  it("deletes a password account without letting an old verification or reset token authorize a recreated email", async () => {
+    const api = await setup();
+    const email = await registerVerified(api);
+    const oldVerification = api.mailbox.token(email, "verification");
+    const cookie = await signIn(api, email);
+    const expectedUserId = (await readSession(api, cookie)).json<{
+      session: { user: { id: string } };
+    }>().session.user.id;
+    await post(api, "request-password-reset", { email });
+    const oldReset = api.mailbox.token(email, "reset");
+    expect(
+      (await post(api, "delete-account", { confirm: true, expectedUserId }, undefined, cookie))
+        .statusCode,
+    ).toBe(200);
+    expect((await readSession(api, cookie)).json()).toEqual({ session: null });
+    expect((await post(api, "sign-up/email", { email, password })).statusCode).toBe(200);
+    const newVerification = api.mailbox.token(email, "verification");
+    expect((await post(api, "verify-email", { token: oldVerification })).json()).toMatchObject({
+      code: "AUTH_INVALID_TOKEN",
+    });
+    expect(
+      (await post(api, "reset-password", { token: oldReset, newPassword })).json(),
+    ).toMatchObject({ code: "AUTH_INVALID_TOKEN" });
+    expect((await post(api, "sign-in/email", { email, password })).statusCode).toBe(403);
+    expect((await post(api, "verify-email", { token: newVerification })).statusCode).toBe(200);
+    await signIn(api, email);
+  });
+
+  it("cannot issue an orphaned reset record when deletion wins after the account lookup", async () => {
+    const api = await setup();
+    const email = await registerVerified(api);
+    const cookie = await signIn(api, email);
+    const expectedUserId = (await readSession(api, cookie)).json<{
+      session: { user: { id: string } };
+    }>().session.user.id;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const hook = api.auth.options.databaseHooks!.verification!.create!;
+    const before = hook.before!;
+    vi.spyOn(hook, "before").mockImplementationOnce(async (record, context) => {
+      entered.resolve();
+      await release.promise;
+      return before(record, context);
+    });
+    const pending = post(api, "request-password-reset", { email }).then((response) => response);
+    await entered.promise;
+    try {
+      expect(
+        (await post(api, "delete-account", { confirm: true, expectedUserId }, undefined, cookie))
+          .statusCode,
+      ).toBe(200);
+    } finally {
+      release.resolve();
+    }
+    expect((await pending).statusCode).toBe(500);
+    expect((await post(api, "sign-in/email", { email, password })).statusCode).toBe(401);
+  });
+
   it("requires user-chosen profile onboarding after verified password sign-in", async () => {
     const api = await setup();
     const email = await registerVerified(api);
