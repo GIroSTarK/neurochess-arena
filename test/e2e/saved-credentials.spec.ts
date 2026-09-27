@@ -205,12 +205,15 @@ for (const sources of ["raw/raw", "saved/saved", "saved/raw", "raw/saved"] as co
       const calls: { source: "saved" | "raw"; id?: string }[] = [];
       let leaks = false;
       const responseReads: Promise<void>[] = [];
-      page.on("response", (response) => {
-        if (response.url().startsWith(API_ORIGIN)) {
+      // Reload aborts in-flight polling; inspect bodies only after their download completes.
+      page.on("requestfinished", (request) => {
+        if (request.url().startsWith(API_ORIGIN)) {
           responseReads.push(
-            response
-              .text()
-              .then((body) => {
+            request
+              .response()
+              .then(async (response) => {
+                if (!response) return;
+                const body = await response.text();
                 leaks ||= [whiteKey, blackKey, rawKey].some((key) => body.includes(key));
               })
               .catch(() => undefined),
