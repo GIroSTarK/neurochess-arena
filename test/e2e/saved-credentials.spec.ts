@@ -249,7 +249,16 @@ for (const sources of ["raw/raw", "saved/saved", "saved/raw", "raw/saved"] as co
       expect(calls).toHaveLength(count);
       expect((await readSnapshot(page, gameId)).state).toBe("paused");
       await privateState();
-      await page.getByRole("button", { name: "Next move", exact: true }).click();
+      // Server snapshots can advance before the browser response enters the leak audit.
+      await Promise.all([
+        page.waitForEvent(
+          "requestfinished",
+          (request) =>
+            request.method() === "POST" &&
+            request.url() === `${API_ORIGIN}/games/${gameId}/ai-turn`,
+        ),
+        page.getByRole("button", { name: "Next move", exact: true }).click(),
+      ]);
       await expect.poll(async () => (await readSnapshot(page, gameId)).moves.length).toBe(3);
       expect(calls.at(-1)).toEqual({ source: "saved", id: white });
       expect((await readSnapshot(page, gameId)).state).toBe("paused");
