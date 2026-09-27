@@ -5,6 +5,7 @@ import {
   type AiProvider,
   credentialMetadataSchema,
   gameDetailsSchema,
+  gamePgnResponseSchema,
 } from "@neurochess/contracts";
 import { authSchema, games, providerCredentials } from "@neurochess/database";
 import type { Page } from "@playwright/test";
@@ -45,7 +46,7 @@ async function fixture() {
     },
   };
 }
-async function login(page: Page, account: { email: string; password: string }) {
+async function login(page: Page, account: { email: string; password: string }, onboard = true) {
   const headers = { origin: WEB_ORIGIN };
   expect(
     (
@@ -55,17 +56,19 @@ async function login(page: Page, account: { email: string; password: string }) {
       })
     ).ok(),
   ).toBe(true);
-  expect(
-    (
-      await page.request.post(API_ORIGIN + "/api/profile/onboarding", {
-        headers,
-        data: {
-          username: "Keys_" + randomUUID().replaceAll("-", "").slice(0, 15),
-          avatar: "initials",
-        },
-      })
-    ).ok(),
-  ).toBe(true);
+  if (onboard) {
+    expect(
+      (
+        await page.request.post(API_ORIGIN + "/api/profile/onboarding", {
+          headers,
+          data: {
+            username: "Keys_" + randomUUID().replaceAll("-", "").slice(0, 15),
+            avatar: "initials",
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+  }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
 }
@@ -304,6 +307,109 @@ for (const human of ["white", "black"] as const) {
     }
   });
 }
+
+test("independent account sessions recover saved keys and complete both AI modes into private history", async ({
+  page,
+  browser,
+}, testInfo) => {
+  const f = await fixture();
+  const device = await browser.newContext({
+    baseURL: WEB_ORIGIN,
+    viewport: page.viewportSize(),
+    isMobile: testInfo.project.use.isMobile ?? false,
+    hasTouch: testInfo.project.use.hasTouch ?? false,
+  });
+  const returning = await device.newPage();
+  try {
+    const account = f.accounts[0]!;
+    await login(page, account);
+    const black = await save(page, "google", "Cross-device opponent", blackKey);
+    const privateOriginal = observeCredentialPrivacy(page, [blackKey, rawKey]);
+    const privateReturning = observeCredentialPrivacy(returning, [blackKey, rawKey]);
+    await page.reload();
+    await page.getByLabel("Game mode").selectOption("ai_vs_human");
+    await configure(page, "Black", black);
+    const humanGame = await start(page);
+    await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+    await square(page, "f2").click();
+    await square(page, "f3").click();
+    await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+    const beforeRecovery = await readSnapshot(page, humanGame);
+    expect(beforeRecovery.state).toBe("active");
+    expect(beforeRecovery.moves.map((move) => move.uci)).toEqual(["f2f3", "e7e5"]);
+
+    // Separate cookies and storage exercise another device, not a same-session tab.
+    await login(returning, account, false);
+    let turns = 0;
+    returning.on("request", (request) => {
+      if (request.url().endsWith("/ai-turn")) turns++;
+    });
+    await returning.getByRole("button", { name: "Return to game" }).click();
+    await expect(returning.getByRole("region", { name: "Choose keys to continue" })).toBeVisible();
+    const recovered = await readSnapshot(returning, humanGame);
+    expect(recovered.state).toBe("paused");
+    expect(recovered.moves).toEqual(beforeRecovery.moves);
+    await expect(returning.getByLabel("Black · Google · API key", { exact: true })).toHaveValue("");
+    await selectRecovery(returning, "Black", black);
+    expect(turns).toBe(0);
+    expect((await readSnapshot(returning, humanGame)).state).toBe("paused");
+
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page.getByText(/You are signed out or your session has ended/)).toBeVisible();
+    await expect(page.getByRole("grid")).toHaveCount(0);
+    await returning.getByRole("button", { name: "Resume game", exact: true }).click();
+    await expect(returning.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+    await square(returning, "g2").click();
+    await square(returning, "g4").click();
+    await expect(returning.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+    expect(turns).toBe(1);
+    const humanResult = await readSnapshot(returning, humanGame);
+    expect(humanResult).toMatchObject({ state: "completed", result: "0-1" });
+    expect(humanResult.moves.map((move) => move.uci)).toEqual(["f2f3", "e7e5", "g2g4", "d8h4"]);
+
+    await returning.goto("/");
+    await configure(returning, "White", null);
+    await configure(returning, "Black", black);
+    const aiGame = await start(returning);
+    await expect(returning.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+    const aiResult = await readSnapshot(returning, aiGame);
+    expect(aiResult).toMatchObject({ state: "completed", result: "0-1" });
+    expect(aiResult.moves.map((move) => move.uci)).toEqual(["f2f3", "e7e5", "g2g4", "d8h4"]);
+
+    expect(
+      (
+        await returning.request.post(`${API_ORIGIN}/api/credentials/${black}/revoke`, {
+          headers: { origin: WEB_ORIGIN },
+          data: {},
+        })
+      ).ok(),
+    ).toBe(true);
+    await login(page, account, false);
+    let providerReads = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("/providers/") || request.url().endsWith("/ai-turn")) {
+        providerReads++;
+      }
+    });
+    await page.goto("/history");
+    await expect(page.getByRole("link", { name: "Replay game", exact: true })).toHaveCount(2);
+    for (const result of [humanResult, aiResult]) {
+      await page.locator(`a[href="/?game=${result.gameId}"]`).click();
+      await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+      await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
+      const pgn = await page.request.get(`${API_ORIGIN}/games/${result.gameId}/pgn`);
+      expect(pgn.status()).toBe(200);
+      expect(gamePgnResponseSchema.parse(await pgn.json()).pgn).toBe(result.pgn);
+      await page.goto("/history");
+    }
+    expect(providerReads).toBe(0);
+    await privateOriginal();
+    await privateReturning();
+  } finally {
+    await device.close();
+    await f.close();
+  }
+});
 
 for (const reason of ["revoked", "undecryptable", "rejected"] as const) {
   test(`${reason} saved key pauses safely and accepts an explicit replacement`, async ({
