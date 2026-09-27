@@ -10,6 +10,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
+import { createOAuthDeletionFence } from "../src/auth/oauth-deletion-fence.js";
 import { AUTH_COOKIE_NAME, type AuthService, createAuth } from "../src/auth/service.js";
 import { createLoggerOptions } from "../src/logger.js";
 
@@ -21,6 +22,7 @@ import { OAUTH_ENVIRONMENT, type OAuthGrant, TestOAuthTransport } from "./oauth-
 const harness = new ApiHarness();
 const emails: string[] = [];
 const states: string[] = [];
+const markers: string[] = [];
 let requestNumber = 0;
 function remoteAddress() {
   requestNumber++;
@@ -38,9 +40,15 @@ afterEach(async () => {
         .delete(authSchema.verification)
         .where(inArray(authSchema.verification.identifier, states));
     }
+    if (markers.length) {
+      await database.db
+        .delete(accountDeletionMarkers)
+        .where(inArray(accountDeletionMarkers.fingerprint, markers));
+    }
   } finally {
     emails.length = 0;
     states.length = 0;
+    markers.length = 0;
     await database.close();
     vi.restoreAllMocks();
   }
@@ -839,5 +847,147 @@ describe("Google and GitHub OAuth through Better Auth and PostgreSQL", () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+});
+
+describe("OAuth deletion fence boundary", () => {
+  it.each(["google", "github"] as const)(
+    "admits a new %s identity only after a concurrent deletion releases the fence, and rejects it once the cutoff is recorded",
+    async (provider) => {
+      const api = await setup();
+      const person = identity();
+      const { fingerprint } = createOAuthDeletionFence(
+        api.database,
+        AUTH_ENVIRONMENT.BETTER_AUTH_SECRET,
+      );
+      const marker = fingerprint("email", person.email);
+      markers.push(marker);
+      const flow = await start(api, provider);
+      const locked = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      // Deletion holds the fence exclusively before it removes the account and records the cutoff.
+      const deleting = api.database.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${marker}, 0))`);
+        locked.resolve();
+        await release.promise;
+        await tx.insert(accountDeletionMarkers).values({
+          fingerprint: marker,
+          cutoff: sql`clock_timestamp()`,
+          expiresAt: sql`clock_timestamp() + interval '10 minutes'`,
+        });
+      });
+      await locked.promise;
+      const pending = callback(api, flow, person).then((response) => response);
+      try {
+        await vi.waitFor(async () => {
+          const waiting = await api.database.db.execute(
+            sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like 'select pg_advisory_xact_lock_shared(%'`,
+          );
+          expect(waiting.rows.length).toBeGreaterThan(0);
+        });
+      } finally {
+        release.resolve();
+        await deleting;
+      }
+      failed(await pending);
+      expect(
+        await api.database.db.$count(authSchema.user, eq(authSchema.user.email, person.email)),
+      ).toBe(0);
+      await sessionUser(api, await callback(api, await start(api, provider), person));
+    },
+  );
+
+  it.each(["sign-in", "link"] as const)(
+    "cannot %s an identity whose account deletion commits after the fence check passed",
+    async (action) => {
+      const api = await setup();
+      let person: ReturnType<typeof identity>;
+      let ownerId: string;
+      let cookie: string;
+      if (action === "sign-in") {
+        person = identity();
+        const first = await callback(api, await start(api, "google"), person);
+        ownerId = (await sessionUser(api, first)).id;
+        const item = first.cookies.find((entry) => entry.name === AUTH_COOKIE_NAME)!;
+        cookie = `${item.name}=${item.value}`;
+      } else {
+        const account = await api.register();
+        person = identity(account.email);
+        ownerId = account.userId;
+        cookie = account.cookie;
+      }
+      const flow = await start(
+        api,
+        "google",
+        action === "link" ? cookie : undefined,
+        action === "link",
+      );
+      // Consume the state first, then pause so admission runs against an uncommitted deletion.
+      const exchanging = Promise.withResolvers<void>();
+      const exchange = Promise.withResolvers<void>();
+      const transport = api.transport.fetch;
+      vi.spyOn(api.transport, "fetch").mockImplementationOnce(async (input, init) => {
+        exchanging.resolve();
+        await exchange.promise;
+        return transport(input, init);
+      });
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const pending = callback(api, flow, person).then((response) => response);
+      let deleting: ReturnType<typeof post> | undefined;
+      try {
+        await exchanging.promise;
+        const transaction = api.database.db.transaction.bind(api.database.db);
+        vi.spyOn(api.database.db, "transaction").mockImplementationOnce((work) =>
+          transaction(async (tx) => {
+            const result = await work(tx);
+            entered.resolve();
+            await release.promise;
+            return result;
+          }),
+        );
+        deleting = post(
+          api,
+          "/delete-account",
+          { confirm: true, expectedUserId: ownerId },
+          cookie,
+        ).then((response) => response);
+        await entered.promise;
+        exchange.resolve();
+        await vi.waitFor(async () => {
+          const waiting = await api.database.db.execute(
+            sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like ${action === "sign-in" ? 'insert into "session"%' : 'insert into "account"%'}`,
+          );
+          expect(waiting.rows.length).toBeGreaterThan(0);
+        });
+      } finally {
+        exchange.resolve();
+        release.resolve();
+      }
+      expect((await deleting).statusCode).toBe(200);
+      failed(await pending);
+      for (const table of [authSchema.session, authSchema.account]) {
+        expect(await api.database.db.$count(table, eq(table.userId, ownerId))).toBe(0);
+      }
+      expect(await api.database.db.$count(authSchema.user, eq(authSchema.user.id, ownerId))).toBe(
+        0,
+      );
+    },
+  );
+
+  it("admits identity creation only inside the adapter transaction that performs the write", async () => {
+    const api = await setup();
+    const fence = createOAuthDeletionFence(api.database, AUTH_ENVIRONMENT.BETTER_AUTH_SECRET);
+    const startedAt = await fence.start();
+    const { email } = identity();
+    const profile = { sub: "fence-probe-subject" };
+    expect(await fence.allows("google", profile, email, startedAt, "create-user")).toBe(false);
+    expect(await fence.allows("google", profile, email, startedAt, "sign-in")).toBe(true);
+    const { adapter } = await api.auth.$context;
+    expect(
+      await adapter.transaction(() =>
+        fence.allows("google", profile, email, startedAt, "create-user"),
+      ),
+    ).toBe(true);
   });
 });

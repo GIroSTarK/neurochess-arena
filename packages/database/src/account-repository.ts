@@ -1,12 +1,16 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 
 import { lockAccountSession } from "./account-session.js";
+import type { AuthTransaction } from "./auth.js";
 import type { DatabaseConnection } from "./client.js";
 import { accountDeletionMarkers } from "./schema/account-deletion.js";
 import { account, session, user } from "./schema/auth.js";
 import { games } from "./schema/index.js";
 
 export type AccountDeletionResult = "deleted" | "unauthorized" | "reauthentication_required";
+// Identity creation holds one transaction-scoped advisory lock per fingerprint shared; deletion takes
+// them exclusively. Both lock in sorted order.
+const fenceLock = (fingerprint: string) => sql`hashtextextended(${fingerprint}, 0)`;
 class DeletionRejected extends Error {
   constructor(readonly result: Exclude<AccountDeletionResult, "deleted">) {
     super(result);
@@ -23,8 +27,21 @@ export function createAccountRepository(database: DatabaseConnection) {
       if (!timestamp) throw new Error("ACCOUNT_CLOCK_UNAVAILABLE");
       return timestamp;
     },
-    async allowsOAuth(identifiers: readonly string[], startedAt: string): Promise<boolean> {
-      const result = await database.db.execute<{ allowed: boolean }>(sql`select (
+    async allowsOAuth(
+      identifiers: readonly string[],
+      startedAt: string,
+      transaction?: AuthTransaction,
+    ): Promise<boolean> {
+      if (transaction) {
+        // A new identity references no row that deletion locks. Hold its fence until the creating
+        // transaction commits, so this check cannot fall between a deletion cutoff and its commit.
+        for (const identifier of [...identifiers].sort()) {
+          await transaction.execute(
+            sql`select pg_advisory_xact_lock_shared(${fenceLock(identifier)})`,
+          );
+        }
+      }
+      const result = await (transaction ?? database.db).execute<{ allowed: boolean }>(sql`select (
         ${startedAt}::timestamptz > clock_timestamp() - interval '10 minutes'
         and ${startedAt}::timestamptz <= clock_timestamp()
         and not exists (select 1 from ${accountDeletionMarkers}
@@ -102,6 +119,11 @@ export function createAccountRepository(database: DatabaseConnection) {
               .filter((binding) => binding.provider === "google" || binding.provider === "github")
               .map((binding) => fingerprint(binding.provider, binding.subject)),
           ]);
+          // Creation admitted before these locks still conflicts with the live account and fails;
+          // creation admitted after them waits for the commit and sees the cutoff recorded below.
+          for (const marker of [...markers].sort()) {
+            await tx.execute(sql`select pg_advisory_xact_lock(${fenceLock(marker)})`);
+          }
           // Restricting game/seat FKs deliberately reject future shared-human data until retention is defined.
           await tx.delete(user).where(eq(user.id, userId));
           // Record the cutoff after cascade waits. This fence survives deletion and API restarts.

@@ -91,6 +91,7 @@ export function validateOAuthIdentity(
         source.oauth.profile,
         user.email,
         state?.serverContext?.startedAt,
+        source.action,
       ))
     ) {
       return { error: "AUTH_OAUTH_FAILED" };

@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+
 import {
   aiControllers,
   aiTurnReservations,
   aiTurns,
   authSchema,
+  createAccountRepository,
   createCredentialRepository,
   gameCommands,
   gameParticipants,
@@ -15,6 +18,7 @@ import {
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createOAuthDeletionFence } from "../src/auth/oauth-deletion-fence.js";
 import { AUTH_COOKIE_NAME, createAuth } from "../src/auth/service.js";
 import { createCredentialCipher } from "../src/credentials/encryption.js";
 import { createCredentialService } from "../src/credentials/service.js";
@@ -437,5 +441,110 @@ describe("confirmed account deletion", () => {
     expect((await deleting).statusCode).toBe(200);
     expect(await queued).toMatchObject({ code: "UNAUTHORIZED" });
     expect(await api.repository.read((r) => r.getGame(snapshot.gameId))).toBeUndefined();
+  });
+});
+
+describe("OAuth deletion fence transaction boundary", () => {
+  function fenceFor(api: TestApi) {
+    const accounts = createAccountRepository(api.database);
+    const { fingerprint } = createOAuthDeletionFence(
+      api.database,
+      AUTH_ENVIRONMENT.BETTER_AUTH_SECRET,
+    );
+    return { accounts, fingerprint };
+  }
+  async function waitingFor(api: TestApi, statement: string) {
+    await vi.waitFor(async () => {
+      const waiting = await api.database.db.execute(
+        sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like ${`${statement}%`}`,
+      );
+      expect(waiting.rows.length).toBeGreaterThan(0);
+    });
+  }
+
+  it("holds deletion until identity creation that passed the fence ends, then fences that older flow", async () => {
+    const api = await harness.createApi();
+    const owner = await harness.account(api);
+    const { accounts, fingerprint } = fenceFor(api);
+    const identifiers = [
+      fingerprint("google", "1234567890"),
+      fingerprint("email", owner.email.toLowerCase()),
+    ];
+    const startedAt = await accounts.oauthStartedAt();
+    const admitted = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const creating = api.database.db
+      .transaction(async (tx) => {
+        try {
+          expect(await accounts.allowsOAuth(identifiers, startedAt, tx)).toBe(true);
+        } finally {
+          admitted.resolve();
+        }
+        await release.promise;
+        // The account is still live while its deletion waits for the fence.
+        await expect(
+          tx.insert(authSchema.user).values({
+            id: randomUUID(),
+            name: "",
+            email: owner.email,
+            updatedAt: new Date(),
+          }),
+        ).rejects.toMatchObject({ cause: { code: "23505" } });
+        throw new Error("fence-probe-rollback");
+      })
+      .catch((error: unknown) => error);
+    await admitted.promise;
+    const deleting = post(api, owner.cookie, path, confirmed(owner.userId)).then(
+      (response) => response,
+    );
+    try {
+      await waitingFor(api, "select pg_advisory_xact_lock(");
+    } finally {
+      release.resolve();
+    }
+    expect(await creating).toMatchObject({ message: "fence-probe-rollback" });
+    expect((await deleting).statusCode).toBe(200);
+    expect(await accounts.allowsOAuth(identifiers, startedAt)).toBe(false);
+    expect(await accounts.allowsOAuth(identifiers, await accounts.oauthStartedAt())).toBe(true);
+  });
+
+  it("makes identity creation wait for an in-progress deletion and then rejects the older flow", async () => {
+    const api = await harness.createApi();
+    const owner = await harness.account(api);
+    const { accounts, fingerprint } = fenceFor(api);
+    const identifiers = [
+      fingerprint("github", "42"),
+      fingerprint("email", owner.email.toLowerCase()),
+    ];
+    const older = await accounts.oauthStartedAt();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const transaction = api.database.db.transaction.bind(api.database.db);
+    vi.spyOn(api.database.db, "transaction").mockImplementationOnce((work) =>
+      transaction(async (tx) => {
+        const result = await work(tx);
+        entered.resolve();
+        await release.promise;
+        return result;
+      }),
+    );
+    const deleting = post(api, owner.cookie, path, confirmed(owner.userId)).then(
+      (response) => response,
+    );
+    await entered.promise;
+    const newer = await accounts.oauthStartedAt();
+    const waiting = api.database.db.transaction((tx) =>
+      accounts.allowsOAuth(identifiers, older, tx),
+    );
+    try {
+      await waitingFor(api, "select pg_advisory_xact_lock_shared(");
+    } finally {
+      release.resolve();
+    }
+    expect((await deleting).statusCode).toBe(200);
+    expect(await waiting).toBe(false);
+    expect(
+      await api.database.db.transaction((tx) => accounts.allowsOAuth(identifiers, newer, tx)),
+    ).toBe(true);
   });
 });
