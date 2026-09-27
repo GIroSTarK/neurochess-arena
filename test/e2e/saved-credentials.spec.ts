@@ -320,6 +320,14 @@ test("independent account sessions recover saved keys and complete both AI modes
     hasTouch: testInfo.project.use.hasTouch ?? false,
   });
   const returning = await device.newPage();
+  const returningErrors: string[] = [];
+  // This page bypasses the fixture; retain only safe categories of unexpected diagnostics.
+  returning.on("pageerror", () => returningErrors.push("Uncaught application error"));
+  returning.on("console", (message) => {
+    if (["error", "warning"].includes(message.type())) {
+      returningErrors.push(`Application console ${message.type()}`);
+    }
+  });
   try {
     const account = f.accounts[0]!;
     await login(page, account);
@@ -405,6 +413,7 @@ test("independent account sessions recover saved keys and complete both AI modes
     expect(providerReads).toBe(0);
     await privateOriginal();
     await privateReturning();
+    expect(returningErrors).toEqual([]);
   } finally {
     await device.close();
     await f.close();
