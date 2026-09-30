@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-30
 
 ## Vision
 
@@ -59,6 +59,31 @@ A registered user can do everything a guest can and can also:
 - delete an individual game, clear all game history, or delete the account and associated data.
 
 Registration supports email/password, Google, and GitHub. Email verification and password reset are required for email/password accounts.
+
+### Identity changes and account linking
+
+Guest games remain separate from accounts. Signing in does not import or transfer guest games, their human seats, or their unfinished-game slot. Explain this before sign-in. Guest access remains governed by the original guest session; an account request gains no guest authority merely because both cookies exist.
+
+On public account-capable routes, a valid account session takes precedence over a guest session. A failed or expired authenticated operation requires sign-in or an explicit return to guest play; it must not silently become a new guest game. The development Sandbox remains explicitly guest-only, including when an account cookie is present.
+
+Sign-in, sign-out, account switching, and session expiry end the old page's controller activity, cancel obsolete requests, clear page-owned provider keys and private state, and fence late responses. Returning to any unfinished AI game requires paused recovery and explicit continuation. Signing in never starts background play.
+
+Do not automatically merge password, Google, or GitHub accounts because their emails match, even when a provider reports a verified email. A conflict guides the user to their existing sign-in method or password recovery without granting access to that account. Linking another method requires a deliberate action from the signed-in account and fresh proof of control of both the existing account and the new method; matching email alone is insufficient.
+
+### Usernames and avatars
+
+Every authentication method uses the same username onboarding requirement before account gameplay. The user chooses the name; neither an email address nor an OAuth display name silently becomes the username.
+
+- Trim surrounding whitespace, then require 3–24 ASCII letters, digits, or underscores. Preserve the chosen letter case for display and store a lowercase normalized value with database-enforced uniqueness. Reject other characters instead of transliterating them.
+- Reserve the normalized names `admin`, `administrator`, `api`, `arena`, `auth`, `guest`, `help`, `login`, `logout`, `moderator`, `neurochess`, `root`, `security`, `support`, `system`, and `www`.
+- Users may change their username subject to the same validation and uniqueness rules. A successful atomic change releases the old name; a failed change preserves it. Ownership and human-seat authority use immutable account IDs, never usernames. No rename cooldown or old-name redirect is required in Phase 3.
+- Use initials by default, or a validated HTTPS avatar URL supplied by the user's Google/GitHub authentication provider on an allowed provider host. Treat avatar metadata as untrusted. Users can remove an imported avatar; subsequent sign-ins must respect removal. Custom uploads, arbitrary user-supplied avatar URLs, and API-side image fetching are deferred.
+
+### Private history and deletion
+
+Account history lists completed and aborted public games together, newest first, with explicit state/result labels and private replay access. Keep active/paused recovery separate. Sandbox and temporary guest records never appear in account history.
+
+Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
 
 ## Game modes
 
@@ -226,9 +251,10 @@ The MVP is ready when:
 
 ## Open product decisions
 
-- Avatar source and whether custom avatar uploads are included in the MVP
 - Exact retention period for an inactive guest game
 - Exact supported parameter matrix for each provider and model
-- Whether an aborted game should be visually grouped separately from completed history
+- Session invalidation after password reset (resolve before the email lifecycle is implemented)
+- Whether an otherwise authorized, already-dispatched AI result may complete after saved-credential revocation (resolve before saved credentials are used for inference); revocation must prevent future dispatches and retries
+- Retention and deletion rights for shared human-room participants (Phase 4)
 - Final deployment platform and production region
 - Repository license

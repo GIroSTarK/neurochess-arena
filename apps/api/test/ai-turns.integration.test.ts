@@ -44,7 +44,7 @@ describe("authoritative AI turns through injected adapters", () => {
     const api = await harness.createApi();
     const otherApi = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gate = gatedAdapter();
     const otherAdapter = createScriptedAdapter({ provider: "openai", moves: [output("d2d4")] });
     const first = service(api, { openai: gate.adapter });
@@ -93,7 +93,7 @@ describe("authoritative AI turns through injected adapters", () => {
   it("builds both seats' inputs from complete history and reaches checkmate through the real service", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const snapshots: GameSnapshot[] = [];
     let ply = 0;
     function adapter(provider: AiProvider) {
@@ -155,7 +155,7 @@ describe("authoritative AI turns through injected adapters", () => {
   it("reconstructs repetition history across instance restart and pause/resume before accepting the drawing AI move", async () => {
     let api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const history = [...KNIGHT_CYCLE, ...KNIGHT_CYCLE];
     const adapter = createScriptedAdapter({
       provider: "openai",
@@ -194,7 +194,7 @@ describe("authoritative AI turns through injected adapters", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [] });
     const gamesService = service(api, { openai: adapter });
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
@@ -214,11 +214,11 @@ describe("authoritative AI turns through injected adapters", () => {
         gamesService.aiTurn(principal, { ...cmd, ...extra }, access()),
       ).rejects.toMatchObject({ code: "INVALID_REQUEST", message: "INVALID_REQUEST" });
     }
+    await expect(gamesService.aiTurn(stranger.principal, cmd, access())).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
     await expect(
-      gamesService.aiTurn({ guestSessionId: stranger.id }, cmd, access()),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    await expect(
-      gamesService.aiTurn({ guestSessionId: randomUUID() }, cmd, access()),
+      gamesService.aiTurn({ kind: "guest", guestSessionId: randomUUID() }, cmd, access()),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(
       gamesService.aiTurn(principal, { ...cmd, expectedVersion: 1 }, access()),
@@ -267,7 +267,7 @@ describe("authoritative AI turns through injected adapters", () => {
   it("rejects Sandbox and ordinary human turns while preserving human/AI receipt identity across kinds", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
     const gamesService = service(api, { openai: adapter });
     const sandbox = await createSandbox(api, owner);
@@ -326,7 +326,7 @@ describe("authoritative AI turns through injected adapters", () => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
       const stranger = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const gate = gatedAdapter();
       const gamesService = service(api, { openai: gate.adapter });
       const { snapshot } = await gamesService.createAi(principal, aiMatch);
@@ -387,7 +387,7 @@ describe("authoritative AI turns through injected adapters", () => {
     async ({ name, response }) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const adapter = {
         ...createScriptedAdapter({ provider: "openai" }),
         requestMove: async () => response as NormalizedMoveResponse,

@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-19
+**Last updated:** 2026-09-30
 
 ## Architectural drivers
 
@@ -87,6 +87,8 @@ analysis      persisted Stockfish samples and post-game aggregates
 
 Fastify route schemas validate external input and serialize explicit response shapes. Domain services do not depend on Fastify request objects.
 
+The API's `identity` module defines a credential-free, server-derived `Principal` and its database validity/locking boundary. Guest token verification and cookie renewal stay in `guests`; game authorization consumes the principal rather than the guest authentication service. See [ADR-0013](decisions/0013-server-derived-principals-and-account-lifecycle.md) for the account extension and cleanup rules.
+
 ### PostgreSQL and Drizzle
 
 PostgreSQL is the durable system of record. Drizzle ORM defines the schema in TypeScript and Drizzle Kit produces reviewed SQL migrations. Use the latest stable release line; do not base the MVP on Drizzle v1 beta/RC relations APIs.
@@ -109,6 +111,8 @@ Core tables are expected to include:
 Stable relational fields stay in typed columns. Bounded provider-specific parameter, usage, and error metadata may use `jsonb`. Provider keys never appear in JSON metadata.
 
 Enforce the [public-mode and independent Sandbox limits](product.md#development-sandbox) with a database constraint and an application-level check with a clear conflict response. The partial unique index on `(owner_guest_session_id, is_sandbox)` reserves one active/paused slot per group. Concurrent creation requests must not bypass either limit; see [ADR-0012](decisions/0012-independent-sandbox-game-slot.md).
+
+Account ownership must extend this with normalized account references and an unambiguous owner, retaining guest rows and separate Sandbox slots. Owner-only uniqueness does not cover joining a room as a non-owner: Phase 4 must extend database-enforced unfinished-slot reservations to all human participants before joining is enabled.
 
 ### Stockfish worker
 
@@ -301,9 +305,13 @@ Missing commentary is not an error.
 
 ## Authentication and guest sessions
 
-Better Auth manages email/password, Google, GitHub, email verification, password reset, and authenticated sessions in PostgreSQL. Profiles add a unique username and avatar metadata.
+The account architecture uses Better Auth for email/password, Google, GitHub, email verification, password reset, and authenticated sessions in PostgreSQL. Profiles add the display/normalized username and avatar metadata defined by the [product policies](product.md#usernames-and-avatars). Implementation milestones are tracked only in the [roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
 
 Guests explicitly bootstrap an opaque 256-bit token in a host-only Secure, HttpOnly, SameSite=Strict cookie before creating a game. Only its SHA-256 digest is stored with an internal guest UUID. Bootstrap reuses valid identities; other endpoints reject missing or expired identities rather than creating replacements. Valid activity renews the configured inactivity expiry without rotating the token (24 hours by default). Exact-Origin POST enforcement and credentialed CORS complement the cookie policy. See [ADR-0006](decisions/0006-guest-owned-game-commands.md).
+
+`guests/http.ts` handles cookie authentication/renewal and returns only the principal to game services. The principal has an explicit identity kind; only the guest variant is currently executable. Reads require database validity. Commands lock the identity before the game and reject an expired identity after the lock wait. AI reservation, dispatch/retry, and outcome checks use the same command preparation. Server cleanup also takes the identity lock but may discard an attempt or pause an abandoned game after session expiry; it cannot renew the session or dispatch inference.
+
+When account-capable gameplay is added, resolve a validated account session first on public routes and never combine its authority with a guest cookie. Account-only and expired authenticated operations fail closed. Sandbox remains explicitly guest-only, including shared game-resource routes for Sandbox records; selecting a Sandbox resource must not grant guest fallback on an ordinary account operation. Do not accept identity IDs or kinds in transport bodies. Follow the [guest separation and transition policy](product.md#identity-changes-and-account-linking), including deliberate OAuth linking; configure these policies explicitly rather than inheriting authentication-library defaults.
 
 Temporary game metadata does not appear in durable history. Access expires now; automated deletion after inactivity and the production retention duration are follow-up work and must be resolved before production guest gameplay.
 
@@ -391,4 +399,4 @@ Phase 1 acceptance must additionally verify:
 
 The web app can be hosted as static assets. The API hosting environment must support a long-running Node.js Fastify process and persistent WebSocket connections. PostgreSQL should be managed or backed up appropriately and reached over TLS. Both applications should be containerizable.
 
-The exact providers, production region, email delivery service, object storage for custom avatars, observability service, and backup policy remain open decisions.
+The exact hosting providers, production region, email delivery service, observability service, and backup policy remain open decisions. Custom avatar uploads and their storage are deferred by the [profile policy](product.md#usernames-and-avatars).
