@@ -17,6 +17,10 @@ Rules below always apply. Before a material change, read the sources and section
 
 When code and documentation disagree, determine the intended behavior before editing. Correct whichever is wrong; update both when the contract changes. Do not change a requirement merely to match a bug.
 
+## External documentation
+
+Use Context7 first when external library or framework documentation is needed. Prefer documentation matching the installed version. If coverage is missing, consult official documentation directly.
+
 ## Technical baseline
 
 - Use npm workspaces and TypeScript throughout the product code.
