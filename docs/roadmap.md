@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–2 and the Sandbox presentation remake completed; Phase 3 in progress
 
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-01
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -86,7 +86,7 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 **Status:** In progress
 
-Completed milestone: P3-01 introduces the server-derived principal and identity validity/locking boundary while preserving guest authorization, expiry, controller cleanup, and independent Sandbox limits. The [accepted identity ADR](decisions/0013-server-derived-principals-and-account-lifecycle.md) and [product policies](product.md#identity-changes-and-account-linking) define guest separation, usernames/avatars, deliberate OAuth linking, and history/deletion scope. Account authentication and ownership remain subsequent milestones.
+Completed milestones: P3-01 introduces the server-derived principal and identity validity/locking boundary while preserving guest authorization, expiry, controller cleanup, and independent Sandbox limits. The [accepted identity ADR](decisions/0013-server-derived-principals-and-account-lifecycle.md) and [product policies](product.md#identity-changes-and-account-linking) define guest separation, usernames/avatars, deliberate OAuth linking, and history/deletion scope. P3-02 adds the [Better Auth session foundation](development.md#account-session-foundation): generated PostgreSQL persistence, a protected Fastify bridge, safe session projection, validated configuration, and an account resolver. Database-backed tests cover session invalidation/expiry/forgery, origins, cookies, throttling, redaction, and populated migration upgrades. Registration, account UI, and gameplay ownership remain subsequent milestones.
 
 Deliverables:
 

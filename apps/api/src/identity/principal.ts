@@ -4,7 +4,12 @@ export interface GuestPrincipal {
   readonly guestSessionId: string;
 }
 
-// Add an account variant only alongside validated account sessions and ownership support.
+export interface AccountPrincipal {
+  readonly kind: "account";
+  readonly userId: string;
+}
+
+// Gameplay remains guest-only until account ownership, locks, and seats ship together.
 export type Principal = GuestPrincipal;
 
 export function isGuestPrincipal(principal: { readonly kind: string }): boolean {

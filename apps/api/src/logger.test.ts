@@ -4,6 +4,25 @@ import { describe, expect, it } from "vitest";
 import { createLoggerOptions } from "./logger.js";
 
 describe("secret-safe logging", () => {
+  it("omits protocol tokens embedded in authentication paths", () => {
+    const chunks: string[] = [];
+    const logger = pino(createLoggerOptions("info"), {
+      write(chunk: string) {
+        chunks.push(chunk);
+      },
+    });
+    logger.info(
+      {
+        req: {
+          method: "GET",
+          url: "/api/auth/reset-password/path-token-canary?callbackURL=secret",
+        },
+      },
+      "incoming request",
+    );
+    expect(chunks.join("")).not.toContain("path-token-canary");
+    expect(JSON.parse(chunks.join(""))).toHaveProperty("req.path", "/api/auth/[Redacted]");
+  });
   it("preserves error diagnostics across formatting and serialization", () => {
     const chunks: string[] = [];
     const canary = "error-diagnostics-canary-secret";

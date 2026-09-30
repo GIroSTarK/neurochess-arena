@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-01
 
 ## Architectural drivers
 
@@ -306,6 +306,14 @@ Missing commentary is not an error.
 ## Authentication and guest sessions
 
 The account architecture uses Better Auth for email/password, Google, GitHub, email verification, password reset, and authenticated sessions in PostgreSQL. Profiles add the display/normalized username and avatar metadata defined by the [product policies](product.md#usernames-and-avatars). Implementation milestones are tracked only in the [roadmap](roadmap.md#phase-3--accounts-encrypted-credentials-and-history).
+
+The API's `auth` service uses the stable Better Auth Drizzle adapter from the server-only database package. Generated user/account/session/verification and rate-limit tables share the existing migration history. The Fastify bridge explicitly allows session lookup and sign-out; account creation, email/OAuth flows, profile mutation, token/account enumeration, and built-in account deletion remain closed until their complete application flows are provided. The library also disables email/password and implicit account linking explicitly.
+
+Account session lookup returns only user ID/email/verification state and session expiry, or `null`; tokens, provider accounts, raw names/avatars, IPs, and user agents never enter application JSON. A separate account resolver verifies the signed cookie against PostgreSQL on every call and returns only an account principal. It neither refreshes sessions nor falls back to a guest. Game services still accept only the guest principal until account ownership, identity locking, seats, and unfinished-game constraints are extended together.
+
+Auth configuration requires a secret and explicit API/browser origins. Account cookies are host-only, Secure, HttpOnly, and SameSite=Lax to support later top-level OAuth callbacks; cookie session caching is disabled. Sessions last seven days and renew after one day through session lookup. Fastify preserves every Set-Cookie header, requires the exact web Origin for sign-out, and retains Better Auth CSRF/origin checks. Database-backed limits apply per socket IP and endpoint (100 requests per 60 seconds); untrusted forwarding headers cannot choose the IP or auth base URL. Same-site HTTPS origins are required for browser deployment; HTTP localhost is the development exception. Proxy trust must be configured deliberately when deployment is selected.
+
+Auth responses are uncached and use a no-referrer policy. Errors use localized application codes/messages, library console logging and telemetry are disabled, and unknown auth request paths are masked because protocol tokens can appear in path segments. Sign-out verifies that the session is no longer valid before acknowledging success, including when the library catches a database deletion error.
 
 Guests explicitly bootstrap an opaque 256-bit token in a host-only Secure, HttpOnly, SameSite=Strict cookie before creating a game. Only its SHA-256 digest is stored with an internal guest UUID. Bootstrap reuses valid identities; other endpoints reject missing or expired identities rather than creating replacements. Valid activity renews the configured inactivity expiry without rotating the token (24 hours by default). Exact-Origin POST enforcement and credentialed CORS complement the cookie policy. See [ADR-0006](decisions/0006-guest-owned-game-commands.md).
 

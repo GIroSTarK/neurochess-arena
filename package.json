@@ -37,6 +37,7 @@
     "infra:down": "docker compose down",
     "infra:test:up": "docker compose --profile test up -d --wait postgres-test",
     "db:generate": "npm run db:generate --workspace @neurochess/database --",
+    "auth:generate": "auth generate --config apps/api/auth-schema.config.ts --adapter drizzle --dialect pg --output packages/database/src/schema/auth.ts --yes",
     "db:check": "npm run db:check --workspace @neurochess/database",
     "db:migrate": "npm run db:migrate --workspace @neurochess/database",
     "db:studio": "npm run db:studio --workspace @neurochess/database"
@@ -55,6 +56,7 @@
     "@types/react-dom": "19.3.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitejs/plugin-react": "6.1.1",
+    "auth": "1.7.6",
     "concurrently": "10.0.5",
     "dependency-cruiser": "18.4.0",
     "drizzle-kit": "0.31.10",
