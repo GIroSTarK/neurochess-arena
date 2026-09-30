@@ -26,7 +26,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
     const gamesService = createGameService(api.repository, {
       nodeEnv: "test",
@@ -47,9 +47,9 @@ describe("database-backed AI controllers and paused single steps", () => {
         access(),
       ),
     ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
-    await expect(
-      gamesService.controller({ guestSessionId: stranger.id }, claim),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(gamesService.controller(stranger.principal, claim)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
     expect(await gamesService.controller(principal, claim)).toEqual(snapshot);
     await expect(
       gamesService.controller(principal, { ...claim, controllerId: randomUUID() }),
@@ -80,7 +80,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     async (unclaimed) => {
       const first = await harness.createApi();
       const owner = await harness.guest(first);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const original = unclaimed
         ? createGameService(first.repository, { nodeEnv: "test", sandboxEnabled: true })
         : service(first);
@@ -121,7 +121,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const owner = await harness.guest(api);
     const sandboxOwner = await harness.guest(api);
     const sandbox = await createSandbox(api, sandboxOwner);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api);
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     await api.database.db.delete(aiControllers).where(eq(aiControllers.gameId, snapshot.gameId));
@@ -130,9 +130,7 @@ describe("database-backed AI controllers and paused single steps", () => {
       state: "paused",
       version: 1,
     });
-    expect(
-      await gamesService.snapshot({ guestSessionId: sandboxOwner.id }, sandbox.gameId),
-    ).toEqual(sandbox);
+    expect(await gamesService.snapshot(sandboxOwner.principal, sandbox.gameId)).toEqual(sandbox);
   });
 
   it.each([false, true])(
@@ -140,7 +138,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     async (step) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const gate = gatedAdapter();
       const first = service(api, { openai: gate.adapter });
       let { snapshot } = await first.createAi(principal, aiMatch);
@@ -173,7 +171,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const api = await harness.createApi();
     const other = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gate = gatedAdapter();
     const first = service(api, { openai: gate.adapter });
     const second = service(other);
@@ -224,7 +222,7 @@ describe("database-backed AI controllers and paused single steps", () => {
   it("steps a complete match one revision at a time, never exposing playable paused snapshots", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const principal = { guestSessionId: owner.id };
+    const principal = owner.principal;
     const gamesService = service(api, {
       openai: createScriptedAdapter({
         provider: "openai",
@@ -261,7 +259,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     async (action) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
-      const principal = { guestSessionId: owner.id };
+      const principal = owner.principal;
       const gate = gatedAdapter();
       const gamesService = service(api, { openai: gate.adapter });
       const initial = (await gamesService.createAi(principal, aiMatch)).snapshot;

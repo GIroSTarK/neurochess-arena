@@ -25,7 +25,9 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
-import { GUEST_COOKIE_NAME, type GuestIdentity, type GuestService } from "../guests/service.js";
+import { authenticateGuestRequest, setGuestCookie } from "../guests/http.js";
+import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
+import type { Principal } from "../identity/principal.js";
 import { gameErrorMessages } from "../locales/en.js";
 import {
   AI_TURN_TIMEOUT_MS,
@@ -120,20 +122,8 @@ export async function registerGameRoutes(
     return reply.code(errorStatuses[code]).send(response);
   });
 
-  function setGuestCookie(reply: FastifyReply, identity: GuestIdentity): void {
-    reply.setCookie(GUEST_COOKIE_NAME, identity.token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-      maxAge: options.guests.ttlSeconds,
-    });
-  }
-
-  async function principalFor(request: FastifyRequest, reply: FastifyReply) {
-    const identity = await options.guests.authenticate(request.cookies[GUEST_COOKIE_NAME]);
-    setGuestCookie(reply, identity);
-    return identity.principal;
+  function principalFor(request: FastifyRequest, reply: FastifyReply): Promise<Principal> {
+    return authenticateGuestRequest(options.guests, request, reply);
   }
 
   const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
@@ -290,7 +280,7 @@ export async function registerGameRoutes(
     },
     async (request, reply) => {
       const identity = await options.guests.bootstrap(request.cookies[GUEST_COOKIE_NAME]);
-      setGuestCookie(reply, identity);
+      setGuestCookie(reply, identity, options.guests.ttlSeconds);
       return { status: "ready" as const };
     },
   );
@@ -308,7 +298,7 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
-      const principal = await principalFor(request, reply);
+      const principal = await authenticateGuestRequest(options.guests, request, reply);
       const snapshot = await options.games.createSandbox(principal);
       return reply.code(201).send(snapshot);
     },
@@ -325,7 +315,8 @@ export async function registerGameRoutes(
         response: { 200: unfinishedGameResponseSchema, ...errorResponses },
       },
     },
-    async (request, reply) => options.games.unfinished(await principalFor(request, reply)),
+    async (request, reply) =>
+      options.games.unfinished(await authenticateGuestRequest(options.guests, request, reply)),
   );
 
   routes.post(

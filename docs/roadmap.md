@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–2 and the Sandbox presentation remake completed
+**Status:** Phases 0–2 and the Sandbox presentation remake completed; Phase 3 in progress
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-30
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -84,6 +84,10 @@ Exit condition: guests can complete both AI modes with any supported provider co
 
 ## Phase 3 — Accounts, encrypted credentials, and history
 
+**Status:** In progress
+
+Completed milestone: P3-01 introduces the server-derived principal and identity validity/locking boundary while preserving guest authorization, expiry, controller cleanup, and independent Sandbox limits. The [accepted identity ADR](decisions/0013-server-derived-principals-and-account-lifecycle.md) and [product policies](product.md#identity-changes-and-account-linking) define guest separation, usernames/avatars, deliberate OAuth linking, and history/deletion scope. Account authentication and ownership remain subsequent milestones.
+
 Deliverables:
 
 - Better Auth with email/password, Google, and GitHub;
@@ -108,6 +112,7 @@ Deliverables:
 - server-authoritative turn broadcasts;
 - disconnect and indefinite reconnect behavior;
 - owner-controlled abort with `aborted` history state;
+- extend database-enforced unfinished-game slots to non-owning human participants and resolve shared-participant retention/deletion before enabling joins;
 - authorization and privacy tests.
 
 Exit condition: two separate browser sessions can complete or abort a private game and recover correctly from disconnections.

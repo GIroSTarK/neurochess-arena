@@ -1,27 +1,25 @@
 import type { ChessColor } from "@neurochess/chess";
 import type { StoredGame, StoredParticipant } from "@neurochess/database";
 
-import type { GuestPrincipal } from "../guests/service.js";
+import { isGuestPrincipal, type Principal } from "../identity/principal.js";
 
 import { GameRequestError } from "./errors.js";
 
 export function authorizeGameRead(
-  principal: GuestPrincipal,
+  principal: Principal,
   game: StoredGame,
   participants: readonly StoredParticipant[],
   sandboxEnabled: boolean,
 ): void {
-  const isOwner = game.ownerGuestSessionId === principal.guestSessionId;
+  const isOwner = ownsGame(principal, game);
   const allowed = game.isSandbox
     ? sandboxEnabled && isOwner
-    : isOwner ||
-      (game.mode === null &&
-        participants.some((seat) => seat.guestSessionId === principal.guestSessionId));
+    : isOwner || (game.mode === null && participants.some((seat) => occupiesSeat(principal, seat)));
   if (!allowed) throw new GameRequestError("NOT_FOUND");
 }
 
 export function authorizeHumanSeat(
-  principal: GuestPrincipal,
+  principal: Principal,
   game: StoredGame,
   participants: readonly StoredParticipant[],
   turn: ChessColor,
@@ -29,18 +27,22 @@ export function authorizeHumanSeat(
 ): void {
   authorizeGameRead(principal, game, participants, sandboxEnabled);
   const seat = participants.find((participant) => participant.color === turn);
-  const sandboxControl =
-    game.isSandbox && sandboxEnabled && game.ownerGuestSessionId === principal.guestSessionId;
-  if (
-    seat?.seatType !== "human" ||
-    (!sandboxControl && seat.guestSessionId !== principal.guestSessionId)
-  ) {
+  const sandboxControl = game.isSandbox && sandboxEnabled && ownsGame(principal, game);
+  if (seat?.seatType !== "human" || (!sandboxControl && !occupiesSeat(principal, seat))) {
     throw new GameRequestError("FORBIDDEN");
   }
 }
 
-export function authorizeGameControl(principal: GuestPrincipal, game: StoredGame): void {
-  if (game.ownerGuestSessionId !== principal.guestSessionId) {
+export function authorizeGameControl(principal: Principal, game: StoredGame): void {
+  if (!ownsGame(principal, game)) {
     throw new GameRequestError("FORBIDDEN");
   }
+}
+
+function ownsGame(principal: Principal, game: StoredGame): boolean {
+  return isGuestPrincipal(principal) && game.ownerGuestSessionId === principal.guestSessionId;
+}
+
+function occupiesSeat(principal: Principal, seat: StoredParticipant): boolean {
+  return isGuestPrincipal(principal) && seat.guestSessionId === principal.guestSessionId;
 }
