@@ -13,6 +13,7 @@
     "apps/**/*.test.ts",
     "apps/**/*.test.tsx",
     "apps/api/test/providers/orphaned-turn.ts",
+    "apps/api/auth-schema.config.ts",
     "packages/**/*.test.ts",
     "vitest.config.ts",
     "vitest.integration.config.ts",

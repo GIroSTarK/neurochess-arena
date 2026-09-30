@@ -117,3 +117,12 @@ export {
   type AiTurnRequest,
   type AiRequestErrorCode,
 } from "./ai-http.js";
+export {
+  authEmptyRequestSchema,
+  authSessionResponseSchema,
+  authSignOutResponseSchema,
+  authErrorCodeSchema,
+  authErrorResponseSchema,
+  type AuthSessionResponse,
+  type AuthErrorCode,
+} from "./auth.js";

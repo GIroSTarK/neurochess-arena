@@ -1,4 +1,13 @@
-import type { GameErrorCode } from "@neurochess/contracts";
+import type { AuthErrorCode, GameErrorCode } from "@neurochess/contracts";
+
+export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
+  AUTH_INVALID_REQUEST: "The authentication request could not be accepted.",
+  AUTH_UNAUTHORIZED: "A valid account session is required.",
+  AUTH_FORBIDDEN: "This authentication request is not allowed.",
+  AUTH_NOT_FOUND: "This authentication action is not available.",
+  AUTH_RATE_LIMITED: "Too many authentication requests. Try again later.",
+  AUTH_UNAVAILABLE: "Authentication is temporarily unavailable. Try again later.",
+};
 
 export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   INVALID_REQUEST: "The request could not be accepted.",

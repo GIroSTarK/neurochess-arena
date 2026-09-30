@@ -39,6 +39,8 @@ jobs:
       NODE_ENV: test
       VITE_API_BASE_URL: http://localhost:3001
       WEB_ORIGIN: http://localhost:5173
+      BETTER_AUTH_URL: http://localhost:3001
+      BETTER_AUTH_SECRET: ci-only-auth-fixture-secret-not-for-deployment
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

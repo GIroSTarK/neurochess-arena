@@ -101,6 +101,14 @@ function serializeError(error: unknown): Record<string, unknown> {
 }
 
 function stripQuery(value: string): string {
+  // Email/auth protocols may put bearer tokens in path segments as well as queries.
+  const authPath = value.split("?")[0]?.split("#")[0];
+  if (
+    authPath?.startsWith("/api/auth/") &&
+    !["/api/auth/get-session", "/api/auth/sign-out"].includes(authPath)
+  ) {
+    return "/api/auth/[Redacted]";
+  }
   if (value.startsWith("/") && value.includes("?")) {
     return value.slice(0, value.indexOf("?"));
   }
@@ -108,6 +116,7 @@ function stripQuery(value: string): string {
   try {
     const url = new URL(value);
     if (url.protocol === "http:" || url.protocol === "https:") {
+      if (url.pathname.startsWith("/api/auth/")) url.pathname = stripQuery(url.pathname);
       url.hash = "";
       url.search = "";
       return url.toString();

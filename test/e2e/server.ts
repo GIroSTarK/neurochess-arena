@@ -13,6 +13,7 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
+import { createAccountAuth } from "../../apps/api/src/auth/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { integrationDatabase } from "../database.js";
@@ -111,6 +112,11 @@ async function main() {
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
+      auth: createAccountAuth(database, {
+        WEB_ORIGIN,
+        BETTER_AUTH_URL: API_ORIGIN,
+        BETTER_AUTH_SECRET: "browser-tests-only-auth-secret-not-for-deployment",
+      }),
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {

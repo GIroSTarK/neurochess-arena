@@ -33,3 +33,11 @@ export {
   type InvocationResult,
   type GamePositionUpdate,
 } from "./game-repository.js";
+export { createAuthDatabaseAdapter } from "./auth-adapter.js";
+export {
+  user as authUsers,
+  account as authAccounts,
+  session as authSessions,
+  verification as authVerifications,
+  rateLimit as authRateLimits,
+} from "./schema/auth.js";

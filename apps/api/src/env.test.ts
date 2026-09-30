@@ -9,9 +9,51 @@ const validEnvironment = {
   WEB_ORIGIN: "http://localhost:5173",
   DATABASE_URL: "postgresql://user:password@localhost:5432/neurochess",
   LOG_LEVEL: "silent",
+  BETTER_AUTH_URL: "http://localhost:3001",
+  BETTER_AUTH_SECRET: "fixture-only-auth-secret-with-at-least-32-characters",
 };
 
 describe("parseApiEnvironment", () => {
+  it.each([undefined, "", "short-secret-canary", " ".repeat(40)])(
+    "requires an explicit auth secret without disclosing invalid values",
+    (BETTER_AUTH_SECRET) => {
+      expect(() => parseApiEnvironment({ ...validEnvironment, BETTER_AUTH_SECRET })).toThrow(
+        "Invalid environment variables: BETTER_AUTH_SECRET",
+      );
+    },
+  );
+
+  it.each(["WEB_ORIGIN", "BETTER_AUTH_URL"])("validates %s as an explicit safe origin", (key) => {
+    for (const value of [
+      "https://user:secret@example.com",
+      "https://example.com/path",
+      "https://example.com?token=secret",
+      "https://example.com#secret",
+      "https://*.example.com",
+      "ftp://example.com",
+      "http://example.com",
+    ]) {
+      expect(() => parseApiEnvironment({ ...validEnvironment, [key]: value })).toThrow(key);
+    }
+  });
+
+  it("requires an auth URL and HTTPS origins in production", () => {
+    expect(() => parseApiEnvironment({ ...validEnvironment, BETTER_AUTH_URL: undefined })).toThrow(
+      "BETTER_AUTH_URL",
+    );
+    expect(() => parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production" })).toThrow(
+      "Invalid environment variables: BETTER_AUTH_URL, WEB_ORIGIN",
+    );
+    expect(
+      parseApiEnvironment({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        WEB_ORIGIN: "https://arena.example.com",
+        BETTER_AUTH_URL: "https://api.example.com",
+      }).BETTER_AUTH_URL,
+    ).toBe("https://api.example.com");
+  });
+
   it("disables the sandbox by default and gives guests a 24-hour inactivity expiry", () => {
     expect(parseApiEnvironment(validEnvironment)).toMatchObject({
       SANDBOX_ENABLED: false,
@@ -31,8 +73,13 @@ describe("parseApiEnvironment", () => {
       parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "true" }),
     ).toThrow("SANDBOX_ENABLED");
     expect(
-      parseApiEnvironment({ ...validEnvironment, NODE_ENV: "production", SANDBOX_ENABLED: "false" })
-        .SANDBOX_ENABLED,
+      parseApiEnvironment({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        SANDBOX_ENABLED: "false",
+        WEB_ORIGIN: "https://arena.example.com",
+        BETTER_AUTH_URL: "https://api.example.com",
+      }).SANDBOX_ENABLED,
     ).toBe(false);
   });
 

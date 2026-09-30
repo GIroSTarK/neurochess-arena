@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+const originSchema = z.string().refine((value) => {
+  try {
+    const url = new URL(value);
+    return (
+      value === url.origin &&
+      !url.hostname.includes("*") &&
+      (url.protocol === "https:" || (url.protocol === "http:" && url.hostname === "localhost"))
+    );
+  } catch {
+    return false;
+  }
+});
+
 const postgresUrlSchema = z
   .string()
   .min(1)
@@ -17,7 +30,12 @@ const apiEnvironmentSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     API_HOST: z.string().min(1).default("127.0.0.1"),
     API_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
-    WEB_ORIGIN: z.url().default("http://localhost:5173"),
+    WEB_ORIGIN: originSchema.default("http://localhost:5173"),
+    BETTER_AUTH_URL: originSchema,
+    BETTER_AUTH_SECRET: z
+      .string()
+      .min(32)
+      .refine((value) => value.trim().length >= 32),
     DATABASE_URL: postgresUrlSchema,
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
@@ -31,6 +49,13 @@ const apiEnvironmentSchema = z
   .superRefine((environment, context) => {
     if (environment.NODE_ENV === "production" && environment.SANDBOX_ENABLED) {
       context.addIssue({ code: "custom", path: ["SANDBOX_ENABLED"] });
+    }
+    if (environment.NODE_ENV === "production") {
+      for (const key of ["WEB_ORIGIN", "BETTER_AUTH_URL"] as const) {
+        if (!environment[key].startsWith("https://")) {
+          context.addIssue({ code: "custom", path: [key] });
+        }
+      }
     }
   });
 

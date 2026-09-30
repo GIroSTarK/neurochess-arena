@@ -13,6 +13,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
+import { registerAuthRoutes } from "./auth/routes.js";
+import type { AccountAuth } from "./auth/service.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 
 export interface ReadinessProbe {
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
   readonly readiness: ReadinessProbe;
   readonly webOrigin: string;
   readonly gameApi?: Omit<GameApiOptions, "webOrigin">;
+  readonly auth?: AccountAuth;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -76,6 +79,10 @@ export async function buildApp(options: BuildAppOptions) {
 
   if (options.gameApi) {
     await app.register(registerGameRoutes, { ...options.gameApi, webOrigin: options.webOrigin });
+  }
+
+  if (options.auth) {
+    await app.register(registerAuthRoutes, { auth: options.auth, webOrigin: options.webOrigin });
   }
 
   app.setNotFoundHandler((request, reply) => {

@@ -16,6 +16,8 @@ Retain the root `overrides` and `allowScripts` fields during dependency upgrades
 
 Copy `.env.example` to `.env`. The committed values are local placeholders only; never place production credentials in the repository.
 
+Set `BETTER_AUTH_SECRET` to a cryptographically random value of at least 32 characters (for example, 32 random bytes encoded as base64). Store it only in the local environment or deployment secret storage; keep it stable across API restarts. The API refuses to start without it. Set `BETTER_AUTH_URL` to the public API origin.
+
 Start PostgreSQL and wait for its health check:
 
 ```text
@@ -39,6 +41,8 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 | `API_HOST`                  | API        | Fastify listen address                                                    |
 | `API_PORT`                  | API        | Fastify listen port                                                       |
 | `WEB_ORIGIN`                | API        | Exact browser origin allowed by CORS                                      |
+| `BETTER_AUTH_URL`           | API        | Explicit public API origin; auth is mounted at `/api/auth`                |
+| `BETTER_AUTH_SECRET`        | API        | Required random signing/encryption secret, at least 32 characters         |
 | `DATABASE_URL`              | API, tools | PostgreSQL connection URL                                                 |
 | `LOG_LEVEL`                 | API        | Pino log level                                                            |
 | `SANDBOX_ENABLED`           | API, web   | Exactly `true` or `false`; defaults to false; production API rejects true |
@@ -49,6 +53,8 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 | `TEST_POSTGRES_PORT`        | Compose    | Separate test-service port, defaults to 5433                              |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
+
+Auth/API and browser origins accept HTTPS, or HTTP `localhost` outside production. Credentials, paths, trailing slashes, wildcards, queries, and fragments are rejected. Production requires HTTPS and a same-site browser/API deployment for the cookie policy; use `localhost` consistently during development. Trusted auth origins and credentialed CORS use the exact `WEB_ORIGIN`, never a request-supplied Host or forwarded header. No proxy is trusted by default; deployments behind one must deliberately define that boundary before relying on client-specific rate limits.
 
 Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_` variables. Both applications read the same root `.env`; no second Sandbox flag is needed. Restart development services after changing it, or rebuild the web bundle and restart the API when using `npm start`. The web value is fixed at Vite startup/build time; API checks still apply if the configurations differ.
 
@@ -72,6 +78,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 | `npm run infra:test:up`      | Start the isolated disposable test PostgreSQL service            |
 | `npm run infra:down`         | Stop PostgreSQL while preserving data                            |
 | `npm run db:generate -- ...` | Generate a named Drizzle migration                               |
+| `npm run auth:generate`      | Regenerate Better Auth's Drizzle schema without database access  |
 | `npm run db:check`           | Check migration metadata for consistency                         |
 | `npm run db:migrate`         | Apply pending migrations                                         |
 | `npm run db:studio`          | Open Drizzle Studio                                              |
@@ -128,6 +135,16 @@ Choose Human vs human, AI vs human with either human color, AI vs AI, or identic
 All sample identities, commentary, and measurements are explicitly labeled **Test data**. Human seats omit AI details; only the supplied human seat receives a resignation action. AI scenarios exercise commentary/telemetry slots and opt-in Moves/Analysis/Events tabs. Replay synchronizes sample details with the selected position. Missing commentary, missing usage/pricing, and the initial position have explicit empty/unavailable states. Analysis is a labeled extension slot; no Stockfish or provider is invoked.
 
 The reference adapter and data live in `apps/web/src/reference`; reusable composition lives in `arena/ArenaDetails.tsx` and `ui/DetailTabs.tsx`. Keep fixture data and adapters out of shared presentation components. Cover every scenario's seat/capability mapping in `apps/web/src/reference/ArenaReferenceScreen.test.tsx`; extend `test/e2e/arena-reference.spec.ts` when a new capability needs browser-specific geometry, scrolling, or native interaction coverage. This is a UI reuse check, not acceptance of real AI orchestration or room permissions.
+
+## Account session foundation
+
+`GET /api/auth/get-session` accepts no query fields and returns `{ user: { id, email, emailVerified }, session: { expiresAt } }`, or `null` for a missing, forged, expired, or revoked session. The response excludes session tokens and provider/profile metadata. `POST /api/auth/sign-out` requires JSON `{}`, an exact `WEB_ORIGIN`, and the account cookie; it invalidates the session and clears its cookies. Both use `credentials: "include"`, `Cache-Control: no-store`, localized `AUTH_*` errors, and `Referrer-Policy: no-referrer`. Preserve every returned Set-Cookie header in server integrations.
+
+All other auth paths are unavailable. Email/password registration is enabled only in isolated integration fixtures; there is no runtime enable flag or incomplete account UI. The server account resolver is available for later account routes, while guest gameplay and Sandbox retain their existing guest authority. Cookie caching is disabled, and account linking and deletion are disabled. Session lifetime, cookie policy, and endpoint protections are described in [authentication architecture](architecture.md#authentication-and-guest-sessions).
+
+The pinned Better Auth runtime, Drizzle adapter, and `auth` schema generator are 1.7.6, compatible with stable Drizzle ORM 0.45.3 and Kit 0.31.10. Use `npm run auth:generate`, review `packages/database/src/schema/auth.ts`, then `npm run db:generate -- --name <change>` and inspect the generated SQL. The generation-only config shares runtime options but uses non-deployment placeholders and never connects to a database. Do not run Better Auth's migrate command or Drizzle schema push. Runtime/adapter/generator upgrades must be reviewed together.
+
+Focused verification: `npm exec vitest -- run --config vitest.integration.config.ts apps/api/test/auth.integration.test.ts packages/database/test/persistence.integration.test.ts`. Fixtures create accounts through the real auth service, persist/consume verification records, and exercise cookies, revocation, expiry, forgery, origins, database-backed throttling, redaction, and guest coexistence without outbound mail or OAuth calls.
 
 ## Sandbox API
 
@@ -307,11 +324,13 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
 
+Migration `0008_better_auth_foundation.sql` adds generated Better Auth user/account/session/verification and rate-limit tables, with auth foreign keys and indexes; it does not rewrite guest identities or games. Stop API writers, apply the reviewed migration, configure the auth origin/secret, and restart the updated API. Integration coverage upgrades populated legacy game schemas and verifies guest ownership, seats, moves, receipts, reservations, and controller records remain intact.
+
 Migration `0007_separate_sandbox_game_slot.sql` replaces the unfinished-owner index with a unique `(owner_guest_session_id, is_sandbox)` index for active/paused games. It does not rewrite game data. Stop old API writers, apply it, and restart the updated API so creation and discovery consistently use their own group. See [ADR-0012](decisions/0012-independent-sandbox-game-slot.md) for the contract and rollback constraint.
 
 Migration `0006_ai_controller_presence.sql` adds the per-game controller UUID/expiry table and cascading foreign key. It does not rewrite existing games or Sandbox data. Stop old API writers, apply it, and restart the updated API; active ordinary AI games without a lease are then paused by the presence worker. Never expire a reservation into another provider dispatch. The [controller ADR](decisions/0011-ai-controller-presence-and-step.md) defines recovery and deployment behavior.
 
-Never edit an applied migration or use schema push as a substitute for reviewed SQL. Better Auth schema generation will feed this same migration history when authentication is implemented.
+Never edit an applied migration or use schema push as a substitute for reviewed SQL. Better Auth schema generation feeds this same migration history.
 
 Migration `0002_game_command_receipts.sql` creates the shared accepted-command receipts and backfills existing moves. Stop old API writers before applying it, then start the API version that writes receipts for every move and lifecycle action. See [ADR-0007](decisions/0007-lifecycle-recovery-and-private-replay.md). Integration tests exercise this backfill on a populated prior schema, receipt uniqueness, cascading deletion, and atomic rollback.
 
@@ -323,7 +342,7 @@ Migration `0005_ai_invocation_policy.sql` adds logical AI turns and normalized i
 
 ## Logging and errors
 
-The API logger omits request bodies, retains only method/path/request ID for requests, strips URL queries, and recursively redacts credential-like object fields. Raw exceptions are reduced to a safe name and non-secret code before serialization; the error serializer preserves only those diagnostic fields when it receives an already-sanitized record.
+The API logger omits request bodies, retains only method/path/request ID for requests, strips URL queries, masks unknown auth paths that may contain protocol tokens, and recursively redacts credential-like object fields. Raw exceptions are reduced to a safe name and non-secret code before serialization; the error serializer preserves only those diagnostic fields when it receives an already-sanitized record. Better Auth's console logger and telemetry are disabled; auth errors emit fixed application diagnostics without raw library errors.
 
 Idle PostgreSQL pool errors write a fixed, credential-free diagnostic to stderr without terminating the API. The pool remains available for new connections, and `/ready` checks current database availability on every request, returning `503` when its query fails.
 

@@ -175,6 +175,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0005_ai_invocation_policy",
         "0006_ai_controller_presence",
         "0007_separate_sandbox_game_slot",
+        "0008_better_auth_foundation",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -291,6 +292,14 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       );
       const controllers = await tx.execute(sql`select * from ai_controllers`);
       await applyMigration(migrationFiles[6]!);
+      const beforeGuests = await tx.execute(sql`select * from guest_sessions order by id`);
+      await applyMigration(migrationFiles[7]!);
+      expect((await tx.execute(sql`select * from guest_sessions order by id`)).rows).toEqual(
+        beforeGuests.rows,
+      );
+      for (const table of ["user", "account", "session", "verification", "rate_limit"]) {
+        expect((await tx.execute(sql`select * from ${sql.identifier(table)}`)).rows).toEqual([]);
+      }
       expect((await tx.execute(sql`select * from ai_controllers`)).rows).toEqual(controllers.rows);
       expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual(
         reservationRows.rows,
