@@ -2,6 +2,7 @@ import { createDatabase, createGameRepository } from "@neurochess/database";
 
 import { buildApp } from "./app.js";
 import { createAccountAuth } from "./auth/service.js";
+import { createAuthEmailSender } from "./auth/smtp.js";
 import { EnvironmentValidationError, parseApiEnvironment } from "./env.js";
 import { createGameService } from "./games/service.js";
 import { createGuestService } from "./guests/service.js";
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
-    auth: createAccountAuth(database, environment),
+    auth: createAccountAuth(database, environment, createAuthEmailSender(environment)),
     gameApi: {
       games: createGameService(repository, {
         nodeEnv: environment.NODE_ENV,

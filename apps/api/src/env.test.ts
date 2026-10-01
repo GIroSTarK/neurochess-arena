@@ -11,6 +11,9 @@ const validEnvironment = {
   LOG_LEVEL: "silent",
   BETTER_AUTH_URL: "http://localhost:3001",
   BETTER_AUTH_SECRET: "fixture-only-auth-secret-with-at-least-32-characters",
+  AUTH_EMAIL_TRANSPORT: "smtp",
+  AUTH_EMAIL_FROM: "accounts@example.com",
+  SMTP_HOST: "smtp.example.com",
 };
 
 describe("parseApiEnvironment", () => {
