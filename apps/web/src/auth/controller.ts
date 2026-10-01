@@ -164,7 +164,19 @@ export class AccountController {
         }
         this.expectedAccount = true;
         rememberIntent(true);
-        const profile = await this.api.profile(signal, session.user.id);
+        const profile = await this.api.profile(signal, session.user.id).catch((error: unknown) => {
+          const code = accountError(error);
+          if (
+            (code === "PROFILE_UNAVAILABLE" || code === "AUTH_UNAVAILABLE") &&
+            key === this.resolvedKey &&
+            this.state.phase === "account" &&
+            this.state.profile
+          ) {
+            // A profile outage does not revoke the session; still confirm it below.
+            return this.state.profile;
+          }
+          throw error;
+        });
         if (cancelled()) return;
         const confirmation = await this.api.session(signal);
         if (cancelled()) return;

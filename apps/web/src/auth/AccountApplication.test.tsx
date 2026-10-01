@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../app/App";
-import { GAME_ID, jsonResponse, requestPath } from "../test/fixtures";
+import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 import { renderLocalized } from "../test/render";
 
@@ -22,6 +22,74 @@ afterEach(() => {
 });
 
 describe("account presentation", () => {
+  it.each(["focus", "profile-changed"])(
+    "uses the refreshed username when saving after a %s notification",
+    async (notification) => {
+      window.history.replaceState(null, "", "/account");
+      let current = profile;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(session),
+        "GET /profile": () => jsonResponse(current),
+        "POST /profile": () => jsonResponse(current),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+      await screen.findByRole("heading", { name: "Your profile" });
+      expect(screen.getByLabelText("Username")).toHaveValue("Player");
+      await userEvent.clear(screen.getByLabelText("Username"));
+      await userEvent.type(screen.getByLabelText("Username"), "LocalDraft");
+
+      current = { ...profile, username: "Renamed" };
+      const channel = new BroadcastChannel("neurochess.identity");
+      try {
+        await act(async () => {
+          if (notification === "profile-changed") channel.postMessage(notification);
+          else fireEvent(window, new Event("focus"));
+        });
+        await screen.findByRole("link", { name: /Renamed/ });
+        expect(screen.getByLabelText("Username")).toHaveValue("Renamed");
+        await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+        await screen.findByText("Profile saved.");
+        const saved = http.fetch.mock.calls.find(
+          ([url, options]) => requestPath(url) === "/profile" && options?.method === "POST",
+        );
+        expect(requestBody(saved?.[1])).toBe(JSON.stringify({ username: "Renamed" }));
+        http.assertNoUnexpectedRequests();
+      } finally {
+        channel.close();
+      }
+    },
+  );
+  it("preserves a username draft when a refresh only changes the avatar", async () => {
+    window.history.replaceState(null, "", "/account");
+    let removed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () =>
+        jsonResponse({
+          ...profile,
+          avatar: removed
+            ? profile.avatar
+            : {
+                ...profile.avatar,
+                source: "github",
+                url: "https://avatars.githubusercontent.com/u/123",
+              },
+        }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await screen.findByRole("button", { name: "Remove avatar" });
+    await userEvent.clear(screen.getByLabelText("Username"));
+    await userEvent.type(screen.getByLabelText("Username"), "LocalDraft");
+    removed = true;
+    await act(async () => fireEvent(window, new Event("focus")));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Remove avatar" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("Username")).toHaveValue("LocalDraft");
+    http.assertNoUnexpectedRequests();
+  });
   it("accepts a fresh form submission after BFCache restore without retaining the previous password", async () => {
     window.history.replaceState(null, "", "/auth/sign-up");
     const http = createHttpMock({

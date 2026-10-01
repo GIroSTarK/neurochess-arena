@@ -77,7 +77,7 @@ export function ProfileScreen({
         }}
       >
         <AccountField
-          key={state.session?.user.id}
+          key={`${state.session?.user.id ?? ""}:${profile.username ?? ""}`}
           name="username"
           label={t("account.username")}
           defaultValue={profile.username ?? ""}

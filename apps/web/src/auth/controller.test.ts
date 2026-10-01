@@ -29,6 +29,85 @@ afterEach(() => {
 });
 
 describe("page account identity", () => {
+  it.each(["PROFILE_UNAVAILABLE", "AUTH_UNAVAILABLE"] as const)(
+    "preserves the established identity when a same-session profile refresh fails with %s",
+    async (code) => {
+      const { api, controller } = fixture();
+      await controller.refresh();
+      const identity = controller.identity();
+      const revision = controller.getSnapshot().revision;
+      vi.mocked(api.profile).mockRejectedValueOnce(new AccountFailure(code));
+      await controller.refresh();
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: "account",
+        session: session(),
+        profile,
+        revision,
+      });
+      expect(identity.signal.aborted).toBe(false);
+      await expect(identity.verify()).resolves.toBeUndefined();
+
+      vi.mocked(api.profile).mockResolvedValue({ ...profile, username: "Renamed" });
+      await controller.refresh();
+      expect(controller.getSnapshot().profile?.username).toBe("Renamed");
+      expect(controller.getSnapshot().revision).toBe(revision);
+      expect(identity.signal.aborted).toBe(false);
+    },
+  );
+  it("requires a successful initial profile read before admitting an account", async () => {
+    const { api, controller } = fixture();
+    vi.mocked(api.profile).mockRejectedValue(new AccountFailure("PROFILE_UNAVAILABLE"));
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "unavailable",
+      session: null,
+      profile: null,
+      issue: "PROFILE_UNAVAILABLE",
+    });
+  });
+  it("does not reuse a previous account's profile after the session changes", async () => {
+    const { api, controller } = fixture();
+    await controller.refresh();
+    const identity = controller.identity();
+    vi.mocked(api.session).mockResolvedValue(session("00000000-0000-4000-8000-000000000002"));
+    vi.mocked(api.profile).mockRejectedValue(new AccountFailure("PROFILE_UNAVAILABLE"));
+    await controller.refresh();
+    expect(identity.signal.aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "unavailable",
+      session: null,
+      profile: null,
+    });
+  });
+  it("confirms the session after a failed profile refresh before keeping the old identity", async () => {
+    const { api, controller } = fixture();
+    await controller.refresh();
+    const identity = controller.identity();
+    vi.mocked(api.profile).mockRejectedValue(new AccountFailure("PROFILE_UNAVAILABLE"));
+    vi.mocked(api.session).mockResolvedValueOnce(session()).mockResolvedValue(null);
+    await controller.refresh();
+    expect(identity.signal.aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "required",
+      session: null,
+      profile: null,
+    });
+  });
+  it("invalidates an established identity when session confirmation is unavailable", async () => {
+    const { api, controller } = fixture();
+    await controller.refresh();
+    const identity = controller.identity();
+    vi.mocked(api.session)
+      .mockResolvedValueOnce(session())
+      .mockRejectedValue(new AccountFailure("AUTH_UNAVAILABLE"));
+    await controller.refresh();
+    expect(identity.signal.aborted).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "unavailable",
+      session: null,
+      profile: null,
+    });
+  });
   it("refreshes onboarding, usernames and avatars for the same session without ending its game lifetime", async () => {
     const { api, controller } = fixture();
     vi.mocked(api.profile).mockResolvedValueOnce({
