@@ -26,6 +26,7 @@ export function ProfileScreen({
   const [error, setError] = useState<AccountErrorCode | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   if (!profile) return null;
   async function save(remove = false) {
     if (pending.current || !form.current) return;
@@ -43,6 +44,7 @@ export function ProfileScreen({
       await controller.saveProfile(
         remove ? { avatar: "remove" } : { username: username.success ? username.data : "" },
       );
+      if (!remove) setUsernameDraft(null);
       setSaved(true);
       if (!profile?.completed && !remove) window.location.assign(returnTo);
     } catch (error) {
@@ -77,10 +79,10 @@ export function ProfileScreen({
         }}
       >
         <AccountField
-          key={`${state.session?.user.id ?? ""}:${profile.username ?? ""}`}
           name="username"
           label={t("account.username")}
-          defaultValue={profile.username ?? ""}
+          value={usernameDraft ?? profile.username ?? ""}
+          onChange={(event) => setUsernameDraft(event.currentTarget.value)}
           autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
