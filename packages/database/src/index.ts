@@ -1,5 +1,12 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { runMigrations } from "./migrations.js";
+export { profiles } from "./schema/profiles.js";
+export {
+  createProfileRepository,
+  UsernameTakenError,
+  type ProfileRepository,
+  type StoredProfile,
+} from "./profile-repository.js";
 export {
   games,
   gameParticipants,

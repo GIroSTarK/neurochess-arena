@@ -1,3 +1,4 @@
+import { profileUsernameSchema } from "@neurochess/contracts";
 import type { GameReader, GameTransaction } from "@neurochess/database";
 
 import { GameRequestError } from "../games/errors.js";
@@ -25,13 +26,25 @@ export async function requireActivePrincipal(
   if (!(await activePrincipal(reader, principal))) {
     throw new GameRequestError("UNAUTHORIZED");
   }
+  await requireGameProfile(reader, principal);
+}
+
+async function requireGameProfile(reader: GameReader, principal: Principal) {
+  if (
+    principal.kind === "account" &&
+    !profileUsernameSchema.safeParse(await reader.getAccountUsername(principal.userId)).success
+  ) {
+    throw new GameRequestError("PROFILE_REQUIRED");
+  }
 }
 
 // Lock identity before game, even for expired-session cleanup. Callers accepting user
 // commands must require true; the repository rechecks validity after the lock wait.
 export async function lockPrincipal(tx: GameTransaction, principal: Principal): Promise<boolean> {
   await lockIdentity(tx, principal);
-  return activePrincipal(tx, principal);
+  if (!(await activePrincipal(tx, principal))) return false;
+  await requireGameProfile(tx, principal);
+  return true;
 }
 
 export async function lockIdentity(tx: GameTransaction, identity: GameIdentity): Promise<void> {

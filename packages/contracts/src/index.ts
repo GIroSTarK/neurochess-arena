@@ -140,3 +140,16 @@ export {
   type AuthSessionResponse,
   type AuthErrorCode,
 } from "./auth.js";
+export {
+  profileUsernameSchema,
+  safeProviderAvatar,
+  profileAvatarSchema,
+  profileResponseSchema,
+  profileOnboardingRequestSchema,
+  profileUpdateRequestSchema,
+  profileErrorCodeSchema,
+  profileErrorResponseSchema,
+  type ProfileResponse,
+  type ProfileUpdateRequest,
+  type ProfileErrorCode,
+} from "./profile.js";

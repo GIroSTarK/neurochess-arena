@@ -1,9 +1,9 @@
 import {
   authEmailRequestSchema,
-  type AuthOAuthProvider,
   authOAuthProviderSchema,
   authOAuthSignInRequestSchema,
   authResetPasswordRequestSchema,
+  safeProviderAvatar,
 } from "@neurochess/contracts";
 import type { BetterAuthPlugin } from "better-auth";
 import {
@@ -65,27 +65,6 @@ export function oauthProviders(
   };
 }
 
-function safeAvatar(provider: AuthOAuthProvider, value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length > 2048) return undefined;
-  try {
-    const url = new URL(value);
-    const allowed =
-      provider === "google"
-        ? /^(?:[a-z0-9-]+\.)?googleusercontent\.com$/.test(url.hostname)
-        : url.hostname === "avatars.githubusercontent.com";
-    return allowed &&
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      !url.port &&
-      !url.hash
-      ? url.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function oauthPolicy(): BetterAuthPlugin {
   return {
     id: "arena-oauth-policy",
@@ -118,7 +97,7 @@ export function oauthPolicy(): BetterAuthPlugin {
             user: {
               ...identitySchema.parse(result.user),
               name: "",
-              image: safeAvatar(id, result.user.image),
+              image: safeProviderAvatar(id, result.user.image) ?? undefined,
             },
             data: subject.data,
           };

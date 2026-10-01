@@ -206,7 +206,7 @@ describe("sandbox entry and commands", () => {
     expect(controller.getSnapshot().phase).toBe("ready");
   });
 
-  it.each<GameErrorCode>(["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"])(
+  it.each<GameErrorCode>(["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "PROFILE_REQUIRED"])(
     "clears loaded state on %s without implicitly bootstrapping",
     async (code) => {
       const { api, controller } = await started();

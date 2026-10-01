@@ -7,6 +7,7 @@ const noticeKeys = {
   existing: "notices.existing",
   "sandbox-unavailable": "notices.sandboxUnavailable",
   UNAUTHORIZED: "notices.unauthorized",
+  PROFILE_REQUIRED: "notices.profileRequired",
   FORBIDDEN: "notices.forbidden",
   NOT_FOUND: "notices.notFound",
   INVALID_REQUEST: "notices.invalidRequest",

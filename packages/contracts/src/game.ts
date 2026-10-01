@@ -162,6 +162,7 @@ export const gameErrorCodeSchema = z.enum([
   "INVALID_GAME_STATE",
   "GAME_CONFLICT",
   "UNAUTHORIZED",
+  "PROFILE_REQUIRED",
   "FORBIDDEN",
   "NOT_FOUND",
   "INTERNAL_SERVER_ERROR",

@@ -7,6 +7,7 @@ import type { SandboxNotice } from "./state";
 /** Codes that end the guest's access to the loaded game. */
 const accessCodes = [
   "UNAUTHORIZED",
+  "PROFILE_REQUIRED",
   "FORBIDDEN",
   "NOT_FOUND",
 ] as const satisfies readonly GameErrorCode[];
