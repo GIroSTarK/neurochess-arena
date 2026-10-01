@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm
 
 import type { DatabaseConnection } from "./client.js";
 import { session, user } from "./schema/auth.js";
+import { providerCredentials } from "./schema/credentials.js";
 import {
   aiControllers,
   aiTurnReservations,
@@ -58,6 +59,17 @@ export type GamePositionUpdate = Pick<
 >;
 
 export interface GameReader {
+  getProviderCredential(
+    userId: string,
+    credentialId: string,
+    provider: string,
+  ): Promise<
+    | Pick<
+        typeof providerCredentials.$inferSelect,
+        "version" | "keyId" | "nonce" | "authTag" | "ciphertext"
+      >
+    | undefined
+  >;
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
   hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
   getAccountUsername(userId: string): Promise<string | null>;
@@ -122,6 +134,25 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    async getProviderCredential(userId, credentialId, provider) {
+      const [record] = await db
+        .select({
+          version: providerCredentials.version,
+          keyId: providerCredentials.keyId,
+          nonce: providerCredentials.nonce,
+          authTag: providerCredentials.authTag,
+          ciphertext: providerCredentials.ciphertext,
+        })
+        .from(providerCredentials)
+        .where(
+          and(
+            eq(providerCredentials.userId, userId),
+            eq(providerCredentials.id, credentialId),
+            eq(providerCredentials.provider, provider),
+          ),
+        );
+      return record;
+    },
     async getAccountUsername(userId) {
       const [profile] = await db
         .select({ username: profiles.username })

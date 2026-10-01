@@ -197,11 +197,13 @@ export async function registerGameRoutes(
       );
       try {
         return await options.games.models(principal, request.body.provider, {
-          apiKey: request.body.apiKey,
+          ...("apiKey" in request.body
+            ? { apiKey: request.body.apiKey }
+            : { credentialId: request.body.credentialId }),
           signal: scope.signal,
         });
       } finally {
-        request.body.apiKey = "";
+        if ("apiKey" in request.body) request.body.apiKey = "";
         scope.dispose();
       }
     },
@@ -291,12 +293,14 @@ export async function registerGameRoutes(
             ...(step === undefined ? {} : { step }),
           },
           {
-            apiKey: request.body.apiKey,
+            ...("apiKey" in request.body
+              ? { apiKey: request.body.apiKey }
+              : { credentialId: request.body.credentialId }),
             signal: scope.signal,
           },
         );
       } finally {
-        request.body.apiKey = "";
+        if ("apiKey" in request.body) request.body.apiKey = "";
         scope.dispose();
       }
     },

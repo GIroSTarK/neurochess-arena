@@ -107,10 +107,9 @@ describe("independent AI setup", () => {
         parameters: { reasoningEffort: "high" },
       },
     });
-    expect(api.discover.mock.calls.map(([input]) => input.apiKey)).toEqual([
-      "white-sentinel-key",
-      "black-sentinel-key",
-    ]);
+    expect(
+      api.discover.mock.calls.map(([input]) => ("apiKey" in input ? input.apiKey : undefined)),
+    ).toEqual(["white-sentinel-key", "black-sentinel-key"]);
     expect(
       JSON.stringify({ state: controller.getSnapshot(), game, creation: api.create.mock.calls }),
     ).not.toContain("sentinel-key");

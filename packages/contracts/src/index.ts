@@ -109,6 +109,8 @@ export {
 } from "./game.js";
 export {
   sessionApiKeySchema,
+  providerCredentialSourceSchema,
+  type ProviderCredentialSource,
   modelDiscoveryRequestSchema,
   aiTurnRequestSchema,
   aiRequestErrorCodeSchema,
