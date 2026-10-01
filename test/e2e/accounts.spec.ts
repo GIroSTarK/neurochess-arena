@@ -47,7 +47,11 @@ async function register(page: Page, email: string) {
   await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
   const username = usernameFor();
   await page.getByLabel("Username", { exact: true }).fill(username);
-  await page.getByRole("button", { name: "Finish profile", exact: true }).click();
+  // Onboarding reloads the same URL after briefly rendering setup in the old document.
+  await Promise.all([
+    page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()),
+    page.getByRole("button", { name: "Finish profile", exact: true }).click(),
+  ]);
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   return username;
 }
@@ -238,36 +242,47 @@ test("a second tab switches accounts during discovery and discards the old page'
   const secondName = await register(otherAccountPage, secondEmail);
   await otherContext.close();
   const firstName = await register(page, emailFor());
-  const held = Promise.withResolvers<void>();
+  let discoveryHeld = false;
   const release = Promise.withResolvers<void>();
   await page.route(API_ORIGIN + "/providers/models", async (route) => {
     const response = await route.fetch();
-    held.resolve();
+    discoveryHeld = true;
     await release.promise;
     await route.fulfill({ response });
   });
-  const seat = page.getByRole("group", { name: "White", exact: true });
-  await seat.getByLabel("API key", { exact: true }).fill("obsolete-key-canary");
-  await seat.getByRole("button", { name: "Load models", exact: true }).click();
-  await held.promise;
-  const switching = await context.newPage();
-  await login(switching, secondEmail);
-  await expect(switching.getByRole("heading", { name: "Set up a game" })).toBeVisible();
-  await expect(page.getByRole("link", { name: secondName })).toBeVisible();
-  release.resolve();
-  await expect(page.getByRole("link", { name: firstName })).toHaveCount(0);
-  await expect(seat.getByLabel("API key", { exact: true })).toHaveValue("");
-  await expect(seat.getByRole("combobox", { name: "Model", exact: true })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
-  await switching.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue as guest", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
-  await switching.close();
+  let switching: Page | undefined;
+  try {
+    const seat = page.getByRole("group", { name: "White", exact: true });
+    await seat.getByLabel("API key", { exact: true }).fill("obsolete-key-canary");
+    await seat.getByRole("button", { name: "Load models", exact: true }).click();
+    await expect
+      .poll(() => discoveryHeld, {
+        message: "Discovery response is held before switching accounts",
+      })
+      .toBe(true);
+    switching = await context.newPage();
+    await login(switching, secondEmail);
+    await expect(switching.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+    await expect(page.getByRole("link", { name: secondName })).toBeVisible();
+    release.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+    await expect(page.getByRole("link", { name: firstName })).toHaveCount(0);
+    await expect(seat.getByLabel("API key", { exact: true })).toHaveValue("");
+    await expect(seat.getByRole("combobox", { name: "Model", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await switching.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
+    await page.getByRole("button", { name: "Continue as guest", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  } finally {
+    release.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+    await switching?.close();
+  }
 });
 
 test("unverified sign-in offers resend, a verified profile can be renamed, and cookie loss requires explicit guest play", async ({
