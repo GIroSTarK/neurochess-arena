@@ -44,6 +44,7 @@ export async function registerAuthRoutes(
   app: FastifyInstance,
   options: { auth: AccountAuth; webOrigin: string },
 ) {
+  app.addHook("onClose", async () => options.auth.close?.());
   app.addHook("onRequest", async (request, reply) => {
     reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer");
     const path = request.url.split("?")[0]?.slice(AUTH_BASE_PATH.length) ?? "";
@@ -101,6 +102,7 @@ export async function registerAuthRoutes(
       if (path !== "/get-session" && path !== "/sign-out") headers.delete("cookie");
       try {
         const body = request.method === "POST" ? bodySchema.parse(request.body) : undefined;
+        const logger = request.log;
         const response = await options.auth.handle(
           new Request(`${options.auth.baseURL}${request.url}`, {
             method: request.method,
@@ -109,6 +111,11 @@ export async function registerAuthRoutes(
               ? { body: JSON.stringify(path === "/sign-up/email" ? { ...body, name: "" } : body) }
               : {}),
           }),
+          () =>
+            logger.warn(
+              { event: "auth_email_delivery_failed" },
+              "Authentication email delivery failed",
+            ),
         );
         const cookies = response.headers.getSetCookie();
         if (cookies.length) reply.header("set-cookie", cookies);
@@ -155,8 +162,6 @@ export async function registerAuthRoutes(
 
 function safeLibraryError(code: string): AuthErrorCode | undefined {
   switch (code) {
-    case "AUTH_EMAIL_UNAVAILABLE":
-      return "AUTH_EMAIL_UNAVAILABLE";
     case "EMAIL_NOT_VERIFIED":
       return "AUTH_EMAIL_NOT_VERIFIED";
     case "INVALID_EMAIL_OR_PASSWORD":

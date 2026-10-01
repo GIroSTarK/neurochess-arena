@@ -66,7 +66,7 @@ Email/password sign-in requires a verified email. Registration and verification 
 
 Verification and password-reset links expire after one hour. A repeated valid verification link is idempotent and never creates a session. A reset token can change the password only once, including concurrent submissions. A successful reset revokes every existing account session and requires explicit sign-in with the new password; resetting an unverified account does not bypass email verification.
 
-Registration, verification resend, and reset requests use generic acknowledgements without disclosing whether an address has an eligible account. An email-transport failure returns an actionable failure, never a claim of delivery. A failed registration email can be recovered through explicit verification resend. Sign-in does not send mail automatically. Rate limits require waiting before another attempt. Sign-out revokes the current session.
+Registration, verification resend, and reset initiation acknowledge request receipt without confirming account eligibility or email delivery. Their public acknowledgement is the same when delivery succeeds or fails, and does not wait for SMTP completion. Delivery failures are reported internally without account details or secrets. If no email arrives, wait a minute and explicitly request a new link; a registration account can already exist even when its email did not arrive. Validation, origin, rate-limit, and authentication-service failures retain their normal errors. Sign-in does not send mail automatically. Sign-out revokes the current session.
 
 ### Identity changes and account linking
 

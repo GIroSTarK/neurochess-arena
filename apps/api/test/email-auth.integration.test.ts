@@ -1,4 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto";
+import { setImmediate } from "node:timers/promises";
 
 import { authRateLimits, authSessions, authUsers, authVerifications } from "@neurochess/database";
 import { eq, inArray, like } from "drizzle-orm";
@@ -97,6 +98,16 @@ async function signIn(value = password) {
 
 function session(cookie: string) {
   return app.inject({ url: "/api/auth/get-session", remoteAddress: ip, headers: { cookie } });
+}
+
+function controlDeliveryFailure(failed: boolean) {
+  const delivery = { failed };
+  const send = mailbox.send.bind(mailbox);
+  vi.spyOn(mailbox, "send").mockImplementation(async (message) => {
+    if (delivery.failed) throw new Error(`smtp-secret-canary ${message.to} ${message.text}`);
+    await send(message);
+  });
+  return delivery;
 }
 
 async function requestReset() {
@@ -263,13 +274,13 @@ describe("verified email/password lifecycle", () => {
     expect(response.headers.location).toBeUndefined();
   });
 
-  it("reports failed delivery safely and allows explicit verification resend after recovery", async () => {
+  it("acknowledges requests without claiming delivery and allows explicit resend after recovery", async () => {
     const failure = vi
       .spyOn(mailbox, "send")
       .mockRejectedValue(new Error("smtp-password-token-canary"));
     const failed = await post("sign-up/email", { email, password });
-    expect(failed.statusCode).toBe(503);
-    expect(failed.json()).toMatchObject({ code: "AUTH_EMAIL_UNAVAILABLE" });
+    expect(failed.statusCode).toBe(200);
+    expect(failed.json()).toMatchObject({ status: "accepted" });
     expect(failed.headers["set-cookie"]).toBeUndefined();
     expect(mailbox.messages).toHaveLength(0);
     failure.mockRestore();
@@ -280,19 +291,20 @@ describe("verified email/password lifecycle", () => {
       .spyOn(mailbox, "send")
       .mockRejectedValue(new Error("smtp-password-token-canary"));
     const reset = await post("request-password-reset", { email });
-    expect(reset.statusCode).toBe(503);
-    expect(reset.json()).toMatchObject({ code: "AUTH_EMAIL_UNAVAILABLE" });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json()).toEqual(failed.json());
     expect((await session(cookie)).json()).not.toBeNull();
     expect(logs.join("")).not.toContain("smtp-password-token-canary");
+    expect(logs.join("")).toContain('"event":"auth_email_delivery_failed"');
     expect(reset.body).not.toContain("smtp-password-token-canary");
     rejected.mockRestore();
   });
 
-  it("keeps delivery failures isolated between simultaneous requests and reports resend rejection", async () => {
+  it("keeps simultaneous delivery outcomes independent of public acknowledgements", async () => {
     await register();
     const verification = mailbox.link();
     const failedSend = vi.spyOn(mailbox, "send").mockRejectedValue(new Error("smtp-secret-canary"));
-    expect((await post("send-verification-email", { email })).statusCode).toBe(503);
+    expect((await post("send-verification-email", { email })).statusCode).toBe(200);
     failedSend.mockRestore();
     await verify(verification);
     const send = mailbox.send.bind(mailbox);
@@ -308,8 +320,138 @@ describe("verified email/password lifecycle", () => {
       post("request-password-reset", { email }),
       post("request-password-reset", { email }),
     ]);
-    expect(results.map((response) => response.statusCode).sort()).toEqual([200, 503]);
+    expect(results.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(results[0].json()).toEqual(results[1].json());
     expect(mailbox.messages).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    "keeps reset responses identical for absent and present accounts with failed delivery=%s",
+    async (failedDelivery) => {
+      const delivery = controlDeliveryFailure(failedDelivery);
+      const absent = await post("request-password-reset", { email: email.toUpperCase() });
+      delivery.failed = false;
+      await register();
+      await verify();
+      const cookie = await signIn();
+      const secret = mailbox.link().searchParams.get("token")!;
+      delivery.failed = failedDelivery;
+      const present = await post("request-password-reset", { email: email.toUpperCase() }, cookie);
+      expect(present.statusCode).toBe(200);
+      expect(present.json()).toEqual(absent.json());
+      expect(present.headers["set-cookie"]).toBeUndefined();
+      expect(present.headers["retry-after"]).toBeUndefined();
+      expect(present.body).not.toContain(email);
+      expect((await session(cookie)).json()).not.toBeNull();
+      expect(mailbox.messages).toHaveLength(failedDelivery ? 1 : 2);
+      if (failedDelivery) expect(logs.join("")).toContain('"event":"auth_email_delivery_failed"');
+      for (const value of ["smtp-secret-canary", secret, email, cookie]) {
+        expect(logs.join("")).not.toContain(value);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "keeps new and duplicate registration responses identical with failed delivery=%s",
+    async (failedDelivery) => {
+      if (failedDelivery) {
+        vi.spyOn(mailbox, "send").mockRejectedValue(new Error("smtp-secret-canary"));
+      }
+      const created = await register();
+      const duplicate = await post("sign-up/email", { email: email.toUpperCase(), password });
+      expect(duplicate.statusCode).toBe(200);
+      expect(duplicate.json()).toEqual(created.json());
+      expect(duplicate.headers["set-cookie"]).toBeUndefined();
+      expect(mailbox.messages).toHaveLength(failedDelivery ? 0 : 1);
+    },
+  );
+
+  it.each([false, true])(
+    "keeps resend responses identical for absent, unverified and verified accounts with failed delivery=%s",
+    async (failedDelivery) => {
+      const delivery = controlDeliveryFailure(failedDelivery);
+      const absent = await post("send-verification-email", { email });
+      delivery.failed = false;
+      await register();
+      const verification = mailbox.link();
+      delivery.failed = failedDelivery;
+      const unverified = await post("send-verification-email", { email: email.toUpperCase() });
+      await verify(verification);
+      const verified = await post("send-verification-email", { email });
+      for (const response of [unverified, verified]) {
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual(absent.json());
+        expect(response.headers["set-cookie"]).toBeUndefined();
+      }
+      expect(mailbox.messages).toHaveLength(failedDelivery ? 1 : 2);
+    },
+  );
+
+  it.each(["sign-up/email", "send-verification-email", "request-password-reset"])(
+    "acknowledges %s before SMTP completes and drains delivery on shutdown",
+    async (path) => {
+      if (path !== "sign-up/email") await register();
+      const count = mailbox.messages.length;
+      const sending = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const send = mailbox.send.bind(mailbox);
+      vi.spyOn(mailbox, "send").mockImplementation(async (message) => {
+        sending.resolve();
+        await release.promise;
+        await send(message);
+      });
+      let response: Awaited<ReturnType<typeof post>> | undefined;
+      const request = post(path, path === "sign-up/email" ? { email, password } : { email }).then(
+        (result) => {
+          response = result;
+          return result;
+        },
+      );
+      let closing: Promise<void> | undefined;
+      try {
+        await sending.promise;
+        await vi.waitFor(() => expect(response?.statusCode).toBe(200), { timeout: 1500 });
+        expect(response!.json()).toMatchObject({ status: "accepted" });
+        expect(mailbox.messages).toHaveLength(count);
+        let closed = false;
+        closing = app.close().then(() => {
+          closed = true;
+        });
+        await setImmediate();
+        expect(closed).toBe(false);
+      } finally {
+        release.resolve();
+        await request;
+        await (closing ?? app.close());
+      }
+      expect(mailbox.messages).toHaveLength(count + 1);
+    },
+  );
+
+  it("does not expose failure when the internal delivery observer also fails", async () => {
+    await register();
+    vi.spyOn(mailbox, "send").mockRejectedValue(new Error("smtp-secret-canary"));
+    const auth = createAccountAuth(database, environment, mailbox);
+    try {
+      const response = await auth.handle(
+        new Request(`${environment.BETTER_AUTH_URL}/api/auth/request-password-reset`, {
+          method: "POST",
+          headers: {
+            origin: environment.WEB_ORIGIN,
+            "content-type": "application/json",
+            "x-neurochess-client-ip": ip,
+          },
+          body: JSON.stringify({ email }),
+        }),
+        () => {
+          throw new Error("telemetry-secret-canary");
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: true });
+    } finally {
+      await auth.close?.();
+    }
   });
 
   it("commits registration before dispatching email", async () => {
@@ -320,7 +462,7 @@ describe("verified email/password lifecycle", () => {
       await send(message);
     });
     await register();
-    expect(visibleUsers).toEqual([1]);
+    await vi.waitFor(() => expect(visibleUsers).toEqual([1]));
   });
 
   it("does not dispatch email when the registration transaction fails to commit", async () => {

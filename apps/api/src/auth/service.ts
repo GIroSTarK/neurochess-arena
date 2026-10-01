@@ -17,8 +17,9 @@ import { AUTH_BASE_PATH, type AuthEnvironment, authOptions } from "./options.js"
 export interface AccountAuth {
   readonly baseURL: string;
   readonly emailEnabled?: boolean;
-  handle(request: Request): Promise<Response>;
+  handle(request: Request, onEmailDeliveryFailure?: () => void): Promise<Response>;
   resolve(headers: Headers): Promise<AccountPrincipal | null>;
+  close?(): Promise<void>;
 }
 
 export function createAccountAuth(
@@ -27,6 +28,7 @@ export function createAccountAuth(
   sender?: AuthEmailSender,
 ): AccountAuth {
   const delivery = new AsyncLocalStorage<AuthEmail[]>();
+  const pendingDeliveries = new Set<Promise<void>>();
   const bufferedSender: AuthEmailSender | undefined = sender
     ? {
         async send(message) {
@@ -90,20 +92,30 @@ export function createAccountAuth(
     }
   }
 
+  async function deliverEmails(messages: AuthEmail[], onFailure?: () => void): Promise<void> {
+    try {
+      for (const message of messages) await sender?.send(message);
+    } catch {
+      try {
+        onFailure?.();
+      } catch {
+        // Telemetry failure must not recreate a recipient-dependent public error.
+      }
+    }
+  }
+
   return {
     baseURL: environment.BETTER_AUTH_URL,
     emailEnabled: Boolean(sender),
-    async handle(request) {
+    async handle(request, onEmailDeliveryFailure) {
       const pending: AuthEmail[] = [];
       const response = await delivery.run(pending, () => handleRequest(request));
-      // Registration invokes mail callbacks inside its transaction and catches
-      // callback failures. Dispatch only after commit, then acknowledge delivery.
-      if (response.ok && sender) {
-        try {
-          for (const message of pending) await sender.send(message);
-        } catch {
-          return Response.json({ code: "AUTH_EMAIL_UNAVAILABLE" }, { status: 503 });
-        }
+      // Dispatch only after commit. Neither SMTP outcomes nor SMTP delays may
+      // reveal which unauthenticated requests resulted in an email attempt.
+      if (response.ok && sender && pending.length) {
+        const task = deliverEmails(pending, onEmailDeliveryFailure);
+        pendingDeliveries.add(task);
+        void task.then(() => pendingDeliveries.delete(task));
       }
       // Better Auth's sign-out catches adapter deletion errors. Never acknowledge
       // revocation while the same server-side session can still authenticate.
@@ -119,6 +131,9 @@ export function createAccountAuth(
     async resolve(headers) {
       const value = await getSession(headers);
       return value ? { kind: "account", userId: z.uuid().parse(value.user.id) } : null;
+    },
+    async close() {
+      await Promise.all(pendingDeliveries);
     },
   };
 }

@@ -7,14 +7,13 @@ export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
   AUTH_NOT_FOUND: "This authentication action is not available.",
   AUTH_RATE_LIMITED: "Too many authentication requests. Try again later.",
   AUTH_UNAVAILABLE: "Authentication is temporarily unavailable. Try again later.",
-  AUTH_EMAIL_UNAVAILABLE: "Email could not be sent. Try again later or request a new link.",
   AUTH_EMAIL_NOT_VERIFIED: "Verify your email before signing in. You can request a new link.",
   AUTH_INVALID_CREDENTIALS: "The email or password is incorrect.",
   AUTH_INVALID_TOKEN: "This link is invalid or has expired. Request a new link.",
 };
 
 export const authEmailAcceptedMessage =
-  "If this address is eligible, check your email for the next step.";
+  "Your request was received. If no email arrives, wait a minute and request a new link.";
 
 export const authEmailMessages = {
   verification: {
