@@ -90,6 +90,11 @@ export class AccountController {
     if (typeof BroadcastChannel !== "undefined") {
       this.channel = new BroadcastChannel("neurochess.identity");
       this.channel.onmessage = (event: MessageEvent<unknown>) => {
+        if (event.data === "profile-changed") {
+          this.cancelCheck();
+          void this.refresh();
+          return;
+        }
         if (event.data !== "changing" && event.data !== "changed") return;
         this.cancelCheck();
         this.operation?.abort();
@@ -143,37 +148,46 @@ export class AccountController {
   }
   private async readIdentity(signal: AbortSignal) {
     const cancelled = () => signal.aborted;
-    try {
-      const session = await this.api.session(signal);
-      if (cancelled()) return;
-      this.lastCheckedAt = Date.now();
-      const key = sessionKey(session);
-      if (key === this.resolvedKey) return;
-      this.invalidate();
-      if (!session) {
+    // A changing cookie may invalidate the profile read or its confirmation. Retry
+    // identity resolution, but do not spin indefinitely while another tab signs in.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const session = await this.api.session(signal);
+        if (cancelled()) return;
+        this.lastCheckedAt = Date.now();
+        const key = sessionKey(session);
+        if (key !== this.resolvedKey) this.invalidate();
+        if (!session) {
+          this.resolvedKey = key;
+          this.publish({ phase: this.expectedAccount ? "required" : "guest" });
+          return;
+        }
+        this.expectedAccount = true;
+        rememberIntent(true);
+        const profile = await this.api.profile(signal, session.user.id);
+        if (cancelled()) return;
+        const confirmation = await this.api.session(signal);
+        if (cancelled()) return;
+        if (sessionKey(confirmation) !== key) {
+          this.invalidate();
+          continue;
+        }
         this.resolvedKey = key;
-        this.publish({ phase: this.expectedAccount ? "required" : "guest" });
+        this.publish({ phase: "account", session, profile, issue: null });
+        return;
+      } catch (error) {
+        if (cancelled()) return;
+        if (accountError(error) === "PROFILE_UNAUTHORIZED") {
+          this.invalidate();
+          continue;
+        }
+        this.invalidate("unavailable");
+        this.publish({ issue: accountError(error) });
         return;
       }
-      this.expectedAccount = true;
-      rememberIntent(true);
-      const profile = await this.api.profile(signal, session.user.id);
-      if (cancelled()) return;
-      // A cookie can change while the profile request is in flight.
-      const confirmation = await this.api.session(signal);
-      if (cancelled()) return;
-      if (sessionKey(confirmation) !== key) {
-        this.cancelCheck();
-        void this.refresh();
-        return;
-      }
-      this.resolvedKey = key;
-      this.publish({ phase: "account", session, profile });
-    } catch (error) {
-      if (cancelled()) return;
-      this.invalidate("unavailable");
-      this.publish({ issue: accountError(error) });
     }
+    this.invalidate("required");
+    this.publish({ issue: "AUTH_UNAUTHORIZED" });
   }
   identity(): AiIdentity {
     const signal = this.lifetime.signal;
@@ -236,8 +250,10 @@ export class AccountController {
     }
   }
   async signOut() {
+    const expectedAccount = this.state.session?.user.id;
+    if (!expectedAccount) return;
     try {
-      await this.transition((signal) => this.api.signOut(signal));
+      await this.transition((signal) => this.api.signOut(signal, expectedAccount));
     } catch (error) {
       if (accountError(error) !== "cancelled") this.publish({ issue: accountError(error) });
     }
@@ -248,15 +264,17 @@ export class AccountController {
     await this.refresh();
     if (cancelled() || this.state.phase !== "account") throw new AccountFailure("cancelled");
     try {
-      const profile = await this.api.saveProfile(
+      await this.api.saveProfile(
         value,
         !this.state.profile?.completed && value.username !== undefined,
         signal,
         this.state.session?.user.id,
       );
+      if (cancelled()) throw new AccountFailure("cancelled");
+      this.cancelCheck();
       await this.refresh();
       if (cancelled()) throw new AccountFailure("cancelled");
-      this.publish({ profile });
+      this.channel?.postMessage("profile-changed");
     } catch (error) {
       if (!cancelled() && accountError(error) === "PROFILE_UNAUTHORIZED") {
         this.cancelCheck();

@@ -138,8 +138,8 @@ export function createAuthApi(apiBaseUrl: string, options: { fetch?: typeof fetc
         signal,
         input(authResetPasswordRequestSchema, { token, newPassword }),
       ),
-    signOut: (signal: AbortSignal) =>
-      request("/api/auth/sign-out", authSuccessResponseSchema, signal, {}),
+    signOut: (signal: AbortSignal, expectedAccount: string) =>
+      request("/api/auth/sign-out", authSuccessResponseSchema, signal, {}, expectedAccount),
     async social(provider: AuthOAuthProvider, signal: AbortSignal) {
       const result = await request(
         "/api/auth/sign-in/social",

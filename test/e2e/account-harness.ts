@@ -2,12 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   authRateLimits,
+  authSessions,
   authUsers,
   authVerifications,
   type DatabaseConnection,
   games,
 } from "@neurochess/database";
-import { inArray, like, or } from "drizzle-orm";
+import { eq, inArray, like, or } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
@@ -19,20 +20,28 @@ import { API_ORIGIN, WEB_ORIGIN } from "./environment.js";
 
 // Only the disposable browser-test entrypoint installs these transports and routes.
 export function accountHarness(database: DatabaseConnection) {
-  const emails = new Set<string>();
+  const createdUserIds = new Set<string>();
+  const createdSessionIds = new Set<string>();
   const states = new Set<string>();
   const addresses = new Set<string>();
   const messages: { email: string; kind: string; link: string }[] = [];
   const grants = new Map<string, { url: URL; provider: "google" | "github"; email: string }>();
   const accessTokens = new Map<string, string>();
+  const createdCallback = `${WEB_ORIGIN}/?auth=fixture-account-created`;
   const sender: AuthEmailSender = {
     async send(message) {
-      emails.add(message.to);
       const link = /https?:\/\/\S+/.exec(message.text)?.[0];
       if (!link) throw new Error("Missing test email link");
+      const url = new URL(link);
+      const kind = url.pathname === "/auth/reset-password" ? "reset" : "verification";
+      if (kind === "reset") {
+        const token = new URLSearchParams(url.hash.slice(1)).get("token");
+        if (!token) throw new Error("Missing test reset token");
+        states.add(`reset-password:${token}`);
+      }
       messages.push({
         email: message.to,
-        kind: new URL(link).pathname === "/auth/reset-password" ? "reset" : "verification",
+        kind,
         link,
       });
     },
@@ -123,7 +132,64 @@ export function accountHarness(database: DatabaseConnection) {
         const address = headers.get(AUTH_IP_HEADER) ?? "2001:db8::1";
         addresses.add(address);
         headers.set(AUTH_IP_HEADER, address);
-        return auth.handle(new Request(request, { headers }), onFailure);
+        const path = new URL(request.url).pathname;
+        const social = path === "/api/auth/sign-in/social";
+        const body = social
+          ? JSON.stringify({
+              ...z.record(z.string(), z.unknown()).parse(await request.clone().json()),
+              newUserCallbackURL: createdCallback,
+            })
+          : undefined;
+        const response = await auth.handle(
+          new Request(request, { headers, ...(body ? { body } : {}) }),
+          onFailure,
+        );
+        if (path === "/api/auth/sign-up/email" && response.ok) {
+          const { user } = z
+            .object({ user: z.object({ id: z.uuid() }) })
+            .parse(await response.clone().json());
+          // Duplicate registration returns a synthetic, unpersisted ID. Never claim
+          // an existing user by looking up the email supplied to an auth operation.
+          const [created] = await database.db
+            .select({ id: authUsers.id })
+            .from(authUsers)
+            .where(eq(authUsers.id, user.id));
+          if (created) createdUserIds.add(created.id);
+        }
+        if (social && response.ok) {
+          const { url } = z.object({ url: z.url() }).parse(await response.clone().json());
+          const state = new URL(url).searchParams.get("state");
+          if (state) states.add(state);
+        }
+        const location = response.headers.get("location");
+        const callbackSession =
+          path.startsWith("/api/auth/callback/") &&
+          (location === createdCallback || location === `${WEB_ORIGIN}/?auth=signed-in`);
+        const session =
+          callbackSession || (path === "/api/auth/sign-in/email" && response.ok)
+            ? await auth.resolve(
+                new Headers({
+                  cookie: response.headers
+                    .getSetCookie()
+                    .map((value) => value.split(";")[0])
+                    .join("; "),
+                }),
+              )
+            : null;
+        if (session) createdSessionIds.add(session.sessionId);
+        // Better Auth selects this server-controlled destination only for isRegister.
+        // Restore the canonical callback before the normal API bridge sees it.
+        if (
+          path.startsWith("/api/auth/callback/") &&
+          response.headers.get("location") === createdCallback
+        ) {
+          if (!session) throw new Error("Created OAuth fixture session is unavailable");
+          createdUserIds.add(session.userId);
+          const projected = new Headers(response.headers);
+          projected.set("location", `${WEB_ORIGIN}/?auth=signed-in`);
+          return new Response(response.body, { status: response.status, headers: projected });
+        }
+        return response;
       },
     },
     install(app: FastifyInstance) {
@@ -165,8 +231,6 @@ export function accountHarness(database: DatabaseConnection) {
         const url = new URL(input.url);
         const state = url.searchParams.get("state");
         if (!state) return reply.code(400).send({});
-        emails.add(input.email);
-        states.add(state);
         const callback = new URL(`/api/auth/callback/${input.provider}`, API_ORIGIN);
         callback.searchParams.set("state", state);
         if (input.cancel) callback.searchParams.set("error", "access_denied");
@@ -181,19 +245,18 @@ export function accountHarness(database: DatabaseConnection) {
     },
     async close() {
       globalThis.fetch = originalFetch;
-      if (emails.size) {
-        const users = await database.db
-          .select({ id: authUsers.id })
-          .from(authUsers)
-          .where(inArray(authUsers.email, [...emails]));
-        const ids = users.map((user) => user.id);
-        if (ids.length) {
-          await database.db.transaction(async (tx) => {
-            await tx.delete(games).where(inArray(games.ownerUserId, ids));
-            await tx.delete(authVerifications).where(inArray(authVerifications.value, ids));
-            await tx.delete(authUsers).where(inArray(authUsers.id, ids));
-          });
-        }
+      if (createdSessionIds.size) {
+        await database.db
+          .delete(authSessions)
+          .where(inArray(authSessions.id, [...createdSessionIds]));
+      }
+      if (createdUserIds.size) {
+        const ids = [...createdUserIds];
+        await database.db.transaction(async (tx) => {
+          await tx.delete(games).where(inArray(games.ownerUserId, ids));
+          await tx.delete(authVerifications).where(inArray(authVerifications.value, ids));
+          await tx.delete(authUsers).where(inArray(authUsers.id, ids));
+        });
       }
       if (states.size) {
         await database.db

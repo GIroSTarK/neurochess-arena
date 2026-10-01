@@ -133,6 +133,44 @@ function session(cookie?: string) {
 }
 
 describe("PostgreSQL Better Auth foundation", () => {
+  it("does not revoke or clear a replacement account's cookie when a stale page signs out", async () => {
+    const original = await accountFixture();
+    const replacement = await accountFixture();
+    for (const expected of [original.user.id, "guest", "malformed"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/sign-out",
+        remoteAddress: ip,
+        headers: {
+          origin: environment.WEB_ORIGIN,
+          cookie: replacement.cookie,
+          "x-neurochess-expected-account": expected,
+        },
+        payload: {},
+      });
+      expect(response.statusCode).toBe(expected === "malformed" ? 400 : 401);
+      expect(response.headers["set-cookie"]).toBeUndefined();
+      expect((await session(replacement.cookie)).json()).toMatchObject({
+        user: { id: replacement.user.id },
+      });
+    }
+    const signedOut = await app.inject({
+      method: "POST",
+      url: "/api/auth/sign-out",
+      remoteAddress: ip,
+      headers: {
+        origin: environment.WEB_ORIGIN,
+        cookie: replacement.cookie,
+        "x-neurochess-expected-account": replacement.user.id,
+      },
+      payload: {},
+    });
+    expect(signedOut.statusCode).toBe(200);
+    expect((await session(replacement.cookie)).json()).toBeNull();
+    expect((await session(original.cookie)).json()).toMatchObject({
+      user: { id: original.user.id },
+    });
+  });
   it("permits ongoing session observation without accumulating a minute-long inactivity budget", async () => {
     let now = Date.now();
     vi.spyOn(Date, "now").mockImplementation(() => now);

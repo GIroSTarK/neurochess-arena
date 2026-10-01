@@ -125,6 +125,98 @@ test("email registration, profile, account play, sign-out, paused return and pas
   await expect(page.getByRole("alert")).toContainText(/invalid or has expired/);
 });
 
+test("other tabs observe onboarding and profile edits without losing keys or pausing a game", async ({
+  page,
+  context,
+}) => {
+  const email = emailFor();
+  await page.goto("/auth/sign-up");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(page.getByText(/Request received/)).toBeVisible();
+  await page.goto(await emailLink(page, email, "verification"));
+  await login(page, email);
+  await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
+  const observer = await context.newPage();
+  try {
+    await observer.goto("/");
+    await expect(observer.getByRole("heading", { name: "Choose your username" })).toBeVisible();
+    await page.getByLabel("Username", { exact: true }).fill(usernameFor());
+    await page.getByRole("button", { name: "Finish profile" }).click();
+    await expect(observer.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+    const key = observer
+      .getByRole("group", { name: "White", exact: true })
+      .getByLabel("API key", { exact: true });
+    await expect(key).toBeEditable();
+    await key.fill("profile-key-fixture");
+    await page.goto("/account");
+    const firstRename = usernameFor();
+    await page.getByLabel("Username", { exact: true }).fill(firstRename);
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    await expect(observer.getByRole("link", { name: firstRename, exact: true })).toBeVisible();
+    await expect(key).toHaveValue("profile-key-fixture");
+    const gameId = await startAccountGame(observer);
+    const renamed = usernameFor();
+    await page.getByLabel("Username", { exact: true }).fill(renamed);
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(observer.getByRole("link", { name: renamed, exact: true })).toBeVisible();
+    await expect(observer.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+    const game = await observer.request.get(`${API_ORIGIN}/games/${gameId}`);
+    expect(((await game.json()) as { state: string }).state).toBe("active");
+  } finally {
+    await observer.close();
+  }
+});
+
+test("a stale Sign out cannot revoke the replacement account cookie", async ({
+  page,
+  context,
+  browser,
+}) => {
+  const otherContext = await browser.newContext({ baseURL: WEB_ORIGIN });
+  await otherContext.addCookies([
+    {
+      name: "neurochess_test_client",
+      value: randomUUID(),
+      url: API_ORIGIN,
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+    },
+  ]);
+  const otherPage = await otherContext.newPage();
+  const replacementName = await register(otherPage, emailFor());
+  const replacementCookies = await otherContext.cookies(API_ORIGIN);
+  const replacement = await otherPage.request.get(API_ORIGIN + "/api/auth/get-session");
+  const replacementId = ((await replacement.json()) as { user: { id: string } }).user.id;
+  await otherContext.close();
+  await register(page, emailFor());
+  const original = await page.request.get(API_ORIGIN + "/api/auth/get-session");
+  const originalId = ((await original.json()) as { user: { id: string } }).user.id;
+  const release = Promise.withResolvers<void>();
+  await page.route(API_ORIGIN + "/api/auth/get-session", async (route) => {
+    await release.promise;
+    await route.continue();
+  });
+  try {
+    await context.addCookies(replacementCookies);
+    const signOut = page.waitForResponse(API_ORIGIN + "/api/auth/sign-out");
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    const rejected = await signOut;
+    expect(rejected.status()).toBe(401);
+    expect(rejected.request().headers()["x-neurochess-expected-account"]).toBe(originalId);
+    release.resolve();
+    await expect(page.getByRole("link", { name: replacementName, exact: true })).toBeVisible();
+    const remaining = await page.request.get(API_ORIGIN + "/api/auth/get-session");
+    expect(((await remaining.json()) as { user: { id: string } }).user.id).toBe(replacementId);
+  } finally {
+    release.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 test("a second tab switches accounts during discovery and discards the old page's secrets and late result", async ({
   page,
   context,
@@ -231,8 +323,10 @@ for (const provider of ["google", "github"] as const) {
       const callback = (await response.json()) as { url: string };
       await route.fulfill({ status: 302, headers: { location: callback.url }, body: "" });
     });
-    await page.route("https://*.googleusercontent.com/**", (route) => route.abort());
-    await page.route("https://avatars.githubusercontent.com/**", (route) => route.abort());
+    await page.context().route("https://*.googleusercontent.com/**", (route) => route.abort());
+    await page
+      .context()
+      .route("https://avatars.githubusercontent.com/**", (route) => route.abort());
     await page.goto("/auth/sign-in");
     await page
       .getByRole("button", {
@@ -240,8 +334,13 @@ for (const provider of ["google", "github"] as const) {
       })
       .click();
     await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
+    const observer = await page.context().newPage();
+    await observer.goto("/");
+    await expect(observer.getByRole("button", { name: "Remove avatar" })).toBeVisible();
     await page.getByRole("button", { name: "Remove avatar" }).click();
     await expect(page.getByRole("button", { name: "Remove avatar" })).toHaveCount(0);
+    await expect(observer.getByRole("button", { name: "Remove avatar" })).toHaveCount(0);
+    await observer.close();
     await page.getByLabel("Username", { exact: true }).fill(usernameFor());
     await page.getByRole("button", { name: "Finish profile" }).click();
     await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();

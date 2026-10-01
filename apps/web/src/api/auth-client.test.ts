@@ -5,6 +5,14 @@ import { jsonResponse } from "../test/fixtures";
 import { createAuthApi } from "./auth-client";
 
 describe("account transport", () => {
+  it("sends the observed account assertion on sign-out", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => jsonResponse({ success: true }));
+    const api = createAuthApi("http://localhost:3001", { fetch });
+    await api.signOut(new AbortController().signal, "00000000-0000-4000-8000-000000000001");
+    expect(
+      new Headers(fetch.mock.calls[0]?.[1]?.headers).get("x-neurochess-expected-account"),
+    ).toBe("00000000-0000-4000-8000-000000000001");
+  });
   it("uses validated credentialed requests and never retains server error prose", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       jsonResponse(

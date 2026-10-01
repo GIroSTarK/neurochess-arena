@@ -14,6 +14,7 @@ import {
   authSignInRequestSchema,
   authSignOutResponseSchema,
   authVerificationQuerySchema,
+  expectedAccountSchema,
 } from "@neurochess/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -164,6 +165,16 @@ export async function registerAuthRoutes(
       // creates a session; verification and password recovery never auto-sign in.
       if (path !== "/get-session" && path !== "/sign-out" && !isCallback) headers.delete("cookie");
       try {
+        if (path === "/sign-out") {
+          const expected = expectedAccountSchema.safeParse(
+            request.headers["x-neurochess-expected-account"],
+          );
+          if (!expected.success) return await fail(request, reply, 400);
+          if (expected.data !== undefined) {
+            const account = await options.auth.resolve(headers);
+            if (expected.data !== account?.userId) return await fail(request, reply, 401);
+          }
+        }
         const body = request.method === "POST" ? bodySchema.parse(request.body) : undefined;
         const libraryBody =
           path === "/sign-in/social"

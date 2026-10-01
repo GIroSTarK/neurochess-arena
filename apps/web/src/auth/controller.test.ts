@@ -29,6 +29,74 @@ afterEach(() => {
 });
 
 describe("page account identity", () => {
+  it("refreshes onboarding, usernames and avatars for the same session without ending its game lifetime", async () => {
+    const { api, controller } = fixture();
+    vi.mocked(api.profile).mockResolvedValueOnce({
+      username: null,
+      completed: false,
+      avatar: { source: "initials", initials: "?" },
+    });
+    await controller.refresh();
+    const identity = controller.identity();
+    const revision = controller.getSnapshot().revision;
+    const updated: ProfileResponse = {
+      ...profile,
+      username: "Renamed",
+      avatar: {
+        source: "github",
+        initials: "RE",
+        url: "https://avatars.githubusercontent.com/u/123",
+      },
+    };
+    vi.mocked(api.profile).mockResolvedValue(updated);
+    await controller.refresh();
+    expect(controller.getSnapshot().profile).toEqual(updated);
+    expect(controller.getSnapshot().revision).toBe(revision);
+    expect(identity.signal.aborted).toBe(false);
+    await expect(identity.verify()).resolves.toBeUndefined();
+    vi.mocked(api.profile).mockResolvedValue(profile);
+    await controller.refresh();
+    expect(controller.getSnapshot().profile?.avatar.source).toBe("initials");
+  });
+  it.each(["switch", "expiry"])(
+    "immediately reconciles %s during the session-to-profile read",
+    async (change) => {
+      const { api, controller } = fixture();
+      const replacement =
+        change === "switch" ? session("00000000-0000-4000-8000-000000000002") : null;
+      vi.mocked(api.profile).mockImplementationOnce(async () => {
+        vi.mocked(api.session).mockResolvedValue(replacement);
+        throw new AccountFailure("PROFILE_UNAUTHORIZED");
+      });
+      await controller.refresh();
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: replacement ? "account" : "required",
+        session: replacement,
+        profile: replacement ? profile : null,
+      });
+    },
+  );
+  it("bounds reconciliation when profile authorization keeps failing", async () => {
+    const { api, controller } = fixture();
+    vi.mocked(api.profile).mockRejectedValue(new AccountFailure("PROFILE_UNAUTHORIZED"));
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "required",
+      session: null,
+      profile: null,
+    });
+    expect(vi.mocked(api.profile).mock.calls.length).toBeLessThanOrEqual(3);
+  });
+  it("binds sign-out to the displayed account before the transition clears it", async () => {
+    const { api, controller } = fixture();
+    await controller.refresh();
+    vi.mocked(api.session).mockResolvedValue(session("00000000-0000-4000-8000-000000000002"));
+    await controller.signOut();
+    expect(api.signOut).toHaveBeenCalledWith(
+      expect.any(AbortSignal),
+      "00000000-0000-4000-8000-000000000001",
+    );
+  });
   it("immediately clears private profile state when a save loses authorization after preflight", async () => {
     const { api, controller } = fixture();
     await controller.refresh();
