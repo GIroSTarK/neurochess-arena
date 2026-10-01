@@ -1,7 +1,13 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { setImmediate } from "node:timers/promises";
 
-import { authRateLimits, authSessions, authUsers, authVerifications } from "@neurochess/database";
+import {
+  authRateLimits,
+  authSessions,
+  authUsers,
+  authVerifications,
+  createProfileRepository,
+} from "@neurochess/database";
 import { eq, inArray, like } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +15,7 @@ import { integrationDatabase } from "../../../test/database.js";
 import { buildApp } from "../src/app.js";
 import { createAccountAuth } from "../src/auth/service.js";
 import { createLoggerOptions } from "../src/logger.js";
+import { createProfileService } from "../src/profiles/service.js";
 
 import { createTestMailbox } from "./auth-mailbox.js";
 
@@ -35,6 +42,7 @@ beforeEach(async () => {
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
     auth: createAccountAuth(database, environment, mailbox),
+    profiles: createProfileService(createProfileRepository(database)),
     logger: {
       ...createLoggerOptions("info"),
       stream: { write: (chunk: string) => logs.push(chunk) },
@@ -121,6 +129,38 @@ async function requestReset() {
 }
 
 describe("verified email/password lifecycle", () => {
+  it("keeps email private in explicit username onboarding and profile updates", async () => {
+    await register();
+    await verify();
+    const cookie = await signIn();
+    const initial = await app.inject({ url: "/profile", headers: { cookie } });
+    expect(initial.json()).toEqual({
+      username: null,
+      completed: false,
+      avatar: { source: "initials", initials: "?" },
+    });
+    const username = `Email_${randomUUID().slice(0, 8)}`;
+    for (const url of ["/profile/onboarding", "/profile"]) {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: { cookie, origin: environment.WEB_ORIGIN },
+        payload: { username },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        username,
+        completed: true,
+        avatar: { source: "initials", initials: "EM" },
+      });
+      expect(response.body).not.toContain(email);
+    }
+    const second = await signIn();
+    expect(
+      (await app.inject({ url: "/profile", headers: { cookie: second } })).json(),
+    ).toMatchObject({ username });
+  });
+
   it("registers, verifies, signs in, resets and revokes all sessions, then signs out through the real service", async () => {
     await register();
     expect(mailbox.messages).toHaveLength(1);

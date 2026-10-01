@@ -13,6 +13,7 @@ import {
   modelInvocations,
   moves,
 } from "./schema/index.js";
+import { profiles } from "./schema/profiles.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type StoredGame = typeof games.$inferSelect;
@@ -59,6 +60,7 @@ export type GamePositionUpdate = Pick<
 export interface GameReader {
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
   hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
+  getAccountUsername(userId: string): Promise<string | null>;
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
   getMoves(gameId: string): Promise<StoredMove[]>;
@@ -120,6 +122,13 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    async getAccountUsername(userId) {
+      const [profile] = await db
+        .select({ username: profiles.username })
+        .from(profiles)
+        .where(eq(profiles.userId, userId));
+      return profile?.username ?? null;
+    },
     async hasAccountSession(userId, sessionId) {
       const [active] = await db
         .select({ id: session.id })

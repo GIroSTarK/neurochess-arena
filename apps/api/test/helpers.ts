@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { type GameSnapshot, gameSnapshotSchema, type MoveCommand } from "@neurochess/contracts";
 import {
   createGameRepository,
+  createProfileRepository,
   type DatabaseConnection,
   type GameRepository,
   games,
@@ -18,6 +19,7 @@ import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 import type { GuestPrincipal } from "../src/identity/principal.js";
+import { createProfileService } from "../src/profiles/service.js";
 
 export const WEB_ORIGIN = "http://localhost:5173";
 export const KNIGHT_CYCLE = ["g1f3", "g8f6", "f3g1", "f6g8"];
@@ -59,7 +61,12 @@ export class ApiHarness {
       logger: options.logger ?? false,
       readiness: database,
       webOrigin: WEB_ORIGIN,
-      ...(options.auth ? { auth: options.auth(database) } : {}),
+      ...(options.auth
+        ? {
+            auth: options.auth(database),
+            profiles: createProfileService(createProfileRepository(database)),
+          }
+        : {}),
       gameApi: {
         games: createGameService(repository, {
           nodeEnv: options.nodeEnv ?? "test",

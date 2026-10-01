@@ -384,6 +384,7 @@ export const en = {
   },
   notices: {
     existing: "Your current game is open.",
+    profileRequired: "Choose a username to complete your profile before playing.",
     sandboxUnavailable:
       "The development sandbox is unavailable on this server. Enable it on your development server, then retry.",
     unauthorized:

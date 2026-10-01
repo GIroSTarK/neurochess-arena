@@ -31,7 +31,7 @@ export class AccountGameHarness extends ApiHarness {
     });
   }
 
-  async account(api: TestApi) {
+  async account(api: TestApi, completeProfile = true) {
     const fixture = betterAuth({
       ...authOptions(authEnvironment),
       database: createAuthDatabaseAdapter(api.database),
@@ -59,6 +59,12 @@ export class AccountGameHarness extends ApiHarness {
       new Headers({ cookie }),
     );
     if (!principal) throw new Error("Account fixture did not authenticate");
+    if (completeProfile) {
+      const profile = await this.post(api, cookie, "/profile/onboarding", {
+        username: `Player_${randomUUID().replaceAll("-", "").slice(0, 16)}`,
+      });
+      expect(profile.statusCode, profile.body).toBe(200);
+    }
     return {
       cookie,
       principal,

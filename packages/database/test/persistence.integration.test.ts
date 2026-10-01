@@ -178,6 +178,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0008_better_auth_foundation",
         "0009_oauth_account_identity",
         "0010_account_owned_games",
+        "0011_profiles",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -386,6 +387,45 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         );
         expect(after.rows, table).toEqual(beforeOwnership[index]);
       }
+      const accountGameId = randomUUID();
+      await tx.execute(
+        sql`insert into games(id, owner_user_id, mode, state, result, fen, pgn) values (${accountGameId}, ${authUserId}, 'ai_vs_human', 'paused', '*', 'account-position', 'account-history')`,
+      );
+      await tx.execute(
+        sql`insert into game_participants(game_id, color, seat_type, user_id) values (${accountGameId}, 'white', 'human', ${authUserId})`,
+      );
+      await tx.execute(
+        sql`update "user" set image = 'https://lh3.googleusercontent.com/a/upgrade' where id = ${authUserId}`,
+      );
+      const beforeProfiles = [];
+      for (const table of [...authTables, ...preservedTables]) {
+        beforeProfiles.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[10]!);
+      const afterProfiles = [];
+      for (const table of [...authTables, ...preservedTables]) {
+        afterProfiles.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      expect(afterProfiles).toEqual(beforeProfiles);
+      expect((await tx.execute(sql`select * from profiles`)).rows).toEqual([]);
+      await tx.execute(
+        sql`insert into profiles(user_id, username, username_normalized) values (${authUserId}, 'Upgraded', 'upgraded')`,
+      );
+      expect(
+        (await tx.execute(sql`select owner_user_id from games where id = ${accountGameId}`)).rows,
+      ).toEqual([{ owner_user_id: authUserId }]);
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

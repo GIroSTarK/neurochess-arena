@@ -6,6 +6,8 @@ import {
   authSessions,
   authUsers,
   authVerifications,
+  createGameRepository,
+  createProfileRepository,
 } from "@neurochess/database";
 import { eq, inArray, like } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp } from "../src/app.js";
 import { createAccountAuth } from "../src/auth/service.js";
+import { createGameService } from "../src/games/service.js";
 import { createLoggerOptions } from "../src/logger.js";
+import { createProfileService } from "../src/profiles/service.js";
 
 import { createTestMailbox } from "./auth-mailbox.js";
 import { createOAuthTransport, type OAuthProvider } from "./oauth-transport.js";
@@ -53,6 +57,7 @@ beforeEach(async () => {
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
     auth: createAccountAuth(database, environment, mailbox),
+    profiles: createProfileService(createProfileRepository(database)),
     logger: {
       ...createLoggerOptions("info"),
       stream: { write: (chunk: string) => logs.push(chunk) },
@@ -181,6 +186,67 @@ function expectFailure(response: Awaited<ReturnType<typeof callback>>, code = "A
 describe.each(["google", "github"] as const)(
   "%s OAuth through the real auth integration",
   (provider) => {
+    it("requires chosen-username onboarding, supports renames and preserves avatar removal on returning sign-in", async () => {
+      const cookie = sessionCookie(await callback(await start(provider)));
+      const read = (value = cookie) => app.inject({ url: "/profile", headers: { cookie: value } });
+      const update = (url: string, payload: object) =>
+        app.inject({
+          method: "POST",
+          url,
+          payload,
+          headers: { cookie, origin: environment.WEB_ORIGIN },
+        });
+      const initial = await read();
+      expect(initial.statusCode).toBe(200);
+      expect(initial.json()).toMatchObject({
+        username: null,
+        completed: false,
+        avatar: { source: provider, initials: "?" },
+      });
+      const principal = (await createAccountAuth(database, environment, mailbox).resolve(
+        new Headers({ cookie }),
+      ))!;
+      const games = createGameService(createGameRepository(database), {
+        nodeEnv: "test",
+        sandboxEnabled: true,
+      });
+      await expect(games.unfinishedGame(principal)).rejects.toMatchObject({
+        code: "PROFILE_REQUIRED",
+      });
+      const username = `OAuth_${randomUUID().slice(0, 8)}`;
+      expect((await update("/profile/onboarding", { username })).json()).toMatchObject({
+        username,
+        completed: true,
+        avatar: { source: provider, initials: "OA" },
+      });
+      expect(await games.unfinishedGame(principal)).toEqual({ game: null });
+      const renamed = `Renamed_${randomUUID().slice(0, 8)}`;
+      expect((await update("/profile", { username: renamed, avatar: "remove" })).json()).toEqual({
+        username: renamed,
+        completed: true,
+        avatar: { source: "initials", initials: "RE" },
+      });
+      expect((await post("sign-out", {}, cookie)).statusCode).toBe(200);
+      const returning = sessionCookie(await callback(await start(provider)));
+      const response = await read(returning);
+      expect(response.json()).toEqual({
+        username: renamed,
+        completed: true,
+        avatar: { source: "initials", initials: "RE" },
+      });
+      expect(response.body).not.toContain(email);
+      expect(response.body).not.toContain(principal.userId);
+      expect((await session(returning)).body).not.toContain(renamed);
+      expect(
+        (
+          await database.db
+            .select({ image: authUsers.image })
+            .from(authUsers)
+            .where(eq(authUsers.id, principal.userId))
+        )[0],
+      ).toEqual({ image: null });
+    });
+
     it("enforces a single owner for a provider subject in PostgreSQL", async () => {
       const first = await callback(await start(provider));
       const owner = (await session(sessionCookie(first))).json<{ user: { id: string } }>().user.id;

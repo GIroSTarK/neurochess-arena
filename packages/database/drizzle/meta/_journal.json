@@ -78,6 +78,13 @@
       "when": 1790823684742,
       "tag": "0010_account_owned_games",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790860682323,
+      "tag": "0011_profiles",
+      "breakpoints": true
     }
   ]
 }
