@@ -8,6 +8,7 @@ export function readAppPage(): AppPage {
   if (
     [
       "/account",
+      "/account/credentials",
       "/auth/sign-in",
       "/auth/sign-up",
       "/auth/verify",

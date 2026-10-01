@@ -201,7 +201,7 @@ export class AccountController {
     this.invalidate("required");
     this.publish({ issue: "AUTH_UNAUTHORIZED" });
   }
-  identity(): AiIdentity {
+  identity(requireProfile = true): AiIdentity {
     const signal = this.lifetime.signal;
     const cancelled = () => signal.aborted;
     const intent = this.state.phase === "account" ? "account" : "guest";
@@ -215,7 +215,7 @@ export class AccountController {
         if (
           cancelled() ||
           this.state.phase !== intent ||
-          (intent === "account" && !this.state.profile?.completed)
+          (requireProfile && intent === "account" && !this.state.profile?.completed)
         ) {
           throw new ApiFailure("cancelled");
         }

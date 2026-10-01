@@ -6,6 +6,7 @@ import { providerFailureMessage } from "../api/ai-messages";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { ArenaHeader } from "../arena/ArenaHeader";
+import type { SavedCredentialChoices } from "../arena/setup/CredentialSource";
 import { SeatSetup } from "../arena/setup/SeatSetup";
 import { AccountAccess } from "../auth/AccountAccess";
 import { PieceIcon } from "../board/PieceIcon";
@@ -22,17 +23,24 @@ export function ArenaSetupScreen({
   sandboxEnabled,
   onCreated,
   onReturnToGame,
+  savedCredentials,
 }: {
   readonly api: SetupApi;
   readonly credentials: SetupCredentials;
   readonly sandboxEnabled: boolean;
   readonly onCreated: (game: GameDetails) => void;
   readonly onReturnToGame: (gameId: string) => void;
+  readonly savedCredentials?: SavedCredentialChoices;
 }) {
   const { t } = useTranslation();
   const [controller] = useState(() => new SetupController(api, credentials));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => controller.connect(), [controller]);
+  useEffect(() => {
+    if (savedCredentials?.phase === "ready") {
+      controller.updateSavedCredentials(savedCredentials.credentials);
+    }
+  }, [controller, savedCredentials?.phase, savedCredentials?.credentials]);
   const ready = state.phase === "editing" && setupConfiguration(state) !== null;
 
   function issueMessage(issue: SetupIssue): string {
@@ -52,6 +60,9 @@ export function ArenaSetupScreen({
   const seatMessage = (color: "white" | "black") => {
     if (state.mode === "ai_vs_human" && state.humanColor === color) return t("setup.humanSeat");
     const seat = state.seats[color];
+    if (savedCredentials && seat.issue?.code === "provider_auth") {
+      return t("credentials.unavailable");
+    }
     if (seat.issue) return issueMessage(seat.issue);
     if (seat.discovery === "loading") return t("setup.loading");
     if (seat.modelId) return t("setup.selected");
@@ -164,6 +175,8 @@ export function ArenaSetupScreen({
                 error={seat.issue !== null}
                 onProvider={(provider) => controller.setProvider(color, provider)}
                 onKey={(value) => controller.setKey(color, value)}
+                {...(savedCredentials ? { savedCredentials } : {})}
+                onCredential={(value) => controller.setCredential(color, value)}
                 onKeyBlur={() => controller.validateKey(color)}
                 onDiscover={() => void controller.discover(color)}
                 onModel={(model) => controller.setModel(color, model)}

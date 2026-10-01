@@ -3,14 +3,15 @@ import {
   aiProviderSchema,
   type ChessColor,
   chessColorSchema,
-  sessionApiKeySchema,
+  type ProviderCredentialSource,
+  providerCredentialSourceSchema,
 } from "@neurochess/contracts";
 
 import { AiRequestFailure } from "./ai-client";
 import { ApiFailure } from "./failures";
 
 export function createSessionCredentials(lifetime: AbortSignal) {
-  const keys = new Map<ChessColor, { provider: AiProvider; apiKey: string }>();
+  const keys = new Map<ChessColor, { provider: AiProvider; source: ProviderCredentialSource }>();
   let disposed = false;
   const clear = () => keys.clear();
   // pagehide also covers bfcache: navigating back must require fresh key entry.
@@ -23,23 +24,29 @@ export function createSessionCredentials(lifetime: AbortSignal) {
   }
   lifetime.addEventListener("abort", dispose, { once: true });
   if (lifetime.aborted) dispose();
+  function set(color: ChessColor, provider: AiProvider, source: ProviderCredentialSource) {
+    if (disposed) throw new AiRequestFailure("AI_KEY_REQUIRED");
+    const parsed = providerCredentialSourceSchema.safeParse(source);
+    if (
+      !parsed.success ||
+      !aiProviderSchema.safeParse(provider).success ||
+      !chessColorSchema.safeParse(color).success
+    ) {
+      throw new ApiFailure("malformed");
+    }
+    keys.set(color, { provider, source: parsed.data });
+  }
   return {
     set(color: ChessColor, provider: AiProvider, apiKey: string) {
-      if (disposed) throw new AiRequestFailure("AI_KEY_REQUIRED");
-      const parsed = sessionApiKeySchema.safeParse(apiKey);
-      if (
-        !parsed.success ||
-        !aiProviderSchema.safeParse(provider).success ||
-        !chessColorSchema.safeParse(color).success
-      ) {
-        throw new ApiFailure("malformed");
-      }
-      keys.set(color, { provider, apiKey: parsed.data });
+      set(color, provider, { apiKey });
     },
-    require(color: ChessColor, provider: AiProvider): string {
+    setSaved(color: ChessColor, provider: AiProvider, credentialId: string) {
+      set(color, provider, { credentialId });
+    },
+    require(color: ChessColor, provider: AiProvider): ProviderCredentialSource {
       const entry = keys.get(color);
       if (entry?.provider !== provider) throw new AiRequestFailure("AI_KEY_REQUIRED");
-      return entry.apiKey;
+      return { ...entry.source };
     },
     remove(color: ChessColor) {
       keys.delete(color);

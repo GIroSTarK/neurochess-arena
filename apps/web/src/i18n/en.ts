@@ -1,4 +1,56 @@
 export const en = {
+  credentials: {
+    title: "Saved provider keys",
+    navigation: "Provider keys",
+    description:
+      "Manage encrypted keys for this account. Choose a key explicitly for each AI seat; recovery always needs Resume or Next move.",
+    add: "Add a provider key",
+    label: "Label",
+    labelHint:
+      "Use a name you recognize, up to 64 characters. Do not put your API key in the label.",
+    persistence:
+      "Saving sends this key to the Arena API for encrypted storage in your account. It remains saved after you close this tab, until you revoke it or clear your saved keys. Saved keys cannot be revealed.",
+    saveOptIn: "Save this key to my account",
+    save: "Save key",
+    saved: "Key saved. Select it explicitly in game setup or paused recovery.",
+    list: "Your saved keys",
+    empty: "No saved keys yet. You can always use a session-only key.",
+    suffix: "Ends in {{suffix}}",
+    masked: "Key hidden",
+    created: "Saved {{date}}",
+    revokeLabel: "Revoke {{label}}",
+    revoke: "Revoke key",
+    revokeTitle: "Revoke this saved key?",
+    clear: "Clear all saved keys",
+    clearTitle: "Clear all saved keys for this account?",
+    revokeHint:
+      "Removed keys cannot be used for future provider requests. Seats using them will need another key. An already-sent request may still finish and incur a charge. Games and your profile are kept.",
+    refresh: "Refresh saved keys",
+    loadError: "Saved keys could not be loaded. Refresh the list or use a key for this tab.",
+    source: "Credential source",
+    missingSelection: "Unavailable saved key — choose a replacement",
+    recoveryTitle: "Choose credentials to continue",
+    savedOption: "{{label}} · {{suffix}}",
+    selectHint: "Choose a saved key explicitly. Only keys for this provider are listed.",
+    guestHint: "Sign in to save keys to an account. Guest keys are only available in this tab.",
+    recovery:
+      "Session-only keys and saved selections were cleared. Enter a key or choose a saved key for each AI seat, then Resume or Next move.",
+    unavailable:
+      "This key is unavailable or was rejected. Choose another saved key, enter a replacement for this tab, or manage your saved keys. Continue when ready.",
+    errors: {
+      cancelled: "This operation was cancelled. Try again when ready.",
+      CREDENTIAL_INVALID_REQUEST:
+        "Choose a provider, a valid label and an API key without spaces. Keep the key out of the label.",
+      CREDENTIAL_UNAUTHORIZED: "Your account session changed. Sign in again to manage keys.",
+      CREDENTIAL_FORBIDDEN: "This request is not allowed. Reload the page and try again.",
+      CREDENTIAL_CONFLICT:
+        "This save may already exist. Refresh your saved keys before saving again.",
+      CREDENTIAL_LIMIT_REACHED:
+        "Your account has 100 saved keys. Revoke a key before saving another.",
+      CREDENTIAL_UNAVAILABLE:
+        "The operation could not be confirmed. Refresh your saved keys before trying again. If saving remains unavailable, use a key for this tab.",
+    },
+  },
   account: {
     label: "Account",
     signIn: "Sign in",

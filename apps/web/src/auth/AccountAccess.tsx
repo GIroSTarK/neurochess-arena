@@ -18,9 +18,18 @@ export function AccountAccess() {
           className="flex min-h-target max-w-full min-w-0 items-center gap-2 text-text hover:text-accent"
         >
           <Avatar avatar={account.state.profile.avatar} />
-          <span className="max-w-48 break-words">
+          <span className="max-w-48 min-w-0 break-words">
             {account.state.profile.username ?? t("account.profile")}
           </span>
+        </a>
+        <a
+          href={
+            "/account/credentials" +
+            (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))
+          }
+          className="inline-flex min-h-target items-center text-accent underline"
+        >
+          {t("credentials.navigation")}
         </a>
         <Button variant="quiet" padding="compact" onClick={() => void account.controller.signOut()}>
           {t("account.signOut")}

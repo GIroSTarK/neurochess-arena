@@ -23,6 +23,7 @@ import {
   type ModelDiscoveryResult,
   modelDiscoveryResultSchema,
   moveCommandSchema,
+  type ProviderCredentialSource,
   unfinishedGameDetailsSchema,
 } from "@neurochess/contracts";
 import type { z } from "zod";
@@ -51,7 +52,7 @@ export interface AiApi extends Pick<
   controller(command: AiControllerRequest, signal: AbortSignal): Promise<GameSnapshot>;
   turn(
     command: AiControlledTurnCommand,
-    apiKey: string,
+    credential: ProviderCredentialSource,
     signal: AbortSignal,
   ): Promise<GameSnapshot>;
 }
@@ -309,8 +310,8 @@ export function createAiApi(
       if (result.gameId !== gameId.toLowerCase()) throw new ApiFailure("malformed");
       return result;
     },
-    async turn(command, apiKey, signal) {
-      const body = validated(aiTurnRequestSchema, { ...command, apiKey });
+    async turn(command, credential, signal) {
+      const body = validated(aiTurnRequestSchema, { ...command, ...credential });
       // Allow the server's operational deadline to pause and persist the turn before
       // the transport deadline. Never automatically retry an uncertain paid operation.
       return snapshotFor(

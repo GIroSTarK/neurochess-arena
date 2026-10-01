@@ -88,6 +88,27 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("requires explicit saved selection after recovery and dispatches only on Next move", async () => {
+    const h = harness();
+    await h.controller.load(GAME_ID);
+    const saved = {
+      credentialId: GAME_ID,
+      provider: "openai" as const,
+      label: "Saved",
+      maskedSuffix: "1234",
+      createdAt: "2026-10-01T00:00:00.000Z",
+    };
+    h.controller.setCredential("white", GAME_ID, [saved]);
+    h.controller.setCredential("black", GAME_ID, [saved]);
+    expect(h.controller.getSnapshot().keys).toEqual({ white: true, black: true });
+    expect(h.api.turn).not.toHaveBeenCalled();
+    h.api.turn.mockResolvedValue(snapshot(["e2e4"], { state: "paused", legalMoves: [] }));
+    await h.controller.continue(true);
+    expect(h.api.turn.mock.calls[0]?.[1]).toEqual({ credentialId: GAME_ID });
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(h.controller.getSnapshot().keys).toEqual({ white: false, black: false });
+  });
   it("does not restore an earlier provider-pause notice while an explicit retry is in flight", async () => {
     const game = { ...details, snapshot: snapshot([], { state: "paused", legalMoves: [] }) };
     const h = harness(game);

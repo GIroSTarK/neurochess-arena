@@ -1,8 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  createCredentialRepository,
   createGameRepository,
   createProfileRepository,
   type GameRepository,
@@ -14,6 +16,8 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
+import { createCredentialCipher } from "../../apps/api/src/credentials/crypto.js";
+import { createCredentialService } from "../../apps/api/src/credentials/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
@@ -30,6 +34,10 @@ async function main() {
   // There is deliberately no DATABASE_URL fallback and no reuse of a dev API.
   const database = integrationDatabase();
   const accounts = accountHarness(database);
+  const credentialCipher = createCredentialCipher({
+    keyId: "browser-fixture",
+    key: randomBytes(32).toString("base64"),
+  });
   const guestIds = new Set<string>();
   const original = createGameRepository(database);
   const repository: GameRepository = {
@@ -118,12 +126,14 @@ async function main() {
       webOrigin: WEB_ORIGIN,
       auth: accounts.auth,
       profiles: createProfileService(createProfileRepository(database)),
+      credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {
           nodeEnv: "test",
           sandboxEnabled: true,
           aiAdapters: setupProviders(),
+          credentialCipher,
         }),
       },
     });

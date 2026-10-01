@@ -1,0 +1,121 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  type AiProvider,
+  credentialMetadataSchema,
+  gameDetailsSchema,
+} from "@neurochess/contracts";
+import type { Page } from "@playwright/test";
+
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
+import { expect } from "./fixtures";
+
+export async function credentialAccount(page: Page) {
+  const email = `${randomUUID()}@example.com`;
+  const password = "credential browser fixture 🌙";
+  const headers = { origin: WEB_ORIGIN };
+  expect(
+    (
+      await page.request.post(API_ORIGIN + "/api/auth/sign-up/email", {
+        headers,
+        data: { email, password },
+      })
+    ).ok(),
+  ).toBe(true);
+  let link = "";
+  await expect
+    .poll(async () => {
+      const response = await page.request.post(API_ORIGIN + "/__test__/mail", {
+        data: { email, kind: "verification" },
+      });
+      const body = (await response.json()) as { link: string | null };
+      link = body.link ?? "";
+      return Boolean(link);
+    })
+    .toBe(true);
+  expect((await page.request.get(link)).ok()).toBe(true);
+  expect(
+    (
+      await page.request.post(API_ORIGIN + "/api/auth/sign-in/email", {
+        headers,
+        data: { email, password },
+      })
+    ).ok(),
+  ).toBe(true);
+  const username = "Keys_" + randomUUID().slice(0, 8);
+  expect(
+    (
+      await page.request.post(API_ORIGIN + "/profile/onboarding", { headers, data: { username } })
+    ).ok(),
+  ).toBe(true);
+  return { email, password, username };
+}
+
+export async function saveCredential(
+  page: Page,
+  label: string,
+  apiKey: string,
+  provider: AiProvider = "openai",
+) {
+  await page.getByLabel("Provider", { exact: true }).selectOption(provider);
+  await page.getByLabel("Label", { exact: true }).fill(label);
+  await page.getByLabel("API key", { exact: true }).fill(apiKey);
+  const optIn = page.getByRole("checkbox", { name: "Save this key to my account" });
+  await expect(optIn).not.toBeChecked();
+  await optIn.check();
+  const saving = page.waitForResponse(
+    (response) =>
+      response.url() === API_ORIGIN + "/credentials" && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Save key", exact: true }).click();
+  const response = await saving;
+  expect(response.status()).toBe(201);
+  const result = credentialMetadataSchema.parse(await response.json());
+  await expect(page.getByText(label, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
+  await expect(optIn).not.toBeChecked();
+  return result;
+}
+
+export async function configureCredential(
+  page: Page,
+  color: "White" | "Black",
+  source: { credentialId: string } | { apiKey: string },
+  provider: AiProvider = "openai",
+) {
+  const seat = page.getByRole("group", { name: color, exact: true });
+  await expect(seat.getByLabel("Provider", { exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  await seat.getByLabel("Provider", { exact: true }).selectOption(provider);
+  if ("credentialId" in source) {
+    await expect(
+      seat
+        .getByRole("option")
+        .filter({ hasText: /Ends in/ })
+        .first(),
+    ).toBeAttached();
+    await seat.getByLabel("Credential source").selectOption(source.credentialId);
+    await expect(seat.getByLabel("API key", { exact: true })).toHaveCount(0);
+  } else {
+    await expect(seat.getByLabel("Credential source")).toHaveValue("session");
+    await seat.getByLabel("API key", { exact: true }).fill(source.apiKey);
+  }
+  await seat.getByRole("button", { name: "Load models", exact: true }).click();
+  const model = seat.getByRole("combobox", { name: "Model", exact: true });
+  await expect(model).toHaveAttribute("aria-disabled", "false");
+  await model.fill("model-a");
+  await model.press("ArrowDown");
+  await model.press("Enter");
+}
+
+export async function startCredentialGame(page: Page) {
+  const creation = page.waitForResponse(
+    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
+  );
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  const game = gameDetailsSchema.parse(await (await creation).json());
+  await expect(page.getByRole("grid")).toBeVisible();
+  return game;
+}

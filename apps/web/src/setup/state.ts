@@ -23,6 +23,7 @@ export interface SeatSetupState {
   readonly provider: AiProvider;
   readonly keyReady: boolean;
   readonly keyEpoch: number;
+  readonly credential: string;
   readonly discovery: "idle" | "loading" | "loaded" | "error";
   readonly models: readonly ModelDescriptor[];
   readonly modelId: string;
@@ -44,6 +45,7 @@ export function emptySeat(provider: AiProvider, keyEpoch = 0): SeatSetupState {
     provider,
     keyReady: false,
     keyEpoch,
+    credential: "session",
     discovery: "idle",
     models: [],
     modelId: "",
