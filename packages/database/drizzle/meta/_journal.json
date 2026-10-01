@@ -92,6 +92,13 @@
       "when": 1790883532206,
       "tag": "0012_provider_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790885345687,
+      "tag": "0013_owner_scoped_credential_ids",
+      "breakpoints": true
     }
   ]
 }

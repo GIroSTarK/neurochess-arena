@@ -95,7 +95,7 @@ export function createCredentialRepository(database: DatabaseConnection): Creden
         const [record] = await tx
           .insert(providerCredentials)
           .values({ ...value, userId: identity.userId })
-          .onConflictDoNothing({ target: providerCredentials.id })
+          .onConflictDoNothing({ target: [providerCredentials.userId, providerCredentials.id] })
           .returning(metadata);
         return record ?? ("conflict" as const);
       }),

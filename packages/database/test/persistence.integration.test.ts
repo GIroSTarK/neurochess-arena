@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -180,6 +180,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0010_account_owned_games",
         "0011_profiles",
         "0012_provider_credentials",
+        "0013_owner_scoped_credential_ids",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -448,6 +449,94 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       }
       expect(afterCredentials).toEqual(beforeCredentials);
       expect((await tx.execute(sql`select * from provider_credentials`)).rows).toEqual([]);
+      const sharedCredentialId = randomUUID();
+      const fixtureKey = Buffer.alloc(32, 9);
+      const fixtureNonce = Buffer.from("0123456789abcdef01234567", "hex");
+      const fixtureAad = Buffer.from(
+        JSON.stringify([
+          "neurochess-provider-credential",
+          1,
+          "upgrade-fixture",
+          authUserId,
+          "openai",
+          sharedCredentialId,
+        ]),
+      );
+      const cipher = createCipheriv("aes-256-gcm", fixtureKey, fixtureNonce, { authTagLength: 16 });
+      cipher.setAAD(fixtureAad);
+      const fixtureCiphertext = Buffer.concat([
+        cipher.update("migration-fixture-key-1234", "utf8"),
+        cipher.final(),
+      ]);
+      await tx.execute(sql`
+        insert into provider_credentials(id, user_id, provider, label, masked_suffix, version, key_id, nonce, auth_tag, ciphertext)
+        values (${sharedCredentialId}, ${authUserId}, 'openai', 'Preserved', '1234', 1, 'upgrade-fixture',
+          ${fixtureNonce.toString("hex")}, ${cipher.getAuthTag().toString("hex")}, ${fixtureCiphertext.toString("hex")})`);
+      const scopePreservedTables = [...credentialPreservedTables, "provider_credentials"];
+      const beforeCredentialScope = [];
+      for (const table of scopePreservedTables) {
+        beforeCredentialScope.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[12]!);
+      const afterCredentialScope = [];
+      for (const table of scopePreservedTables) {
+        afterCredentialScope.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      expect(afterCredentialScope).toEqual(beforeCredentialScope);
+      const stored = (
+        await tx.execute<{ nonce: string; auth_tag: string; ciphertext: string }>(sql`
+        select nonce, auth_tag, ciphertext from provider_credentials
+        where user_id = ${authUserId} and id = ${sharedCredentialId}`)
+      ).rows[0]!;
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        fixtureKey,
+        Buffer.from(stored.nonce, "hex"),
+        { authTagLength: 16 },
+      );
+      decipher.setAAD(fixtureAad);
+      decipher.setAuthTag(Buffer.from(stored.auth_tag, "hex"));
+      expect(
+        Buffer.concat([
+          decipher.update(Buffer.from(stored.ciphertext, "hex")),
+          decipher.final(),
+        ]).toString("utf8"),
+      ).toBe("migration-fixture-key-1234");
+      const otherCredentialOwner = randomUUID();
+      await tx.execute(
+        sql`insert into "user" (id, name, email) values (${otherCredentialOwner}, '', 'other-upgrade@example.com')`,
+      );
+      const otherCredential = await tx.execute(sql`
+        insert into provider_credentials(id, user_id, provider, label, version, key_id, nonce, auth_tag, ciphertext)
+        select id, ${otherCredentialOwner}, provider, 'Independent', version, key_id, nonce, auth_tag, ciphertext
+        from provider_credentials where user_id = ${authUserId} and id = ${sharedCredentialId}
+        on conflict (user_id, id) do nothing returning id`);
+      expect(otherCredential.rows).toEqual([{ id: sharedCredentialId }]);
+      const duplicateCredential = await tx.execute(sql`
+        insert into provider_credentials(id, user_id, provider, label, version, key_id, nonce, auth_tag, ciphertext)
+        select id, user_id, provider, 'Replacement', version, key_id, nonce, auth_tag, ciphertext
+        from provider_credentials where user_id = ${authUserId} and id = ${sharedCredentialId}
+        on conflict (user_id, id) do nothing returning id`);
+      expect(duplicateCredential.rows).toEqual([]);
+      expect(
+        (
+          await tx.execute(
+            sql`select label from provider_credentials where user_id = ${authUserId} and id = ${sharedCredentialId}`,
+          )
+        ).rows,
+      ).toEqual([{ label: "Preserved" }]);
       expect(
         (await tx.execute(sql`select owner_user_id from games where id = ${accountGameId}`)).rows,
       ).toEqual([{ owner_user_id: authUserId }]);

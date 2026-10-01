@@ -1,12 +1,21 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { user } from "./auth.js";
 
 export const providerCredentials = pgTable(
   "provider_credentials",
   {
-    id: uuid("id").primaryKey(),
+    id: uuid("id").notNull(),
     userId: uuid("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -21,6 +30,7 @@ export const providerCredentials = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
     index("provider_credentials_owner_created_idx").on(table.userId, table.createdAt, table.id),
     check(
       "provider_credentials_provider_valid",

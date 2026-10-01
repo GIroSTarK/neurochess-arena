@@ -32,6 +32,110 @@ function input(changes: object = {}) {
 }
 
 describe("encrypted account credential management", () => {
+  it.each(["revoke", "clear"] as const)(
+    "keeps shared credential IDs private across accounts and %s operations",
+    async (deletion) => {
+      const api = await harness.createAuthenticatedApi();
+      const owner = await harness.account(api);
+      const caller = await harness.account(api);
+      const ownerInput = input({ label: "Owner", apiKey: "owner-fixture-key-A123" });
+      const callerInput = input({
+        credentialId: ownerInput.credentialId.toUpperCase(),
+        provider: "google",
+        label: "Caller",
+        apiKey: "caller-fixture-key-B456",
+      });
+      const original = await harness.post(api, owner.cookie, "/credentials", ownerInput);
+      expect(original.statusCode).toBe(201);
+      const ownerMetadata = credentialMetadataSchema.parse(original.json());
+      const control = await harness.post(api, caller.cookie, "/credentials", input());
+      expect(control.statusCode).toBe(201);
+      const shared = await harness.post(api, caller.cookie, "/credentials", callerInput);
+      expect(shared.statusCode, shared.body).toBe(201);
+      expect(credentialMetadataSchema.parse(shared.json())).toMatchObject({
+        credentialId: ownerInput.credentialId,
+        provider: "google",
+        label: "Caller",
+        maskedSuffix: "B456",
+      });
+      const duplicate = await harness.post(api, caller.cookie, "/credentials", {
+        ...callerInput,
+        credentialId: ownerInput.credentialId,
+        provider: "anthropic",
+        apiKey: "replacement-fixture-key-C789",
+      });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json()).toMatchObject({ code: "CREDENTIAL_CONFLICT" });
+
+      const records = await api.database.db
+        .select()
+        .from(providerCredentials)
+        .where(eq(providerCredentials.id, ownerInput.credentialId));
+      expect(records).toHaveLength(2);
+      const cipher = createCredentialCipher({
+        keyId: "integration-fixture",
+        key: Buffer.alloc(32, 7).toString("base64"),
+      });
+      for (const record of records) {
+        const { version, keyId, nonce, authTag, ciphertext } = record;
+        const envelope = { version, keyId, nonce, authTag, ciphertext };
+        const context = {
+          userId: record.userId,
+          provider: record.provider,
+          credentialId: record.id,
+        };
+        expect(cipher.decrypt(context, envelope)).toBe(
+          record.userId === owner.principal.userId ? ownerInput.apiKey : callerInput.apiKey,
+        );
+        expect(() =>
+          cipher.decrypt(
+            {
+              ...context,
+              userId:
+                record.userId === owner.principal.userId
+                  ? caller.principal.userId
+                  : owner.principal.userId,
+            },
+            envelope,
+          ),
+        ).toThrow("CREDENTIAL_UNAVAILABLE");
+      }
+
+      const deleteInput =
+        deletion === "revoke" ? { credentialId: callerInput.credentialId } : { confirm: true };
+      expect(
+        (await harness.post(api, caller.cookie, `/credentials/${deletion}`, deleteInput))
+          .statusCode,
+      ).toBe(200);
+      expect(
+        credentialListResponseSchema.parse(
+          (await api.app.inject({ url: "/credentials", headers: { cookie: owner.cookie } })).json(),
+        ),
+      ).toEqual({ credentials: [ownerMetadata] });
+      // The caller's outcome is identical whether the foreign record exists or has been revoked.
+      expect((await harness.post(api, caller.cookie, "/credentials", callerInput)).statusCode).toBe(
+        201,
+      );
+      expect(
+        (
+          await harness.post(api, caller.cookie, "/credentials/revoke", {
+            credentialId: callerInput.credentialId,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await harness.post(api, owner.cookie, "/credentials/revoke", {
+            credentialId: ownerInput.credentialId,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect((await harness.post(api, caller.cookie, "/credentials", callerInput)).statusCode).toBe(
+        201,
+      );
+    },
+  );
+
   it("persists only ciphertext and bounded metadata, binds its context and cascades only its owner's rows", async () => {
     const api = await harness.createAuthenticatedApi();
     const account = await harness.account(api);
