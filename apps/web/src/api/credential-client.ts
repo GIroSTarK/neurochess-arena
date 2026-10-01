@@ -54,7 +54,7 @@ export function createCredentialApi(
     const abort = new AbortController();
     const combined = AbortSignal.any([signal, identity.signal, abort.signal]);
     const cancelled = () => signal.aborted || identity.signal.aborted;
-    const timer = setTimeout(() => abort.abort(), 10_000);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       if (cancelled()) throw new CredentialFailure("cancelled");
       if (
@@ -66,6 +66,8 @@ export function createCredentialApi(
       }
       await identity.verify();
       if (cancelled()) throw new CredentialFailure("cancelled");
+      // Verification may refresh the identity under its own deadlines; this one bounds only transport.
+      timer = setTimeout(() => abort.abort(), 10_000);
       const response = await fetcher(new URL(path, origin), {
         method: body === undefined ? "GET" : "POST",
         credentials: "include",

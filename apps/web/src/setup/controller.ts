@@ -162,11 +162,16 @@ export class SetupController {
 
   updateSavedCredentials(credentials: readonly CredentialMetadata[]) {
     this.savedCredentials = credentials;
+    this.dropRemovedSelections();
+  }
+
+  // Locked phases cannot reset a seat, so editing must repeat this when it resumes.
+  private dropRemovedSelections() {
     for (const color of colors) {
       const seat = this.state.seats[color];
       if (
         seat.credential !== "session" &&
-        !credentials.some(
+        !this.savedCredentials.some(
           (item) => item.credentialId === seat.credential && item.provider === seat.provider,
         )
       ) {
@@ -302,6 +307,7 @@ export class SetupController {
         phase: game ? "conflict" : "editing",
         existingGameId: game?.snapshot.gameId ?? null,
       });
+      this.dropRemovedSelections();
     } catch (error: unknown) {
       if (isCancelled()) return;
       if (error instanceof ApiFailure && error.code === "UNAUTHORIZED") {

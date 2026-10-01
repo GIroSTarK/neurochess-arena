@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../app/App";
-import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
+import { errorResponse, GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 import { renderLocalized } from "../test/render";
 
@@ -82,6 +82,54 @@ describe("credential settings", () => {
         ([url, init]) => requestPath(url) === "/credentials" && init?.method === "POST",
       ),
     ).toHaveLength(1);
+    http.assertNoUnexpectedRequests();
+  });
+  it("retries an unconfirmed save by its ID until the outcome is known", async () => {
+    window.history.replaceState(null, "", "/account/credentials");
+    let entries: (typeof saved)[] = [];
+    const ids: string[] = [];
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: entries }),
+      "POST /credentials": (init) => {
+        const { credentialId } = JSON.parse(requestBody(init)) as { credentialId: string };
+        ids.push(credentialId);
+        if (ids.length === 1) throw new Error("Lost acknowledgement");
+        if (credentialId === ids[0]) {
+          // The first request commits only after its reconciliation read missed it.
+          entries = [{ ...saved, credentialId }];
+          return errorResponse("CREDENTIAL_CONFLICT", 409);
+        }
+        const created = { ...saved, credentialId, label: "Second key" };
+        entries = [created, ...entries];
+        return jsonResponse(created, 201);
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await screen.findByText(/No saved keys yet/);
+    async function submit(label: string) {
+      const button = await screen.findByRole("button", { name: "Save key" });
+      await userEvent.type(screen.getByLabelText("Label"), label);
+      await userEvent.type(screen.getByLabelText("API key", { exact: true }), "save-fixture-1234");
+      await userEvent.click(screen.getByRole("checkbox"));
+      await userEvent.click(button);
+    }
+    await submit("Arena key");
+    await screen.findByText(/The operation could not be confirmed/);
+    await submit("Arena key");
+    await screen.findByText(
+      "This save may already exist. Refresh your saved keys before saving again.",
+    );
+    expect(ids).toEqual([ids[0], ids[0]]);
+    expect(await screen.findByText("Arena key")).toBeInTheDocument();
+    expect(screen.queryByText(/Key saved/)).not.toBeInTheDocument();
+    await submit("Second key");
+    await screen.findByText("Key saved. Select it explicitly in game setup or paused recovery.");
+    expect(ids).toHaveLength(3);
+    expect(ids[2]).not.toBe(ids[0]);
+    expect(await screen.findByText("Second key")).toBeInTheDocument();
     http.assertNoUnexpectedRequests();
   });
   it("reconciles a lost save response by its ID before offering another save", async () => {

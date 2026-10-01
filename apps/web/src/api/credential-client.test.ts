@@ -63,6 +63,41 @@ describe("credential HTTP boundary", () => {
     await expect(api.clear(signal())).rejects.toMatchObject({ code: "CREDENTIAL_UNAVAILABLE" });
     expect(fetch).toHaveBeenCalledTimes(3);
   });
+  it("starts the transport deadline after identity verification", async () => {
+    vi.useFakeTimers();
+    try {
+      const verification = Promise.withResolvers<void>();
+      const fetch = vi.fn<typeof globalThis.fetch>(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
+          }),
+      );
+      const api = createCredentialApi(
+        "https://api.example.test",
+        { ...identity(), verify: () => verification.promise },
+        fetch,
+      );
+      const pending = expect(api.list(signal())).rejects.toMatchObject({
+        code: "CREDENTIAL_UNAVAILABLE",
+      });
+      await vi.advanceTimersByTimeAsync(9_999);
+      verification.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      const transport = fetch.mock.calls[0]?.[1]?.signal;
+      expect(transport?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(transport?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(transport?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("blocks guests before dispatch and discards a late old-account list", async () => {
     const pending = Promise.withResolvers<Response>();
     const fetch = vi.fn<typeof globalThis.fetch>(() => pending.promise);

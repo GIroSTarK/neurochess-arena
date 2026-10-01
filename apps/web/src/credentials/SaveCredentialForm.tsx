@@ -20,15 +20,20 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<CredentialFailure["code"] | null>(null);
   const [saved, setSaved] = useState(false);
-  const [unconfirmedId, setUnconfirmedId] = useState<string | null>(null);
+  // A read that lacks this ID cannot rule out a late commit. Reusing it for later attempts lets
+  // the account-scoped ID conflict instead of storing a second copy.
+  const [unconfirmed, setUnconfirmed] = useState<{ id: string; reconciled: boolean } | null>(null);
   const catalogState = useSyncExternalStore(catalog.subscribe, catalog.getSnapshot);
-  if (unconfirmedId && catalogState.phase === "ready") {
-    setUnconfirmedId(null);
-    if (catalogState.credentials.some((item) => item.credentialId === unconfirmedId)) {
+  if (unconfirmed && catalogState.phase === "ready") {
+    if (catalogState.credentials.some((item) => item.credentialId === unconfirmed.id)) {
+      setUnconfirmed(null);
       setSaved(true);
       setError(null);
+    } else if (!unconfirmed.reconciled) {
+      setUnconfirmed({ ...unconfirmed, reconciled: true });
     }
   }
+  const reconciling = unconfirmed !== null && !unconfirmed.reconciled;
   useEffect(() => {
     let abort = new AbortController();
     lifetime.current = abort;
@@ -38,7 +43,7 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
       setConsent(false);
       setError(null);
       setSaved(false);
-      setUnconfirmedId(null);
+      setUnconfirmed(null);
     };
     const restore = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
@@ -66,14 +71,15 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
       !catalog.api ||
       pending.current ||
       !consent ||
-      unconfirmedId !== null
+      reconciling
     ) {
       return;
     }
     const isCancelled = () => signal.aborted || catalog.api?.signal.aborted;
     const data = new FormData(form.current);
+    const retryId = unconfirmed?.id;
     const input = credentialSaveRequestSchema.safeParse({
-      credentialId: crypto.randomUUID(),
+      credentialId: retryId ?? crypto.randomUUID(),
       save: true,
       provider: data.get("provider"),
       label: data.get("label"),
@@ -87,6 +93,7 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
     setBusy(true);
     setError(null);
     setSaved(false);
+    setUnconfirmed(null);
     form.current.reset();
     setConsent(false);
     try {
@@ -95,11 +102,15 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
       setSaved(true);
       await catalog.changed();
     } catch (error) {
-      if (!isCancelled() && credentialError(error) !== "cancelled") {
-        setError(credentialError(error));
+      const code = credentialError(error);
+      if (!isCancelled() && code !== "cancelled") {
+        setError(code);
         // A lost save acknowledgement may already have inserted the record.
         await catalog.changed();
-        if (!isCancelled()) setUnconfirmedId(input.data.credentialId);
+        // A conflict on a reused ID means an earlier attempt was stored, not this submission.
+        if (!isCancelled() && !(retryId && code === "CREDENTIAL_CONFLICT")) {
+          setUnconfirmed({ id: input.data.credentialId, reconciled: false });
+        }
       }
     } finally {
       if (!isCancelled()) {
@@ -165,11 +176,7 @@ export function SaveCredentialForm({ catalog }: { readonly catalog: CredentialCa
         </p>
       ) : null}
       {saved ? <p role="status">{t("credentials.saved")}</p> : null}
-      <Button
-        type="submit"
-        variant="primary"
-        aria-disabled={busy || !consent || unconfirmedId !== null}
-      >
+      <Button type="submit" variant="primary" aria-disabled={busy || !consent || reconciling}>
         {t(busy ? "account.working" : "credentials.save")}
       </Button>
     </form>
