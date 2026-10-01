@@ -78,6 +78,14 @@ Sign-in, sign-out, account switching, and session expiry end the old page's cont
 
 Do not automatically merge password, Google, or GitHub accounts because their emails match, even when a provider reports a verified email. A conflict guides the user to their existing sign-in method or password recovery without granting access to that account. Linking another method requires a deliberate action from the signed-in account and fresh proof of control of both the existing account and the new method; matching email alone is insufficient.
 
+### Google and GitHub sign-in
+
+OAuth sign-in requires a valid email currently reported as verified by the provider. Missing, malformed, or unverified email fails without creating an account or session; the user must correct it at the provider or use their existing sign-in method. GitHub's email API must verify the selected address, including when the public profile hides it.
+
+The immutable Google subject or GitHub user ID identifies a returning account. A changed verified provider email does not merge accounts or overwrite the local email/profile, even if it matches another account. Provider names never select a public username; only validated provider avatars may initialize the avatar, and later sign-ins preserve removal.
+
+Account linking remains unavailable until a flow proving control of both methods is supplied. Password recovery applies only to an existing password method; it must not add a password to an OAuth-only account. Reset initiation keeps the same generic acknowledgement for those accounts. Canceled consent, invalid/expired callbacks, and provider failures require an explicit new sign-in attempt; no automatic retries create a session.
+
 ### Usernames and avatars
 
 Every authentication method uses the same username onboarding requirement before account gameplay. The user chooses the name; neither an email address nor an OAuth display name silently becomes the username.
@@ -261,7 +269,6 @@ The MVP is ready when:
 
 - Exact retention period for an inactive guest game
 - Exact supported parameter matrix for each provider and model
-- Session invalidation after password reset (resolve before the email lifecycle is implemented)
 - Whether an otherwise authorized, already-dispatched AI result may complete after saved-credential revocation (resolve before saved credentials are used for inference); revocation must prevent future dispatches and retries
 - Retention and deletion rights for shared human-room participants (Phase 4)
 - Final deployment platform and production region

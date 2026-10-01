@@ -4,6 +4,10 @@ import {
   authEmptyRequestSchema,
   type AuthErrorCode,
   authErrorResponseSchema,
+  authOAuthCallbackQuerySchema,
+  authOAuthProviderSchema,
+  authOAuthSignInRequestSchema,
+  authOAuthSignInResponseSchema,
   authRegistrationRequestSchema,
   authResetPasswordRequestSchema,
   authSessionResponseSchema,
@@ -16,6 +20,7 @@ import { z } from "zod";
 
 import { authEmailAcceptedMessage, authErrorMessages } from "../locales/en.js";
 
+import { oauthAuthorizationEndpoints } from "./oauth.js";
 import { AUTH_BASE_PATH, AUTH_IP_HEADER } from "./options.js";
 import type { AccountAuth } from "./service.js";
 
@@ -44,6 +49,18 @@ export async function registerAuthRoutes(
   app: FastifyInstance,
   options: { auth: AccountAuth; webOrigin: string },
 ) {
+  const callbackProvider = (path: string) => {
+    if (!path.startsWith("/callback/")) return undefined;
+    const parsed = authOAuthProviderSchema.safeParse(path.slice("/callback/".length));
+    return parsed.success && options.auth.oauthProviders?.includes(parsed.data)
+      ? parsed.data
+      : undefined;
+  };
+  const oauthFailure = (reply: FastifyReply, code: AuthErrorCode = "AUTH_OAUTH_FAILED") =>
+    reply
+      .code(303)
+      .header("location", `${options.webOrigin}/?auth=oauth-error&code=${code}`)
+      .send();
   app.addHook("onClose", async () => options.auth.close?.());
   app.addHook("onRequest", async (request, reply) => {
     reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer");
@@ -51,6 +68,10 @@ export async function registerAuthRoutes(
     const allowed =
       (request.method === "GET" && path === "/get-session") ||
       (request.method === "POST" && path === "/sign-out") ||
+      (request.method === "POST" &&
+        path === "/sign-in/social" &&
+        Boolean(options.auth.oauthProviders?.length)) ||
+      (request.method === "GET" && Boolean(callbackProvider(path))) ||
       (options.auth.emailEnabled &&
         ((request.method === "GET" && path === "/verify-email") ||
           (request.method === "POST" && Boolean(emailRequest(path)))));
@@ -70,16 +91,32 @@ export async function registerAuthRoutes(
     bodyLimit: 16_384,
     async handler(request, reply) {
       const path = request.url.split("?")[0]?.slice(AUTH_BASE_PATH.length) ?? "";
-      const querySchema =
-        path === "/verify-email" ? authVerificationQuerySchema : authEmptyRequestSchema;
-      const bodySchema = emailRequest(path) ?? authEmptyRequestSchema;
+      const isCallback = Boolean(callbackProvider(path));
+      const querySchema = isCallback
+        ? authOAuthCallbackQuerySchema
+        : path === "/verify-email"
+          ? authVerificationQuerySchema
+          : authEmptyRequestSchema;
+      const bodySchema =
+        path === "/sign-in/social"
+          ? authOAuthSignInRequestSchema
+          : (emailRequest(path) ?? authEmptyRequestSchema);
       if (
         !querySchema.safeParse(request.query).success ||
         (request.method === "POST" &&
           (!request.headers["content-type"]?.match(/^application\/json(?:\s*;|$)/i) ||
             !bodySchema.safeParse(request.body).success))
       ) {
+        if (isCallback) return oauthFailure(reply);
         return sendError(request, reply, 400);
+      }
+      if (
+        path === "/sign-in/social" &&
+        !options.auth.oauthProviders?.includes(
+          authOAuthSignInRequestSchema.parse(request.body).provider,
+        )
+      ) {
+        return sendError(request, reply, 404);
       }
       const headers = new Headers();
       for (const name of [
@@ -99,17 +136,27 @@ export async function registerAuthRoutes(
       headers.set(AUTH_IP_HEADER, request.ip);
       // Email flows do not inherit another account's cookie. Only explicit sign-in
       // creates a session; verification and password recovery never auto-sign in.
-      if (path !== "/get-session" && path !== "/sign-out") headers.delete("cookie");
+      if (path !== "/get-session" && path !== "/sign-out" && !isCallback) headers.delete("cookie");
       try {
         const body = request.method === "POST" ? bodySchema.parse(request.body) : undefined;
+        const libraryBody =
+          path === "/sign-in/social"
+            ? {
+                ...body,
+                disableRedirect: true,
+                callbackURL: `${options.webOrigin}/?auth=signed-in`,
+                newUserCallbackURL: `${options.webOrigin}/?auth=signed-in`,
+                errorCallbackURL: `${options.webOrigin}/?auth=oauth-error`,
+              }
+            : path === "/sign-up/email"
+              ? { ...body, name: "" }
+              : body;
         const logger = request.log;
         const response = await options.auth.handle(
           new Request(`${options.auth.baseURL}${request.url}`, {
             method: request.method,
             headers,
-            ...(body
-              ? { body: JSON.stringify(path === "/sign-up/email" ? { ...body, name: "" } : body) }
-              : {}),
+            ...(body ? { body: JSON.stringify(libraryBody) } : {}),
           }),
           () =>
             logger.warn(
@@ -122,6 +169,22 @@ export async function registerAuthRoutes(
         const retryAfter =
           response.headers.get("retry-after") ?? response.headers.get("x-retry-after");
         if (retryAfter && /^\d+$/.test(retryAfter)) reply.header("retry-after", retryAfter);
+        if (isCallback) {
+          const location = response.headers.get("location");
+          if (response.status >= 300 && response.status < 400 && location) {
+            if (location === `${options.webOrigin}/?auth=signed-in`) {
+              return await reply.code(303).header("location", location).send();
+            }
+            const errorUrl = new URL(location);
+            const code =
+              errorUrl.origin === options.webOrigin && errorUrl.pathname === "/"
+                ? safeOAuthError(errorUrl.searchParams.get("error"))
+                : "AUTH_OAUTH_FAILED";
+            return await oauthFailure(reply, code);
+          }
+          const error = libraryErrorSchema.safeParse(await response.json().catch(() => null));
+          return await oauthFailure(reply, safeOAuthError(error.success ? error.data.code : null));
+        }
         if (!response.ok) {
           const error = libraryErrorSchema.safeParse(await response.json().catch(() => null));
           const code = error.success ? safeLibraryError(error.data.code) : undefined;
@@ -129,7 +192,20 @@ export async function registerAuthRoutes(
         }
         const payload: unknown = await response.json();
         let projected: unknown;
-        if (path === "/get-session") projected = authSessionResponseSchema.parse(payload);
+        if (path === "/sign-in/social") {
+          const result = authOAuthSignInResponseSchema.strip().parse(payload);
+          const provider = authOAuthSignInRequestSchema.parse(request.body).provider;
+          const url = new URL(result.url);
+          if (
+            `${url.origin}${url.pathname}` !== oauthAuthorizationEndpoints[provider] ||
+            url.username ||
+            url.password ||
+            url.hash
+          ) {
+            throw new Error("Invalid OAuth authorization destination");
+          }
+          projected = result;
+        } else if (path === "/get-session") projected = authSessionResponseSchema.parse(payload);
         else if (path === "/sign-out") projected = authSignOutResponseSchema.parse(payload);
         else if (path === "/sign-in/email") {
           signInResponseSchema.parse(payload);
@@ -154,10 +230,26 @@ export async function registerAuthRoutes(
         return await reply.code(response.status).send(projected);
       } catch {
         request.log.error("Authentication request failed");
+        if (isCallback) return oauthFailure(reply);
         return sendError(request, reply, 500);
       }
     },
   });
+}
+
+function safeOAuthError(code: string | null): AuthErrorCode {
+  switch (code) {
+    case "access_denied":
+      return "AUTH_OAUTH_CANCELLED";
+    case "account_not_linked":
+      return "AUTH_OAUTH_ACCOUNT_CONFLICT";
+    case "email_not_found":
+    case "email_not_verified":
+    case "AUTH_OAUTH_EMAIL_UNAVAILABLE":
+      return "AUTH_OAUTH_EMAIL_UNAVAILABLE";
+    default:
+      return "AUTH_OAUTH_FAILED";
+  }
 }
 
 function safeLibraryError(code: string): AuthErrorCode | undefined {

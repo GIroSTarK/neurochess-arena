@@ -25,6 +25,13 @@ const postgresUrlSchema = z
     }
   });
 
+const oauthCredentialSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .regex(/^[\x21-\x7e]+$/)
+  .optional();
+
 const apiEnvironmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -36,6 +43,10 @@ const apiEnvironmentSchema = z
       .string()
       .min(32)
       .refine((value) => value.trim().length >= 32),
+    GOOGLE_CLIENT_ID: oauthCredentialSchema,
+    GOOGLE_CLIENT_SECRET: oauthCredentialSchema,
+    GITHUB_CLIENT_ID: oauthCredentialSchema,
+    GITHUB_CLIENT_SECRET: oauthCredentialSchema,
     AUTH_EMAIL_TRANSPORT: z.enum(["disabled", "smtp"]).default("disabled"),
     AUTH_EMAIL_FROM: z.email().max(254).optional(),
     SMTP_HOST: z.union([z.hostname(), z.ipv4(), z.ipv6()]).optional(),
@@ -54,6 +65,13 @@ const apiEnvironmentSchema = z
     GUEST_SESSION_TTL_SECONDS: z.coerce.number().int().min(1).max(31_536_000).default(86_400),
   })
   .superRefine((environment, context) => {
+    for (const provider of ["GOOGLE", "GITHUB"] as const) {
+      const id = `${provider}_CLIENT_ID` as const;
+      const secret = `${provider}_CLIENT_SECRET` as const;
+      if (Boolean(environment[id]) !== Boolean(environment[secret])) {
+        context.addIssue({ code: "custom", path: [environment[id] ? secret : id] });
+      }
+    }
     if (environment.NODE_ENV === "production" && environment.AUTH_EMAIL_TRANSPORT !== "smtp") {
       context.addIssue({ code: "custom", path: ["AUTH_EMAIL_TRANSPORT"] });
     }
