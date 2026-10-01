@@ -216,7 +216,11 @@ test("setup uses protected discovery and hands off an independently configured g
   ).toHaveAttribute("aria-disabled", "false");
   expect(apiReads).toEqual(["/games/unfinished"]);
   expect(posts).toEqual([]);
-  expect(await context.cookies(API_ORIGIN)).toEqual([]);
+  expect(
+    (await context.cookies(API_ORIGIN))
+      .map((cookie) => cookie.name)
+      .filter((name) => name !== "neurochess_test_client"),
+  ).toEqual([]);
   const white = await configure(page, "White");
   const black = await configure(page, "Black");
   await white.getByText("Advanced parameters", { exact: true }).click();

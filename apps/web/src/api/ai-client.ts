@@ -72,7 +72,18 @@ function snapshotFor(snapshot: GameSnapshot, gameId?: string): GameSnapshot {
   return snapshot;
 }
 
-export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch } = {}): AiApi {
+export interface AiIdentity {
+  readonly intent: "account" | "guest";
+  readonly expectedAccount?: string;
+  readonly signal: AbortSignal;
+  verify(): Promise<void>;
+  lost?(): void;
+}
+
+export function createAiApi(
+  apiBaseUrl: string,
+  options: { fetch?: typeof fetch; identity?: AiIdentity } = {},
+): AiApi {
   const origin = new URL(apiBaseUrl);
   if (
     origin.protocol !== "https:" &&
@@ -99,20 +110,28 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
     timeoutMs = 10_000,
     gameId?: string,
   ): Promise<T> {
-    const isCancelled = () => signal.aborted;
+    const isCancelled = () => signal.aborted || Boolean(options.identity?.signal.aborted);
     if (isCancelled()) throw new ApiFailure("cancelled");
     const controller = new AbortController();
     const cancel = () => controller.abort();
     signal.addEventListener("abort", cancel, { once: true });
+    options.identity?.signal.addEventListener("abort", cancel, { once: true });
     const timer = setTimeout(cancel, timeoutMs);
     try {
+      if (options.identity) await options.identity.verify();
+      if (isCancelled()) throw new ApiFailure("cancelled");
       const response = await fetcher(new URL(path, origin), {
         method: body === undefined ? "GET" : "POST",
         credentials: "include",
         cache: "no-store",
         redirect: "error",
+        referrerPolicy: "no-referrer",
         headers: {
           accept: "application/json",
+          "x-neurochess-identity": options.identity?.intent ?? "guest",
+          ...(options.identity?.expectedAccount
+            ? { "x-neurochess-expected-account": options.identity.expectedAccount }
+            : {}),
           ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -126,6 +145,9 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
       }
       if (!response.ok) {
         const error = validated(aiErrorResponseSchema, payload);
+        if (error.code === "UNAUTHORIZED" || error.code === "PROFILE_REQUIRED") {
+          options.identity?.lost?.();
+        }
         if (!("message" in error)) throw new AiRequestFailure(error.code);
         throw new ApiFailure(
           "api",
@@ -133,6 +155,8 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
           error.code === "GAME_CONFLICT" ? snapshotFor(error.currentSnapshot, gameId) : undefined,
         );
       }
+      if (options.identity) await options.identity.verify();
+      if (isCancelled()) throw new ApiFailure("cancelled");
       return validated(schema, payload);
     } catch (error: unknown) {
       if (isCancelled()) throw new ApiFailure("cancelled");
@@ -142,6 +166,7 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
     } finally {
       clearTimeout(timer);
       signal.removeEventListener("abort", cancel);
+      options.identity?.signal.removeEventListener("abort", cancel);
     }
   }
 
@@ -155,6 +180,11 @@ export function createAiApi(apiBaseUrl: string, options: { fetch?: typeof fetch 
 
   return {
     async bootstrap(signal) {
+      if (options.identity?.intent === "account") {
+        await options.identity.verify();
+        if (signal.aborted || options.identity.signal.aborted) throw new ApiFailure("cancelled");
+        return;
+      }
       await request("/guest-session", guestSessionResponseSchema, signal, {});
     },
     async snapshot(gameId, signal) {

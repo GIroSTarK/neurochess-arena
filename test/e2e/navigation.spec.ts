@@ -37,7 +37,9 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
       .violations,
   ).toEqual([]);
   expect(apiRequests).toContain("/games/unfinished");
-  expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
+  expect(
+    apiRequests.every((path) => ["/games/unfinished", "/api/auth/get-session"].includes(path)),
+  ).toBe(true);
   await sandbox.focus();
   await expect(sandbox).toBeFocused();
   await page.keyboard.press("Enter");
@@ -63,6 +65,7 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
   await page.route("**/games/unfinished", (route) => route.fulfill({ json: { game: null } }));
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: null }));
   await page.goto(DISABLED_WEB_ORIGIN);
   await expect(page).toHaveTitle("Neurochess Arena");
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
@@ -118,7 +121,9 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   await expect(page.getByRole("grid")).toHaveCount(0);
   await expect.poll(() => sandboxRequested).toBe(true);
   expect(apiRequests).toContain("/games/unfinished");
-  expect(apiRequests.every((path) => path === "/games/unfinished")).toBe(true);
+  expect(
+    apiRequests.every((path) => ["/games/unfinished", "/api/auth/get-session"].includes(path)),
+  ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("sandbox-loading.png"), fullPage: true });
 
   loading.resolve();
@@ -149,7 +154,11 @@ test("Arena resolves a Sandbox game URL and links to its authorized recovery", a
   expect(new URL(page.url()).pathname).toBe("/");
   await expect(page.getByRole("grid")).toHaveCount(0);
   expect(apiRequests.length).toBeGreaterThan(0);
-  expect(apiRequests.every((path) => path === `/games/${current.gameId}/details`)).toBe(true);
+  expect(
+    apiRequests.every((path) =>
+      [`/games/${current.gameId}/details`, "/api/auth/get-session"].includes(path),
+    ),
+  ).toBe(true);
   await page.goto(gameUrl);
   await expect(page).toHaveURL(new RegExp("/sandbox\\?game=" + current.gameId + "$"));
   await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();

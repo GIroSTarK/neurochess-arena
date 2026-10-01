@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   createGameRepository,
+  createProfileRepository,
   type GameRepository,
   games,
   guestSessions,
@@ -13,11 +14,12 @@ import { inArray } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
-import { createAccountAuth } from "../../apps/api/src/auth/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
+import { createProfileService } from "../../apps/api/src/profiles/service.js";
 import { integrationDatabase } from "../database.js";
 
+import { accountHarness } from "./account-harness.js";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
 import { closeResources, notifyParent, shutdownMessage } from "./lifecycle.js";
 import { setupHarness } from "./setup-harness.js";
@@ -27,6 +29,7 @@ async function main() {
   // This guard runs before creating a pool, applying migrations or listening.
   // There is deliberately no DATABASE_URL fallback and no reuse of a dev API.
   const database = integrationDatabase();
+  const accounts = accountHarness(database);
   const guestIds = new Set<string>();
   const original = createGameRepository(database);
   const repository: GameRepository = {
@@ -48,6 +51,7 @@ async function main() {
       { name: "web", close: () => web?.close() },
       { name: "disabled web", close: () => disabledWeb?.close() },
       { name: "API", close: () => app?.close() },
+      { name: "test accounts", close: () => accounts.close() },
       {
         name: "test guests",
         close: async () => {
@@ -112,11 +116,8 @@ async function main() {
     app = await buildApp({
       readiness: database,
       webOrigin: WEB_ORIGIN,
-      auth: createAccountAuth(database, {
-        WEB_ORIGIN,
-        BETTER_AUTH_URL: API_ORIGIN,
-        BETTER_AUTH_SECRET: "browser-tests-only-auth-secret-not-for-deployment",
-      }),
+      auth: accounts.auth,
+      profiles: createProfileService(createProfileRepository(database)),
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {
@@ -126,6 +127,7 @@ async function main() {
         }),
       },
     });
+    accounts.install(app);
     process.env.VITE_API_BASE_URL = API_ORIGIN;
     process.env.SANDBOX_ENABLED = "false";
     disabledWeb = await createServer({

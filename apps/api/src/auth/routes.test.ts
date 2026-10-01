@@ -10,17 +10,39 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-async function createApp(handle: (request: Request) => Promise<Response>) {
+async function createApp(handle: (request: Request) => Promise<Response>, emailEnabled = false) {
   const app = await buildApp({
     readiness: { check: async () => undefined },
     webOrigin,
-    auth: { baseURL, handle, resolve: async () => null },
+    auth: { baseURL, handle, emailEnabled, resolve: async () => null },
   });
   apps.push(app);
   return app;
 }
 
 describe("auth HTTP bridge", () => {
+  it("sends invalid browser verification links to a token-free localized recovery page, retaining JSON errors", async () => {
+    const app = await createApp(
+      async () =>
+        Response.json({ code: "TOKEN_EXPIRED", message: "secret-canary" }, { status: 400 }),
+      true,
+    );
+    for (const url of [
+      "/api/auth/verify-email?token=secret-canary",
+      "/api/auth/verify-email?unexpected=secret-canary",
+    ]) {
+      const browser = await app.inject({ url, headers: { accept: "text/html" } });
+      expect(browser.statusCode).toBe(303);
+      expect(browser.headers.location).toBe(
+        webOrigin + "/?auth=verification-error&code=AUTH_INVALID_TOKEN",
+      );
+      expect(browser.body).not.toContain("canary");
+      expect(browser.headers["referrer-policy"]).toBe("no-referrer");
+      const api = await app.inject({ url, headers: { accept: "application/json" } });
+      expect(api.statusCode).toBe(400);
+      expect(api.headers.location).toBeUndefined();
+    }
+  });
   it("projects the session and preserves each Set-Cookie header, including Expires commas", async () => {
     const cookies = [
       "first=one; Path=/; HttpOnly; Secure; Expires=Wed, 21 Oct 2026 07:28:00 GMT",

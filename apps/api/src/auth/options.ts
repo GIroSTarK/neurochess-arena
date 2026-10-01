@@ -94,6 +94,7 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
       max: 100,
       storage: "database",
       customRules: {
+        "/get-session": { window: 1, max: 60 },
         "/sign-up/email": { window: 60, max: 3 },
         "/sign-in/email": { window: 60, max: 10 },
         "/send-verification-email": { window: 60, max: 3 },

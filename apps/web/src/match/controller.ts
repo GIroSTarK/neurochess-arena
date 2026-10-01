@@ -155,6 +155,8 @@ export class MatchController {
     this.lifetime = null;
     this.credentials = null;
     this.publish({
+      phase: "loading",
+      details: null,
       keys: { white: false, black: false },
       keyEpoch: this.state.keyEpoch + 1,
       thinking: false,

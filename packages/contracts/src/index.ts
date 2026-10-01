@@ -119,6 +119,7 @@ export {
 } from "./ai-http.js";
 export {
   gameIdentityIntentSchema,
+  expectedAccountSchema,
   authPasswordSchema,
   authRegistrationRequestSchema,
   authSignInRequestSchema,

@@ -7,6 +7,7 @@ import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { SeatSetup } from "../arena/setup/SeatSetup";
+import { AccountAccess } from "../auth/AccountAccess";
 import { PieceIcon } from "../board/PieceIcon";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
@@ -78,7 +79,7 @@ export function ArenaSetupScreen({
     <AppShell
       mainId="arena-setup"
       skipLabel={t("app.skipLink")}
-      context={t("setup.session")}
+      context={<AccountAccess />}
       navigation={<AppNavigation page="arena" sandboxEnabled={sandboxEnabled} />}
       footer={t("setup.footer")}
       announcement={announcement}

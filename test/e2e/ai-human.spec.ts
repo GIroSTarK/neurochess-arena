@@ -293,6 +293,7 @@ for (const committed of [false, true]) {
       const retry = page.getByRole("button", { name: "Retry same move", exact: true });
       await expect(retry).toHaveAttribute("aria-disabled", "false");
       await retry.click();
+      await expect.poll(() => commands.length).toBe(2);
       expect(commands[1]).toEqual(commands[0]);
     }
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
