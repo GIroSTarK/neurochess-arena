@@ -118,6 +118,14 @@ export {
   type AiRequestErrorCode,
 } from "./ai-http.js";
 export {
+  authPasswordSchema,
+  authRegistrationRequestSchema,
+  authSignInRequestSchema,
+  authEmailRequestSchema,
+  authVerificationQuerySchema,
+  authResetPasswordRequestSchema,
+  authAcceptedResponseSchema,
+  authSuccessResponseSchema,
   authEmptyRequestSchema,
   authSessionResponseSchema,
   authSignOutResponseSchema,
