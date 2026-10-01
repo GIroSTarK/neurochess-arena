@@ -369,6 +369,10 @@ The independent setup adapter in `apps/web/src/setup` consumes that client and a
 5. Reads return masked metadata only. Decryption occurs only for an authorized provider call.
 6. Users can revoke individual saved keys, clear credentials, or delete the account.
 
+The [credential envelope ADR](decisions/0014-encrypted-provider-credentials.md) defines AES-256-GCM, versioned key identification and owner/provider/record authentication. The database repository accepts encrypted fields only, and metadata queries never select ciphertext. Every management transaction locks the auth user before credential rows and checks the exact session both after the lock and after the operation; expiry during a row/index wait rolls back changes. This shares the auth/game revocation lock. Profile onboarding is not required to manage or delete saved keys.
+
+The [credential API](development.md#saved-credential-api) requires explicit saving, bounds each account to 100 records and returns only ID, provider, label, masked suffix and creation time. Credential IDs are unique within an account, enforced by the composite `(user_id, id)` primary key. Reusing an ID within the same account conflicts without overwriting; another account may use the same ID independently, so saving cannot reveal whether a foreign record exists. Every credential lookup or mutation must include the authenticated owner. Distinct IDs may store the same key independently. Revoke and clear physically delete scoped rows. Missing or foreign revoke IDs acknowledge the same result, without revealing existence. Saves and clear serialize on the owner lock: clear removes the rows present at its turn, while later saves survive. Management never decrypts; missing encryption configuration disables saves while listing/deletion remain available. Provider operations retain their session-only contracts until the separate saved-credential integration; the [in-flight revocation decision](product.md#open-product-decisions) remains unresolved.
+
 All request logging and exception reporting must redact credential fields, authorization headers, cookies, URLs with tokens, and provider secrets.
 
 ## Realtime rooms

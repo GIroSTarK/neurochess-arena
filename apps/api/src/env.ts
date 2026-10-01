@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  credentialEncryptionKeySchema,
+  credentialKeyIdSchema,
+} from "./credentials/configuration.js";
+
 const originSchema = z.string().refine((value) => {
   try {
     const url = new URL(value);
@@ -55,6 +60,8 @@ const apiEnvironmentSchema = z
     SMTP_USER: z.string().min(1).max(1024).optional(),
     SMTP_PASSWORD: z.string().min(1).max(4096).optional(),
     DATABASE_URL: postgresUrlSchema,
+    CREDENTIAL_ENCRYPTION_KEY_ID: credentialKeyIdSchema.optional(),
+    CREDENTIAL_ENCRYPTION_KEY: credentialEncryptionKeySchema.optional(),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
@@ -65,6 +72,19 @@ const apiEnvironmentSchema = z
     GUEST_SESSION_TTL_SECONDS: z.coerce.number().int().min(1).max(31_536_000).default(86_400),
   })
   .superRefine((environment, context) => {
+    if (
+      Boolean(environment.CREDENTIAL_ENCRYPTION_KEY_ID) !==
+      Boolean(environment.CREDENTIAL_ENCRYPTION_KEY)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: [
+          environment.CREDENTIAL_ENCRYPTION_KEY_ID
+            ? "CREDENTIAL_ENCRYPTION_KEY"
+            : "CREDENTIAL_ENCRYPTION_KEY_ID",
+        ],
+      });
+    }
     for (const provider of ["GOOGLE", "GITHUB"] as const) {
       const id = `${provider}_CLIENT_ID` as const;
       const secret = `${provider}_CLIENT_SECRET` as const;
