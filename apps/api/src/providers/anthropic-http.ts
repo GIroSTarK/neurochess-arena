@@ -96,6 +96,9 @@ export async function anthropicRequest(
 ): Promise<JsonResult> {
   const isAborted = () => input.signal.aborted;
   if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
+  const denied = await input.beforeDispatch?.();
+  if (denied) return { ok: false, error: denied };
+  if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
   const url = new URL(`https://api.anthropic.com/v1/${path}`);
   if (path === "models") {
     url.searchParams.set("limit", "1000");

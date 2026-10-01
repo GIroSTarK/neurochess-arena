@@ -5,6 +5,7 @@ import type {
   ModelCapabilities,
   ModelDiscoveryResult,
   NormalizedMoveResponse,
+  ProviderFailure,
   UciMove,
 } from "@neurochess/contracts";
 
@@ -12,6 +13,7 @@ export interface ListModelsInput {
   // Request-scoped only: adapters must not retain credentials on an instance.
   readonly apiKey: string;
   readonly signal: AbortSignal;
+  readonly beforeDispatch?: () => Promise<ProviderFailure | null>;
 }
 
 export interface AiChessContext {

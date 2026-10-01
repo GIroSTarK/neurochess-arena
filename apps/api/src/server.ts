@@ -26,25 +26,25 @@ async function main(): Promise<void> {
   const environment = parseApiEnvironment(process.env);
   const database = createDatabase(environment.DATABASE_URL);
   const repository = createGameRepository(database);
+  const credentialCipher =
+    environment.CREDENTIAL_ENCRYPTION_KEY_ID && environment.CREDENTIAL_ENCRYPTION_KEY
+      ? createCredentialCipher({
+          keyId: environment.CREDENTIAL_ENCRYPTION_KEY_ID,
+          key: environment.CREDENTIAL_ENCRYPTION_KEY,
+        })
+      : undefined;
   const app = await buildApp({
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
     auth: createAccountAuth(database, environment, createAuthEmailSender(environment)),
     profiles: createProfileService(createProfileRepository(database)),
-    credentials: createCredentialService(
-      createCredentialRepository(database),
-      environment.CREDENTIAL_ENCRYPTION_KEY_ID && environment.CREDENTIAL_ENCRYPTION_KEY
-        ? createCredentialCipher({
-            keyId: environment.CREDENTIAL_ENCRYPTION_KEY_ID,
-            key: environment.CREDENTIAL_ENCRYPTION_KEY,
-          })
-        : undefined,
-    ),
+    credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
     gameApi: {
       games: createGameService(repository, {
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
+        ...(credentialCipher ? { credentialCipher } : {}),
         aiAdapters: {
           openai: createOpenAiAdapter(),
           anthropic: createAnthropicAdapter(),

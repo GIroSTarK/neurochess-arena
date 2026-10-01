@@ -101,6 +101,12 @@ Account history lists completed and aborted public games together, newest first,
 
 Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
 
+## Saved credential use and revocation
+
+Accounts explicitly choose a saved credential for each AI seat or use a session-only key. A saved reference grants no account, game, seat, or controller authority and is never automatically selected by provider. Recovery still requires an explicit credential choice and Resume or Next move; saving keys does not enable background play.
+
+Revoking or clearing a saved credential prevents future authorized provider dispatches, including discovery pagination and invalid-output retries. An already-dispatched result may complete if its account session, game revision, and controller remain authorized. Revocation cannot undo an upstream request or its charge. Missing, revoked, undecryptable, or provider-rejected credentials cause a recoverable provider-auth failure; a turn pauses without consuming the invalid-output budget. Invalid output already received still counts under the normal three-attempt policy. Stop, session revocation, and controller loss retain their existing outcome fences.
+
 ## Game modes
 
 ### AI versus AI
@@ -269,7 +275,6 @@ The MVP is ready when:
 
 - Exact retention period for an inactive guest game
 - Exact supported parameter matrix for each provider and model
-- Whether an otherwise authorized, already-dispatched AI result may complete after saved-credential revocation (resolve before saved credentials are used for inference); revocation must prevent future dispatches and retries
 - Retention and deletion rights for shared human-room participants (Phase 4)
 - Final deployment platform and production region
 - Repository license

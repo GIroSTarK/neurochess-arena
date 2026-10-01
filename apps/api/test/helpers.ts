@@ -16,7 +16,7 @@ import { expect } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AccountAuth } from "../src/auth/service.js";
-import { createCredentialCipher } from "../src/credentials/crypto.js";
+import { createCredentialCipher, type CredentialCipher } from "../src/credentials/crypto.js";
 import { createCredentialService } from "../src/credentials/service.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
@@ -56,11 +56,19 @@ export class ApiHarness {
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
       auth?: (database: DatabaseConnection) => AccountAuth;
       credentials?: (database: DatabaseConnection) => NonNullable<BuildAppOptions["credentials"]>;
+      credentialCipher?: CredentialCipher | null;
     } = {},
   ): Promise<TestApi> {
     const database = integrationDatabase();
     const original = createGameRepository(database);
     const repository = options.repository?.(original) ?? original;
+    const credentialCipher =
+      options.credentialCipher === undefined
+        ? createCredentialCipher({
+            keyId: "integration-fixture",
+            key: Buffer.alloc(32, 7).toString("base64"),
+          })
+        : options.credentialCipher;
     const app = await buildApp({
       logger: options.logger ?? false,
       readiness: database,
@@ -73,10 +81,7 @@ export class ApiHarness {
               options.credentials?.(database) ??
               createCredentialService(
                 createCredentialRepository(database),
-                createCredentialCipher({
-                  keyId: "integration-fixture",
-                  key: Buffer.alloc(32, 7).toString("base64"),
-                }),
+                credentialCipher ?? undefined,
               ),
           }
         : {}),
@@ -85,6 +90,7 @@ export class ApiHarness {
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,
           aiAdapters: options.aiAdapters ?? {},
+          ...(credentialCipher ? { credentialCipher } : {}),
         }),
         guests: createGuestService(repository, options.ttlSeconds ?? 86_400),
         providerTimeouts: options.providerTimeouts ?? {},

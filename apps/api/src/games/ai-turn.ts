@@ -19,13 +19,14 @@ import type {
   StoredParticipant,
 } from "@neurochess/database";
 
+import {
+  credentialFailure,
+  type ProviderCredentialAccess,
+  type ProviderOperationAccess,
+} from "../credentials/provider-access.js";
 import type { Principal } from "../identity/principal.js";
 import { lockIdentity } from "../identity/validity.js";
-import {
-  AI_MOVE_INSTRUCTIONS,
-  type AiProviderAdapter,
-  type ListModelsInput,
-} from "../providers/adapter.js";
+import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapter.js";
 import { discoverModels, effectiveParameters } from "../providers/discovery.js";
 import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
@@ -84,6 +85,7 @@ function invocationResult(response: NormalizedMoveResponse, discarded = false): 
 export function createAiTurnExecutor(options: {
   readonly repository: GameRepository;
   readonly adapters: AiAdapters;
+  readonly useCredential: ProviderCredentialAccess;
   readonly prepareCommand: (
     tx: GameTransaction,
     principal: Principal,
@@ -96,7 +98,7 @@ export function createAiTurnExecutor(options: {
   return async (
     principal: Principal,
     input: unknown,
-    access: ListModelsInput,
+    access: ProviderOperationAccess,
   ): Promise<GameSnapshot> => {
     const parsed = aiControlledTurnCommandSchema.safeParse(input);
     if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
@@ -185,7 +187,14 @@ export function createAiTurnExecutor(options: {
     try {
       // Discovery shares the reservation fence with inference, but never holds database locks.
       const discoveryStarted = performance.now();
-      const discovery = await discoverModels(reserved.adapter, access);
+      const discovery =
+        (await options.useCredential(
+          principal,
+          reserved.selected.seat.provider,
+          access,
+          recheck,
+          (resolved) => discoverModels(reserved.adapter, resolved),
+        )) ?? credentialFailure;
       const discoveryDurationMs = Math.max(0, Math.round(performance.now() - discoveryStarted));
       const model = discovery.ok
         ? discovery.models.find((entry) => entry.id === reserved.selected.seat.modelId)
@@ -224,15 +233,21 @@ export function createAiTurnExecutor(options: {
               usage: null,
               providerRequestId: null,
             }
-          : await invokeMove(reserved.adapter, {
-              apiKey: access.apiKey,
-              signal: access.signal,
-              instructions: AI_MOVE_INSTRUCTIONS,
-              modelId: reserved.selected.seat.modelId,
-              parameters: { ...invocation.effectiveParameters },
-              ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
-              context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
-            });
+          : ((await options.useCredential(
+              principal,
+              reserved.selected.seat.provider,
+              access,
+              recheck,
+              (resolved) =>
+                invokeMove(reserved.adapter, {
+                  ...resolved,
+                  instructions: AI_MOVE_INSTRUCTIONS,
+                  modelId: reserved.selected.seat.modelId,
+                  parameters: { ...invocation.effectiveParameters },
+                  ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
+                  context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+                }),
+            )) ?? { ...credentialFailure, durationMs: 0, usage: null, providerRequestId: null });
         const currentAttempt = attempt;
         const received = response;
         const snapshot = await repository.write(async (tx) => {

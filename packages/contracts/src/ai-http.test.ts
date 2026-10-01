@@ -15,7 +15,32 @@ const command = {
   expectedVersion: 0,
 };
 
-describe("session-only HTTP credential contracts", () => {
+describe("exclusive HTTP credential contracts", () => {
+  it("accepts a saved reference or session key, never both or neither", () => {
+    const credentialId = "4096AA18-CEC3-4FB5-BBB0-FB8AC82970FF";
+    for (const [schema, base] of [
+      [modelDiscoveryRequestSchema, { provider: "openai" }],
+      [aiTurnRequestSchema, command],
+    ] as const) {
+      expect(schema.parse({ ...base, credentialId })).toEqual({
+        ...base,
+        credentialId: credentialId.toLowerCase(),
+      });
+      expect(schema.safeParse({ ...base, apiKey: "fixture" }).success).toBe(true);
+      for (const source of [
+        {},
+        { credentialId, apiKey: "fixture" },
+        { credentialId, apiKey: "" },
+        { credentialId: "invalid" },
+        { credentialId: null },
+        { credentialId, userId: command.gameId },
+        { credentialId, save: true },
+      ]) {
+        expect(schema.safeParse({ ...base, ...source }).success).toBe(false);
+      }
+    }
+    expect(aiTurnCommandSchema.safeParse({ ...command, credentialId }).success).toBe(false);
+  });
   it("validates controller actions without accepting credentials or client-defined expiry", () => {
     const acquire = {
       gameId: command.gameId,

@@ -147,6 +147,9 @@ export async function openRouterRequest(
 ): Promise<JsonResult> {
   const isAborted = () => input.signal.aborted;
   if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
+  const denied = await input.beforeDispatch?.();
+  if (denied) return { ok: false, error: denied };
+  if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
   const generation = "body" in operation;
   const url = new URL(
     `https://openrouter.ai/api/v1/${generation ? "chat/completions" : "models/user"}`,

@@ -9,13 +9,22 @@ export const sessionApiKeySchema = z
   .min(1)
   .max(4096)
   .regex(/^[\x21-\x7e]+(?![\s\S])/);
-export const modelDiscoveryRequestSchema = z.strictObject({
-  provider: aiProviderSchema,
-  apiKey: sessionApiKeySchema,
+const sessionCredentialSchema = z.strictObject({ apiKey: sessionApiKeySchema });
+const savedCredentialSchema = z.strictObject({
+  credentialId: z.uuid().transform((value) => value.toLowerCase()),
 });
-export const aiTurnRequestSchema = aiControlledTurnCommandSchema.extend({
-  apiKey: sessionApiKeySchema,
-});
+export const providerCredentialSourceSchema = z.union([
+  sessionCredentialSchema,
+  savedCredentialSchema,
+]);
+export const modelDiscoveryRequestSchema = z.union([
+  sessionCredentialSchema.extend({ provider: aiProviderSchema }),
+  savedCredentialSchema.extend({ provider: aiProviderSchema }),
+]);
+export const aiTurnRequestSchema = z.union([
+  aiControlledTurnCommandSchema.extend(sessionCredentialSchema.shape),
+  aiControlledTurnCommandSchema.extend(savedCredentialSchema.shape),
+]);
 export const aiRequestErrorCodeSchema = z.enum([
   "AI_TURN_IN_PROGRESS",
   "AI_TURN_RECOVERY_REQUIRED",
@@ -31,5 +40,6 @@ export const aiErrorResponseSchema = z.union([
 ]);
 
 export type ModelDiscoveryRequest = z.infer<typeof modelDiscoveryRequestSchema>;
+export type ProviderCredentialSource = z.infer<typeof providerCredentialSourceSchema>;
 export type AiTurnRequest = z.infer<typeof aiTurnRequestSchema>;
 export type AiRequestErrorCode = z.infer<typeof aiRequestErrorCodeSchema>;
