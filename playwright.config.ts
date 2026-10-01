@@ -8,10 +8,10 @@ import { WEB_ORIGIN } from "./test/e2e/environment";
 export default defineConfig({
   testDir: "./test/e2e",
   testMatch: "**/*.spec.ts",
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: 1,
+  workers: process.env.CI ? 1 : 8,
   timeout: 45_000,
   expect: { timeout: 8_000 },
   reporter: "list",
