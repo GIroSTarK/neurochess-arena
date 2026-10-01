@@ -100,6 +100,7 @@ test("Pause, speed, duplicate Next move and Resume use complete server snapshots
   await expectSelectArrowSpacing(page.getByLabel("Delay between moves"));
   await page.getByLabel("Delay between moves").selectOption("5000");
   const pause = page.getByRole("button", { name: "Pause", exact: true });
+  await expect(pause).toHaveAttribute("aria-disabled", "false");
   await pause.focus();
   await pause.press("Enter");
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeFocused();
