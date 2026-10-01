@@ -10,6 +10,12 @@ export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
   AUTH_EMAIL_NOT_VERIFIED: "Verify your email before signing in. You can request a new link.",
   AUTH_INVALID_CREDENTIALS: "The email or password is incorrect.",
   AUTH_INVALID_TOKEN: "This link is invalid or has expired. Request a new link.",
+  AUTH_OAUTH_FAILED: "Sign-in could not be completed. Start again with Google or GitHub.",
+  AUTH_OAUTH_CANCELLED: "Sign-in was canceled. You can try again when ready.",
+  AUTH_OAUTH_EMAIL_UNAVAILABLE:
+    "This provider did not supply a valid verified email. Check your provider account or use your existing sign-in method.",
+  AUTH_OAUTH_ACCOUNT_CONFLICT:
+    "Use your existing sign-in method or password recovery. Accounts are not linked automatically.",
 };
 
 export const authEmailAcceptedMessage =

@@ -1,6 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import { authResetPasswordRequestSchema, authSignInRequestSchema } from "@neurochess/contracts";
+import {
+  type AuthOAuthProvider,
+  authResetPasswordRequestSchema,
+  authSignInRequestSchema,
+} from "@neurochess/contracts";
 import {
   createAuthDatabaseAdapter,
   type DatabaseConnection,
@@ -17,6 +21,7 @@ import { AUTH_BASE_PATH, type AuthEnvironment, authOptions } from "./options.js"
 export interface AccountAuth {
   readonly baseURL: string;
   readonly emailEnabled?: boolean;
+  readonly oauthProviders?: readonly AuthOAuthProvider[];
   handle(request: Request, onEmailDeliveryFailure?: () => void): Promise<Response>;
   resolve(headers: Headers): Promise<AccountPrincipal | null>;
   close?(): Promise<void>;
@@ -107,6 +112,7 @@ export function createAccountAuth(
   return {
     baseURL: environment.BETTER_AUTH_URL,
     emailEnabled: Boolean(sender),
+    oauthProviders: Object.keys(options.socialProviders) as AuthOAuthProvider[],
     async handle(request, onEmailDeliveryFailure) {
       const pending: AuthEmail[] = [];
       const response = await delivery.run(pending, () => handleRequest(request));

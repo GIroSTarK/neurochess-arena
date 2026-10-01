@@ -176,6 +176,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0006_ai_controller_presence",
         "0007_separate_sandbox_game_slot",
         "0008_better_auth_foundation",
+        "0009_oauth_account_identity",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -300,6 +301,32 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       for (const table of ["user", "account", "session", "verification", "rate_limit"]) {
         expect((await tx.execute(sql`select * from ${sql.identifier(table)}`)).rows).toEqual([]);
       }
+      const authUserId = randomUUID();
+      await tx.execute(
+        sql`insert into "user" (id, name, email, email_verified) values (${authUserId}, '', 'upgrade@example.com', true)`,
+      );
+      await tx.execute(
+        sql`insert into account (account_id, provider_id, user_id, password, updated_at) values (${authUserId}, 'credential', ${authUserId}, 'upgrade-password-hash', now())`,
+      );
+      await tx.execute(
+        sql`insert into session (token, user_id, expires_at, updated_at) values ('upgrade-session-fixture', ${authUserId}, now() + interval '1 day', now())`,
+      );
+      await tx.execute(
+        sql`insert into verification (identifier, value, expires_at) values ('upgrade-verification-fixture', ${authUserId}, now() + interval '1 hour')`,
+      );
+      const authTables = ["user", "account", "session", "verification", "rate_limit"];
+      async function authSnapshot() {
+        const result = [];
+        for (const table of authTables) {
+          result.push(
+            (await tx.execute(sql`select * from ${sql.identifier(table)} order by id`)).rows,
+          );
+        }
+        return result;
+      }
+      const beforeAuth = await authSnapshot();
+      await applyMigration(migrationFiles[8]!);
+      expect(await authSnapshot()).toEqual(beforeAuth);
       expect((await tx.execute(sql`select * from ai_controllers`)).rows).toEqual(controllers.rows);
       expect((await tx.execute(sql`select * from ai_turn_reservations`)).rows).toEqual(
         reservationRows.rows,

@@ -4,10 +4,17 @@ import type { ApiEnvironment } from "../env.js";
 
 import { AUTH_BASE_PATH, AUTH_IP_HEADER } from "./constants.js";
 import { authEmail, type AuthEmailSender } from "./email.js";
+import { discardedOAuthTokens, oauthPolicy, oauthProviders } from "./oauth.js";
 
 export type AuthEnvironment = Pick<
   ApiEnvironment,
-  "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "WEB_ORIGIN"
+  | "BETTER_AUTH_URL"
+  | "BETTER_AUTH_SECRET"
+  | "WEB_ORIGIN"
+  | "GOOGLE_CLIENT_ID"
+  | "GOOGLE_CLIENT_SECRET"
+  | "GITHUB_CLIENT_ID"
+  | "GITHUB_CLIENT_SECRET"
 >;
 
 export { AUTH_BASE_PATH, AUTH_IP_HEADER } from "./constants.js";
@@ -19,6 +26,9 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
     basePath: AUTH_BASE_PATH,
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [environment.WEB_ORIGIN],
+    socialProviders: oauthProviders(environment),
+    plugins: [oauthPolicy()],
+    onAPIError: { errorURL: `${environment.WEB_ORIGIN}/?auth=oauth-error` },
     emailAndPassword: {
       enabled: Boolean(sender),
       disableSignUp: !sender,
@@ -61,6 +71,16 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
     account: {
       accountLinking: { enabled: false, disableImplicitLinking: true },
       encryptOAuthTokens: true,
+      storeAccountCookie: false,
+      storeStateStrategy: "database",
+      skipStateCookieCheck: false,
+      updateAccountOnSignIn: false,
+    },
+    databaseHooks: {
+      account: {
+        create: { before: async (account) => ({ data: { ...account, ...discardedOAuthTokens } }) },
+        update: { before: async (account) => ({ data: { ...account, ...discardedOAuthTokens } }) },
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
@@ -79,6 +99,8 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
         "/send-verification-email": { window: 60, max: 3 },
         "/request-password-reset": { window: 60, max: 3 },
         "/reset-password": { window: 60, max: 10 },
+        "/sign-in/social": { window: 60, max: 10 },
+        "/callback/*": { window: 60, max: 30 },
       },
     },
     advanced: {
