@@ -110,7 +110,18 @@ async function accountFixture() {
     .getSetCookie()
     .map((value) => value.split(";")[0])
     .join("; ");
-  return { ...result, cookie, setCookies: response.headers.getSetCookie(), fixture };
+  const [storedSession] = await database.db
+    .select({ id: authSessions.id })
+    .from(authSessions)
+    .where(eq(authSessions.token, result.token));
+  if (!storedSession) throw new Error("Fixture session is missing");
+  return {
+    ...result,
+    sessionId: storedSession.id,
+    cookie,
+    setCookies: response.headers.getSetCookie(),
+    fixture,
+  };
 }
 
 function session(cookie?: string) {
@@ -130,6 +141,7 @@ describe("PostgreSQL Better Auth foundation", () => {
       expect(await other.resolve(new Headers({ cookie: account.cookie }))).toEqual({
         kind: "account",
         userId: account.user.id,
+        sessionId: account.sessionId,
       });
       expect(await database.db.$count(authAccounts, eq(authAccounts.userId, account.user.id))).toBe(
         1,
@@ -290,6 +302,7 @@ describe("PostgreSQL Better Auth foundation", () => {
     expect(await auth.resolve(new Headers({ cookie: account.cookie }))).toEqual({
       kind: "account",
       userId: account.user.id,
+      sessionId: account.sessionId,
     });
     const preflight = await app.inject({
       method: "OPTIONS",
@@ -392,6 +405,7 @@ describe("PostgreSQL Better Auth foundation", () => {
     expect(await auth.resolve(new Headers({ cookie: cookies }))).toEqual({
       kind: "account",
       userId: account.user.id,
+      sessionId: account.sessionId,
     });
   });
 
@@ -462,11 +476,17 @@ describe("PostgreSQL Better Auth foundation", () => {
 
   it("does not acknowledge sign-out when the auth library catches a failed database deletion", async () => {
     const account = await accountFixture();
-    const originalDelete = database.db.delete.bind(database.db);
-    const deletion = vi.spyOn(database.db, "delete").mockImplementation((table) => {
-      if (table === authSessions) throw new Error("database-deletion-secret-canary");
-      return originalDelete(table);
-    });
+    const originalTransaction = database.db.transaction.bind(database.db);
+    const deletion = vi.spyOn(database.db, "transaction").mockImplementation((action, config) =>
+      originalTransaction(async (tx) => {
+        const originalDelete = tx.delete.bind(tx);
+        vi.spyOn(tx, "delete").mockImplementation((table) => {
+          if (table === authSessions) throw new Error("database-deletion-secret-canary");
+          return originalDelete(table);
+        });
+        return action(tx);
+      }, config),
+    );
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/sign-out",
@@ -481,6 +501,7 @@ describe("PostgreSQL Better Auth foundation", () => {
     expect(await auth.resolve(new Headers({ cookie: account.cookie }))).toEqual({
       kind: "account",
       userId: account.user.id,
+      sessionId: account.sessionId,
     });
     expect(logs.join("")).not.toContain("database-deletion-secret-canary");
   });

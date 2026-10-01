@@ -2,7 +2,7 @@ import type { BetterAuthOptions } from "better-auth";
 
 import type { ApiEnvironment } from "../env.js";
 
-import { AUTH_BASE_PATH, AUTH_IP_HEADER } from "./constants.js";
+import { AUTH_BASE_PATH, AUTH_COOKIE_PREFIX, AUTH_IP_HEADER } from "./constants.js";
 import { authEmail, type AuthEmailSender } from "./email.js";
 import { discardedOAuthTokens, oauthPolicy, oauthProviders } from "./oauth.js";
 
@@ -108,7 +108,7 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
       disableCSRFCheck: false,
       disableOriginCheck: false,
       crossSubDomainCookies: { enabled: false },
-      cookiePrefix: "neurochess",
+      cookiePrefix: AUTH_COOKIE_PREFIX,
       defaultCookieAttributes: { httpOnly: true, secure: true, sameSite: "lax", path: "/" },
       ipAddress: { ipAddressHeaders: [AUTH_IP_HEADER] },
       database: { generateId: "uuid", joins: false },

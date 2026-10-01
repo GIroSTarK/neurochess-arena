@@ -25,7 +25,7 @@ export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions["logger"];
   readonly readiness: ReadinessProbe;
   readonly webOrigin: string;
-  readonly gameApi?: Omit<GameApiOptions, "webOrigin">;
+  readonly gameApi?: Omit<GameApiOptions, "webOrigin" | "auth">;
   readonly auth?: AccountAuth;
 }
 
@@ -78,7 +78,11 @@ export async function buildApp(options: BuildAppOptions) {
   );
 
   if (options.gameApi) {
-    await app.register(registerGameRoutes, { ...options.gameApi, webOrigin: options.webOrigin });
+    await app.register(registerGameRoutes, {
+      ...options.gameApi,
+      webOrigin: options.webOrigin,
+      ...(options.auth ? { auth: options.auth } : {}),
+    });
   }
 
   if (options.auth) {

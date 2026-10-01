@@ -71,6 +71,13 @@
       "when": 1790820896318,
       "tag": "0009_oauth_account_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790823684742,
+      "tag": "0010_account_owned_games",
+      "breakpoints": true
     }
   ]
 }

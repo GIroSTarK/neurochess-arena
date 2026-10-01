@@ -20,7 +20,7 @@ import type {
 } from "@neurochess/database";
 
 import type { Principal } from "../identity/principal.js";
-import { lockPrincipal } from "../identity/validity.js";
+import { lockIdentity } from "../identity/validity.js";
 import {
   AI_MOVE_INSTRUCTIONS,
   type AiProviderAdapter,
@@ -322,7 +322,7 @@ export function createAiTurnExecutor(options: {
       try {
         await repository.write(async (tx) => {
           // Cleanup uses the server's attempt/fence identity, even if the principal has expired.
-          await lockPrincipal(tx, principal);
+          await lockIdentity(tx, principal);
           await tx.lockGame(command.gameId);
           if (
             response &&

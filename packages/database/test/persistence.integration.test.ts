@@ -64,7 +64,7 @@ async function game() {
   const owner = await guest();
   const [created] = await database.db.insert(games).values(gameValues(owner.id)).returning();
   if (!created) throw new Error("Fixture insertion failed");
-  return created;
+  return { ...created, ownerGuestSessionId: owner.id };
 }
 
 function moveValues(gameId: string): NewMove {
@@ -177,6 +177,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0007_separate_sandbox_game_slot",
         "0008_better_auth_foundation",
         "0009_oauth_account_identity",
+        "0010_account_owned_games",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -343,6 +344,48 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       expect((await tx.execute(sql`select * from game_commands order by game_id`)).rows).toEqual(
         afterReservations[3]!.rows,
       );
+      const turnId = randomUUID();
+      await tx.execute(
+        sql`insert into ai_turns(id, game_id, ply, color, attempt_count) values (${turnId}, ${aiGame}, 1, 'white', 1)`,
+      );
+      await tx.execute(
+        sql`insert into model_invocations(turn_id, attempt_number, reservation_id, command_id, expected_version, provider, model_id, effective_parameters) values (${turnId}, 1, ${randomUUID()}, ${randomUUID()}, 0, 'openai', 'fixture-white', '{}')`,
+      );
+      const preservedTables = [
+        "guest_sessions",
+        "games",
+        "game_participants",
+        "moves",
+        "game_commands",
+        "ai_turn_reservations",
+        "ai_controllers",
+        "ai_turns",
+        "model_invocations",
+      ];
+      const beforeOwnership = [];
+      for (const table of preservedTables) {
+        beforeOwnership.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      await applyMigration(migrationFiles[9]!);
+      expect(await authSnapshot()).toEqual(beforeAuth);
+      for (const [index, table] of preservedTables.entries()) {
+        const added =
+          table === "games"
+            ? "{owner_user_id}"
+            : table === "game_participants"
+              ? "{user_id}"
+              : "{}";
+        const after = await tx.execute(
+          sql`select to_jsonb(t) - ${added}::text[] as value from ${sql.identifier(table)} t order by (to_jsonb(t) - ${added}::text[])::text`,
+        );
+        expect(after.rows, table).toEqual(beforeOwnership[index]);
+      }
       await tx.execute(sql`drop schema ${sql.identifier(schemaName)} cascade`);
     });
   });

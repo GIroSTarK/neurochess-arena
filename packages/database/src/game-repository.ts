@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
+import { session, user } from "./schema/auth.js";
 import {
   aiControllers,
   aiTurnReservations,
@@ -57,6 +58,7 @@ export type GamePositionUpdate = Pick<
 
 export interface GameReader {
   getGuest(id: string): Promise<StoredGuestSession | undefined>;
+  hasAccountSession(userId: string, sessionId: string): Promise<boolean>;
   getGame(id: string): Promise<StoredGame | undefined>;
   getParticipants(gameId: string): Promise<StoredParticipant[]>;
   getMoves(gameId: string): Promise<StoredMove[]>;
@@ -66,6 +68,7 @@ export interface GameReader {
     guestId: string,
     scope: "ordinary" | "sandbox",
   ): Promise<StoredGame | undefined>;
+  findUnfinishedAccountGame(userId: string): Promise<StoredGame | undefined>;
 }
 
 export interface GameTransaction extends GameReader {
@@ -76,6 +79,7 @@ export interface GameTransaction extends GameReader {
   renewAiController(gameId: string, controllerId: string, leaseMs: number): Promise<boolean>;
   clearAiController(gameId: string): Promise<void>;
   lockGuest(id: string): Promise<StoredGuestSession | undefined>;
+  lockAccount(id: string): Promise<void>;
   lockGame(id: string): Promise<StoredGame | undefined>;
   hasCommand(gameId: string, commandId: string): Promise<boolean>;
   appendCommand(command: NewGameCommand): Promise<void>;
@@ -103,7 +107,9 @@ export interface GameTransaction extends GameReader {
 }
 
 export interface GameRepository {
-  expiredAiControllers(): Promise<{ gameId: string; guestId: string }[]>;
+  expiredAiControllers(): Promise<
+    { gameId: string; ownerGuestSessionId: string | null; ownerUserId: string | null }[]
+  >;
   createGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession>;
   renewGuest(tokenHash: string, ttlSeconds: number): Promise<StoredGuestSession | undefined>;
   read<T>(action: (reader: GameReader) => Promise<T>): Promise<T>;
@@ -114,6 +120,20 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    async hasAccountSession(userId, sessionId) {
+      const [active] = await db
+        .select({ id: session.id })
+        .from(session)
+        .where(
+          and(
+            eq(session.id, sessionId),
+            eq(session.userId, userId),
+            // Better Auth stores UTC in timestamp-without-time-zone columns.
+            gt(session.expiresAt, sql`clock_timestamp() at time zone 'UTC'`),
+          ),
+        );
+      return active !== undefined;
+    },
     async getGuest(id) {
       const [guest] = await db
         .select()
@@ -159,6 +179,19 @@ function readerFor(db: Executor): GameReader {
         );
       return game;
     },
+    async findUnfinishedAccountGame(userId) {
+      const [game] = await db
+        .select()
+        .from(games)
+        .where(
+          and(
+            eq(games.ownerUserId, userId),
+            inArray(games.state, ["active", "paused"]),
+            eq(games.isSandbox, false),
+          ),
+        );
+      return game;
+    },
   };
 }
 
@@ -167,7 +200,11 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
   return {
     expiredAiControllers: () =>
       db
-        .select({ gameId: games.id, guestId: games.ownerGuestSessionId })
+        .select({
+          gameId: games.id,
+          ownerGuestSessionId: games.ownerGuestSessionId,
+          ownerUserId: games.ownerUserId,
+        })
         .from(games)
         .leftJoin(aiControllers, eq(aiControllers.gameId, games.id))
         .where(
@@ -266,6 +303,9 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                 .for("update");
               // Check expiry after any lock wait, using the database clock.
               return reader.getGuest(id);
+            },
+            async lockAccount(id) {
+              await tx.select({ id: user.id }).from(user).where(eq(user.id, id)).for("update");
             },
             async lockGame(id) {
               const [game] = await tx.select().from(games).where(eq(games.id, id)).for("update");

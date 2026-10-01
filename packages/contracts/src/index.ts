@@ -118,6 +118,7 @@ export {
   type AiRequestErrorCode,
 } from "./ai-http.js";
 export {
+  gameIdentityIntentSchema,
   authPasswordSchema,
   authRegistrationRequestSchema,
   authSignInRequestSchema,
