@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const gameIdentityIntentSchema = z.enum(["account", "guest"]).optional();
+
 export const authEmptyRequestSchema = z.strictObject({});
 export const authOAuthProviderSchema = z.enum(["google", "github"]);
 export const authOAuthSignInRequestSchema = z.strictObject({ provider: authOAuthProviderSchema });

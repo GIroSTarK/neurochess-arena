@@ -13,6 +13,7 @@ import { expect } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
+import type { AccountAuth } from "../src/auth/service.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
@@ -48,6 +49,7 @@ export class ApiHarness {
       logger?: BuildAppOptions["logger"];
       aiAdapters?: AiAdapters;
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
+      auth?: (database: DatabaseConnection) => AccountAuth;
     } = {},
   ): Promise<TestApi> {
     const database = integrationDatabase();
@@ -57,6 +59,7 @@ export class ApiHarness {
       logger: options.logger ?? false,
       readiness: database,
       webOrigin: WEB_ORIGIN,
+      ...(options.auth ? { auth: options.auth(database) } : {}),
       gameApi: {
         games: createGameService(repository, {
           nodeEnv: options.nodeEnv ?? "test",

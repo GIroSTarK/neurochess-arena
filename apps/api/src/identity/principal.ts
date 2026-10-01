@@ -4,14 +4,18 @@ export interface GuestPrincipal {
   readonly guestSessionId: string;
 }
 
-export interface AccountPrincipal {
+export interface AccountIdentity {
   readonly kind: "account";
   readonly userId: string;
 }
 
-// Gameplay remains guest-only until account ownership, locks, and seats ship together.
-export type Principal = GuestPrincipal;
+export interface AccountPrincipal extends AccountIdentity {
+  readonly sessionId: string;
+}
 
-export function isGuestPrincipal(principal: { readonly kind: string }): boolean {
+export type GameIdentity = GuestPrincipal | AccountIdentity;
+export type Principal = GuestPrincipal | AccountPrincipal;
+
+export function isGuestPrincipal(principal: GameIdentity): principal is GuestPrincipal {
   return principal.kind === "guest";
 }

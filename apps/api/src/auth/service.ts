@@ -59,6 +59,9 @@ export function createAccountAuth(
   async function handleRequest(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     let userId: string | undefined;
+    if (request.method === "POST" && path === `${AUTH_BASE_PATH}/sign-out`) {
+      userId = (await getSession(request.headers))?.user.id;
+    }
     if (
       sender &&
       request.method === "POST" &&
@@ -136,7 +139,13 @@ export function createAccountAuth(
     },
     async resolve(headers) {
       const value = await getSession(headers);
-      return value ? { kind: "account", userId: z.uuid().parse(value.user.id) } : null;
+      return value
+        ? {
+            kind: "account",
+            userId: z.uuid().parse(value.user.id),
+            sessionId: z.uuid().parse(value.session.id),
+          }
+        : null;
     },
     async close() {
       await Promise.all(pendingDeliveries);

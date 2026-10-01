@@ -8,6 +8,7 @@ import {
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameIdentityIntentSchema,
   gameInvocationsSchema,
   gameParamsSchema,
   gamePgnResponseSchema,
@@ -25,6 +26,8 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
+import { AUTH_COOKIE_PREFIX } from "../auth/constants.js";
+import type { AccountAuth } from "../auth/service.js";
 import { authenticateGuestRequest, setGuestCookie } from "../guests/http.js";
 import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
 import type { Principal } from "../identity/principal.js";
@@ -40,6 +43,7 @@ import { GameConflictError, GameRequestError } from "./errors.js";
 import type { GameService } from "./service.js";
 
 export interface GameApiOptions {
+  readonly auth?: AccountAuth;
   readonly games: GameService;
   readonly guests: GuestService;
   readonly webOrigin: string;
@@ -122,7 +126,27 @@ export async function registerGameRoutes(
     return reply.code(errorStatuses[code]).send(response);
   });
 
-  function principalFor(request: FastifyRequest, reply: FastifyReply): Promise<Principal> {
+  async function principalFor(request: FastifyRequest, reply: FastifyReply): Promise<Principal> {
+    const params = gameParamsSchema.safeParse(request.params);
+    // The immutable server-owned marker selects Sandbox authority on shared routes.
+    // It never permits guest fallback for an ordinary public game.
+    if (params.success && (await options.games.isSandboxGame(params.data.gameId))) {
+      return authenticateGuestRequest(options.guests, request, reply);
+    }
+    const intent = gameIdentityIntentSchema.safeParse(request.headers["x-neurochess-identity"]);
+    if (!intent.success) throw new GameRequestError("INVALID_REQUEST");
+    const account = await options.auth?.resolve(
+      new Headers(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
+    );
+    if (account) return account;
+    const hasAccountCookie = Object.keys(request.cookies).some(
+      (name) =>
+        name === `__Secure-${AUTH_COOKIE_PREFIX}.session_token` ||
+        name === `${AUTH_COOKIE_PREFIX}.session_token`,
+    );
+    if (intent.data === "account" || (hasAccountCookie && intent.data !== "guest")) {
+      throw new GameRequestError("UNAUTHORIZED");
+    }
     return authenticateGuestRequest(options.guests, request, reply);
   }
 

@@ -1,6 +1,8 @@
 import { type AiGameConfiguration, aiGameConfigurationSchema } from "@neurochess/contracts";
 import type { NewParticipant, StoredGame, StoredParticipant } from "@neurochess/database";
 
+import type { GameIdentity } from "../identity/principal.js";
+
 import { GameIntegrityError } from "./errors.js";
 
 export function configurationOf(
@@ -15,6 +17,7 @@ export function configurationOf(
     if (participant.seatType === "human") {
       if (
         participant.guestSessionId !== stored.ownerGuestSessionId ||
+        participant.userId !== stored.ownerUserId ||
         participant.provider !== null ||
         participant.modelId !== null ||
         participant.parameters !== null
@@ -23,7 +26,9 @@ export function configurationOf(
       }
       seats[participant.color] = { type: "human" };
     } else {
-      if (participant.guestSessionId !== null) throw new GameIntegrityError();
+      if (participant.guestSessionId !== null || participant.userId !== null) {
+        throw new GameIntegrityError();
+      }
       // Parse the stored fields together below; a corrupt row is never repaired or defaulted.
       seats[participant.color] = {
         type: "ai",
@@ -40,7 +45,7 @@ export function configurationOf(
 
 export function participantsFor(
   gameId: string,
-  ownerGuestSessionId: string,
+  owner: GameIdentity,
   configuration: AiGameConfiguration | null,
 ): NewParticipant[] {
   return (["white", "black"] as const).map((color) => {
@@ -59,7 +64,11 @@ export function participantsFor(
           gameId,
           color,
           seatType: "human",
-          guestSessionId: configuration !== null || color === "white" ? ownerGuestSessionId : null,
+          guestSessionId:
+            owner.kind === "guest" && (configuration !== null || color === "white")
+              ? owner.guestSessionId
+              : null,
+          userId: owner.kind === "account" ? owner.userId : null,
         };
   });
 }

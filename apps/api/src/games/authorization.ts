@@ -1,12 +1,12 @@
 import type { ChessColor } from "@neurochess/chess";
 import type { StoredGame, StoredParticipant } from "@neurochess/database";
 
-import { isGuestPrincipal, type Principal } from "../identity/principal.js";
+import { type GameIdentity, isGuestPrincipal } from "../identity/principal.js";
 
-import { GameRequestError } from "./errors.js";
+import { GameIntegrityError, GameRequestError } from "./errors.js";
 
 export function authorizeGameRead(
-  principal: Principal,
+  principal: GameIdentity,
   game: StoredGame,
   participants: readonly StoredParticipant[],
   sandboxEnabled: boolean,
@@ -19,7 +19,7 @@ export function authorizeGameRead(
 }
 
 export function authorizeHumanSeat(
-  principal: Principal,
+  principal: GameIdentity,
   game: StoredGame,
   participants: readonly StoredParticipant[],
   turn: ChessColor,
@@ -33,16 +33,32 @@ export function authorizeHumanSeat(
   }
 }
 
-export function authorizeGameControl(principal: Principal, game: StoredGame): void {
+export function authorizeGameControl(principal: GameIdentity, game: StoredGame): void {
   if (!ownsGame(principal, game)) {
     throw new GameRequestError("FORBIDDEN");
   }
 }
 
-function ownsGame(principal: Principal, game: StoredGame): boolean {
-  return isGuestPrincipal(principal) && game.ownerGuestSessionId === principal.guestSessionId;
+export function ownerOf(
+  game: Pick<StoredGame, "ownerUserId" | "ownerGuestSessionId">,
+): GameIdentity {
+  if (game.ownerGuestSessionId && !game.ownerUserId) {
+    return { kind: "guest", guestSessionId: game.ownerGuestSessionId };
+  }
+  if (game.ownerUserId && !game.ownerGuestSessionId) {
+    return { kind: "account", userId: game.ownerUserId };
+  }
+  throw new GameIntegrityError();
 }
 
-function occupiesSeat(principal: Principal, seat: StoredParticipant): boolean {
-  return isGuestPrincipal(principal) && seat.guestSessionId === principal.guestSessionId;
+function ownsGame(principal: GameIdentity, game: StoredGame): boolean {
+  return isGuestPrincipal(principal)
+    ? game.ownerGuestSessionId === principal.guestSessionId
+    : !game.isSandbox && game.ownerUserId === principal.userId;
+}
+
+function occupiesSeat(principal: GameIdentity, seat: StoredParticipant): boolean {
+  return isGuestPrincipal(principal)
+    ? seat.guestSessionId === principal.guestSessionId
+    : seat.userId === principal.userId;
 }
