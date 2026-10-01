@@ -85,6 +85,13 @@
       "when": 1790860682323,
       "tag": "0011_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790883532206,
+      "tag": "0012_provider_credentials",
+      "breakpoints": true
     }
   ]
 }

@@ -54,3 +54,11 @@ export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   NOT_FOUND: "The requested resource was not found.",
   INTERNAL_SERVER_ERROR: "The server could not complete the request.",
 };
+export const credentialErrorMessages = {
+  CREDENTIAL_INVALID_REQUEST: "Check the credential details and try again.",
+  CREDENTIAL_UNAUTHORIZED: "Sign in again to manage saved keys.",
+  CREDENTIAL_FORBIDDEN: "This credential request is not allowed.",
+  CREDENTIAL_CONFLICT: "This save ID already exists. Refresh your saved keys before trying again.",
+  CREDENTIAL_LIMIT_REACHED: "Revoke a saved key before saving another.",
+  CREDENTIAL_UNAVAILABLE: "Saved key management is unavailable. Try again later.",
+};

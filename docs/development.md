@@ -35,30 +35,31 @@ The API reads the root `.env` file when present. Vite also uses the root as its 
 
 ## Environment contract
 
-| Variable                                   | Consumer   | Purpose                                                                       |
-| ------------------------------------------ | ---------- | ----------------------------------------------------------------------------- |
-| `NODE_ENV`                                 | API        | `development`, `test`, or `production`                                        |
-| `API_HOST`                                 | API        | Fastify listen address                                                        |
-| `API_PORT`                                 | API        | Fastify listen port                                                           |
-| `WEB_ORIGIN`                               | API        | Exact browser origin allowed by CORS                                          |
-| `BETTER_AUTH_URL`                          | API        | Explicit public API origin; auth is mounted at `/api/auth`                    |
-| `BETTER_AUTH_SECRET`                       | API        | Required random signing/encryption secret, at least 32 characters             |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | API        | Optional complete pair enabling Google sign-in; server-only                   |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | API        | Optional complete pair enabling GitHub sign-in; server-only                   |
-| `AUTH_EMAIL_TRANSPORT`                     | API        | `disabled` (default outside production) or `smtp`; production requires `smtp` |
-| `AUTH_EMAIL_FROM`                          | API        | One valid sender email address; required with SMTP                            |
-| `SMTP_HOST`                                | API        | SMTP hostname or IP, without a URL, credentials, or path; required with SMTP  |
-| `SMTP_PORT`                                | API        | SMTP port, 1–65535; defaults to 587                                           |
-| `SMTP_SECURITY`                            | API        | `starttls` (default), `tls`, or local development/test `none`                 |
-| `SMTP_USER`, `SMTP_PASSWORD`               | API        | Optional SMTP credentials; supply both or neither; server-only secrets        |
-| `DATABASE_URL`                             | API, tools | PostgreSQL connection URL                                                     |
-| `LOG_LEVEL`                                | API        | Pino log level                                                                |
-| `SANDBOX_ENABLED`                          | API, web   | Exactly `true` or `false`; defaults to false; production API rejects true     |
-| `GUEST_SESSION_TTL_SECONDS`                | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400                      |
-| `VITE_API_BASE_URL`                        | web        | Public HTTP(S) API origin, without credentials, paths, query, or fragment     |
-| `POSTGRES_*`                               | Compose    | Local database name, user, password, and port                                 |
-| `TEST_DATABASE_URL`                        | Tests      | Explicit disposable PostgreSQL database ending in `_test`; no fallback        |
-| `TEST_POSTGRES_PORT`                       | Compose    | Separate test-service port, defaults to 5433                                  |
+| Variable                                                    | Consumer   | Purpose                                                                                                                                                                  |
+| ----------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NODE_ENV`                                                  | API        | `development`, `test`, or `production`                                                                                                                                   |
+| `API_HOST`                                                  | API        | Fastify listen address                                                                                                                                                   |
+| `API_PORT`                                                  | API        | Fastify listen port                                                                                                                                                      |
+| `WEB_ORIGIN`                                                | API        | Exact browser origin allowed by CORS                                                                                                                                     |
+| `BETTER_AUTH_URL`                                           | API        | Explicit public API origin; auth is mounted at `/api/auth`                                                                                                               |
+| `BETTER_AUTH_SECRET`                                        | API        | Required random signing/encryption secret, at least 32 characters                                                                                                        |
+| `CREDENTIAL_ENCRYPTION_KEY_ID`, `CREDENTIAL_ENCRYPTION_KEY` | API        | Optional complete pair enabling provider-key saving: 1–64 ASCII letters/digits/underscore/hyphen identifier and canonical base64 of exactly 32 random bytes; server-only |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`                  | API        | Optional complete pair enabling Google sign-in; server-only                                                                                                              |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`                  | API        | Optional complete pair enabling GitHub sign-in; server-only                                                                                                              |
+| `AUTH_EMAIL_TRANSPORT`                                      | API        | `disabled` (default outside production) or `smtp`; production requires `smtp`                                                                                            |
+| `AUTH_EMAIL_FROM`                                           | API        | One valid sender email address; required with SMTP                                                                                                                       |
+| `SMTP_HOST`                                                 | API        | SMTP hostname or IP, without a URL, credentials, or path; required with SMTP                                                                                             |
+| `SMTP_PORT`                                                 | API        | SMTP port, 1–65535; defaults to 587                                                                                                                                      |
+| `SMTP_SECURITY`                                             | API        | `starttls` (default), `tls`, or local development/test `none`                                                                                                            |
+| `SMTP_USER`, `SMTP_PASSWORD`                                | API        | Optional SMTP credentials; supply both or neither; server-only secrets                                                                                                   |
+| `DATABASE_URL`                                              | API, tools | PostgreSQL connection URL                                                                                                                                                |
+| `LOG_LEVEL`                                                 | API        | Pino log level                                                                                                                                                           |
+| `SANDBOX_ENABLED`                                           | API, web   | Exactly `true` or `false`; defaults to false; production API rejects true                                                                                                |
+| `GUEST_SESSION_TTL_SECONDS`                                 | API        | Inactivity expiry, 1–31536000 seconds; defaults to 86400                                                                                                                 |
+| `VITE_API_BASE_URL`                                         | web        | Public HTTP(S) API origin, without credentials, paths, query, or fragment                                                                                                |
+| `POSTGRES_*`                                                | Compose    | Local database name, user, password, and port                                                                                                                            |
+| `TEST_DATABASE_URL`                                         | Tests      | Explicit disposable PostgreSQL database ending in `_test`; no fallback                                                                                                   |
+| `TEST_POSTGRES_PORT`                                        | Compose    | Separate test-service port, defaults to 5433                                                                                                                             |
 
 Invalid environment errors contain variable names only. Never add server secrets to a `VITE_` variable.
 
@@ -225,6 +226,25 @@ Every method reaches username onboarding before account gameplay. `/account` edi
 Sign-in/out, cross-tab changes, expiry and reset invalidation clear page keys and private state. The browser uses a non-secret sessionStorage account-intent marker, BroadcastChannel notifications, focus/pageshow checks and 15-second observation; API authorization remains authoritative on every operation. Public requests include `x-neurochess-identity` and `x-neurochess-expected-account` (observed UUID or `guest`); profile reads/updates and sign-out include the expectation. These optional expectations can only deny a changed identity, never supply one. Missing cookies on a previously authenticated page require sign-in or explicit guest continuation. Returning to an existing game requires paused recovery and fresh keys; login never resumes it automatically.
 
 Run `npm run test:e2e -- test/e2e/accounts.spec.ts` against the isolated browser server for desktop/mobile email and injected Google/GitHub flows, profile editing, account play, paused return, session switching and reset revocation, late-response fencing, safe links, keyboard and enlarged-copy coverage. Test-only mailbox/OAuth routes and transports live in `test/e2e/account-harness.ts`; they are absent from production. Browser clients receive isolated fixture socket identities for the real database-backed rate limiter. Teardown tracks immutable user IDs from actual registration results and new-user OAuth callbacks, never email addresses encountered during reset or sign-in. It removes those users and their games, plus individually tracked sessions, reset/OAuth records and fixture rate-limit entries, after draining email work. No test sends real email or performs a live OAuth exchange; production consent and SMTP delivery still require the manual checks above.
+
+## Saved credential API
+
+These account-only endpoints use a valid Better Auth cookie, no-store responses and strict shared contracts. POST requires the exact `WEB_ORIGIN`; unknown body/query fields are rejected. Clients send `X-Neurochess-Expected-Account` with the account ID they resolved so a stale tab cannot manage a different cookie account. Guests never gain access, including when both cookies exist. Profile onboarding is not required for key management.
+
+| Route                      | Body                                                    | Success                     |
+| -------------------------- | ------------------------------------------------------- | --------------------------- |
+| `POST /credentials`        | `{ credentialId, save: true, provider, label, apiKey }` | `201` metadata              |
+| `GET /credentials`         | No query fields                                         | `200 { credentials }`       |
+| `POST /credentials/revoke` | `{ credentialId }`                                      | `200 { status: "deleted" }` |
+| `POST /credentials/clear`  | `{ confirm: true }`                                     | `200 { status: "deleted" }` |
+
+Generate a fresh UUID `credentialId` for each explicit save. Reusing an ID returns `409 CREDENTIAL_CONFLICT` and never overwrites. If the response is lost, list metadata and reconcile that ID before offering another explicit save; do not blindly retry with a new ID. Distinct IDs may save identical keys/labels; no plaintext fingerprint is stored. Each account can save 100 credentials, with `409 CREDENTIAL_LIMIT_REACHED` beyond that limit. Lists are complete within that bound, newest first with ID as a stable tiebreaker. Concurrent saves/clear/revoke serialize per account: clear removes rows existing at its transaction, and a later save survives. Repeating revoke or clear succeeds; absent and foreign revoke IDs are indistinguishable and never delete another account's record.
+
+Metadata contains only `credentialId`, provider, trimmed label (1–64 characters, no controls), `maskedSuffix`, and `createdAt`. The suffix is the final four ASCII letters/digits/underscore/hyphen only for keys longer than eight characters; otherwise it is `null`. A label containing the submitted key is rejected. Provider keys use the existing 1–4096 printable ASCII boundary; saving does not call a provider or establish key validity. There is no individual read or reveal endpoint. Provider discovery/turn requests still require a session-only `apiKey`; saved references and UI arrive in their separate milestones.
+
+Set both `CREDENTIAL_ENCRYPTION_KEY_ID` and `CREDENTIAL_ENCRYPTION_KEY` to enable saves. Generate the latter with a cryptographic generator as exactly 32 random bytes encoded in canonical base64. Keep it separate from `BETTER_AUTH_SECRET`, outside PostgreSQL/source control, in deployment secret storage. Do not set a `VITE_` equivalent. A partial or malformed pair prevents startup with variable names only; omitting both disables saving with `503 CREDENTIAL_UNAVAILABLE`, while authenticated listing/revocation/clear remain available. No key is generated automatically at startup.
+
+The [envelope and operations ADR](decisions/0014-encrypted-provider-credentials.md) defines the encryption format, key-loss recovery and rotation requirements. Back up the deployment key separately from database backups and test recovery before production. Losing it makes the saved ciphertext unrecoverable; users can delete records and explicitly save replacement provider keys. This implementation accepts one configured key ID/material pair. Do not replace that material under the same ID or switch IDs while rows still need the old key. Production rotation requires a reviewed maintenance procedure: stop writers, retain old secrets, authenticate/decrypt each old envelope and re-encrypt under a new random key and unique ID (with new nonces), verify every row, deploy the new configuration, then restart. Retain old secrets for backup restoration under the deployment's retention policy. An automated rotation/multi-key service is outside this change. Revoking a saved record deletes it from Arena, not from the upstream provider or existing backups.
 
 ## Sandbox API
 
@@ -407,6 +427,8 @@ Automated checks do not certify screen-reader behavior or every browser engine. 
 ## Migrations
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.
+
+Migration `0012_provider_credentials.sql` adds the account-owned credential table, owner/creation index, bounded envelope checks and owner cascade; it does not rewrite existing auth/profile/game data. Stop API writers, apply the reviewed migration, configure the optional encryption pair, then restart the updated API. Populated-schema tests compare all prior records before/after this migration; fresh/repeated migrations run in integration setup. The built-in account deletion path remains disabled pending complete application cleanup.
 
 Migration `0011_profiles.sql` adds a private profile row keyed to the auth user, nullable display/normalized username, sticky avatar-removal preference, validation check and unique normalized-name index. It leaves populated auth/game tables and existing provider images unchanged, and never infers usernames. Existing accounts must complete onboarding before account game/provider access, including recovery. Stop all API writers, apply the reviewed migration, and restart the updated API together; old binaries bypass the new onboarding requirement. Guest/Sandbox access and server-side controller cleanup remain available. Populated-schema tests preserve account owners, human seats, guest games and execution records; fresh/repeated migration runs are part of integration setup.
 

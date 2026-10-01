@@ -104,6 +104,12 @@ function stripQuery(value: string): string {
   // Email/auth protocols may put bearer tokens in path segments as well as queries.
   const authPath = value.split("?")[0]?.split("#")[0];
   if (
+    authPath?.startsWith("/credentials/") &&
+    !["/credentials/revoke", "/credentials/clear"].includes(authPath)
+  ) {
+    return "/credentials/[Redacted]";
+  }
+  if (
     authPath?.startsWith("/api/auth/") &&
     !["/api/auth/get-session", "/api/auth/sign-out"].includes(authPath)
   ) {
@@ -116,7 +122,9 @@ function stripQuery(value: string): string {
   try {
     const url = new URL(value);
     if (url.protocol === "http:" || url.protocol === "https:") {
-      if (url.pathname.startsWith("/api/auth/")) url.pathname = stripQuery(url.pathname);
+      if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/credentials/")) {
+        url.pathname = stripQuery(url.pathname);
+      }
       url.hash = "";
       url.search = "";
       return url.toString();

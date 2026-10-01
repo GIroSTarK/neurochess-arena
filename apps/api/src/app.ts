@@ -15,6 +15,8 @@ import {
 
 import { registerAuthRoutes } from "./auth/routes.js";
 import type { AccountAuth } from "./auth/service.js";
+import { registerCredentialRoutes } from "./credentials/routes.js";
+import type { CredentialService } from "./credentials/service.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
@@ -30,6 +32,7 @@ export interface BuildAppOptions {
   readonly gameApi?: Omit<GameApiOptions, "webOrigin" | "auth">;
   readonly auth?: AccountAuth;
   readonly profiles?: ProfileService;
+  readonly credentials?: CredentialService;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -89,6 +92,13 @@ export async function buildApp(options: BuildAppOptions) {
   }
 
   if (options.auth) {
+    if (options.credentials) {
+      await app.register(registerCredentialRoutes, {
+        auth: options.auth,
+        credentials: options.credentials,
+        webOrigin: options.webOrigin,
+      });
+    }
     await app.register(registerAuthRoutes, { auth: options.auth, webOrigin: options.webOrigin });
     if (options.profiles) {
       await app.register(registerProfileRoutes, {

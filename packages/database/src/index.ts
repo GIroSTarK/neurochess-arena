@@ -48,3 +48,10 @@ export {
   verification as authVerifications,
   rateLimit as authRateLimits,
 } from "./schema/auth.js";
+export { providerCredentials } from "./schema/credentials.js";
+export {
+  createCredentialRepository,
+  type CredentialRepository,
+  type NewCredential,
+  type StoredCredentialMetadata,
+} from "./credential-repository.js";

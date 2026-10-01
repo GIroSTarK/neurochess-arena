@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { type GameSnapshot, gameSnapshotSchema, type MoveCommand } from "@neurochess/contracts";
 import {
+  createCredentialRepository,
   createGameRepository,
   createProfileRepository,
   type DatabaseConnection,
@@ -15,6 +16,8 @@ import { expect } from "vitest";
 import { integrationDatabase } from "../../../test/database.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AccountAuth } from "../src/auth/service.js";
+import { createCredentialCipher } from "../src/credentials/crypto.js";
+import { createCredentialService } from "../src/credentials/service.js";
 import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
@@ -52,6 +55,7 @@ export class ApiHarness {
       aiAdapters?: AiAdapters;
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
       auth?: (database: DatabaseConnection) => AccountAuth;
+      credentials?: (database: DatabaseConnection) => NonNullable<BuildAppOptions["credentials"]>;
     } = {},
   ): Promise<TestApi> {
     const database = integrationDatabase();
@@ -65,6 +69,15 @@ export class ApiHarness {
         ? {
             auth: options.auth(database),
             profiles: createProfileService(createProfileRepository(database)),
+            credentials:
+              options.credentials?.(database) ??
+              createCredentialService(
+                createCredentialRepository(database),
+                createCredentialCipher({
+                  keyId: "integration-fixture",
+                  key: Buffer.alloc(32, 7).toString("base64"),
+                }),
+              ),
           }
         : {}),
       gameApi: {

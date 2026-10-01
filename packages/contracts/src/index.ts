@@ -154,3 +154,4 @@ export {
   type ProfileUpdateRequest,
   type ProfileErrorCode,
 } from "./profile.js";
+export * from "./credential.js";
