@@ -8,7 +8,7 @@
 - Firefox, WebKit, physical touch devices, browser/operating-system zoom, and on-screen keyboards remain unverified. Chromium touch emulation and root-text enlargement are not substitutes for those checks.
 - The production build splits vendor code into separate chunks, but no bundle size budget or field-performance baseline has been established.
 
-The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Existing sandbox checks do not certify the AI, account, room, or analysis flows; apply the acceptance checklist as each flow is implemented.
+The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Automated browser coverage includes Sandbox, the AI modes and account journeys. Private rooms and Stockfish analysis still need their own acceptance coverage when implemented.
 
 ## Static reference limitations
 

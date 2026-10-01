@@ -1,5 +1,6 @@
 import {
   emptyQuerySchema,
+  expectedAccountSchema,
   type ProfileErrorCode,
   profileErrorResponseSchema,
   profileOnboardingRequestSchema,
@@ -59,10 +60,16 @@ export async function registerProfileRoutes(
     );
   });
   async function principal(request: FastifyRequest) {
+    const expected = expectedAccountSchema.safeParse(
+      request.headers["x-neurochess-expected-account"],
+    );
+    if (!expected.success) throw new ProfileRequestError("PROFILE_INVALID_REQUEST");
     const value = await options.auth.resolve(
       new Headers(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
     );
-    if (!value) throw new ProfileRequestError("PROFILE_UNAUTHORIZED");
+    if (!value || (expected.data !== undefined && expected.data !== value.userId)) {
+      throw new ProfileRequestError("PROFILE_UNAUTHORIZED");
+    }
     return value;
   }
   const response = {

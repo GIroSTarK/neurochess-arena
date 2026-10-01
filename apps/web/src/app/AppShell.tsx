@@ -54,9 +54,9 @@ export function AppShell({
             {navigation}
           </nav>
         ) : null}
-        <span className="py-3 text-right text-label text-text-muted max-sm:max-w-32 max-sm:text-caption">
+        <div className="max-w-full min-w-0 py-3 text-right text-label text-text-muted">
           {context}
-        </span>
+        </div>
       </header>
       <main id={mainId} tabIndex={-1}>
         {children}

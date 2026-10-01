@@ -17,6 +17,47 @@ const harness = new AccountGameHarness();
 afterEach(() => harness.dispose());
 
 describe("account-owned game HTTP authority", () => {
+  it("rejects a stale page's expected account before discovery or creation without changing cookie precedence", async () => {
+    const api = await harness.createAuthenticatedApi();
+    const account = await harness.account(api);
+    const guest = await harness.guest(api);
+    for (const expected of ["guest", randomUUID(), "invalid"]) {
+      for (const url of ["/games", "/providers/models", "/guest-session"]) {
+        const response = await api.app.inject({
+          method: "POST",
+          url,
+          headers: {
+            cookie: account.cookie,
+            origin: WEB_ORIGIN,
+            "x-neurochess-expected-account": expected,
+          },
+          payload:
+            url === "/games"
+              ? aiMatch
+              : url === "/guest-session"
+                ? {}
+                : { provider: "openai", apiKey: "fixture" },
+        });
+        expect(response.statusCode).toBe(expected === "invalid" ? 400 : 401);
+      }
+    }
+    const absent = await api.app.inject({
+      url: "/games/unfinished",
+      headers: { cookie: guest.cookie, "x-neurochess-expected-account": account.principal.userId },
+    });
+    expect(absent.statusCode).toBe(401);
+    const accepted = await api.app.inject({
+      method: "POST",
+      url: "/games",
+      headers: {
+        cookie: account.cookie,
+        origin: WEB_ORIGIN,
+        "x-neurochess-expected-account": account.principal.userId,
+      },
+      payload: aiMatch,
+    });
+    expect(accepted.statusCode).toBe(201);
+  });
   it("serializes two sessions on different API instances into one public unfinished slot", async () => {
     const api = await harness.createAuthenticatedApi();
     const otherApi = await harness.createAuthenticatedApi();

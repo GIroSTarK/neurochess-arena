@@ -1,6 +1,7 @@
 import { lazy, Suspense, useSyncExternalStore } from "react";
 
-import { MatchScreen } from "../match/MatchScreen";
+import { AccountApplication } from "../auth/AccountApplication";
+import type { AuthEntry } from "../auth/navigation";
 
 import { DocumentMetadata } from "./DocumentMetadata";
 import { readAppPage, subscribeToNavigation } from "./navigation";
@@ -31,9 +32,10 @@ const ArenaReferenceScreen =
 export interface AppProps {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
+  readonly authEntry?: AuthEntry;
 }
 
-export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
+export function App({ apiBaseUrl, sandboxEnabled, authEntry }: AppProps) {
   const requestedPage = useSyncExternalStore(subscribeToNavigation, readAppPage);
   if (
     import.meta.env.DEV &&
@@ -60,15 +62,17 @@ export function App({ apiBaseUrl, sandboxEnabled }: AppProps) {
       </>
     );
   }
-  const page = requestedPage === "arena" ? "arena" : "not-found";
+  const page =
+    requestedPage === "arena" || requestedPage === "account" ? requestedPage : "not-found";
 
   return (
     <>
       <DocumentMetadata page={page} />
-      {page === "arena" ? (
-        <MatchScreen
+      {page !== "not-found" ? (
+        <AccountApplication
           apiBaseUrl={apiBaseUrl}
           sandboxEnabled={sandboxEnabled && SandboxScreen !== null}
+          {...(authEntry ? { entry: authEntry } : {})}
         />
       ) : (
         <StaticScreen page={page} sandboxEnabled={sandboxEnabled && SandboxScreen !== null} />

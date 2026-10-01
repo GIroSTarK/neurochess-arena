@@ -1,4 +1,88 @@
 export const en = {
+  account: {
+    label: "Account",
+    signIn: "Sign in",
+    signOut: "Sign out",
+    profile: "Your profile",
+    onboarding: "Choose your username",
+    finishProfile: "Finish profile",
+    saveProfile: "Save profile",
+    profileHint: "Choose how you appear in Arena. Your email stays private.",
+    username: "Username",
+    usernameHint:
+      "3–24 letters, digits or underscores. Names are unique regardless of capitalization; reserved names are unavailable.",
+    usernameInvalid: "Choose 3–24 letters, digits or underscores and avoid reserved names.",
+    removeAvatar: "Remove avatar",
+    avatarHint: "Use initials or your provider avatar. Removed avatars stay removed after sign-in.",
+    saved: "Profile saved.",
+    email: "Email",
+    password: "Password",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    emailInvalid: "Enter a valid email address.",
+    passwordHint: "Use 12–128 characters. Spaces, Unicode and pasted passwords are welcome.",
+    passwordInvalid: "Enter a password. New passwords must contain 12–128 characters.",
+    separation:
+      "Guest games stay separate from your account. Signing in clears this page’s provider keys and stops its controller. Account games return paused and need your explicit continuation.",
+    google: "Continue with Google",
+    github: "Continue with GitHub",
+    resend: "Resend verification link",
+    titles: {
+      signIn: "Sign in",
+      signUp: "Create an account",
+      verify: "Verify your email",
+      forgot: "Forgot password?",
+      reset: "Reset your password",
+    },
+    actions: {
+      signIn: "Sign in",
+      signUp: "Create account",
+      verify: "Request verification link",
+      forgot: "Request reset link",
+      reset: "Set new password",
+    },
+    accepted:
+      "Request received. If your account is eligible, check your inbox for a link. If nothing arrives, wait a minute and request another link. A registration may already exist even if no email arrives.",
+    verified: "Email verified. Sign in to continue.",
+    resetDone:
+      "Password updated. Your previous sessions have ended. Sign in with your new password.",
+    return: "Return to Arena",
+    working: "Please wait…",
+    loading: "Checking your session",
+    required: "Sign in to continue",
+    unavailable: "Account service unavailable",
+    sessionEnded:
+      "Your session ended or changed. Provider keys and private page data have been cleared. Sign in again or explicitly return to guest play.",
+    guest: "Continue as guest",
+    retry: "Try again",
+    footer: "Private account · Session-only keys stay in this page’s memory",
+    errors: {
+      cancelled: "This action was cancelled. Try again.",
+      AUTH_INVALID_REQUEST: "Check the fields and try again.",
+      AUTH_UNAUTHORIZED: "Sign in again to continue.",
+      AUTH_FORBIDDEN: "This request could not be authorized. Return to Arena and try again.",
+      AUTH_NOT_FOUND: "This sign-in method is not available on this server. Try another method.",
+      AUTH_RATE_LIMITED: "Too many attempts. Wait a minute before trying again.",
+      AUTH_UNAVAILABLE:
+        "The account service could not complete this request. Try again. If a reset may have completed, request a new link.",
+      AUTH_EMAIL_NOT_VERIFIED:
+        "Verify your email before signing in. You can request another verification link below.",
+      AUTH_INVALID_CREDENTIALS:
+        "The email or password is incorrect. Try again or reset your password.",
+      AUTH_INVALID_TOKEN: "This link is invalid or has expired. Request a new link below.",
+      AUTH_OAUTH_FAILED: "Provider sign-in failed or expired. Start a new sign-in attempt.",
+      AUTH_OAUTH_CANCELLED: "Provider sign-in was cancelled. Choose a method to try again.",
+      AUTH_OAUTH_EMAIL_UNAVAILABLE:
+        "Your provider must supply a verified email. Check it with the provider or use your existing sign-in method.",
+      AUTH_OAUTH_ACCOUNT_CONFLICT:
+        "An account already uses this email. Use its existing sign-in method or password recovery. Accounts are not linked automatically.",
+      PROFILE_INVALID_REQUEST: "Check your username and try again.",
+      PROFILE_UNAUTHORIZED: "Your session ended. Sign in again.",
+      PROFILE_FORBIDDEN: "This profile request could not be authorized.",
+      PROFILE_USERNAME_TAKEN: "That username is already in use. Choose another.",
+      PROFILE_UNAVAILABLE: "Your profile could not be loaded or saved. Try again.",
+    },
+  },
   telemetry: {
     commentary: "Commentary & move details",
     read: "Read",

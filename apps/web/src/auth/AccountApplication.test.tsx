@@ -1,0 +1,153 @@
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { App } from "../app/App";
+import { GAME_ID, jsonResponse, requestPath } from "../test/fixtures";
+import { createHttpMock } from "../test/http";
+import { renderLocalized } from "../test/render";
+
+const session = {
+  user: { id: GAME_ID, email: "private@example.com", emailVerified: true },
+  session: { expiresAt: "2027-10-01T00:00:00.000Z" },
+};
+const profile = {
+  username: "Player",
+  completed: true,
+  avatar: { source: "initials", initials: "PL" },
+};
+afterEach(() => {
+  sessionStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+describe("account presentation", () => {
+  it("accepts a fresh form submission after BFCache restore without retaining the previous password", async () => {
+    window.history.replaceState(null, "", "/auth/sign-up");
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      "POST /api/auth/sign-up/email": () =>
+        jsonResponse({ status: "accepted", message: "receipt" }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await userEvent.type(screen.getByLabelText("Password", { exact: true }), "old-password-canary");
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    expect(screen.getByLabelText("Password", { exact: true })).toHaveValue("");
+    await userEvent.type(screen.getByLabelText("Email"), "player@example.com");
+    await userEvent.type(
+      screen.getByLabelText("Password", { exact: true }),
+      "new-password-fixture",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await screen.findByText(/Request received/);
+    http.assertNoUnexpectedRequests();
+  });
+  it("keeps sign-out failures visible so the user can explicitly retry", async () => {
+    window.history.replaceState(null, "", "/");
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "POST /api/auth/sign-out": () =>
+        jsonResponse(
+          { code: "AUTH_UNAVAILABLE", message: "unsafe-canary", requestId: "test" },
+          503,
+        ),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not complete/);
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    http.assertNoUnexpectedRequests();
+  });
+  it("accepts pasted passwords, acknowledges registration generically and explains guest separation", async () => {
+    window.history.replaceState(null, "", "/auth/sign-up");
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      "POST /api/auth/sign-up/email": () =>
+        jsonResponse({ status: "accepted", message: "untrusted-canary" }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await screen.findByRole("heading", { name: "Create an account" });
+    expect(screen.getByText(/Guest games stay separate/)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "player@example.com");
+    await user.click(screen.getByLabelText("Password", { exact: true }));
+    await user.paste("a pasted password 🌙");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(screen.getByLabelText("Password", { exact: true })).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("Password", { exact: true })).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    await screen.findByText(/Request received/);
+    expect(screen.getByLabelText("Password", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("Password", { exact: true })).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "Show password" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(document.body).not.toHaveTextContent("untrusted-canary");
+    http.assertNoUnexpectedRequests();
+  });
+  it("requires username onboarding before account setup and handles duplicate names safely", async () => {
+    window.history.replaceState(null, "", "/");
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () =>
+        jsonResponse({
+          ...profile,
+          username: null,
+          completed: false,
+          avatar: { source: "initials", initials: "?" },
+        }),
+      "POST /profile/onboarding": () =>
+        jsonResponse(
+          { code: "PROFILE_USERNAME_TAKEN", message: "unsafe-response", requestId: "test" },
+          409,
+        ),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await screen.findByRole("heading", { name: "Choose your username" });
+    await userEvent.type(screen.getByLabelText("Username"), "Player");
+    await userEvent.click(screen.getByRole("button", { name: "Finish profile" }));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent(/already in use/);
+    expect(http.fetch.mock.calls.some(([url]) => requestPath(url).startsWith("/games"))).toBe(
+      false,
+    );
+    http.assertNoUnexpectedRequests();
+  });
+  it("removes account UI and keys after another tab changes the session, fencing a delayed discovery", async () => {
+    window.history.replaceState(null, "", "/");
+    let current: typeof session | null = session;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(current),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    await screen.findByRole("heading", { name: "Set up a game" });
+    expect(screen.getByRole("link", { name: /Player/ })).toBeInTheDocument();
+    current = null;
+    await act(async () => fireEvent(window, new Event("focus")));
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Set up a game" })).not.toBeInTheDocument(),
+    );
+    await screen.findByRole("heading", { name: "Sign in to continue" });
+    expect(screen.queryByText("Player")).not.toBeInTheDocument();
+    expect(http.fetch.mock.calls.some(([url]) => requestPath(url) === "/guest-session")).toBe(
+      false,
+    );
+    http.assertNoUnexpectedRequests();
+  });
+});

@@ -25,6 +25,26 @@ const command = {
 const signal = () => new AbortController().signal;
 
 describe("AI HTTP client", () => {
+  it("skips guest bootstrap for account intent and fences an obsolete response", async () => {
+    const lifetime = new AbortController();
+    const response = Promise.withResolvers<Response>();
+    const fetch = vi.fn<typeof globalThis.fetch>(() => response.promise);
+    const api = createAiApi("https://api.example.test", {
+      fetch,
+      identity: { intent: "account", signal: lifetime.signal, verify: async () => undefined },
+    });
+    await api.bootstrap(signal());
+    expect(fetch).not.toHaveBeenCalled();
+    const pending = api.unfinished(signal());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("x-neurochess-identity")).toBe(
+      "account",
+    );
+    lifetime.abort();
+    response.resolve(jsonResponse({ game: null }));
+    await expect(pending).rejects.toMatchObject({ kind: "cancelled" });
+  });
+
   it("requires explicit bootstrap and transmits keys only in discovery and inference bodies", async () => {
     const details = { configuration, snapshot: snapshot() };
     const calls: { url: string; body: unknown; init: RequestInit | undefined }[] = [];

@@ -49,6 +49,32 @@ export async function registerAuthRoutes(
   app: FastifyInstance,
   options: { auth: AccountAuth; webOrigin: string },
 ) {
+  const fail = (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    status: number,
+    code?: AuthErrorCode,
+  ) => {
+    if (
+      options.auth.emailEnabled &&
+      request.method === "GET" &&
+      request.url.split("?")[0] === `${AUTH_BASE_PATH}/verify-email` &&
+      request.headers.accept?.includes("text/html")
+    ) {
+      const safeCode =
+        code ??
+        (status >= 500
+          ? "AUTH_UNAVAILABLE"
+          : status === 429
+            ? "AUTH_RATE_LIMITED"
+            : "AUTH_INVALID_TOKEN");
+      return reply
+        .code(303)
+        .header("location", `${options.webOrigin}/?auth=verification-error&code=${safeCode}`)
+        .send();
+    }
+    return sendError(request, reply, status, code);
+  };
   const callbackProvider = (path: string) => {
     if (!path.startsWith("/callback/")) return undefined;
     const parsed = authOAuthProviderSchema.safeParse(path.slice("/callback/".length));
@@ -75,16 +101,16 @@ export async function registerAuthRoutes(
       (options.auth.emailEnabled &&
         ((request.method === "GET" && path === "/verify-email") ||
           (request.method === "POST" && Boolean(emailRequest(path)))));
-    if (!allowed) return sendError(request, reply, 404);
+    if (!allowed) return fail(request, reply, 404);
     if (
       (request.headers.origin !== undefined && request.headers.origin !== options.webOrigin) ||
       (request.method === "POST" && request.headers.origin !== options.webOrigin)
     ) {
-      return sendError(request, reply, 403);
+      return fail(request, reply, 403);
     }
   });
 
-  app.setErrorHandler((_error, request, reply) => sendError(request, reply, 400));
+  app.setErrorHandler((_error, request, reply) => fail(request, reply, 400));
   app.route({
     method: ["GET", "POST"],
     url: `${AUTH_BASE_PATH}/*`,
@@ -108,7 +134,7 @@ export async function registerAuthRoutes(
             !bodySchema.safeParse(request.body).success))
       ) {
         if (isCallback) return oauthFailure(reply);
-        return sendError(request, reply, 400);
+        return fail(request, reply, 400);
       }
       if (
         path === "/sign-in/social" &&
@@ -116,7 +142,7 @@ export async function registerAuthRoutes(
           authOAuthSignInRequestSchema.parse(request.body).provider,
         )
       ) {
-        return sendError(request, reply, 404);
+        return fail(request, reply, 404);
       }
       const headers = new Headers();
       for (const name of [
@@ -188,7 +214,7 @@ export async function registerAuthRoutes(
         if (!response.ok) {
           const error = libraryErrorSchema.safeParse(await response.json().catch(() => null));
           const code = error.success ? safeLibraryError(error.data.code) : undefined;
-          return await sendError(request, reply, response.status, code);
+          return await fail(request, reply, response.status, code);
         }
         const payload: unknown = await response.json();
         let projected: unknown;
@@ -231,7 +257,7 @@ export async function registerAuthRoutes(
       } catch {
         request.log.error("Authentication request failed");
         if (isCallback) return oauthFailure(reply);
-        return sendError(request, reply, 500);
+        return fail(request, reply, 500);
       }
     },
   });

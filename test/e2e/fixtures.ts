@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   gameDetailsSchema,
   type GameSnapshot,
@@ -16,6 +18,16 @@ export { expect } from "@playwright/test";
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await page.context().addCookies([
+      {
+        name: "neurochess_test_client",
+        value: randomUUID(),
+        url: API_ORIGIN,
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+      },
+    ]);
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
@@ -47,7 +59,19 @@ export const test = base.extend({
           ["/sandbox/games/unfinished", "/games/unfinished"].some(
             (path) => message.location().url === API_ORIGIN + path,
           ) && message.text().includes("401 (Unauthorized)");
-        if (!message.text().includes("409 (Conflict)") && !anonymousDiscovery) {
+        const accountRejection =
+          message.location().url.startsWith(API_ORIGIN + "/api/auth/") &&
+          /(?:400|401|403|429) \(/.test(message.text());
+        const avatarUnavailable =
+          /https:\/\/(?:lh3.googleusercontent.com|avatars.githubusercontent.com)\//.test(
+            message.location().url,
+          ) && message.text().includes("net::ERR_FAILED");
+        if (
+          !message.text().includes("409 (Conflict)") &&
+          !anonymousDiscovery &&
+          !accountRejection &&
+          !avatarUnavailable
+        ) {
           errors.push("Application console " + message.type());
         }
       }

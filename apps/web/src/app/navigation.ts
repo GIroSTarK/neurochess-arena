@@ -1,10 +1,22 @@
-export type AppPage = "arena" | "sandbox" | "reference" | "not-found";
+export type AppPage = "arena" | "account" | "sandbox" | "reference" | "not-found";
 
 export function readAppPage(): AppPage {
   const { pathname } = window.location;
   if (pathname === "/dev/arena" || pathname === "/dev/arena/") return "reference";
   if (pathname === "/sandbox" || pathname === "/sandbox/") return "sandbox";
   if (pathname === "/") return "arena";
+  if (
+    [
+      "/account",
+      "/auth/sign-in",
+      "/auth/sign-up",
+      "/auth/verify",
+      "/auth/forgot-password",
+      "/auth/reset-password",
+    ].includes(pathname)
+  ) {
+    return "account";
+  }
   return "not-found";
 }
 

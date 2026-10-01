@@ -2,7 +2,7 @@ import type { ChessColor } from "@neurochess/contracts";
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
-import { createAiApi } from "../api/ai-client";
+import { type AiIdentity, createAiApi } from "../api/ai-client";
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
@@ -16,6 +16,8 @@ import { PgnActions } from "../arena/panels/PgnActions";
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
 import { ReplayControls } from "../arena/panels/ReplayControls";
 import { StatusSummary } from "../arena/StatusSummary";
+import { AccountAccess } from "../auth/AccountAccess";
+import { useAccount } from "../auth/context";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
@@ -31,14 +33,28 @@ import { TelemetryPanel } from "./TelemetryPanel";
 export function MatchScreen({
   apiBaseUrl,
   sandboxEnabled,
+  identity,
 }: {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
+  readonly identity?: AiIdentity;
 }) {
   const { t } = useTranslation();
-  const [controller] = useState(() => new MatchController(createAiApi(apiBaseUrl)));
+  const account = useAccount();
+  const [controller] = useState(
+    () => new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {})),
+  );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
-  useEffect(() => controller.connect(), [controller]);
+  const identitySignal = identity?.signal;
+  useEffect(() => {
+    const disconnect = controller.connect();
+    identitySignal?.addEventListener("abort", disconnect, { once: true });
+    if (identitySignal?.aborted) disconnect();
+    return () => {
+      identitySignal?.removeEventListener("abort", disconnect);
+      disconnect();
+    };
+  }, [controller, identitySignal]);
   const helpId = useId();
   const board = useRef<ChessboardHandle>(null);
   const [flipped, setFlipped] = useState<{ gameId: string; color: ChessColor } | null>(null);
@@ -128,7 +144,7 @@ export function MatchScreen({
       identity:
         seat?.type === "ai"
           ? { kind: "ai", provider: t(`setup.providers.${seat.provider}`), model: seat.modelId }
-          : { kind: "human", name: t("players.guest") },
+          : { kind: "human", name: account?.state.profile?.username ?? t("players.guest") },
       activity: {
         label: activity,
         variants: [
@@ -153,7 +169,7 @@ export function MatchScreen({
     <AppShell
       mainId="arena-match"
       skipLabel={t("app.skipLink")}
-      context={t("setup.session")}
+      context={<AccountAccess />}
       navigation={<AppNavigation page="arena" sandboxEnabled={sandboxEnabled} />}
       footer={t("match.private")}
       announcement={

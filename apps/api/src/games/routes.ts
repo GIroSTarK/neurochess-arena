@@ -5,6 +5,7 @@ import {
   aiTurnRequestSchema,
   createGameRequestSchema,
   emptyQuerySchema,
+  expectedAccountSchema,
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
@@ -135,10 +136,17 @@ export async function registerGameRoutes(
       return authenticateGuestRequest(options.guests, request, reply);
     }
     const intent = gameIdentityIntentSchema.safeParse(request.headers["x-neurochess-identity"]);
-    if (!intent.success) throw new GameRequestError("INVALID_REQUEST");
+    const expected = expectedAccountSchema.safeParse(
+      request.headers["x-neurochess-expected-account"],
+    );
+    if (!intent.success || !expected.success) throw new GameRequestError("INVALID_REQUEST");
     const account = await options.auth?.resolve(
       new Headers(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
     );
+    // This assertion can only deny authority derived from the cookie, never grant it.
+    if (expected.data !== undefined && expected.data !== (account?.userId ?? "guest")) {
+      throw new GameRequestError("UNAUTHORIZED");
+    }
     if (account) return account;
     const hasAccountCookie = Object.keys(request.cookies).some(
       (name) =>
@@ -304,6 +312,19 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) => {
+      const expected = expectedAccountSchema.safeParse(
+        request.headers["x-neurochess-expected-account"],
+      );
+      if (!expected.success) throw new GameRequestError("INVALID_REQUEST");
+      if (
+        expected.data !== undefined &&
+        (expected.data !== "guest" ||
+          (await options.auth?.resolve(
+            new Headers(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
+          )))
+      ) {
+        throw new GameRequestError("UNAUTHORIZED");
+      }
       const identity = await options.guests.bootstrap(request.cookies[GUEST_COOKIE_NAME]);
       setGuestCookie(reply, identity, options.guests.ttlSeconds);
       return { status: "ready" as const };

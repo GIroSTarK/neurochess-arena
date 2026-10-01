@@ -456,6 +456,8 @@ describe("private account profiles", () => {
       pending = repository.update(claimant.principal, { username: targetName, removeAvatar: true });
       await expect
         .poll(async () => {
+          // The waiting connection may be created after this transaction's first stats read.
+          await tx.execute(sql`select pg_stat_clear_snapshot()`);
           const waiting = await tx.execute<{ count: number }>(
             sql`select count(*)::int as count from pg_stat_activity where ${result.rows[0]!.pid} = any(pg_blocking_pids(pid))`,
           );
