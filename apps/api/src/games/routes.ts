@@ -6,9 +6,12 @@ import {
   createGameRequestSchema,
   emptyQuerySchema,
   expectedAccountSchema,
+  gameDeleteRequestSchema,
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameHistoryClearRequestSchema,
+  gameHistoryDeletedResponseSchema,
   gameHistoryQuerySchema,
   gameHistoryResponseSchema,
   gameIdentityIntentSchema,
@@ -138,7 +141,7 @@ export async function registerGameRoutes(
     const params = gameParamsSchema.safeParse(request.params);
     // The immutable server-owned marker selects Sandbox authority on shared routes.
     // It never permits guest fallback for an ordinary public game.
-    if (params.success && (await options.games.isSandboxGame(params.data.gameId))) {
+    if (!accountOnly && params.success && (await options.games.isSandboxGame(params.data.gameId))) {
       return authenticateGuestRequest(options.guests, request, reply);
     }
     const intent = gameIdentityIntentSchema.safeParse(request.headers["x-neurochess-identity"]);
@@ -167,6 +170,39 @@ export async function registerGameRoutes(
   }
 
   const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
+
+  routes.post(
+    "/games/:gameId/delete",
+    {
+      bodyLimit: 1024,
+      schema: {
+        params: gameParamsSchema,
+        body: gameDeleteRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameHistoryDeletedResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      return options.games.deleteGame(await principalFor(request, reply, true), request.body);
+    },
+  );
+
+  routes.post(
+    "/games/history/clear",
+    {
+      bodyLimit: 1024,
+      schema: {
+        body: gameHistoryClearRequestSchema,
+        querystring: emptyQuerySchema,
+        response: { 200: gameHistoryDeletedResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.clearHistory(await principalFor(request, reply, true), request.body),
+  );
 
   routes.get(
     "/games/history",

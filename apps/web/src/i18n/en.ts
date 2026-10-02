@@ -8,7 +8,7 @@ export const en = {
       "Sign in to keep a private game history. Guest games stay separate from accounts and do not appear here.",
     arena: "Return to Arena",
     loading: "Loading game history…",
-    loadError: "Game history could not be loaded. Your games are still saved; try again.",
+    loadError: "Game history could not be loaded. Try again.",
     retry: "Retry history",
     empty: "No completed or aborted games yet. Your unfinished game is available in Arena.",
     list: "Finished games",
@@ -21,6 +21,22 @@ export const en = {
     newer: "Newer games",
     older: "Older games",
     refresh: "Refresh history",
+    delete: "Delete game",
+    deleteLabel: "Delete game · {{date}} · {{result}}",
+    deleteTitle: "Delete this game?",
+    deleteHint:
+      "Permanently remove this finished game and its moves, players, commentary, invocation attempts, replay, PGN and execution records from your account. This cannot be undone. Other games, saved provider keys and your profile are kept.",
+    clear: "Clear history",
+    clearTitle: "Clear all finished games?",
+    clearHint:
+      "Permanently remove your completed and aborted games on every page, including their moves, players, commentary, invocation attempts, replay, PGN and execution records. This includes games finished before this request is processed; games finishing later remain. This cannot be undone. Active and paused games, saved provider keys and your profile are kept.",
+    gameSummary: "{{date}} · {{result}}",
+    deleted: { game: "Game deleted.", history: "Finished game history cleared." },
+    deletionErrors: {
+      unfinished: "This game is still in progress. Stop it in Arena before deleting it.",
+      unconfirmed:
+        "Deletion could not be confirmed. Cancel and refresh history to check the result, or try again.",
+    },
   },
   credentials: {
     title: "Saved provider keys",

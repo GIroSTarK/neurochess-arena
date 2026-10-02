@@ -1,23 +1,39 @@
-import type { GameHistoryResponse } from "@neurochess/contracts";
+import type { GameHistoryEntry, GameHistoryResponse } from "@neurochess/contracts";
 
 import type { AiApi } from "../api/ai-client";
+import { ApiFailure } from "../api/failures";
 
 interface HistoryState {
   readonly result: GameHistoryResponse | null;
   readonly page: number;
   readonly phase: "loading" | "ready" | "error";
+  readonly confirmation: GameHistoryEntry | "all" | null;
+  readonly deleting: boolean;
+  readonly deletionError: "unfinished" | "unconfirmed" | null;
+  readonly success: "game" | "history" | null;
 }
 
+const initialState: HistoryState = {
+  result: null,
+  page: 0,
+  phase: "loading",
+  confirmation: null,
+  deleting: false,
+  deletionError: null,
+  success: null,
+};
+
 export class HistoryController {
-  private state: HistoryState = { result: null, page: 0, phase: "loading" };
+  private state: HistoryState = initialState;
   private readonly listeners = new Set<() => void>();
   private request: AbortController | null = null;
+  private mutation: AbortController | null = null;
   private cursors: (string | undefined)[] = [undefined];
   private targetPage = 0;
   private connected = false;
 
   constructor(
-    private readonly api: Pick<AiApi, "history">,
+    private readonly api: Pick<AiApi, "history" | "deleteGame" | "clearHistory">,
     private readonly identitySignal: AbortSignal,
   ) {}
   readonly getSnapshot = () => this.state;
@@ -33,9 +49,10 @@ export class HistoryController {
   }
   private readonly clear = () => {
     this.request?.abort();
+    this.mutation?.abort();
     this.cursors = [undefined];
     this.targetPage = 0;
-    this.publish({ result: null, page: 0, phase: "loading" });
+    this.publish(initialState);
   };
   connect() {
     this.connected = true;
@@ -65,8 +82,52 @@ export class HistoryController {
   readonly newer = () => {
     if (this.state.phase !== "loading" && this.state.page > 0) void this.load(this.state.page - 1);
   };
+  readonly confirmGame = (game: GameHistoryEntry) => {
+    if (this.state.deleting || this.state.phase === "loading") return;
+    this.publish({ ...this.state, confirmation: game, deletionError: null, success: null });
+  };
+  readonly confirmClear = () => {
+    if (this.state.deleting || this.state.phase === "loading") return;
+    this.publish({ ...this.state, confirmation: "all", deletionError: null, success: null });
+  };
+  readonly cancelDeletion = () => {
+    if (!this.state.deleting) {
+      this.publish({ ...this.state, confirmation: null, deletionError: null });
+    }
+  };
+  readonly deleteConfirmed = async () => {
+    const confirmation = this.state.confirmation;
+    if (!confirmation || this.state.deleting || !this.connected || this.identitySignal.aborted) {
+      return;
+    }
+    this.request?.abort();
+    const request = new AbortController();
+    this.mutation = request;
+    const current = () => this.connected && !request.signal.aborted && !this.identitySignal.aborted;
+    this.publish({ ...this.state, deleting: true, deletionError: null });
+    try {
+      if (confirmation === "all") await this.api.clearHistory(request.signal);
+      else await this.api.deleteGame(confirmation.gameId, request.signal);
+      if (!current()) return;
+      this.cursors = [undefined];
+      this.targetPage = 0;
+      // Discard every old page before refresh; a failed read must never resurrect deleted rows.
+      this.publish({ ...initialState, success: confirmation === "all" ? "history" : "game" });
+      await this.load(0);
+    } catch (error) {
+      if (!current()) return;
+      this.publish({
+        ...this.state,
+        deleting: false,
+        deletionError:
+          error instanceof ApiFailure && error.code === "INVALID_GAME_STATE"
+            ? "unfinished"
+            : "unconfirmed",
+      });
+    }
+  };
   private async load(page: number) {
-    if (!this.connected || this.identitySignal.aborted) return;
+    if (!this.connected || this.identitySignal.aborted || this.state.deleting) return;
     this.request?.abort();
     const request = new AbortController();
     this.request = request;
@@ -81,7 +142,7 @@ export class HistoryController {
       );
       if (current()) {
         this.cursors.length = page + 1;
-        this.publish({ result, page, phase: "ready" });
+        this.publish({ ...this.state, result, page, phase: "ready" });
       }
     } catch {
       if (current()) this.publish({ ...this.state, phase: "error" });

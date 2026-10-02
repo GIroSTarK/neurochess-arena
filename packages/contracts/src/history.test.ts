@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  gameDeleteRequestSchema,
+  gameHistoryClearRequestSchema,
   gameHistoryCursorSchema,
+  gameHistoryDeletedResponseSchema,
   gameHistoryEntrySchema,
   gameHistoryQuerySchema,
   gameHistoryResponseSchema,
@@ -23,6 +26,34 @@ const entry = {
   terminationReason: "aborted",
 };
 describe("history transport bounds", () => {
+  it("requires explicit, strictly scoped deletion confirmation", () => {
+    expect(gameDeleteRequestSchema.parse({ gameId: id, confirm: true })).toEqual({
+      gameId: id,
+      confirm: true,
+    });
+    expect(gameHistoryClearRequestSchema.parse({ confirm: true })).toEqual({ confirm: true });
+    for (const confirm of [undefined, false, "true", 1]) {
+      expect(gameDeleteRequestSchema.safeParse({ gameId: id, confirm }).success).toBe(false);
+      expect(gameHistoryClearRequestSchema.safeParse({ confirm }).success).toBe(false);
+    }
+    for (const gameId of [undefined, "", "all", [id]]) {
+      expect(gameDeleteRequestSchema.safeParse({ gameId, confirm: true }).success).toBe(false);
+    }
+    for (const extra of [{ ownerUserId: id }, { gameIds: [id] }, { state: "active" }]) {
+      expect(
+        gameDeleteRequestSchema.safeParse({ gameId: id, confirm: true, ...extra }).success,
+      ).toBe(false);
+      expect(gameHistoryClearRequestSchema.safeParse({ confirm: true, ...extra }).success).toBe(
+        false,
+      );
+    }
+    expect(gameHistoryDeletedResponseSchema.parse({ status: "deleted" })).toEqual({
+      status: "deleted",
+    });
+    expect(
+      gameHistoryDeletedResponseSchema.safeParse({ status: "deleted", count: 1 }).success,
+    ).toBe(false);
+  });
   it("defaults to twenty results and permits at most fifty with a precise cursor", () => {
     expect(gameHistoryQuerySchema.parse({})).toEqual({ limit: 20 });
     expect(

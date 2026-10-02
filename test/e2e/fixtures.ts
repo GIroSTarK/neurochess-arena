@@ -66,11 +66,18 @@ export const test = base.extend({
           /https:\/\/(?:lh3.googleusercontent.com|avatars.githubusercontent.com)\//.test(
             message.location().url,
           ) && message.text().includes("net::ERR_FAILED");
+        const deletedPrivateGame =
+          message.location().url.startsWith(API_ORIGIN) &&
+          /^\/games\/[a-f0-9-]{36}\/details$/i.test(
+            message.location().url.slice(API_ORIGIN.length),
+          ) &&
+          message.text().includes("404 (Not Found)");
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
           !accountRejection &&
-          !avatarUnavailable
+          !avatarUnavailable &&
+          !deletedPrivateGame
         ) {
           errors.push("Application console " + message.type());
         }

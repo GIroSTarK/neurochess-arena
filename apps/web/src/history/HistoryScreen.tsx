@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type AiIdentity, createAiApi } from "../api/ai-client";
@@ -6,6 +6,7 @@ import { resultTitle } from "../arena/result";
 import { AccountFrame } from "../auth/AccountFrame";
 import { authHref } from "../auth/navigation";
 import { Button } from "../ui/Button";
+import { Dialog } from "../ui/Dialog";
 
 import { HistoryController } from "./controller";
 
@@ -43,7 +44,11 @@ export function HistoryScreen({
     () => new HistoryController(createAiApi(apiBaseUrl, { identity }), identity.signal),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const listHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => controller.connect(), [controller]);
+  useEffect(() => {
+    if (state.success) listHeading.current?.focus();
+  }, [state.success]);
   const dateFormat = new Intl.DateTimeFormat(i18n.resolvedLanguage, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -54,6 +59,24 @@ export function HistoryScreen({
       <a href="/" className="inline-flex min-h-target items-center text-accent underline">
         {t("history.arena")}
       </a>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 ref={listHeading} tabIndex={-1} className="text-section font-semibold">
+          {t("history.list")}
+        </h2>
+        <Button
+          variant="secondary"
+          aria-disabled={
+            state.phase === "loading" ||
+            state.deleting ||
+            !state.result ||
+            (state.page === 0 && state.result.games.length === 0)
+          }
+          onClick={controller.confirmClear}
+        >
+          {t("history.clear")}
+        </Button>
+      </div>
+      {state.success ? <p role="status">{t(`history.deleted.${state.success}`)}</p> : null}
       {state.phase === "loading" ? <p role="status">{t("history.loading")}</p> : null}
       {state.phase === "error" ? (
         <div className="grid gap-3">
@@ -108,13 +131,23 @@ export function HistoryScreen({
                   score: game.result,
                 })}
               </p>
-              <a
-                href={"/?game=" + game.gameId}
-                className="inline-flex min-h-target items-center text-accent underline"
-                aria-label={t("history.replayLabel", { date, result: resultTitle(game, t) })}
-              >
-                {t("history.replay")}
-              </a>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <a
+                  href={"/?game=" + game.gameId}
+                  className="inline-flex min-h-target items-center text-accent underline"
+                  aria-label={t("history.replayLabel", { date, result: resultTitle(game, t) })}
+                >
+                  {t("history.replay")}
+                </a>
+                <Button
+                  variant="secondary"
+                  aria-label={t("history.deleteLabel", { date, result: resultTitle(game, t) })}
+                  aria-disabled={state.phase === "loading" || state.deleting}
+                  onClick={() => controller.confirmGame(game)}
+                >
+                  {t("history.delete")}
+                </Button>
+              </div>
             </li>
           );
         })}
@@ -125,27 +158,72 @@ export function HistoryScreen({
           <div className="flex flex-wrap gap-3">
             <Button
               variant="secondary"
-              aria-disabled={state.phase === "loading" || state.page === 0}
+              aria-disabled={state.phase === "loading" || state.deleting || state.page === 0}
               onClick={controller.newer}
             >
               {t("history.newer")}
             </Button>
             <Button
               variant="secondary"
-              aria-disabled={state.phase === "loading" || !state.result.nextCursor}
+              aria-disabled={
+                state.phase === "loading" || state.deleting || !state.result.nextCursor
+              }
               onClick={controller.older}
             >
               {t("history.older")}
             </Button>
             <Button
               variant="quiet"
-              aria-disabled={state.phase === "loading"}
+              aria-disabled={state.phase === "loading" || state.deleting}
               onClick={controller.reload}
             >
               {t("history.refresh")}
             </Button>
           </div>
         </div>
+      ) : null}
+      {state.confirmation ? (
+        <Dialog
+          title={t(state.confirmation === "all" ? "history.clearTitle" : "history.deleteTitle")}
+          description={t(state.confirmation === "all" ? "history.clearHint" : "history.deleteHint")}
+          onCancel={controller.cancelDeletion}
+        >
+          {state.confirmation !== "all" ? (
+            <p className="mt-3 wrap-anywhere">
+              {t("history.gameSummary", {
+                date: dateFormat.format(new Date(state.confirmation.finishedAt)),
+                result: resultTitle(state.confirmation, t),
+              })}
+            </p>
+          ) : null}
+          {state.deletionError ? (
+            <p role="alert" className="mt-3 text-danger">
+              {t(`history.deletionErrors.${state.deletionError}`)}
+            </p>
+          ) : null}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              aria-disabled={state.deleting}
+              onClick={controller.cancelDeletion}
+            >
+              {t("actions.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              aria-disabled={state.deleting}
+              onClick={() => void controller.deleteConfirmed()}
+            >
+              {t(
+                state.deleting
+                  ? "account.working"
+                  : state.confirmation === "all"
+                    ? "history.clear"
+                    : "history.delete",
+              )}
+            </Button>
+          </div>
+        </Dialog>
       ) : null}
     </AccountFrame>
   );

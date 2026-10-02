@@ -1,4 +1,8 @@
 export {
+  gameDeleteRequestSchema,
+  gameHistoryClearRequestSchema,
+  gameHistoryDeletedResponseSchema,
+  type GameHistoryDeletedResponse,
   gameHistoryCursorSchema,
   gameHistoryQuerySchema,
   gameHistoryEntrySchema,
