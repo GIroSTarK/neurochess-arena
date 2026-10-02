@@ -9,6 +9,9 @@ import {
   aiTurnRequestSchema,
   type GameDetails,
   gameDetailsSchema,
+  gameHistoryClearRequestSchema,
+  gameHistoryDeletedResponseSchema,
+  gameHistoryDeleteRequestSchema,
   type GameHistoryQuery,
   gameHistoryQuerySchema,
   type GameHistoryResponse,
@@ -49,6 +52,8 @@ export interface AiApi extends Pick<
   "bootstrap" | "snapshot" | "move" | "lifecycle" | "replay" | "pgn"
 > {
   history(query: GameHistoryQuery, signal: AbortSignal): Promise<GameHistoryResponse>;
+  deleteHistoryGame(gameId: string, signal: AbortSignal): Promise<void>;
+  clearHistory(signal: AbortSignal): Promise<void>;
   discover(input: ModelDiscoveryRequest, signal: AbortSignal): Promise<ModelDiscoveryResult>;
   create(configuration: AiGameConfiguration, signal: AbortSignal): Promise<GameDetails>;
   details(gameId: string, signal: AbortSignal): Promise<GameDetails>;
@@ -193,6 +198,24 @@ export function createAiApi(
         ...(input.cursor ? { cursor: input.cursor } : {}),
       });
       return request("/games/history?" + search.toString(), gameHistoryResponseSchema, signal);
+    },
+    async deleteHistoryGame(gameId, signal) {
+      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
+      await request(
+        "/games/history/delete",
+        gameHistoryDeletedResponseSchema,
+        signal,
+        validated(gameHistoryDeleteRequestSchema, { gameId }),
+      );
+    },
+    async clearHistory(signal) {
+      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
+      await request(
+        "/games/history/clear",
+        gameHistoryDeletedResponseSchema,
+        signal,
+        validated(gameHistoryClearRequestSchema, { confirm: true }),
+      );
     },
     async bootstrap(signal) {
       if (options.identity?.intent === "account") {

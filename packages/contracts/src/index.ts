@@ -3,9 +3,13 @@ export {
   gameHistoryQuerySchema,
   gameHistoryEntrySchema,
   gameHistoryResponseSchema,
+  gameHistoryDeleteRequestSchema,
+  gameHistoryClearRequestSchema,
+  gameHistoryDeletedResponseSchema,
   type GameHistoryQuery,
   type GameHistoryEntry,
   type GameHistoryResponse,
+  type GameHistoryDeletedResponse,
 } from "./history.js";
 export {
   invocationOutcomeSchema,

@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-02
 
 ## Vision
 
@@ -99,7 +99,7 @@ Every authentication method uses the same username onboarding requirement before
 
 Account history lists completed and aborted public games together, newest first, with explicit state/result labels and private replay access. Keep active/paused recovery separate. Sandbox and temporary guest records never appear in account history.
 
-Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
+Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Each operation requires a separate confirmation that explains the removed and retained data. Repeating an individual deletion, or naming a game that is absent or not the account's own, returns the same acknowledgement without revealing or changing any other game. Clearing removes the games finished when it is applied; games that finish afterwards remain in history until cleared again. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
 
 ## Saved credential use and revocation
 

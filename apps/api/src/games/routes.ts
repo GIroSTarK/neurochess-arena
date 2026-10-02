@@ -9,6 +9,9 @@ import {
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameHistoryClearRequestSchema,
+  gameHistoryDeletedResponseSchema,
+  gameHistoryDeleteRequestSchema,
   gameHistoryQuerySchema,
   gameHistoryResponseSchema,
   gameIdentityIntentSchema,
@@ -179,6 +182,25 @@ export async function registerGameRoutes(
     async (request, reply) =>
       options.games.history(await principalFor(request, reply, true), request.query),
   );
+
+  for (const [path, body, action] of [
+    ["/games/history/delete", gameHistoryDeleteRequestSchema, "deleteHistoryGame"],
+    ["/games/history/clear", gameHistoryClearRequestSchema, "clearHistory"],
+  ] as const) {
+    routes.post(
+      path,
+      {
+        bodyLimit: 1024,
+        schema: {
+          body,
+          querystring: emptyQuerySchema,
+          response: { 200: gameHistoryDeletedResponseSchema, ...errorResponses },
+        },
+      },
+      async (request, reply) =>
+        options.games[action](await principalFor(request, reply, true), request.body),
+    );
+  }
 
   routes.post(
     "/games/:gameId/controller",

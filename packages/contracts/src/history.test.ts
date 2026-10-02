@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  gameHistoryClearRequestSchema,
   gameHistoryCursorSchema,
+  gameHistoryDeletedResponseSchema,
+  gameHistoryDeleteRequestSchema,
   gameHistoryEntrySchema,
   gameHistoryQuerySchema,
   gameHistoryResponseSchema,
@@ -61,6 +64,39 @@ describe("history transport bounds", () => {
       { apiKey: "private" },
     ]) {
       expect(gameHistoryEntrySchema.safeParse({ ...entry, ...patch }).success).toBe(false);
+    }
+  });
+});
+
+describe("history deletion transport", () => {
+  it("names exactly one game and never accepts a client-selected owner or scope", () => {
+    expect(gameHistoryDeleteRequestSchema.parse({ gameId: id })).toEqual({ gameId: id });
+    for (const body of [
+      {},
+      { gameId: "invalid" },
+      { gameId: [id] },
+      { gameId: id, ownerUserId: id },
+      { gameId: id, all: true },
+      { gameIds: [id] },
+    ]) {
+      expect(gameHistoryDeleteRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+  it("requires explicit confirmation to clear and acknowledges both operations without details", () => {
+    expect(gameHistoryClearRequestSchema.parse({ confirm: true })).toEqual({ confirm: true });
+    for (const body of [
+      {},
+      { confirm: false },
+      { confirm: "true" },
+      { confirm: true, userId: id },
+    ]) {
+      expect(gameHistoryClearRequestSchema.safeParse(body).success).toBe(false);
+    }
+    expect(gameHistoryDeletedResponseSchema.parse({ status: "deleted" })).toEqual({
+      status: "deleted",
+    });
+    for (const body of [{ status: "missing" }, { status: "deleted", count: 1 }, {}]) {
+      expect(gameHistoryDeletedResponseSchema.safeParse(body).success).toBe(false);
     }
   });
 });

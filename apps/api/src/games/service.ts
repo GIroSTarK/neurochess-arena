@@ -8,6 +8,9 @@ import {
   type AiProvider,
   type AiTurnCommand,
   type GameDetails,
+  gameHistoryClearRequestSchema,
+  type GameHistoryDeletedResponse,
+  gameHistoryDeleteRequestSchema,
   type GameHistoryQuery,
   gameHistoryQuerySchema,
   type GameHistoryResponse,
@@ -57,6 +60,8 @@ import { readInvocations } from "./invocations.js";
 
 export interface GameService {
   history(principal: Principal, query: GameHistoryQuery): Promise<GameHistoryResponse>;
+  deleteHistoryGame(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
+  clearHistory(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
   expireControllers(): Promise<void>;
@@ -299,6 +304,22 @@ export function createGameService(
     });
   }
 
+  // Every account game writer takes the account lock first, so a deletion applies to the
+  // games already finished when it acquires the account; games finishing later remain.
+  async function deleteFromHistory(
+    principal: Principal,
+    deletion: (tx: GameTransaction, userId: string) => Promise<void>,
+  ): Promise<GameHistoryDeletedResponse> {
+    if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");
+    return repository.write(async (tx) => {
+      if (!(await lockPrincipal(tx, principal))) throw new GameRequestError("UNAUTHORIZED");
+      await deletion(tx, principal.userId);
+      // A row-lock wait can outlast the session; rejecting now rolls the deletion back.
+      await requireActivePrincipal(tx, principal);
+      return { status: "deleted" as const };
+    });
+  }
+
   return {
     async history(principal, input) {
       if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");
@@ -329,6 +350,29 @@ export function createGameService(
         if (!result.success) throw new GameIntegrityError();
         return result.data;
       });
+    },
+    async deleteHistoryGame(principal, input) {
+      const parsed = gameHistoryDeleteRequestSchema.safeParse(input);
+      if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
+      const { gameId } = parsed.data;
+      return deleteFromHistory(principal, async (tx, userId) => {
+        if (await tx.deleteAccountHistoryGame(userId, gameId)) return;
+        // Absent and foreign games get the same acknowledgement; Stop must end the owner's game.
+        const stored = await tx.getGame(gameId);
+        if (
+          stored?.ownerUserId === userId &&
+          stored.state !== "completed" &&
+          stored.state !== "aborted"
+        ) {
+          throw new GameRequestError("INVALID_GAME_STATE");
+        }
+      });
+    },
+    async clearHistory(principal, input) {
+      if (!gameHistoryClearRequestSchema.safeParse(input).success) {
+        throw new GameRequestError("INVALID_REQUEST");
+      }
+      return deleteFromHistory(principal, (tx, userId) => tx.clearAccountHistory(userId));
     },
     isSandboxGame: (gameId) =>
       repository.read(async (reader) => (await reader.getGame(gameId))?.isSandbox === true),

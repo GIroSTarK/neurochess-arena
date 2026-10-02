@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-10-01
+**Last updated:** 2026-10-02
 
 ## Architectural drivers
 
@@ -401,6 +401,8 @@ Cost calculation uses provider-reported token counts and versioned pricing metad
 ## API shape
 
 Private account history uses `GET /games/history` with bounded keyset pagination over terminal public games. A read-only repeatable-read transaction checks the account session/profile, selects at most one page plus a lookahead row, and batches the corresponding participant read. The summary validates lifecycle and configuration without loading PGN, moves, or invocations; opening its existing private game URL still performs full-history restoration. Ordering uses immutable terminal `updated_at` plus UUID, preserving PostgreSQL microseconds in the cursor. A partial index supports the owner-scoped query. Cursor contents never choose an owner or grant read authority. The web clears list state on identity changes and fetches credentials only for setup/unfinished play, keeping terminal replay read-only.
+
+History deletion uses `POST /games/history/delete` (one game ID) and `POST /games/history/clear` (explicit confirmation) under the same account-only, completed-profile, expected-account and exact-Origin rules; neither request can name an owner or a broader scope. Listing and deletion share one repository predicate: account-owned, non-Sandbox, public-mode, completed or aborted games. A short `READ COMMITTED` transaction locks the account row, physically deletes matching games, and rechecks the session afterward so expiry during a row wait rolls back. Game foreign keys cascade participants, moves, receipts, logical turns, invocation attempts, reservations and controller leases in the same statement; profiles, credentials, auth records, unfinished games and other identities' games are untouched. Every account game writer takes the account lock first, so clearing applies to the games finished before it acquires the account and later results remain. Future writers that are not the owner, such as Phase 4 room participants, must keep that lock order or revisit this boundary. Absent, repeated, foreign, guest and Sandbox IDs receive the same acknowledgement without disclosure; only the account's own unfinished game returns `409 INVALID_GAME_STATE`, leaving Stop as the way to end play. Repeatable-read game reads return either the complete pre-deletion game or `404`. Commands, controller renewals and late provider outcomes that name a deleted game find no row to lock, so they fail or update nothing; foreign keys prevent recreating its dependent records. Database deletion does not reach external backups.
 
 The exact paths remain an implementation detail, but the API needs these capability groups:
 

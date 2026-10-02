@@ -8,7 +8,7 @@ export const en = {
       "Sign in to keep a private game history. Guest games stay separate from accounts and do not appear here.",
     arena: "Return to Arena",
     loading: "Loading game history…",
-    loadError: "Game history could not be loaded. Your games are still saved; try again.",
+    loadError: "Game history could not be loaded. Check your connection and try again.",
     retry: "Retry history",
     empty: "No completed or aborted games yet. Your unfinished game is available in Arena.",
     list: "Finished games",
@@ -21,6 +21,28 @@ export const en = {
     newer: "Newer games",
     older: "Older games",
     refresh: "Refresh history",
+    delete: "Delete game",
+    deleteLabel: "Delete game · {{date}} · {{result}}",
+    deleteTitle: "Delete this game?",
+    deleteDescription:
+      "This permanently deletes the game from your account: its moves, result, replay and PGN, model commentary, and recorded AI attempts with their latency and token usage. Your other games, unfinished game, saved provider keys and profile are kept. This cannot be undone.",
+    deleteSummary: "{{mode}} · {{date}} · {{result}}",
+    deleting: "Deleting game…",
+    deleted: "Game deleted.",
+    clear: "Clear history",
+    clearTitle: "Clear your game history?",
+    clearDescription:
+      "This permanently deletes every completed and aborted game in your history: their moves, results, replays and PGN, model commentary, and recorded AI attempts with their latency and token usage. Your unfinished game, saved provider keys and profile are kept, and games that finish after your history is cleared will remain. This cannot be undone.",
+    clearing: "Clearing history…",
+    cleared: "History cleared.",
+    deletionErrors: {
+      uncertain:
+        "Deletion could not be confirmed. Repeating it is safe: try again, or cancel to refresh your history.",
+      clearUncertain:
+        "Clearing could not be confirmed. Cancel to refresh your history, or try again to clear every game finished by now.",
+      unfinished: "This game is not finished. Stop it in Arena before deleting it.",
+      rejected: "This request could not be accepted. Reload the page and try again.",
+    },
   },
   credentials: {
     title: "Saved provider keys",

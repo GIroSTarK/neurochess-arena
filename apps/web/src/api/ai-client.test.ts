@@ -2,7 +2,15 @@ import type { AiGameConfiguration, ModelDiscoveryResult } from "@neurochess/cont
 import { describe, expect, it, vi } from "vitest";
 
 import { createWebI18n } from "../i18n";
-import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestBody, snapshot } from "../test/fixtures";
+import {
+  errorResponse,
+  GAME_ID,
+  jsonResponse,
+  OTHER_GAME_ID,
+  requestBody,
+  requestPath,
+  snapshot,
+} from "../test/fixtures";
 
 import { createAiApi } from "./ai-client";
 import { aiRequestMessage, providerFailureMessage } from "./ai-messages";
@@ -54,6 +62,53 @@ describe("AI HTTP client", () => {
     await expect(
       createAiApi("https://api.example.test", { fetch }).history({ limit: 20 }, signal()),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+  it("posts scoped history deletions only for accounts and validates their acknowledgement", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementation(async () => jsonResponse({ status: "deleted" }));
+    const api = createAiApi("https://api.example.test", {
+      fetch,
+      identity: {
+        intent: "account",
+        expectedAccount: GAME_ID,
+        signal: new AbortController().signal,
+        verify: async () => undefined,
+      },
+    });
+    await api.deleteHistoryGame(OTHER_GAME_ID, signal());
+    await api.clearHistory(signal());
+    const [[deleteUrl, deleteInit], [clearUrl, clearInit]] = fetch.mock.calls as [
+      [URL, RequestInit],
+      [URL, RequestInit],
+    ];
+    expect(requestPath(deleteUrl)).toBe("/games/history/delete");
+    expect(JSON.parse(requestBody(deleteInit))).toEqual({ gameId: OTHER_GAME_ID });
+    expect(requestPath(clearUrl)).toBe("/games/history/clear");
+    expect(JSON.parse(requestBody(clearInit))).toEqual({ confirm: true });
+    for (const init of [deleteInit, clearInit]) {
+      expect(init).toMatchObject({ method: "POST", credentials: "include", cache: "no-store" });
+      const headers = new Headers(init.headers);
+      expect(headers.get("x-neurochess-identity")).toBe("account");
+      expect(headers.get("x-neurochess-expected-account")).toBe(GAME_ID);
+    }
+    fetch.mockResolvedValue(jsonResponse({ status: "deleted", count: 2 }));
+    await expect(api.clearHistory(signal())).rejects.toMatchObject({ kind: "malformed" });
+    fetch.mockResolvedValue(errorResponse("INVALID_GAME_STATE", 409));
+    await expect(api.deleteHistoryGame(GAME_ID, signal())).rejects.toMatchObject({
+      kind: "api",
+      code: "INVALID_GAME_STATE",
+    });
+    fetch.mockClear();
+    const guest = createAiApi("https://api.example.test", { fetch });
+    await expect(guest.deleteHistoryGame(GAME_ID, signal())).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(guest.clearHistory(signal())).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(api.deleteHistoryGame("not-a-game", signal())).rejects.toMatchObject({
+      kind: "malformed",
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
   it("sends only the selected saved reference for discovery and inference", async () => {
     const credentialId = "61111111-1111-4111-8111-111111111111";

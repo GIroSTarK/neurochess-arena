@@ -137,6 +137,8 @@ export interface GameTransaction extends GameReader {
     expectedVersion: number,
     position: GamePositionUpdate,
   ): Promise<boolean>;
+  deleteAccountHistoryGame(userId: string, gameId: string): Promise<boolean>;
+  clearAccountHistory(userId: string): Promise<void>;
 }
 
 export interface GameRepository {
@@ -150,6 +152,16 @@ export interface GameRepository {
 }
 
 type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
+
+// Listing and deletion share this scope, so clearing removes exactly what history shows.
+function accountHistoryScope(userId: string) {
+  return and(
+    eq(games.ownerUserId, userId),
+    eq(games.isSandbox, false),
+    isNotNull(games.mode),
+    inArray(games.state, ["completed", "aborted"]),
+  );
+}
 
 function readerFor(db: Executor): GameReader {
   return {
@@ -169,10 +181,7 @@ function readerFor(db: Executor): GameReader {
         .from(games)
         .where(
           and(
-            eq(games.ownerUserId, userId),
-            eq(games.isSandbox, false),
-            isNotNull(games.mode),
-            inArray(games.state, ["completed", "aborted"]),
+            accountHistoryScope(userId),
             before
               ? sql`(${games.updatedAt}, ${games.id}) < (${before.finishedAt}::timestamptz, ${before.gameId}::uuid)`
               : undefined,
@@ -531,6 +540,18 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                 .where(and(eq(games.id, gameId), eq(games.version, expectedVersion)))
                 .returning({ id: games.id });
               return updated.length === 1;
+            },
+            // Participants, moves, receipts, AI turns/attempts, reservations and controller
+            // leases cascade through their game foreign keys within the same statement.
+            async deleteAccountHistoryGame(userId, gameId) {
+              const deleted = await tx
+                .delete(games)
+                .where(and(eq(games.id, gameId), accountHistoryScope(userId)))
+                .returning({ id: games.id });
+              return deleted.length === 1;
+            },
+            async clearAccountHistory(userId) {
+              await tx.delete(games).where(accountHistoryScope(userId));
             },
           });
         },

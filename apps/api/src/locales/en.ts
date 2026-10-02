@@ -46,7 +46,7 @@ export const gameErrorMessages: Readonly<Record<GameErrorCode, string>> = {
   INVALID_REQUEST: "The request could not be accepted.",
   INVALID_UCI: "The move notation is invalid.",
   ILLEGAL_MOVE: "The move is not legal in the current position.",
-  INVALID_GAME_STATE: "The game cannot accept a move in its current state.",
+  INVALID_GAME_STATE: "The game cannot accept this request in its current state.",
   GAME_CONFLICT: "The game has changed. Use the current snapshot.",
   UNAUTHORIZED: "A valid session is required.",
   FORBIDDEN: "This action is not allowed.",

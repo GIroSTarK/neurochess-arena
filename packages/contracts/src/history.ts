@@ -51,6 +51,11 @@ export const gameHistoryResponseSchema = z.strictObject({
   games: z.array(gameHistoryEntrySchema).max(50),
   nextCursor: gameHistoryCursorSchema.nullable(),
 });
+// The account comes from the session; bodies select neither an owner nor a broader scope.
+export const gameHistoryDeleteRequestSchema = z.strictObject({ gameId: gameIdSchema });
+export const gameHistoryClearRequestSchema = z.strictObject({ confirm: z.literal(true) });
+export const gameHistoryDeletedResponseSchema = z.strictObject({ status: z.literal("deleted") });
 export type GameHistoryQuery = z.infer<typeof gameHistoryQuerySchema>;
 export type GameHistoryEntry = z.infer<typeof gameHistoryEntrySchema>;
 export type GameHistoryResponse = z.infer<typeof gameHistoryResponseSchema>;
+export type GameHistoryDeletedResponse = z.infer<typeof gameHistoryDeletedResponseSchema>;
