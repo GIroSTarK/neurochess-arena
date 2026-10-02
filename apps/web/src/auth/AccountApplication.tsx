@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { createAuthApi } from "../api/auth-client";
 import { CredentialsScreen } from "../credentials/CredentialsScreen";
+import { GuestHistory, HistoryScreen } from "../history/HistoryScreen";
 import { MatchScreen } from "../match/MatchScreen";
 import { Button } from "../ui/Button";
 
@@ -31,10 +32,13 @@ export function AccountApplication({
     window.location.pathname.startsWith("/auth/") || entry.verified || entry.error !== null;
   const credentialPage = window.location.pathname === "/account/credentials";
   const profilePage = window.location.pathname === "/account" || credentialPage;
+  const historyPage = window.location.pathname === "/history";
   return (
     <AccountContext value={{ controller, state }}>
       {authPage ? (
         <AuthScreen entry={entry} sandboxEnabled={sandboxEnabled} />
+      ) : historyPage && state.phase === "guest" ? (
+        <GuestHistory sandboxEnabled={sandboxEnabled} />
       ) : state.phase === "account" && credentialPage ? (
         <CredentialsScreen
           key={state.revision}
@@ -47,6 +51,14 @@ export function AccountApplication({
         <ProfileScreen
           key={state.revision}
           returnTo={entry.returnTo}
+          sandboxEnabled={sandboxEnabled}
+        />
+      ) : historyPage && state.phase === "account" ? (
+        <HistoryScreen
+          key={state.revision}
+          apiBaseUrl={apiBaseUrl}
+          identity={controller.identity()}
+          username={state.profile?.username ?? t("account.label")}
           sandboxEnabled={sandboxEnabled}
         />
       ) : !profilePage && (state.phase === "guest" || state.phase === "account") ? (

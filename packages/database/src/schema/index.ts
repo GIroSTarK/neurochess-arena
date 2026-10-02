@@ -94,6 +94,11 @@ export const games = pgTable(
   (table) => [
     index("games_owner_idx").on(table.ownerGuestSessionId),
     index("games_account_owner_idx").on(table.ownerUserId),
+    index("games_account_history_idx")
+      .on(table.ownerUserId, table.updatedAt.desc(), table.id.desc())
+      .where(
+        sql`${table.state} in ('completed', 'aborted') and not ${table.isSandbox} and ${table.mode} is not null`,
+      ),
     uniqueIndex("games_one_unfinished_per_account")
       .on(table.ownerUserId)
       .where(sql`${table.state} in ('active', 'paused')`),

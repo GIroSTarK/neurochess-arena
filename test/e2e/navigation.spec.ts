@@ -69,7 +69,8 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
   await page.goto(DISABLED_WEB_ORIGIN);
   await expect(page).toHaveTitle("Neurochess Arena");
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation").getByRole("link")).toHaveCount(1);
+  await expect(page.getByRole("navigation").getByRole("link")).toHaveText(["Arena", "History"]);
+  await expect(page.getByRole("link", { name: "Sandbox", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open development sandbox" })).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("arena-sandbox-disabled.png"),

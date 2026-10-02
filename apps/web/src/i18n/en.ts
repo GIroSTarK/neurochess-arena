@@ -1,4 +1,27 @@
 export const en = {
+  history: {
+    title: "Private game history",
+    navigation: "History",
+    description:
+      "Your completed and aborted games, newest first. Open a replay to review moves, commentary and PGN. Only you can access these games.",
+    guest:
+      "Sign in to keep a private game history. Guest games stay separate from accounts and do not appear here.",
+    arena: "Return to Arena",
+    loading: "Loading game history…",
+    loadError: "Game history could not be loaded. Your games are still saved; try again.",
+    retry: "Retry history",
+    empty: "No completed or aborted games yet. Your unfinished game is available in Arena.",
+    list: "Finished games",
+    states: { completed: "Completed", aborted: "Aborted" },
+    modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human" },
+    model: "{{model}} · {{provider}}",
+    replay: "Open replay",
+    replayLabel: "Open replay · {{date}} · {{result}}",
+    page: "Page {{number}}",
+    newer: "Newer games",
+    older: "Older games",
+    refresh: "Refresh history",
+  },
   credentials: {
     title: "Saved provider keys",
     navigation: "Provider keys",

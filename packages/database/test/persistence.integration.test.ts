@@ -181,6 +181,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0011_profiles",
         "0012_provider_credentials",
         "0013_owner_scoped_credential_ids",
+        "0014_account_history_index",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -495,6 +496,24 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         );
       }
       expect(afterCredentialScope).toEqual(beforeCredentialScope);
+      await applyMigration(migrationFiles[13]!);
+      const afterHistoryIndex = [];
+      for (const table of scopePreservedTables) {
+        afterHistoryIndex.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      expect(afterHistoryIndex).toEqual(afterCredentialScope);
+      const historyIndex = await tx.execute<{ indexdef: string }>(
+        sql`select indexdef from pg_indexes where schemaname = ${schemaName} and indexname = 'games_account_history_idx'`,
+      );
+      expect(historyIndex.rows[0]?.indexdef).toContain(
+        "owner_user_id, updated_at DESC NULLS LAST, id DESC NULLS LAST",
+      );
       const stored = (
         await tx.execute<{ nonce: string; auth_tag: string; ciphertext: string }>(sql`
         select nonce, auth_tag, ciphertext from provider_credentials

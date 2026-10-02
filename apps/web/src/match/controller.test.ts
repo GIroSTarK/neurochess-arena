@@ -23,6 +23,7 @@ function harness(initial = details) {
   let stored = initial.snapshot;
   const api = {
     bootstrap: vi.fn<AiApi["bootstrap"]>(),
+    history: vi.fn<AiApi["history"]>(),
     discover: vi.fn<AiApi["discover"]>(),
     create: vi.fn<AiApi["create"]>(),
     details: vi.fn<AiApi["details"]>(async () => ({ ...initial, snapshot: stored })),

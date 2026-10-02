@@ -63,7 +63,9 @@ export function App({ apiBaseUrl, sandboxEnabled, authEntry }: AppProps) {
     );
   }
   const page =
-    requestedPage === "arena" || requestedPage === "account" ? requestedPage : "not-found";
+    requestedPage === "arena" || requestedPage === "account" || requestedPage === "history"
+      ? requestedPage
+      : "not-found";
 
   return (
     <>

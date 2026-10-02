@@ -42,7 +42,15 @@ export function MatchScreen({
 }) {
   const { t } = useTranslation();
   const account = useAccount();
-  const { catalog, state: savedState } = useCredentials(apiBaseUrl, identity);
+  const [controller] = useState(
+    () => new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {})),
+  );
+  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const needsCredentials =
+    state.phase === "setup" ||
+    state.details?.snapshot.state === "active" ||
+    state.details?.snapshot.state === "paused";
+  const { catalog, state: savedState } = useCredentials(apiBaseUrl, identity, needsCredentials);
   const savedCredentials = catalog.api
     ? {
         ...savedState,
@@ -51,10 +59,6 @@ export function MatchScreen({
         },
       }
     : undefined;
-  const [controller] = useState(
-    () => new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {})),
-  );
-  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
     if (savedState.phase === "ready") controller.reconcileSavedCredentials(savedState.credentials);
   }, [

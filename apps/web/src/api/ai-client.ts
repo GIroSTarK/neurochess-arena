@@ -9,6 +9,10 @@ import {
   aiTurnRequestSchema,
   type GameDetails,
   gameDetailsSchema,
+  type GameHistoryQuery,
+  gameHistoryQuerySchema,
+  type GameHistoryResponse,
+  gameHistoryResponseSchema,
   type GameInvocations,
   gameInvocationsSchema,
   gameParamsSchema,
@@ -44,6 +48,7 @@ export interface AiApi extends Pick<
   SandboxApi,
   "bootstrap" | "snapshot" | "move" | "lifecycle" | "replay" | "pgn"
 > {
+  history(query: GameHistoryQuery, signal: AbortSignal): Promise<GameHistoryResponse>;
   discover(input: ModelDiscoveryRequest, signal: AbortSignal): Promise<ModelDiscoveryResult>;
   create(configuration: AiGameConfiguration, signal: AbortSignal): Promise<GameDetails>;
   details(gameId: string, signal: AbortSignal): Promise<GameDetails>;
@@ -180,6 +185,15 @@ export function createAiApi(
   }
 
   return {
+    async history(query, signal) {
+      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
+      const input = validated(gameHistoryQuerySchema, query);
+      const search = new URLSearchParams({
+        limit: String(input.limit),
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+      });
+      return request("/games/history?" + search.toString(), gameHistoryResponseSchema, signal);
+    },
     async bootstrap(signal) {
       if (options.identity?.intent === "account") {
         await options.identity.verify();

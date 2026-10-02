@@ -9,6 +9,8 @@ import {
   gameDetailsSchema,
   type GameErrorCode,
   gameErrorResponseSchema,
+  gameHistoryQuerySchema,
+  gameHistoryResponseSchema,
   gameIdentityIntentSchema,
   gameInvocationsSchema,
   gameParamsSchema,
@@ -128,7 +130,11 @@ export async function registerGameRoutes(
     return reply.code(errorStatuses[code]).send(response);
   });
 
-  async function principalFor(request: FastifyRequest, reply: FastifyReply): Promise<Principal> {
+  async function principalFor(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    accountOnly = false,
+  ): Promise<Principal> {
     const params = gameParamsSchema.safeParse(request.params);
     // The immutable server-owned marker selects Sandbox authority on shared routes.
     // It never permits guest fallback for an ordinary public game.
@@ -148,6 +154,7 @@ export async function registerGameRoutes(
       throw new GameRequestError("UNAUTHORIZED");
     }
     if (account) return account;
+    if (accountOnly) throw new GameRequestError("UNAUTHORIZED");
     const hasAccountCookie = Object.keys(request.cookies).some(
       (name) =>
         name === `__Secure-${AUTH_COOKIE_PREFIX}.session_token` ||
@@ -160,6 +167,18 @@ export async function registerGameRoutes(
   }
 
   const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
+
+  routes.get(
+    "/games/history",
+    {
+      schema: {
+        querystring: gameHistoryQuerySchema,
+        response: { 200: gameHistoryResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) =>
+      options.games.history(await principalFor(request, reply, true), request.query),
+  );
 
   routes.post(
     "/games/:gameId/controller",

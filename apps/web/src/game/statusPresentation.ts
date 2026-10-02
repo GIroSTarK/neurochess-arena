@@ -1,9 +1,10 @@
 import type { TFunction } from "i18next";
 
+import { resultTitle } from "../arena/result";
 import type { StatusPresentation } from "../arena/status";
 
 import { isRejectionCode } from "./failures";
-import { gameStatus, noticeMessage, resultTitle } from "./messages";
+import { gameStatus, noticeMessage } from "./messages";
 import { isUnfinished, type SandboxState } from "./state";
 
 const activityKeys = [

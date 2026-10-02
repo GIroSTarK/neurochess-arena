@@ -14,6 +14,7 @@ export function AppNavigation({
   const { t } = useTranslation();
   const links = [
     { page: "arena", href: "/", label: t("app.arena") },
+    { page: "history", href: "/history", label: t("history.navigation") },
     ...(sandboxEnabled ? [{ page: "sandbox", href: "/sandbox", label: t("sandbox.title") }] : []),
   ];
   return links.map((link) => (
