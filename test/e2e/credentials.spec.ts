@@ -37,13 +37,16 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
         if (request.url().endsWith("/ai-turn")) turns.push(body);
       }
     });
-    page.on("response", (response) => {
-      if (response.url().startsWith(API_ORIGIN) && !response.url().includes("/api/auth/")) {
+    // A navigation between response headers and body completion never settles
+    // `response.text()`; `requestfinished` fires only once the body is complete.
+    page.on("requestfinished", (request) => {
+      if (request.url().startsWith(API_ORIGIN) && !request.url().includes("/api/auth/")) {
         responseChecks.push(
-          response
-            .text()
+          request
+            .response()
+            .then((response) => response?.text())
             .then((text) => {
-              if ([whiteKey, blackKey].some((key) => text.includes(key))) exposed = true;
+              if (text && [whiteKey, blackKey].some((key) => text.includes(key))) exposed = true;
             })
             .catch(() => undefined),
         );
