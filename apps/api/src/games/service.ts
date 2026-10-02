@@ -8,6 +8,10 @@ import {
   type AiProvider,
   type AiTurnCommand,
   type GameDetails,
+  type GameHistoryQuery,
+  gameHistoryQuerySchema,
+  type GameHistoryResponse,
+  gameHistoryResponseSchema,
   type GameInvocations,
   gameLifecycleSchema,
   type GamePgnResponse,
@@ -52,6 +56,7 @@ import { GameConflictError, GameIntegrityError, GameRequestError } from "./error
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  history(principal: Principal, query: GameHistoryQuery): Promise<GameHistoryResponse>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
   expireControllers(): Promise<void>;
@@ -295,6 +300,36 @@ export function createGameService(
   }
 
   return {
+    async history(principal, input) {
+      if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");
+      const parsed = gameHistoryQuerySchema.safeParse(input);
+      if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
+      const { limit, cursor } = parsed.data;
+      const [finishedAt, gameId] = cursor?.split("_") ?? [];
+      return repository.read(async (reader) => {
+        await requireActivePrincipal(reader, principal);
+        const records = await reader.findAccountHistory(
+          principal.userId,
+          limit + 1,
+          finishedAt && gameId ? { finishedAt, gameId } : undefined,
+        );
+        const page = records.slice(0, limit);
+        const last = page.at(-1);
+        const result = gameHistoryResponseSchema.safeParse({
+          games: page.map((game) => ({
+            gameId: game.id,
+            finishedAt: game.finishedAt,
+            configuration: configurationOf(game, game.participants),
+            state: game.state,
+            result: game.result,
+            terminationReason: game.terminationReason,
+          })),
+          nextCursor: records.length > limit && last ? `${last.finishedAt}_${last.id}` : null,
+        });
+        if (!result.success) throw new GameIntegrityError();
+        return result.data;
+      });
+    },
     isSandboxGame: (gameId) =>
       repository.read(async (reader) => (await reader.getGame(gameId))?.isSandbox === true),
     async controller(principal, input) {

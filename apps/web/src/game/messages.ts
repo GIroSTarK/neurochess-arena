@@ -1,6 +1,8 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
+import { resultTitle } from "../arena/result";
+
 import type { Announcement, SandboxNotice } from "./state";
 
 const noticeKeys = {
@@ -31,13 +33,6 @@ const noticeKeys = {
 
 export function noticeMessage(notice: SandboxNotice, t: TFunction): string {
   return t(noticeKeys[notice]);
-}
-
-export function resultTitle(snapshot: GameSnapshot, t: TFunction): string {
-  if (snapshot.state === "aborted") return t("game.stopped");
-  if (snapshot.result === "1-0") return t("game.whiteWins");
-  if (snapshot.result === "0-1") return t("game.blackWins");
-  return t("game.draw");
 }
 
 export function gameStatus(snapshot: GameSnapshot, t: TFunction): string {

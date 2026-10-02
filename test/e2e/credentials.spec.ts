@@ -37,17 +37,17 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
         if (request.url().endsWith("/ai-turn")) turns.push(body);
       }
     });
-    page.on("response", (response) => {
-      if (response.url().startsWith(API_ORIGIN) && !response.url().includes("/api/auth/")) {
-        responseChecks.push(
-          response
-            .text()
-            .then((text) => {
-              if ([whiteKey, blackKey].some((key) => text.includes(key))) exposed = true;
-            })
-            .catch(() => undefined),
-        );
-      }
+    // Navigation and app aborts can cancel or discard a response body before the
+    // browser exposes it, so inspect each API body before the page receives it.
+    await page.route(API_ORIGIN + "/**", (route) => {
+      if (route.request().url().includes("/api/auth/")) return route.fallback();
+      const check = route.fetch().then(async (response) => {
+        const text = await response.text();
+        if ([whiteKey, blackKey].some((key) => text.includes(key))) exposed = true;
+        await route.fulfill({ response });
+      });
+      responseChecks.push(check);
+      return check;
     });
     await page.goto("/account/credentials");
     const white =
@@ -107,6 +107,7 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
       if (black) expect("apiKey" in body && body.apiKey === blackKey).toBe(false);
     }
     await privateValues();
+    await page.unrouteAll({ behavior: "wait" });
     await Promise.all(responseChecks);
     expect(exposed).toBe(false);
     await page.screenshot({

@@ -1,10 +1,11 @@
-export type AppPage = "arena" | "account" | "sandbox" | "reference" | "not-found";
+export type AppPage = "arena" | "account" | "history" | "sandbox" | "reference" | "not-found";
 
 export function readAppPage(): AppPage {
   const { pathname } = window.location;
   if (pathname === "/dev/arena" || pathname === "/dev/arena/") return "reference";
   if (pathname === "/sandbox" || pathname === "/sandbox/") return "sandbox";
   if (pathname === "/") return "arena";
+  if (pathname === "/history") return "history";
   if (
     [
       "/account",

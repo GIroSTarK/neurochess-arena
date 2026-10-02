@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
+import type { AppPage } from "../app/navigation";
 
 import { AccountAccess } from "./AccountAccess";
 
@@ -10,10 +11,12 @@ export function AccountFrame({
   title,
   children,
   sandboxEnabled,
+  page = "account",
 }: {
   readonly title: string;
   readonly children: ReactNode;
   readonly sandboxEnabled: boolean;
+  readonly page?: AppPage;
 }) {
   const { t } = useTranslation();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -25,7 +28,7 @@ export function AccountFrame({
       mainId="account-main"
       skipLabel={t("app.skipLink")}
       context={<AccountAccess />}
-      navigation={<AppNavigation page="account" sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page={page} sandboxEnabled={sandboxEnabled} />}
       footer={t("account.footer")}
       announcement=""
     >

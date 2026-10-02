@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
 import { session, user } from "./schema/auth.js";
@@ -19,6 +19,20 @@ import { profiles } from "./schema/profiles.js";
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type StoredGame = typeof games.$inferSelect;
 export type StoredParticipant = typeof gameParticipants.$inferSelect;
+export type StoredHistoryGame = Pick<
+  StoredGame,
+  | "id"
+  | "ownerUserId"
+  | "ownerGuestSessionId"
+  | "isSandbox"
+  | "mode"
+  | "state"
+  | "result"
+  | "terminationReason"
+> & {
+  finishedAt: string;
+  participants: StoredParticipant[];
+};
 export type StoredMove = typeof moves.$inferSelect;
 export type NewGame = typeof games.$inferInsert;
 export type NewParticipant = typeof gameParticipants.$inferInsert;
@@ -59,6 +73,11 @@ export type GamePositionUpdate = Pick<
 >;
 
 export interface GameReader {
+  findAccountHistory(
+    userId: string,
+    limit: number,
+    before?: { finishedAt: string; gameId: string },
+  ): Promise<StoredHistoryGame[]>;
   getProviderCredential(
     userId: string,
     credentialId: string,
@@ -134,6 +153,51 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    async findAccountHistory(userId, limit, before) {
+      const records = await db
+        .select({
+          id: games.id,
+          ownerUserId: games.ownerUserId,
+          ownerGuestSessionId: games.ownerGuestSessionId,
+          isSandbox: games.isSandbox,
+          mode: games.mode,
+          state: games.state,
+          result: games.result,
+          terminationReason: games.terminationReason,
+          finishedAt: sql<string>`to_char(${games.updatedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        })
+        .from(games)
+        .where(
+          and(
+            eq(games.ownerUserId, userId),
+            eq(games.isSandbox, false),
+            isNotNull(games.mode),
+            inArray(games.state, ["completed", "aborted"]),
+            before
+              ? sql`(${games.updatedAt}, ${games.id}) < (${before.finishedAt}::timestamptz, ${before.gameId}::uuid)`
+              : undefined,
+          ),
+        )
+        .orderBy(sql`${games.updatedAt} desc nulls last`, sql`${games.id} desc nulls last`)
+        .limit(limit);
+      if (records.length === 0) return [];
+      const participants = await db
+        .select()
+        .from(gameParticipants)
+        .where(
+          inArray(
+            gameParticipants.gameId,
+            records.map((game) => game.id),
+          ),
+        );
+      const seats = new Map<string, StoredParticipant[]>();
+      for (const participant of participants) {
+        const group = seats.get(participant.gameId) ?? [];
+        group.push(participant);
+        seats.set(participant.gameId, group);
+      }
+      return records.map((game) => ({ ...game, participants: seats.get(game.id) ?? [] }));
+    },
     async getProviderCredential(userId, credentialId, provider) {
       const [record] = await db
         .select({

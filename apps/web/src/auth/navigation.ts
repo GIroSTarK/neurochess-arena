@@ -1,7 +1,7 @@
 import { authErrorCodeSchema, gameParamsSchema } from "@neurochess/contracts";
 
 export function safeReturnTo(value: string | null): string {
-  if (value === "/") return value;
+  if (value === "/" || value === "/history") return value;
   if (!value?.startsWith("/?")) return "/";
   const url = new URL(value, window.location.origin);
   const gameId = url.searchParams.get("game");
@@ -23,7 +23,8 @@ export function consumeAuthEntry() {
       ? token
       : null;
   const returnTo = safeReturnTo(
-    url.searchParams.get("returnTo") ?? (url.pathname === "/" ? url.pathname + url.search : null),
+    url.searchParams.get("returnTo") ??
+      (url.pathname === "/" || url.pathname === "/history" ? url.pathname + url.search : null),
   );
   if (url.pathname.startsWith("/auth/") || url.pathname === "/account" || callback) {
     window.history.replaceState(null, "", url.pathname);

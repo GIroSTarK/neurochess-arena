@@ -1,4 +1,13 @@
 export {
+  gameHistoryCursorSchema,
+  gameHistoryQuerySchema,
+  gameHistoryEntrySchema,
+  gameHistoryResponseSchema,
+  type GameHistoryQuery,
+  type GameHistoryEntry,
+  type GameHistoryResponse,
+} from "./history.js";
+export {
   invocationOutcomeSchema,
   modelInvocationSchema,
   aiTurnRecordSchema,

@@ -5,7 +5,7 @@ import { createCredentialApi } from "../api/credential-client";
 
 import { CredentialCatalog } from "./catalog";
 
-export function useCredentials(apiBaseUrl: string, identity?: AiIdentity) {
+export function useCredentials(apiBaseUrl: string, identity?: AiIdentity, enabled = true) {
   const [catalog] = useState(
     () =>
       new CredentialCatalog(
@@ -13,6 +13,6 @@ export function useCredentials(apiBaseUrl: string, identity?: AiIdentity) {
       ),
   );
   const state = useSyncExternalStore(catalog.subscribe, catalog.getSnapshot);
-  useEffect(() => catalog.connect(), [catalog]);
+  useEffect(() => (enabled ? catalog.connect() : undefined), [catalog, enabled]);
   return { catalog, state };
 }

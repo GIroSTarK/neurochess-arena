@@ -1,0 +1,1 @@
+CREATE INDEX "games_account_history_idx" ON "games" USING btree ("owner_user_id","updated_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "games"."state" in ('completed', 'aborted') and not "games"."is_sandbox" and "games"."mode" is not null;
