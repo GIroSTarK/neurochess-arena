@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CredentialSource, type SavedCredentialChoices } from "../arena/setup/CredentialSource";
 import { setupFieldClass } from "../arena/setup/ModelPicker";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
@@ -27,6 +28,9 @@ interface PausedCredentialsProps {
   readonly onResume: () => void;
   readonly children: ReactNode;
   readonly notice?: ReactNode;
+  readonly savedCredentials?: SavedCredentialChoices;
+  readonly selections?: Readonly<Record<ChessColor, string>>;
+  readonly onCredentialChange?: (color: ChessColor, value: string) => void;
 }
 
 interface Recovery {
@@ -99,7 +103,7 @@ export function PausedCredentials(props: PausedCredentialsProps) {
                   setRecovery({ ...current, dismissed: false });
                 }}
               >
-                {t("match.reenterKeys")}
+                {t(props.savedCredentials ? "credentials.recoveryTitle" : "match.reenterKeys")}
               </Button>
             </div>
           ) : null}
@@ -124,6 +128,9 @@ function RecoveryForm({
   headingRef,
   onDismiss,
   notice,
+  savedCredentials,
+  selections,
+  onCredentialChange,
 }: PausedCredentialsProps & {
   readonly recovery: Recovery;
   readonly headingRef: Ref<HTMLHeadingElement>;
@@ -136,6 +143,8 @@ function RecoveryForm({
   const [revealed, setRevealed] = useState({ white: false, black: false });
   const [dismissedTooltip, setDismissedTooltip] = useState<ChessColor | null>(null);
   const rejected = rejectedColor !== null && !edited[rejectedColor];
+  const usesSessionKey = (color: ChessColor) =>
+    !selections?.[color] || selections[color] === "session";
   return (
     <section
       aria-labelledby={`${id}-title`}
@@ -152,10 +161,18 @@ function RecoveryForm({
           tabIndex={-1}
           className="text-section font-semibold"
         >
-          {t("match.reenterKeys")}
+          {t(savedCredentials ? "credentials.recoveryTitle" : "match.reenterKeys")}
         </h2>
         <p id={`${id}-description`} className="text-body text-text-secondary">
-          {t(recovery.missing ? "match.recoveryDescription" : "match.rejectedKeyDescription")}
+          {t(
+            savedCredentials
+              ? recovery.missing
+                ? "credentials.recovery"
+                : "credentials.unavailable"
+              : recovery.missing
+                ? "match.recoveryDescription"
+                : "match.rejectedKeyDescription",
+          )}
         </p>
         {notice ? <p className="text-label text-warning">{notice}</p> : null}
       </div>
@@ -165,88 +182,109 @@ function RecoveryForm({
         const invalid = rejectedColor === color && !edited[color];
         return (
           <div key={color} className="grid min-w-0 gap-2 text-label">
-            <label htmlFor={`${id}-${color}-key`}>
-              {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
-              {t("setup.apiKey")}
-            </label>
-            <div className="relative min-w-0">
-              <input
-                id={`${id}-${color}-key`}
-                aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
-                aria-invalid={invalid}
-                type={revealed[color] ? "text" : "password"}
-                placeholder={t("match.keyPlaceholder")}
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                maxLength={4096}
-                className={`${setupFieldClass} w-full pr-12`}
-                readOnly={disabled}
-                aria-disabled={disabled}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
+            {savedCredentials ? (
+              <CredentialSource
+                provider={seat.provider}
+                value={selections?.[color] ?? "session"}
+                saved={savedCredentials}
+                disabled={disabled}
+                label={`${t(`players.${color}`)} · ${t(`setup.providers.${seat.provider}`)} · ${t("credentials.source")}`}
+                onChange={(value) => {
                   setEdited((current) => ({ ...current, [color]: true }));
-                  setHasValue((current) => ({ ...current, [color]: value.length > 0 }));
-                  if (!value) setRevealed((current) => ({ ...current, [color]: false }));
-                  onKeyChange(color, value);
+                  setHasValue((current) => ({ ...current, [color]: false }));
+                  setRevealed((current) => ({ ...current, [color]: false }));
+                  onCredentialChange?.(color, value);
                 }}
               />
-              <span
-                className="group absolute top-0 right-0"
-                onPointerEnter={() => setDismissedTooltip(null)}
-              >
-                <Button
-                  variant="quiet"
-                  padding="compact"
-                  className="size-target focus-visible:-outline-offset-2"
-                  aria-labelledby={`${id}-${color}-reveal`}
-                  aria-controls={`${id}-${color}-key`}
-                  aria-pressed={revealed[color]}
-                  aria-disabled={disabled || !hasValue[color]}
-                  onClick={() =>
-                    setRevealed((current) => ({ ...current, [color]: !current[color] }))
-                  }
-                  onFocus={() => setDismissedTooltip(null)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setDismissedTooltip(color);
-                  }}
-                >
-                  <Icon
-                    path={
-                      revealed[color]
-                        ? "M3 3l18 18M10 5a10 10 0 0 1 11 7 14 14 0 0 1-3 4M6 6a14 14 0 0 0-3 6c4 8 12 8 16 3M10 10a3 3 0 0 0 4 4"
-                        : "M2 12c5-9 15-9 20 0-5 9-15 9-20 0M15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0"
-                    }
+            ) : null}
+            {usesSessionKey(color) ? (
+              <>
+                <label htmlFor={`${id}-${color}-key`}>
+                  {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
+                  {t("setup.apiKey")}
+                </label>
+                <div className="relative min-w-0">
+                  <input
+                    id={`${id}-${color}-key`}
+                    aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
+                    aria-invalid={invalid}
+                    type={revealed[color] ? "text" : "password"}
+                    placeholder={t("match.keyPlaceholder")}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    maxLength={4096}
+                    className={`${setupFieldClass} w-full pr-12`}
+                    readOnly={disabled}
+                    aria-disabled={disabled}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setEdited((current) => ({ ...current, [color]: true }));
+                      setHasValue((current) => ({ ...current, [color]: value.length > 0 }));
+                      if (!value) setRevealed((current) => ({ ...current, [color]: false }));
+                      onKeyChange(color, value);
+                    }}
                   />
-                </Button>
-                <span
-                  id={`${id}-${color}-reveal`}
-                  role="tooltip"
-                  className={cx(
-                    "absolute right-0 bottom-full z-10 hidden w-max max-w-40 pb-2 text-label text-text",
-                    dismissedTooltip !== color && "group-focus-within:block group-hover:block",
-                  )}
-                >
-                  <span className="block rounded-control border border-control-border bg-surface-raised px-3 py-2">
-                    {t(revealed[color] ? "match.hideSeatKey" : "match.showSeatKey", {
-                      color: t(`players.${color}`),
-                    })}
+                  <span
+                    className="group absolute top-0 right-0"
+                    onPointerEnter={() => setDismissedTooltip(null)}
+                  >
+                    <Button
+                      variant="quiet"
+                      padding="compact"
+                      className="size-target focus-visible:-outline-offset-2"
+                      aria-labelledby={`${id}-${color}-reveal`}
+                      aria-controls={`${id}-${color}-key`}
+                      aria-pressed={revealed[color]}
+                      aria-disabled={disabled || !hasValue[color]}
+                      onClick={() =>
+                        setRevealed((current) => ({ ...current, [color]: !current[color] }))
+                      }
+                      onFocus={() => setDismissedTooltip(null)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setDismissedTooltip(color);
+                      }}
+                    >
+                      <Icon
+                        path={
+                          revealed[color]
+                            ? "M3 3l18 18M10 5a10 10 0 0 1 11 7 14 14 0 0 1-3 4M6 6a14 14 0 0 0-3 6c4 8 12 8 16 3M10 10a3 3 0 0 0 4 4"
+                            : "M2 12c5-9 15-9 20 0-5 9-15 9-20 0M15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0"
+                        }
+                      />
+                    </Button>
+                    <span
+                      id={`${id}-${color}-reveal`}
+                      role="tooltip"
+                      className={cx(
+                        "absolute right-0 bottom-full z-10 hidden w-max max-w-40 pb-2 text-label text-text",
+                        dismissedTooltip !== color && "group-focus-within:block group-hover:block",
+                      )}
+                    >
+                      <span className="block rounded-control border border-control-border bg-surface-raised px-3 py-2">
+                        {t(revealed[color] ? "match.hideSeatKey" : "match.showSeatKey", {
+                          color: t(`players.${color}`),
+                        })}
+                      </span>
+                    </span>
                   </span>
-                </span>
-              </span>
-            </div>
+                </div>
+              </>
+            ) : null}
             {invalid ? (
               <p id={`${id}-${color}-error`} className="text-danger">
-                {t("match.keyRejected")}
+                {t(savedCredentials ? "credentials.unavailable" : "match.keyRejected")}
               </p>
             ) : null}
           </div>
         );
       })}
-      <div id={`${id}-session`} className="grid gap-1 text-label text-text-secondary">
-        <p className="font-semibold">{t("setup.sessionOnly")}</p>
-        <p>{t("setup.sessionOnlyHint")}</p>
-      </div>
+      {recovery.colors.some(usesSessionKey) ? (
+        <div id={`${id}-session`} className="grid gap-1 text-label text-text-secondary">
+          <p className="font-semibold">{t("setup.sessionOnly")}</p>
+          <p>{t("setup.sessionOnlyHint")}</p>
+        </div>
+      ) : null}
       <div className="grid gap-2">
         <Button
           variant="primary"

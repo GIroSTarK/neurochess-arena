@@ -25,6 +25,63 @@ const props = {
 };
 
 describe("paused credential recovery", () => {
+  it("does not describe an exclusively saved selection as a session-only key", () => {
+    renderLocalized(
+      <PausedCredentials
+        {...props}
+        rejectedColor="white"
+        selections={{
+          white: "61111111-1111-4111-8111-111111111111",
+          black: "72222222-2222-4222-8222-222222222222",
+        }}
+        savedCredentials={{ phase: "ready", credentials: [], onRefresh: () => undefined }}
+      />,
+    );
+    expect(
+      screen.queryByText("Cleared when you refresh or close this tab."),
+    ).not.toBeInTheDocument();
+  });
+  it("offers provider-matched saved references while keeping explicit continuation and human seats excluded", async () => {
+    const credentialId = "61111111-1111-4111-8111-111111111111";
+    const onCredentialChange = vi.fn();
+    const onResume = vi.fn();
+    renderLocalized(
+      <PausedCredentials
+        {...props}
+        keys={missing}
+        seats={{ white: { type: "human" }, black: props.seats.black }}
+        selections={{ white: "session", black: "session" }}
+        savedCredentials={{
+          phase: "ready",
+          onRefresh: () => undefined,
+          credentials: [
+            {
+              credentialId,
+              provider: "anthropic",
+              label: "Saved opponent",
+              maskedSuffix: "1234",
+              createdAt: "2026-10-01T00:00:00.000Z",
+            },
+            {
+              credentialId: "72222222-2222-4222-8222-222222222222",
+              provider: "openai",
+              label: "Wrong provider",
+              maskedSuffix: null,
+              createdAt: "2026-10-01T00:00:00.000Z",
+            },
+          ],
+        }}
+        onCredentialChange={onCredentialChange}
+        onResume={onResume}
+      />,
+    );
+    const source = screen.getByLabelText("Black · Anthropic · Credential source");
+    expect(source).toHaveValue("session");
+    expect(screen.queryByRole("option", { name: /Wrong provider/ })).not.toBeInTheDocument();
+    await userEvent.selectOptions(source, credentialId);
+    expect(onCredentialChange).toHaveBeenCalledWith("black", credentialId);
+    expect(onResume).not.toHaveBeenCalled();
+  });
   it("keeps ordinary pauses free of key fields and replacement controls", () => {
     renderLocalized(<PausedCredentials {...props} />);
     expect(screen.getByText("Game details")).toBeVisible();

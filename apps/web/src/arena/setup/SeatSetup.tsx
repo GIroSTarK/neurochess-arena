@@ -13,6 +13,7 @@ import { Button } from "../../ui/Button";
 import { Select } from "../../ui/Select";
 import { StableText } from "../../ui/StableText";
 
+import { CredentialSource, type SavedCredentialChoices } from "./CredentialSource";
 import { ModelPicker, setupFieldClass } from "./ModelPicker";
 
 export interface SeatSetupProps {
@@ -36,6 +37,9 @@ export interface SeatSetupProps {
   readonly onDiscover: () => void;
   readonly onModel: (id: string) => void;
   readonly onParameter: (name: keyof AiParameters, value: string) => void;
+  readonly credential?: string;
+  readonly savedCredentials?: SavedCredentialChoices;
+  readonly onCredential?: (value: string) => void;
 }
 
 export function SeatSetup(props: SeatSetupProps) {
@@ -66,7 +70,21 @@ export function SeatSetup(props: SeatSetupProps) {
           ))}
         </Select>
       </div>
-      <SecretField key={props.keyEpoch} {...props} descriptionId={`${id}-status`} />
+      {props.savedCredentials ? (
+        <CredentialSource
+          provider={props.provider}
+          value={props.credential ?? "session"}
+          saved={props.savedCredentials}
+          disabled={props.disabled}
+          onChange={(value) => props.onCredential?.(value)}
+        />
+      ) : null}
+      {!props.credential || props.credential === "session" ? (
+        <SecretField key={props.keyEpoch} {...props} descriptionId={`${id}-status`} />
+      ) : null}
+      {!props.savedCredentials ? (
+        <p className="text-label text-text-secondary">{t("credentials.guestHint")}</p>
+      ) : null}
       <div className="grid gap-2">
         <Button
           variant="secondary"

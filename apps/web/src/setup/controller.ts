@@ -2,6 +2,7 @@ import {
   type AiParameters,
   type AiProvider,
   type ChessColor,
+  type CredentialMetadata,
   type GameDetails,
   sessionApiKeySchema,
 } from "@neurochess/contracts";
@@ -40,6 +41,7 @@ export class SetupController {
   private operation: AbortController | null = null;
   private lifetime: AbortController | null = null;
   private bootstrap: Promise<void> | null = null;
+  private savedCredentials: readonly CredentialMetadata[] = [];
 
   constructor(
     private readonly api: SetupApi,
@@ -146,7 +148,7 @@ export class SetupController {
   }
 
   setKey(color: ChessColor, value: string) {
-    if (!this.canEdit(color)) return;
+    if (!this.canEdit(color) || this.state.seats[color].credential !== "session") return;
     this.discovery[color]?.abort();
     const seat = this.state.seats[color];
     const parsed = sessionApiKeySchema.safeParse(value);
@@ -155,6 +157,48 @@ export class SetupController {
     this.seat(color, {
       ...emptySeat(seat.provider, seat.keyEpoch),
       keyReady: parsed.success,
+    });
+  }
+
+  updateSavedCredentials(credentials: readonly CredentialMetadata[]) {
+    this.savedCredentials = credentials;
+    this.dropRemovedSelections();
+  }
+
+  // Locked phases cannot reset a seat, so editing must repeat this when it resumes.
+  private dropRemovedSelections() {
+    for (const color of colors) {
+      const seat = this.state.seats[color];
+      if (
+        seat.credential !== "session" &&
+        !this.savedCredentials.some(
+          (item) => item.credentialId === seat.credential && item.provider === seat.provider,
+        )
+      ) {
+        this.setCredential(color, "session");
+        this.seat(color, { issue: { code: "provider_auth" } });
+      }
+    }
+  }
+
+  setCredential(color: ChessColor, credential: string) {
+    const seat = this.state.seats[color];
+    if (!this.canEdit(color) || seat.credential === credential) return;
+    if (
+      credential !== "session" &&
+      !this.savedCredentials.some(
+        (item) => item.credentialId === credential && item.provider === seat.provider,
+      )
+    ) {
+      return;
+    }
+    this.discovery[color]?.abort();
+    this.credentials.remove(color);
+    if (credential !== "session") this.credentials.setSaved(color, seat.provider, credential);
+    this.seat(color, {
+      ...emptySeat(seat.provider, seat.keyEpoch + 1),
+      credential,
+      keyReady: credential !== "session",
     });
   }
 
@@ -215,7 +259,7 @@ export class SetupController {
       const result = await this.api.discover(
         {
           provider: seat.provider,
-          apiKey: this.credentials.require(color, seat.provider),
+          ...this.credentials.require(color, seat.provider),
         },
         request.signal,
       );
@@ -263,6 +307,7 @@ export class SetupController {
         phase: game ? "conflict" : "editing",
         existingGameId: game?.snapshot.gameId ?? null,
       });
+      this.dropRemovedSelections();
     } catch (error: unknown) {
       if (isCancelled()) return;
       if (error instanceof ApiFailure && error.code === "UNAUTHORIZED") {

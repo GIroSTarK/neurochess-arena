@@ -2,7 +2,7 @@ import type { AiGameConfiguration, ModelDiscoveryResult } from "@neurochess/cont
 import { describe, expect, it, vi } from "vitest";
 
 import { createWebI18n } from "../i18n";
-import { GAME_ID, jsonResponse, OTHER_GAME_ID, snapshot } from "../test/fixtures";
+import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestBody, snapshot } from "../test/fixtures";
 
 import { createAiApi } from "./ai-client";
 import { aiRequestMessage, providerFailureMessage } from "./ai-messages";
@@ -25,6 +25,21 @@ const command = {
 const signal = () => new AbortController().signal;
 
 describe("AI HTTP client", () => {
+  it("sends only the selected saved reference for discovery and inference", async () => {
+    const credentialId = "61111111-1111-4111-8111-111111111111";
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ok: true, models: [] }))
+      .mockResolvedValueOnce(jsonResponse(snapshot()));
+    const api = createAiApi("https://api.example.test", { fetch });
+    await api.discover({ provider: "openai", credentialId }, signal());
+    await api.turn(command, { credentialId }, signal());
+    expect(JSON.parse(requestBody(fetch.mock.calls[0]?.[1]))).toEqual({
+      provider: "openai",
+      credentialId,
+    });
+    expect(JSON.parse(requestBody(fetch.mock.calls[1]?.[1]))).toEqual({ ...command, credentialId });
+  });
   it("skips guest bootstrap for account intent and fences an obsolete response", async () => {
     const lifetime = new AbortController();
     const response = Promise.withResolvers<Response>();
@@ -70,7 +85,7 @@ describe("AI HTTP client", () => {
     await api.bootstrap(signal());
     await api.discover({ provider: "openai", apiKey }, signal());
     await api.create(configuration, signal());
-    await api.turn(command, apiKey, signal());
+    await api.turn(command, { apiKey }, signal());
     await api.details(GAME_ID, signal());
     await api.unfinished(signal());
     await api.invocations(GAME_ID, signal());
@@ -110,7 +125,7 @@ describe("AI HTTP client", () => {
     const fetch = vi.fn();
     const api = createAiApi("http://localhost:3001", { fetch });
     const failure: unknown = await api
-      .turn({ ...command, commandId: apiKey }, apiKey, signal())
+      .turn({ ...command, commandId: apiKey }, { apiKey }, signal())
       .catch((error: unknown) => error);
     expect(failure).toMatchObject({ kind: "malformed" });
     expect(JSON.stringify(failure)).not.toContain(apiKey);
@@ -153,7 +168,7 @@ describe("AI HTTP client", () => {
       fetch: vi.fn().mockResolvedValue(jsonResponse(payload, status)),
     });
     const error: unknown = await api
-      .turn(command, apiKey, signal())
+      .turn(command, { apiKey }, signal())
       .catch((error: unknown) => error);
     expect(error).toMatchObject(expected);
     expect(JSON.stringify(error)).not.toContain(apiKey);
@@ -180,7 +195,7 @@ describe("AI HTTP client", () => {
         ),
       ),
     });
-    await expect(api.turn(command, apiKey, signal())).rejects.toMatchObject({
+    await expect(api.turn(command, { apiKey }, signal())).rejects.toMatchObject({
       kind: "malformed",
     });
   });
@@ -203,7 +218,7 @@ describe("AI HTTP client", () => {
           }),
       );
       const api = createAiApi("https://api.example.test", { fetch });
-      const pending = expect(api.turn(command, apiKey, signal())).rejects.toMatchObject({
+      const pending = expect(api.turn(command, { apiKey }, signal())).rejects.toMatchObject({
         kind: "timeout",
       });
       await vi.advanceTimersByTimeAsync(10_000);
@@ -226,10 +241,10 @@ describe("AI HTTP client", () => {
     );
     const api = createAiApi("https://api.example.test", { fetch });
     const owner = new AbortController();
-    const pending = api.turn(command, apiKey, owner.signal);
+    const pending = api.turn(command, { apiKey }, owner.signal);
     owner.abort(apiKey);
     await expect(pending).rejects.toMatchObject({ kind: "cancelled" });
-    await expect(api.turn(command, apiKey, owner.signal)).rejects.toMatchObject({
+    await expect(api.turn(command, { apiKey }, owner.signal)).rejects.toMatchObject({
       kind: "cancelled",
     });
     expect(fetch).toHaveBeenCalledTimes(1);

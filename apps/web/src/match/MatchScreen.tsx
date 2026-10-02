@@ -19,6 +19,7 @@ import { StatusSummary } from "../arena/StatusSummary";
 import { AccountAccess } from "../auth/AccountAccess";
 import { useAccount } from "../auth/context";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
+import { useCredentials } from "../credentials/use-credentials";
 import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
@@ -41,10 +42,29 @@ export function MatchScreen({
 }) {
   const { t } = useTranslation();
   const account = useAccount();
+  const { catalog, state: savedState } = useCredentials(apiBaseUrl, identity);
+  const savedCredentials = catalog.api
+    ? {
+        ...savedState,
+        onRefresh: () => {
+          void catalog.refresh();
+        },
+      }
+    : undefined;
   const [controller] = useState(
     () => new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {})),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  useEffect(() => {
+    if (savedState.phase === "ready") controller.reconcileSavedCredentials(savedState.credentials);
+  }, [
+    controller,
+    savedState.phase,
+    savedState.credentials,
+    state.details?.snapshot.state,
+    state.thinking,
+    state.busy,
+  ]);
   const identitySignal = identity?.signal;
   useEffect(() => {
     const disconnect = controller.connect();
@@ -74,6 +94,7 @@ export function MatchScreen({
       <ArenaSetupScreen
         api={controller.api}
         credentials={controller.credentials}
+        {...(savedCredentials ? { savedCredentials } : {})}
         sandboxEnabled={sandboxEnabled}
         onCreated={(game) => {
           void controller.created(game);
@@ -340,6 +361,11 @@ export function MatchScreen({
               paused={snapshot.state === "paused" && state.phase === "ready"}
               seats={configuration.seats}
               keys={state.keys}
+              selections={state.selections}
+              {...(savedCredentials ? { savedCredentials } : {})}
+              onCredentialChange={(color, value) =>
+                controller.setCredential(color, value, savedState.credentials)
+              }
               rejectedColor={
                 issue?.kind === "provider" && issue.error.code === "provider_auth"
                   ? issue.color

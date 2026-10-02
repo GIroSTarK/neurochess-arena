@@ -1,4 +1,8 @@
-import { aiGameConfigurationSchema, modelDiscoveryRequestSchema } from "@neurochess/contracts";
+import {
+  aiGameConfigurationSchema,
+  type CredentialMetadata,
+  modelDiscoveryRequestSchema,
+} from "@neurochess/contracts";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -22,7 +26,7 @@ import { ArenaSetupScreen } from "./ArenaSetupScreen";
 const cleanup: (() => void)[] = [];
 afterEach(() => cleanup.splice(0).forEach((dispose) => dispose()));
 
-function fixture(models = setupModels) {
+function fixture(models = setupModels, saved?: readonly CredentialMetadata[]) {
   const lifetime = new AbortController();
   const credentials = createSessionCredentials(lifetime.signal);
   cleanup.push(() => lifetime.abort());
@@ -55,11 +59,57 @@ function fixture(models = setupModels) {
         sandboxEnabled
         onCreated={onCreated}
         onReturnToGame={onReturnToGame}
+        {...(saved
+          ? {
+              savedCredentials: {
+                credentials: saved,
+                phase: "ready" as const,
+                onRefresh: () => undefined,
+              },
+            }
+          : {})}
       />
     </StrictMode>,
   );
   return { ...view, credentials, fetch, onCreated, onReturnToGame };
 }
+
+it("uses independently chosen saved and session credentials without returning saved plaintext", async () => {
+  const saved = {
+    credentialId: GAME_ID,
+    provider: "openai" as const,
+    label: "White saved",
+    maskedSuffix: "1234",
+    createdAt: "2026-10-01T00:00:00.000Z",
+  };
+  const { fetch, credentials } = fixture(setupModels, [saved]);
+  const white = within(await screen.findByRole("group", { name: "White" }));
+  await waitFor(() =>
+    expect(white.getByLabelText("Credential source")).toHaveAttribute("aria-disabled", "false"),
+  );
+  expect(white.getByLabelText("Credential source")).toHaveValue("session");
+  await userEvent.selectOptions(white.getByLabelText("Credential source"), GAME_ID);
+  expect(white.queryByLabelText("API key", { exact: true })).not.toBeInTheDocument();
+  await userEvent.click(white.getByRole("button", { name: "Load models" }));
+  await waitFor(() =>
+    expect(white.getByRole("combobox", { name: "Model" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    ),
+  );
+  const discovery = fetch.mock.calls.find(([url]) => requestPath(url) === "/providers/models");
+  expect(JSON.parse(requestBody(discovery?.[1]))).toEqual({
+    provider: "openai",
+    credentialId: GAME_ID,
+  });
+  expect(
+    within(screen.getByRole("group", { name: "Black" })).getByLabelText("API key", { exact: true }),
+  ).toHaveValue("");
+  expect(credentials.require("white", "openai")).toEqual({ credentialId: GAME_ID });
+  await userEvent.selectOptions(white.getByLabelText("Credential source"), "session");
+  expect(white.getByLabelText("API key", { exact: true })).toHaveValue("");
+  expect(() => credentials.require("white", "openai")).toThrow();
+});
 
 async function loadModels(color: "White" | "Black", { typeKey = false } = {}) {
   const user = userEvent.setup();
@@ -190,8 +240,8 @@ describe("Arena setup presentation and validated API handoff", () => {
       },
     });
     expect(JSON.stringify(onCreated.mock.calls)).not.toContain("sentinel");
-    expect(credentials.require("white", "openai")).toBe("White-key-sentinel");
-    expect(credentials.require("black", "openai")).toBe("Black-key-sentinel");
+    expect(credentials.require("white", "openai")).toEqual({ apiKey: "White-key-sentinel" });
+    expect(credentials.require("black", "openai")).toEqual({ apiKey: "Black-key-sentinel" });
     for (const [input, init] of fetch.mock.calls) {
       expect(input instanceof Request ? input.url : input.toString()).not.toContain("sentinel");
       if (requestPath(input) !== "/providers/models") {

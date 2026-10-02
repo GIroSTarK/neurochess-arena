@@ -240,6 +240,7 @@ describe("account presentation", () => {
       "GET /api/auth/get-session": () => jsonResponse(session),
       "GET /profile": () => jsonResponse(profile),
       "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
       "POST /api/auth/sign-out": () =>
         jsonResponse(
           { code: "AUTH_UNAVAILABLE", message: "unsafe-canary", requestId: "test" },
@@ -321,6 +322,7 @@ describe("account presentation", () => {
       "GET /api/auth/get-session": () => jsonResponse(current),
       "GET /profile": () => jsonResponse(profile),
       "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
     });
     vi.stubGlobal("fetch", http.fetch);
     renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);

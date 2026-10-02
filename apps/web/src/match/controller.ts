@@ -1,6 +1,7 @@
 import {
   type AiControlledTurnCommand,
   type ChessColor,
+  type CredentialMetadata,
   type GameDetails,
   type GameInvocations,
   gameParamsSchema,
@@ -28,6 +29,7 @@ export interface MatchState {
   thinking: boolean;
   busy: boolean;
   keys: Record<ChessColor, boolean>;
+  selections: Record<ChessColor, string>;
   keyEpoch: number;
   speed: number;
   issue: MatchIssue | null;
@@ -87,6 +89,7 @@ export class MatchController {
     thinking: false,
     busy: false,
     keys: { white: false, black: false },
+    selections: { white: "session", black: "session" },
     keyEpoch: 0,
     speed: 1500,
     issue: null,
@@ -158,6 +161,7 @@ export class MatchController {
       phase: "loading",
       details: null,
       keys: { white: false, black: false },
+      selections: { white: "session", black: "session" },
       keyEpoch: this.state.keyEpoch + 1,
       thinking: false,
       busy: false,
@@ -234,16 +238,62 @@ export class MatchController {
   }
   private refreshKeys() {
     const keys = { white: false, black: false };
+    const selections = { white: "session", black: "session" };
     for (const color of colors) {
       const seat = this.state.details?.configuration?.seats[color];
       if (seat?.type !== "ai") continue;
       try {
-        keys[color] = Boolean(this.credentials?.require(color, seat.provider));
+        const source = this.credentials?.require(color, seat.provider);
+        keys[color] = Boolean(source);
+        if (source && "credentialId" in source) selections[color] = source.credentialId;
       } catch {
         /* Missing keys are expected after recovery. */
       }
     }
-    this.publish({ keys });
+    this.publish({ keys, selections });
+  }
+  setCredential(color: ChessColor, credential: string, saved: readonly CredentialMetadata[]) {
+    const seat = this.state.details?.configuration?.seats[color];
+    if (
+      seat?.type !== "ai" ||
+      !this.credentials ||
+      this.state.thinking ||
+      this.state.busy ||
+      this.state.details?.snapshot.state !== "paused"
+    ) {
+      return;
+    }
+    if (
+      credential !== "session" &&
+      !saved.some((item) => item.credentialId === credential && item.provider === seat.provider)
+    ) {
+      return;
+    }
+    this.credentials.remove(color);
+    if (credential !== "session") this.credentials.setSaved(color, seat.provider, credential);
+    this.refreshKeys();
+  }
+  reconcileSavedCredentials(saved: readonly CredentialMetadata[]) {
+    if (this.state.details?.snapshot.state !== "paused" || this.state.thinking || this.state.busy) {
+      return;
+    }
+    let changed = false;
+    for (const color of colors) {
+      const selected = this.state.selections[color];
+      const seat = this.state.details.configuration?.seats[color];
+      if (
+        selected !== "session" &&
+        seat?.type === "ai" &&
+        !saved.some((item) => item.credentialId === selected && item.provider === seat.provider)
+      ) {
+        this.credentials?.remove(color);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.refreshKeys();
+      this.publish({ keyEpoch: this.state.keyEpoch + 1 });
+    }
   }
   setKey(color: ChessColor, value: string) {
     const seat = this.state.details?.configuration?.seats[color];

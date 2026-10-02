@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { createAuthApi } from "../api/auth-client";
+import { CredentialsScreen } from "../credentials/CredentialsScreen";
 import { MatchScreen } from "../match/MatchScreen";
 import { Button } from "../ui/Button";
 
@@ -28,11 +29,20 @@ export function AccountApplication({
   useEffect(() => controller.connect(), [controller]);
   const authPage =
     window.location.pathname.startsWith("/auth/") || entry.verified || entry.error !== null;
-  const profilePage = window.location.pathname === "/account";
+  const credentialPage = window.location.pathname === "/account/credentials";
+  const profilePage = window.location.pathname === "/account" || credentialPage;
   return (
     <AccountContext value={{ controller, state }}>
       {authPage ? (
         <AuthScreen entry={entry} sandboxEnabled={sandboxEnabled} />
+      ) : state.phase === "account" && credentialPage ? (
+        <CredentialsScreen
+          key={state.revision}
+          apiBaseUrl={apiBaseUrl}
+          identity={controller.identity(false)}
+          sandboxEnabled={sandboxEnabled}
+          returnTo={entry.returnTo}
+        />
       ) : state.phase === "account" && (profilePage || !state.profile?.completed) ? (
         <ProfileScreen
           key={state.revision}

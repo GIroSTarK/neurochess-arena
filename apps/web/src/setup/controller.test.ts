@@ -13,6 +13,14 @@ const cleanup: (() => void)[] = [];
 afterEach(() => {
   cleanup.splice(0).forEach((dispose) => dispose());
 });
+const credentialId = "61111111-1111-4111-8111-111111111111";
+const saved = {
+  credentialId,
+  provider: "openai" as const,
+  label: "Arena",
+  maskedSuffix: "1234",
+  createdAt: "2026-10-01T00:00:00.000Z",
+};
 
 async function fixture() {
   const lifetime = new AbortController();
@@ -45,6 +53,63 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it("selects saved references per seat, cancels obsolete discovery and invalidates removed selections", async () => {
+    const { controller, api, credentials } = await fixture();
+    controller.updateSavedCredentials([saved]);
+    controller.setCredential("white", credentialId);
+    const old = deferred<ModelDiscoveryResult>();
+    api.discover.mockReturnValueOnce(old.promise);
+    const pending = controller.discover("white");
+    await vi.waitFor(() => expect(api.discover).toHaveBeenCalledOnce());
+    expect(api.discover.mock.calls[0]?.[0]).toEqual({ provider: "openai", credentialId });
+    controller.setCredential("white", "session");
+    expect(api.discover.mock.calls[0]?.[1].aborted).toBe(true);
+    old.resolve({ ok: true, models: setupModels("openai") });
+    await pending;
+    expect(controller.getSnapshot().seats.white.models).toEqual([]);
+    controller.setCredential("white", credentialId);
+    await controller.discover("white");
+    controller.setModel("white", "fixture/model-a");
+    controller.setKey("black", "black-raw-key");
+    await controller.discover("black");
+    controller.setModel("black", "fixture/model-a");
+    expect(setupConfiguration(controller.getSnapshot())).not.toBeNull();
+    controller.updateSavedCredentials([]);
+    expect(setupConfiguration(controller.getSnapshot())).toBeNull();
+    expect(() => credentials.require("white", "openai")).toThrow();
+    expect(credentials.require("black", "openai")).toEqual({ apiKey: "black-raw-key" });
+  });
+  it("invalidates a selection removed during creation before editing can start another game", async () => {
+    const { controller, api, credentials } = await fixture();
+    controller.updateSavedCredentials([saved]);
+    controller.setCredential("white", credentialId);
+    await controller.discover("white");
+    controller.setModel("white", "fixture/model-a");
+    controller.setKey("black", "black-raw-key");
+    await controller.discover("black");
+    controller.setModel("black", "fixture/model-a");
+    const creation = deferred<GameDetails>();
+    api.create.mockReturnValueOnce(creation.promise);
+    const starting = controller.start();
+    await vi.waitFor(() => expect(api.create).toHaveBeenCalledOnce());
+    controller.updateSavedCredentials([]);
+    creation.reject(new ApiFailure("network"));
+    expect(await starting).toBeNull();
+    expect(controller.getSnapshot().issue?.code).toBe("creation_uncertain");
+    await controller.checkExisting();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "editing",
+      seats: {
+        white: { credential: "session", keyReady: false, issue: { code: "provider_auth" } },
+        black: { modelId: "fixture/model-a" },
+      },
+    });
+    expect(setupConfiguration(controller.getSnapshot())).toBeNull();
+    expect(() => credentials.require("white", "openai")).toThrow();
+    expect(credentials.require("black", "openai")).toEqual({ apiKey: "black-raw-key" });
+    expect(await controller.start()).toBeNull();
+    expect(api.create).toHaveBeenCalledOnce();
+  });
   it.each(["white", "black"] as const)(
     "creates a %s human with only the opponent's key",
     async (humanColor) => {
@@ -114,7 +179,7 @@ describe("independent AI setup", () => {
       JSON.stringify({ state: controller.getSnapshot(), game, creation: api.create.mock.calls }),
     ).not.toContain("sentinel-key");
     disconnect();
-    expect(credentials.require("white", "openai")).toBe("white-sentinel-key");
+    expect(credentials.require("white", "openai")).toEqual({ apiKey: "white-sentinel-key" });
   });
 
   it("shares only bootstrap between simultaneous discoveries and suppresses duplicate clicks", async () => {
@@ -150,7 +215,7 @@ describe("independent AI setup", () => {
       await request;
       expect(controller.getSnapshot().seats.white.models).toEqual([]);
       if (change === "provider") expect(() => credentials.require("white", "openai")).toThrow();
-      else expect(credentials.require("white", "openai")).toBe("replacement-key");
+      else expect(credentials.require("white", "openai")).toEqual({ apiKey: "replacement-key" });
     },
   );
 
