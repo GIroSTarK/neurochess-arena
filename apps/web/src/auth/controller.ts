@@ -19,6 +19,7 @@ export interface AccountState {
   profile: ProfileResponse | null;
   revision: number;
   issue: AccountErrorCode | null;
+  deletion: "none" | "pending" | "deleted" | "uncertain";
 }
 
 const intentKey = "neurochess.account-intent";
@@ -47,6 +48,7 @@ export class AccountController {
     profile: null,
     revision: 0,
     issue: null,
+    deletion: "none",
   };
   private readonly listeners = new Set<() => void>();
   private lifetime = new AbortController();
@@ -233,18 +235,23 @@ export class AccountController {
     };
   }
   async chooseGuest() {
+    this.publish({ deletion: "none" });
     this.expectedAccount = false;
     rememberIntent(false);
     this.cancelCheck();
     this.invalidate();
     await this.refresh();
   }
-  async transition<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async transition<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    deleting = false,
+  ): Promise<T> {
     this.operation?.abort();
     this.cancelCheck();
     const abort = new AbortController();
     this.operation = abort;
     this.expectedAccount = true;
+    this.publish({ deletion: deleting ? "pending" : "none" });
     rememberIntent(true);
     this.invalidate("changing");
     this.channel?.postMessage("changing");
@@ -268,6 +275,24 @@ export class AccountController {
       await this.transition((signal) => this.api.signOut(signal, expectedAccount));
     } catch (error) {
       if (accountError(error) !== "cancelled") this.publish({ issue: accountError(error) });
+    }
+  }
+  async deleteAccount() {
+    const expectedAccount = this.state.session?.user.id;
+    if (!expectedAccount || this.operation || this.state.deletion === "pending") return;
+    try {
+      await this.transition((signal) => this.api.deleteAccount(signal, expectedAccount), true);
+      this.publish({ deletion: "deleted" });
+    } catch (error) {
+      const code = accountError(error);
+      if (code === "cancelled") {
+        if (this.getSnapshot().deletion === "pending") this.publish({ deletion: "uncertain" });
+        return;
+      }
+      this.publish({
+        deletion: code === "AUTH_UNAVAILABLE" ? "uncertain" : "none",
+        issue: code,
+      });
     }
   }
   async saveProfile(value: ProfileUpdateRequest) {

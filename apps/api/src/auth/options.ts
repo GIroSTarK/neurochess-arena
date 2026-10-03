@@ -1,10 +1,12 @@
 import type { BetterAuthOptions } from "better-auth";
+import { createEmailVerificationToken } from "better-auth/api";
 
 import type { ApiEnvironment } from "../env.js";
 
 import { AUTH_BASE_PATH, AUTH_COOKIE_PREFIX, AUTH_IP_HEADER } from "./constants.js";
 import { authEmail, type AuthEmailSender } from "./email.js";
 import { discardedOAuthTokens, oauthPolicy, oauthProviders } from "./oauth.js";
+import { accountBoundVerification } from "./verification.js";
 
 export type AuthEnvironment = Pick<
   ApiEnvironment,
@@ -27,7 +29,7 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
     secret: environment.BETTER_AUTH_SECRET,
     trustedOrigins: [environment.WEB_ORIGIN],
     socialProviders: oauthProviders(environment),
-    plugins: [oauthPolicy()],
+    plugins: [oauthPolicy(), accountBoundVerification()],
     onAPIError: { errorURL: `${environment.WEB_ORIGIN}/?auth=oauth-error` },
     emailAndPassword: {
       enabled: Boolean(sender),
@@ -59,11 +61,24 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
         ? {
             sendVerificationEmail: async ({
               user,
-              token,
             }: {
-              user: { email: string };
+              user: { id: string; email: string };
               token: string;
-            }) => sender.send(authEmail(environment, "verification", user.email, token)),
+            }) =>
+              sender.send(
+                authEmail(
+                  environment,
+                  "verification",
+                  user.email,
+                  await createEmailVerificationToken(
+                    environment.BETTER_AUTH_SECRET,
+                    user.email,
+                    undefined,
+                    3600,
+                    { accountId: user.id },
+                  ),
+                ),
+              ),
           }
         : {}),
     },
@@ -97,6 +112,7 @@ export function authOptions(environment: AuthEnvironment, sender?: AuthEmailSend
         "/get-session": { window: 1, max: 60 },
         "/sign-up/email": { window: 60, max: 3 },
         "/sign-in/email": { window: 60, max: 10 },
+        "/delete-account": { window: 60, max: 3 },
         "/send-verification-email": { window: 60, max: 3 },
         "/request-password-reset": { window: 60, max: 3 },
         "/reset-password": { window: 60, max: 10 },

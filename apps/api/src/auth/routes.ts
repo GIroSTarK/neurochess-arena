@@ -1,5 +1,6 @@
 import {
   authAcceptedResponseSchema,
+  authDeleteAccountRequestSchema,
   authEmailRequestSchema,
   authEmptyRequestSchema,
   type AuthErrorCode,
@@ -95,6 +96,7 @@ export async function registerAuthRoutes(
     const allowed =
       (request.method === "GET" && path === "/get-session") ||
       (request.method === "POST" && path === "/sign-out") ||
+      (request.method === "POST" && path === "/delete-account") ||
       (request.method === "POST" &&
         path === "/sign-in/social" &&
         Boolean(options.auth.oauthProviders?.length)) ||
@@ -127,7 +129,9 @@ export async function registerAuthRoutes(
       const bodySchema =
         path === "/sign-in/social"
           ? authOAuthSignInRequestSchema
-          : (emailRequest(path) ?? authEmptyRequestSchema);
+          : path === "/delete-account"
+            ? authDeleteAccountRequestSchema
+            : (emailRequest(path) ?? authEmptyRequestSchema);
       if (
         !querySchema.safeParse(request.query).success ||
         (request.method === "POST" &&
@@ -163,9 +167,16 @@ export async function registerAuthRoutes(
       headers.set(AUTH_IP_HEADER, request.ip);
       // Email flows do not inherit another account's cookie. Only explicit sign-in
       // creates a session; verification and password recovery never auto-sign in.
-      if (path !== "/get-session" && path !== "/sign-out" && !isCallback) headers.delete("cookie");
+      if (
+        path !== "/get-session" &&
+        path !== "/sign-out" &&
+        path !== "/delete-account" &&
+        !isCallback
+      ) {
+        headers.delete("cookie");
+      }
       try {
-        if (path === "/sign-out") {
+        if (path === "/sign-out" || path === "/delete-account") {
           const expected = expectedAccountSchema.safeParse(
             request.headers["x-neurochess-expected-account"],
           );
@@ -243,8 +254,9 @@ export async function registerAuthRoutes(
           }
           projected = result;
         } else if (path === "/get-session") projected = authSessionResponseSchema.parse(payload);
-        else if (path === "/sign-out") projected = authSignOutResponseSchema.parse(payload);
-        else if (path === "/sign-in/email") {
+        else if (path === "/sign-out" || path === "/delete-account") {
+          projected = authSignOutResponseSchema.parse(payload);
+        } else if (path === "/sign-in/email") {
           signInResponseSchema.parse(payload);
           projected = { success: true };
         } else {
@@ -291,6 +303,8 @@ function safeOAuthError(code: string | null): AuthErrorCode {
 
 function safeLibraryError(code: string): AuthErrorCode | undefined {
   switch (code) {
+    case "AUTH_REAUTH_REQUIRED":
+      return "AUTH_REAUTH_REQUIRED";
     case "EMAIL_NOT_VERIFIED":
       return "AUTH_EMAIL_NOT_VERIFIED";
     case "INVALID_EMAIL_OR_PASSWORD":

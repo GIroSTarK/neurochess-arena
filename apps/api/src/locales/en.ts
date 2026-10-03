@@ -11,6 +11,7 @@ export const profileErrorMessages: Readonly<Record<ProfileErrorCode, string>> = 
 export const authErrorMessages: Readonly<Record<AuthErrorCode, string>> = {
   AUTH_INVALID_REQUEST: "The authentication request could not be accepted.",
   AUTH_UNAUTHORIZED: "A valid account session is required.",
+  AUTH_REAUTH_REQUIRED: "Sign in again before deleting your account.",
   AUTH_FORBIDDEN: "This authentication request is not allowed.",
   AUTH_NOT_FOUND: "This authentication action is not available.",
   AUTH_RATE_LIMITED: "Too many authentication requests. Try again later.",

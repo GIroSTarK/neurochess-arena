@@ -93,6 +93,18 @@ export const en = {
     },
   },
   account: {
+    deletion: {
+      title: "Delete account",
+      hint: "Permanently remove your account and its data. Sign in within the last five minutes before confirming.",
+      description:
+        "Delete your profile, saved provider keys, all owned games including unfinished games, moves, invocation history, and login and recovery records. Every device will be signed out. This cannot be undone. Separate guest games and other accounts are unaffected. This removes data from the application database; it does not remove external backups or undo provider requests or charges.",
+      confirm: "Permanently delete account",
+      signIn: "Sign in again",
+      deleted: "Account deleted",
+      done: "Your account and its associated application data have been deleted. You are signed out.",
+      uncertain:
+        "We could not confirm account deletion. This does not mean the account was kept or deleted. Check your connection and sign-in status before explicitly trying again.",
+    },
     label: "Account",
     signIn: "Sign in",
     signOut: "Sign out",
@@ -153,6 +165,8 @@ export const en = {
       cancelled: "This action was cancelled. Try again.",
       AUTH_INVALID_REQUEST: "Check the fields and try again.",
       AUTH_UNAUTHORIZED: "Sign in again to continue.",
+      AUTH_REAUTH_REQUIRED:
+        "Sign in again, then return to Account and confirm deletion within five minutes.",
       AUTH_FORBIDDEN: "This request could not be authorized. Return to Arena and try again.",
       AUTH_NOT_FOUND: "This sign-in method is not available on this server. Try another method.",
       AUTH_RATE_LIMITED: "Too many attempts. Wait a minute before trying again.",

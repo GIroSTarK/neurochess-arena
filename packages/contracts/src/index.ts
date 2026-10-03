@@ -144,6 +144,7 @@ export {
   authAcceptedResponseSchema,
   authSuccessResponseSchema,
   authEmptyRequestSchema,
+  authDeleteAccountRequestSchema,
   authOAuthProviderSchema,
   authOAuthSignInRequestSchema,
   authOAuthSignInResponseSchema,

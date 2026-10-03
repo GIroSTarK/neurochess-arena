@@ -35,7 +35,17 @@ export function AccountApplication({
   const historyPage = window.location.pathname === "/history";
   return (
     <AccountContext value={{ controller, state }}>
-      {authPage ? (
+      {state.deletion === "deleted" && state.phase !== "account" ? (
+        <AccountFrame title={t("account.deletion.deleted")} sandboxEnabled={sandboxEnabled}>
+          <p role="status">{t("account.deletion.done")}</p>
+          <Button
+            variant="secondary"
+            onClick={() => void controller.chooseGuest().then(() => window.location.assign("/"))}
+          >
+            {t("account.guest")}
+          </Button>
+        </AccountFrame>
+      ) : authPage ? (
         <AuthScreen entry={entry} sandboxEnabled={sandboxEnabled} />
       ) : historyPage && state.phase === "guest" ? (
         <GuestHistory sandboxEnabled={sandboxEnabled} />
@@ -79,6 +89,9 @@ export function AccountApplication({
           )}
           sandboxEnabled={sandboxEnabled}
         >
+          {state.deletion === "uncertain" ? (
+            <p role="alert">{t("account.deletion.uncertain")}</p>
+          ) : null}
           {state.issue ? <p role="alert">{t(`account.errors.${state.issue}`)}</p> : null}
           {state.phase === "required" || state.phase === "guest" ? (
             <>

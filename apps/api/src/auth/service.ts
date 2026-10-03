@@ -1,11 +1,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import {
+  authEmailRequestSchema,
   type AuthOAuthProvider,
   authResetPasswordRequestSchema,
   authSignInRequestSchema,
 } from "@neurochess/contracts";
 import {
+  AccountDeletionSessionError,
+  type AuthAccountActions,
+  AuthAccountUnavailableError,
   createAuthDatabaseAdapter,
   type DatabaseConnection,
   withAuthUserLock,
@@ -15,8 +19,10 @@ import { z } from "zod";
 
 import type { AccountPrincipal } from "../identity/principal.js";
 
+import { accountDeletion } from "./account-deletion.js";
 import type { AuthEmail, AuthEmailSender } from "./email.js";
 import { AUTH_BASE_PATH, type AuthEnvironment, authOptions } from "./options.js";
+import { verificationIdentity } from "./verification.js";
 
 export interface AccountAuth {
   readonly baseURL: string;
@@ -44,9 +50,14 @@ export function createAccountAuth(
       }
     : undefined;
   const options = authOptions(environment, bufferedSender);
-  const createAuth = (adapter: ReturnType<typeof createAuthDatabaseAdapter>) =>
+  const createAuth = (
+    adapter: ReturnType<typeof createAuthDatabaseAdapter>,
+    actions?: AuthAccountActions,
+  ) =>
     betterAuth({
       ...options,
+      session: { ...options.session, ...(actions ? { disableSessionRefresh: true } : {}) },
+      plugins: [...options.plugins, accountDeletion(actions)],
       database: adapter,
     });
   const auth = createAuth(createAuthDatabaseAdapter(database));
@@ -58,19 +69,35 @@ export function createAccountAuth(
 
   async function handleRequest(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    const deleting = path === `${AUTH_BASE_PATH}/delete-account`;
     let userId: string | undefined;
-    if (request.method === "POST" && path === `${AUTH_BASE_PATH}/sign-out`) {
+    if (request.method === "GET" && path === `${AUTH_BASE_PATH}/verify-email`) {
+      userId = (
+        await verificationIdentity(
+          new URL(request.url).searchParams.get("token") ?? "",
+          environment.BETTER_AUTH_SECRET,
+        )
+      )?.accountId;
+    }
+    if (request.method === "POST" && (path === `${AUTH_BASE_PATH}/sign-out` || deleting)) {
       userId = (await getSession(request.headers))?.user.id;
     }
     if (
       sender &&
       request.method === "POST" &&
-      (path === `${AUTH_BASE_PATH}/sign-in/email` || path === `${AUTH_BASE_PATH}/reset-password`)
+      (path === `${AUTH_BASE_PATH}/sign-in/email` ||
+        path === `${AUTH_BASE_PATH}/reset-password` ||
+        path === `${AUTH_BASE_PATH}/request-password-reset`)
     ) {
       const body: unknown = await request.clone().json();
       const context = await auth.$context;
-      if (path === `${AUTH_BASE_PATH}/sign-in/email`) {
-        const parsed = authSignInRequestSchema.safeParse(body);
+      if (
+        path === `${AUTH_BASE_PATH}/sign-in/email` ||
+        path === `${AUTH_BASE_PATH}/request-password-reset`
+      ) {
+        const parsed = (
+          path.endsWith("/sign-in/email") ? authSignInRequestSchema : authEmailRequestSchema
+        ).safeParse(body);
         if (parsed.success) {
           userId = (await context.internalAdapter.findUserByEmail(parsed.data.email))?.user.id;
         }
@@ -87,15 +114,32 @@ export function createAccountAuth(
     }
     if (!userId) return auth.handler(request);
     try {
-      return await withAuthUserLock(database, z.uuid().parse(userId), async (adapter) => {
-        const response = await createAuth(adapter).handler(request);
+      return await withAuthUserLock(database, z.uuid().parse(userId), async (adapter, actions) => {
+        const response = await createAuth(adapter, deleting ? actions : undefined).handler(request);
         // The library converts adapter errors into responses. Roll back password,
         // token and session changes together when it reports a server failure.
-        if (response.status >= 500) throw new AuthTransactionFailure(response);
+        if (response.status >= 500) {
+          throw new AuthTransactionFailure(response);
+        }
         return response;
       });
     } catch (error) {
       if (error instanceof AuthTransactionFailure) return error.response;
+      if (
+        path === `${AUTH_BASE_PATH}/verify-email` &&
+        error instanceof AuthAccountUnavailableError
+      ) {
+        return Response.json({ code: "INVALID_TOKEN" }, { status: 401 });
+      }
+      if (
+        deleting &&
+        (error instanceof AuthAccountUnavailableError ||
+          error instanceof AccountDeletionSessionError)
+      ) {
+        const code =
+          error instanceof AccountDeletionSessionError ? error.code : "AUTH_UNAUTHORIZED";
+        return Response.json({ code }, { status: code === "AUTH_REAUTH_REQUIRED" ? 403 : 401 });
+      }
       throw error;
     }
   }
