@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-10-01
+**Last updated:** 2026-10-03
 
 ## Architectural drivers
 
@@ -401,6 +401,10 @@ Cost calculation uses provider-reported token counts and versioned pricing metad
 ## API shape
 
 Private account history uses `GET /games/history` with bounded keyset pagination over terminal public games. A read-only repeatable-read transaction checks the account session/profile, selects at most one page plus a lookahead row, and batches the corresponding participant read. The summary validates lifecycle and configuration without loading PGN, moves, or invocations; opening its existing private game URL still performs full-history restoration. Ordering uses immutable terminal `updated_at` plus UUID, preserving PostgreSQL microseconds in the cursor. A partial index supports the owner-scoped query. Cursor contents never choose an owner or grant read authority. The web clears list state on identity changes and fetches credentials only for setup/unfinished play, keeping terminal replay read-only.
+
+Terminal history deletion uses the same account-before-game write lock order. The SQL DELETE repeats the account, public-mode and terminal-state predicates; existing foreign-key cascades remove participants, moves, receipts, logical turns, invocation attempts, reservations and controllers in the same transaction. Individual deletion locks only an owned public game and rejects active/paused state. Clear takes the account lock before selecting its deletion set, ordering the boundary with creation, lifecycle completion and provider outcomes across API instances. Session/profile checks run after lock waits and after deletion so expiry or failure rolls back all cascades. No retained deletion receipts or tombstones are needed under the [repeat-request policy](product.md#private-history-and-deletion).
+
+A repeatable-read history/replay request already in progress may complete with its consistent pre-deletion view; reads begun after deletion commits return no deleted records. A late provider result can update only its surviving invocation/reservation under the existing fences and cannot recreate a deleted game. The web invalidates old pages before refreshing after a successful deletion, resets cursor navigation and clears confirmations/requests on identity changes or pagehide. Account deletion and shared-room retention remain separate work.
 
 The exact paths remain an implementation detail, but the API needs these capability groups:
 

@@ -105,6 +105,7 @@ export interface GameReader {
 }
 
 export interface GameTransaction extends GameReader {
+  deleteAccountHistory(userId: string, gameId?: string): Promise<void>;
   getAiController(
     gameId: string,
   ): Promise<{ controllerId: string | null; expired: boolean } | undefined>;
@@ -360,6 +361,19 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            async deleteAccountHistory(userId, gameId) {
+              await tx
+                .delete(games)
+                .where(
+                  and(
+                    eq(games.ownerUserId, userId),
+                    eq(games.isSandbox, false),
+                    isNotNull(games.mode),
+                    inArray(games.state, ["completed", "aborted"]),
+                    gameId === undefined ? undefined : eq(games.id, gameId),
+                  ),
+                );
+            },
             async getAiController(gameId) {
               const [lease] = await tx
                 .select({

@@ -8,6 +8,7 @@ import {
   type AiProvider,
   type AiTurnCommand,
   type GameDetails,
+  type GameHistoryDeletedResponse,
   type GameHistoryQuery,
   gameHistoryQuerySchema,
   type GameHistoryResponse,
@@ -53,9 +54,12 @@ import { persistCommand, positionOf, transportSnapshot } from "./command-persist
 import { configurationOf, participantsFor } from "./configuration.js";
 import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+import { createHistoryDeletion } from "./history-deletion.js";
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
+  deleteGame(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
+  clearHistory(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
   history(principal: Principal, query: GameHistoryQuery): Promise<GameHistoryResponse>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
@@ -300,6 +304,7 @@ export function createGameService(
   }
 
   return {
+    ...createHistoryDeletion(repository),
     async history(principal, input) {
       if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");
       const parsed = gameHistoryQuerySchema.safeParse(input);

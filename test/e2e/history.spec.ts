@@ -217,6 +217,58 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
     document.documentElement.style.fontSize = "100%";
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  const clearing = page.getByRole("button", { name: "Clear history", exact: true });
+  await clearing.click();
+  const confirmation = page.getByRole("dialog", { name: "Clear all finished games?" });
+  await expect(confirmation.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await expect(confirmation).toContainText("every page");
+  await page.keyboard.press("Escape");
+  await expect(clearing).toBeFocused();
+  await clearing.click();
+  for (const width of testInfo.project.name === "desktop" ? [1024, 1440] : [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await setPseudoLocalization(page, true);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+    });
+    expect(
+      await confirmation.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.keyboard.press("Tab");
+    await confirmation.getByRole("button", { name: /Cancel/ }).focus();
+    await expect(confirmation.getByRole("button", { name: /Cancel/ })).toBeInViewport();
+  }
+  await setPseudoLocalization(page, false);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "100%";
+  });
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("clear-history-confirmation.png"),
+    fullPage: true,
+  });
+  let failClear = true;
+  await page.route("**/games/history/clear", async (route) => {
+    if (failClear) {
+      failClear = false;
+      await route.fulfill({ status: 200, json: {} });
+    } else await route.continue();
+  });
+  await confirmation.getByRole("button", { name: "Clear history", exact: true }).click();
+  await expect(confirmation.getByRole("alert")).toContainText("Deletion could not be confirmed");
+  expect((await page.request.get(`${API_ORIGIN}/games/${ids[0]!}/pgn`)).status()).toBe(200);
+  await confirmation.getByRole("button", { name: "Clear history", exact: true }).click();
+  await expect(page.getByText("Finished game history cleared.")).toBeVisible();
+  await expect(rows).toHaveCount(0);
+  await expect(page.getByText(/No completed or aborted games yet/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Finished games" })).toBeFocused();
+  await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
+  for (const id of ids) {
+    expect((await page.request.get(`${API_ORIGIN}/games/${id}/pgn`)).status()).toBe(404);
+  }
 });
 
 test("guest guidance and account privacy survive a switch to another account", async ({ page }) => {
@@ -240,4 +292,118 @@ test("guest guidance and account privacy survive a switch to another account", a
   expect((await page.request.get(`${API_ORIGIN}/games/${original.gameId}/replay`)).status()).toBe(
     404,
   );
+});
+
+test("individual deletion retries an uncertain acknowledgement and removes private URL access while preserving unfinished play and keys", async ({
+  page,
+  expectedGameDetails404s,
+}, testInfo) => {
+  const account = await credentialAccount(page);
+  const deleted = await stop(page);
+  const retained = await stop(page);
+  const active = await create(page);
+  const pause = await page.request.post(`${API_ORIGIN}/games/${active.gameId}/lifecycle`, {
+    headers,
+    data: {
+      gameId: active.gameId,
+      expectedVersion: active.version,
+      commandId: randomUUID(),
+      action: "pause",
+    },
+  });
+  expect(pause.ok()).toBe(true);
+  const paused = gameSnapshotSchema.parse(await pause.json());
+  const saved = await page.request.post(API_ORIGIN + "/credentials", {
+    headers,
+    data: {
+      credentialId: randomUUID(),
+      provider: "openai",
+      label: "Keep this key",
+      apiKey: "history-fixture-key",
+      save: true,
+    },
+  });
+  expect(saved.status()).toBe(201);
+  const keysBefore: unknown = await (await page.request.get(API_ORIGIN + "/credentials")).json();
+  await page.goto("/history");
+  const row = page
+    .getByRole("listitem")
+    .filter({ has: page.locator(`a[href="/?game=${deleted.gameId}"]`) });
+  const trigger = row.getByRole("button", { name: /Delete game/ });
+  await expect(trigger).toHaveAccessibleName(new RegExp(deleted.gameId));
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Delete this game?" });
+  await expect(dialog).toContainText(deleted.gameId);
+  await expect(dialog).toContainText("fixture/model-a");
+  await expect(dialog).not.toContainText(retained.gameId);
+  const cancel = dialog.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Delete game", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(cancel).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("delete-game-confirmation.png"),
+    fullPage: true,
+  });
+  await cancel.click();
+  await expect(trigger).toBeFocused();
+  expect((await page.request.get(`${API_ORIGIN}/games/${deleted.gameId}/pgn`)).status()).toBe(200);
+  let writes = 0;
+  await page.route(`**/games/${deleted.gameId}/delete`, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ gameId: deleted.gameId, confirm: true });
+    writes++;
+    if (writes === 1) {
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      await route.fulfill({ status: 200, json: {} });
+    } else await route.continue();
+  });
+  await trigger.click();
+  await dialog.getByRole("button", { name: "Delete game", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Deletion could not be confirmed");
+  expect((await page.request.get(`${API_ORIGIN}/games/${deleted.gameId}/pgn`)).status()).toBe(404);
+  await dialog.getByRole("button", { name: "Delete game", exact: true }).click();
+  await expect(page.getByText("Game deleted.")).toBeVisible();
+  await expect(row).toHaveCount(0);
+  await expect(
+    page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
+  ).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Finished games" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Finished games" })).toHaveAccessibleDescription(
+    "Game deleted.",
+  );
+  expect(writes).toBe(2);
+  for (const suffix of ["", "/details", "/replay", "/pgn", "/invocations"]) {
+    expect(
+      (await page.request.get(`${API_ORIGIN}/games/${deleted.gameId}${suffix}`)).status(),
+    ).toBe(404);
+  }
+  expectedGameDetails404s.add(`${API_ORIGIN}/games/${deleted.gameId}/details`);
+  await page.goto(`/?game=${deleted.gameId}`);
+  await expect(
+    page.locator("p").filter({
+      hasText: "This private game is unavailable to your session. Keys have been cleared.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download PGN" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
+  await page.goto("/history");
+  await expect(page.locator(`a[href="/?game=${retained.gameId}"]`)).toBeVisible();
+  await page.getByRole("button", { name: "Clear history", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Clear history", exact: true })
+    .click();
+  await expect(page.getByText(/No completed or aborted games yet/)).toBeVisible();
+  expect(await (await page.request.get(API_ORIGIN + "/credentials")).json()).toEqual(keysBefore);
+  expect(await (await page.request.get(API_ORIGIN + "/profile")).json()).toMatchObject({
+    username: account.username,
+  });
+  expect(
+    gameSnapshotSchema.parse(
+      await (await page.request.get(`${API_ORIGIN}/games/${active.gameId}`)).json(),
+    ),
+  ).toEqual(paused);
 });

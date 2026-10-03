@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-03
 
 ## Vision
 
@@ -100,6 +100,8 @@ Every authentication method uses the same username onboarding requirement before
 Account history lists completed and aborted public games together, newest first, with explicit state/result labels and private replay access. Keep active/paused recovery separate. Sandbox and temporary guest records never appear in account history.
 
 Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
+
+Game deletion and history clearing have separate explicit confirmations describing the removed game data, with Cancel initially focused. An individual deletion can be repeated safely; a missing or out-of-scope game has the same successful response without revealing its existence. Clear-history includes every page and serializes with that account's game writes: games finished before the clear acquires the account lock are removed; games finishing afterward remain. Each explicitly repeated clear takes a new boundary. Neither operation removes unfinished games, saved credentials, profiles, separate guest games, or another account's data. A failed acknowledgement requires an explicit refresh or retry; the browser never automatically retries deletion.
 
 ## Saved credential use and revocation
 

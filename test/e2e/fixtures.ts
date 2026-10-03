@@ -16,8 +16,12 @@ import { API_ORIGIN } from "./environment";
 
 export { expect } from "@playwright/test";
 
-export const test = base.extend({
-  page: async ({ page }, use) => {
+export const test = base.extend<{ expectedGameDetails404s: Set<string> }>({
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
+  expectedGameDetails404s: async ({}, use) => {
+    await use(new Set<string>());
+  },
+  page: async ({ page, expectedGameDetails404s }, use) => {
     await page.context().addCookies([
       {
         name: "neurochess_test_client",
@@ -66,11 +70,15 @@ export const test = base.extend({
           /https:\/\/(?:lh3.googleusercontent.com|avatars.githubusercontent.com)\//.test(
             message.location().url,
           ) && message.text().includes("net::ERR_FAILED");
+        const deletedPrivateGame =
+          message.text().includes("404 (Not Found)") &&
+          expectedGameDetails404s.delete(message.location().url);
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
           !accountRejection &&
-          !avatarUnavailable
+          !avatarUnavailable &&
+          !deletedPrivateGame
         ) {
           errors.push("Application console " + message.type());
         }
@@ -79,6 +87,7 @@ export const test = base.extend({
     try {
       await use(page);
       expect(errors).toEqual([]);
+      expect(expectedGameDetails404s.size).toBe(0);
     } finally {
       page.off("response", record);
       await Promise.allSettled(reads);
