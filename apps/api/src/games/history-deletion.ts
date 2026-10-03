@@ -43,12 +43,12 @@ export function createHistoryDeletion(repository: GameRepository) {
     });
   }
   return {
-    deleteGame(principal: Principal, input: unknown) {
+    async deleteGame(principal: Principal, input: unknown) {
       const parsed = gameDeleteRequestSchema.safeParse(input);
       if (!parsed.success) throw new GameRequestError("INVALID_REQUEST");
       return remove(principal, parsed.data.gameId.toLowerCase());
     },
-    clearHistory(principal: Principal, input: unknown) {
+    async clearHistory(principal: Principal, input: unknown) {
       if (!gameHistoryClearRequestSchema.safeParse(input).success) {
         throw new GameRequestError("INVALID_REQUEST");
       }

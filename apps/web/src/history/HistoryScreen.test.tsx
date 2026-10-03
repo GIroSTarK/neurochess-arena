@@ -55,6 +55,10 @@ describe("private history presentation", () => {
     vi.stubGlobal("fetch", http.fetch);
     visit();
     const trigger = await screen.findByRole("button", { name: /Delete game ·/ });
+    const heading = screen.getByRole("heading", { name: "Finished games" });
+    const announcement = document.getElementById(heading.getAttribute("aria-describedby") ?? "");
+    expect(announcement).toHaveAttribute("role", "status");
+    expect(announcement).toBeEmptyDOMElement();
     await userEvent.click(trigger);
     let dialog = screen.getByRole("dialog", { name: "Delete this game?" });
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
@@ -87,6 +91,51 @@ describe("private history presentation", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Finished games" })).toHaveFocus();
     expect(screen.getByText("Game deleted.")).toBeVisible();
+    expect(announcement).toHaveTextContent("Game deleted.");
+    expect(heading).toHaveAccessibleDescription("Game deleted.");
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("distinguishes games with identical dates and results in Delete controls and confirmations", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () =>
+        jsonResponse({ games: [entry, { ...entry, gameId: OTHER_GAME_ID }], nextCursor: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    visit();
+    const buttons = await screen.findAllByRole("button", { name: /Delete game ·/ });
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]).not.toHaveAccessibleName(buttons[1]!.getAttribute("aria-label")!);
+    expect(buttons[0]).toHaveAccessibleName(expect.stringContaining(GAME_ID));
+    expect(buttons[1]).toHaveAccessibleName(expect.stringContaining(OTHER_GAME_ID));
+    await userEvent.click(buttons[1]!);
+    const dialog = screen.getByRole("dialog", { name: "Delete this game?" });
+    expect(within(dialog).getByText(OTHER_GAME_ID, { exact: false })).toBeVisible();
+    expect(within(dialog).getByText("Player", { exact: true })).toBeVisible();
+    expect(within(dialog).getByText(/model-a/)).toBeVisible();
+    expect(within(dialog).queryByText(GAME_ID, { exact: false })).not.toBeInTheDocument();
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("describes a server rejection separately from an uncertain deletion", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () => jsonResponse({ games: [entry], nextCursor: null }),
+      [`POST /games/${GAME_ID}/delete`]: () =>
+        jsonResponse({ code: "FORBIDDEN", message: "Not allowed", requestId: "rejected" }, 403),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    visit();
+    await userEvent.click(await screen.findByRole("button", { name: /Delete game ·/ }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete game" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Deletion was rejected");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("could not be confirmed");
+    expect(screen.getByRole("link", { name: /Open replay/ })).toBeVisible();
     http.assertNoUnexpectedRequests();
   });
 

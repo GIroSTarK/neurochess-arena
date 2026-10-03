@@ -9,7 +9,7 @@ interface HistoryState {
   readonly phase: "loading" | "ready" | "error";
   readonly confirmation: GameHistoryEntry | "all" | null;
   readonly deleting: boolean;
-  readonly deletionError: "unfinished" | "unconfirmed" | null;
+  readonly deletionError: "unfinished" | "rejected" | "unconfirmed" | null;
   readonly success: "game" | "history" | null;
 }
 
@@ -22,6 +22,12 @@ const initialState: HistoryState = {
   deletionError: null,
   success: null,
 };
+
+function deletionError(error: unknown): HistoryState["deletionError"] {
+  if (!(error instanceof ApiFailure) || error.kind !== "api" || !error.code) return "unconfirmed";
+  if (error.code === "INVALID_GAME_STATE") return "unfinished";
+  return error.code === "INTERNAL_SERVER_ERROR" ? "unconfirmed" : "rejected";
+}
 
 export class HistoryController {
   private state: HistoryState = initialState;
@@ -104,7 +110,12 @@ export class HistoryController {
     const request = new AbortController();
     this.mutation = request;
     const current = () => this.connected && !request.signal.aborted && !this.identitySignal.aborted;
-    this.publish({ ...this.state, deleting: true, deletionError: null });
+    this.publish({
+      ...this.state,
+      phase: this.state.result ? "ready" : "error",
+      deleting: true,
+      deletionError: null,
+    });
     try {
       if (confirmation === "all") await this.api.clearHistory(request.signal);
       else await this.api.deleteGame(confirmation.gameId, request.signal);
@@ -113,26 +124,27 @@ export class HistoryController {
       this.targetPage = 0;
       // Discard every old page before refresh; a failed read must never resurrect deleted rows.
       this.publish({ ...initialState, success: confirmation === "all" ? "history" : "game" });
-      await this.load(0);
+      await this.load(0, true);
     } catch (error) {
       if (!current()) return;
       this.publish({
         ...this.state,
         deleting: false,
-        deletionError:
-          error instanceof ApiFailure && error.code === "INVALID_GAME_STATE"
-            ? "unfinished"
-            : "unconfirmed",
+        deletionError: deletionError(error),
       });
     }
   };
-  private async load(page: number) {
+  private async load(page: number, preserveSuccess = false) {
     if (!this.connected || this.identitySignal.aborted || this.state.deleting) return;
     this.request?.abort();
     const request = new AbortController();
     this.request = request;
     this.targetPage = page;
-    this.publish({ ...this.state, phase: "loading" });
+    this.publish({
+      ...this.state,
+      phase: "loading",
+      success: preserveSuccess ? this.state.success : null,
+    });
     const current = () => this.connected && !request.signal.aborted && !this.identitySignal.aborted;
     try {
       const cursor = this.cursors[page];

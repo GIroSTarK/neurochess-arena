@@ -296,6 +296,7 @@ test("guest guidance and account privacy survive a switch to another account", a
 
 test("individual deletion retries an uncertain acknowledgement and removes private URL access while preserving unfinished play and keys", async ({
   page,
+  expectedGameDetails404s,
 }, testInfo) => {
   const account = await credentialAccount(page);
   const deleted = await stop(page);
@@ -329,8 +330,12 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
     .getByRole("listitem")
     .filter({ has: page.locator(`a[href="/?game=${deleted.gameId}"]`) });
   const trigger = row.getByRole("button", { name: /Delete game/ });
+  await expect(trigger).toHaveAccessibleName(new RegExp(deleted.gameId));
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Delete this game?" });
+  await expect(dialog).toContainText(deleted.gameId);
+  await expect(dialog).toContainText("fixture/model-a");
+  await expect(dialog).not.toContainText(retained.gameId);
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   await expect(cancel).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -366,12 +371,16 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
     page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
   ).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Finished games" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Finished games" })).toHaveAccessibleDescription(
+    "Game deleted.",
+  );
   expect(writes).toBe(2);
   for (const suffix of ["", "/details", "/replay", "/pgn", "/invocations"]) {
     expect(
       (await page.request.get(`${API_ORIGIN}/games/${deleted.gameId}${suffix}`)).status(),
     ).toBe(404);
   }
+  expectedGameDetails404s.add(`${API_ORIGIN}/games/${deleted.gameId}/details`);
   await page.goto(`/?game=${deleted.gameId}`);
   await expect(
     page.locator("p").filter({

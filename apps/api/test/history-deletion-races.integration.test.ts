@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { authSessions, authUsers, type GameRepository, games } from "@neurochess/database";
-import { eq } from "drizzle-orm";
+import { authSessions, authUsers, games } from "@neurochess/database";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createGameService } from "../src/games/service.js";
@@ -16,6 +16,7 @@ import {
   service,
   turnCommand,
 } from "./ai-turn-helpers.js";
+import type { TestApi } from "./helpers.js";
 import {
   deletionBody,
   deletionPath,
@@ -27,6 +28,32 @@ import {
 const harness = new AccountGameHarness();
 afterEach(() => harness.dispose());
 const options = { nodeEnv: "test", sandboxEnabled: true } as const;
+
+async function waitForBlockedOperations(
+  observer: Pick<TestApi["database"]["db"], "execute">,
+  blockerPid: number,
+  count = 1,
+) {
+  await expect
+    .poll(
+      async () => {
+        await observer.execute(sql`select pg_stat_clear_snapshot()`);
+        // Later writers can queue behind the first waiter rather than the original blocker.
+        const result = await observer.execute<{ count: number }>(sql`
+        with recursive blocked(pid) as (
+          select pid from pg_stat_activity where ${blockerPid} = any(pg_blocking_pids(pid))
+          union
+          select activity.pid from pg_stat_activity activity
+            join blocked on blocked.pid = any(pg_blocking_pids(activity.pid))
+        )
+        select count(*)::int as count from blocked
+      `);
+        return result.rows[0]!.count;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(count);
+}
 
 describe("history deletion transactions and concurrency", () => {
   it.each(["individual", "clear"])(
@@ -79,34 +106,17 @@ describe("history deletion transactions and concurrency", () => {
       const owner = await harness.account(api);
       const snapshot = await terminalGame(harness, api, owner);
       const before = await gameRecords(api, snapshot.gameId);
-      const waiting = Promise.withResolvers<void>();
-      const wrapped: GameRepository = {
-        ...api.repository,
-        write: (action) =>
-          api.repository.write((tx) =>
-            action({
-              ...tx,
-              lockGame: (id) => {
-                waiting.resolve();
-                return tx.lockGame(id);
-              },
-              deleteAccountHistory: (userId, id) => {
-                waiting.resolve();
-                return tx.deleteAccountHistory(userId, id);
-              },
-            }),
-          ),
-      };
-      const deleting = createGameService(wrapped, options);
+      const deleting = createGameService(api.repository, options);
       let pending: Promise<unknown> | undefined;
       await api.database.db.transaction(async (tx) => {
+        const blocker = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
         await tx.select().from(games).where(eq(games.id, snapshot.gameId)).for("update");
         pending = (
           operation === "individual"
             ? deleting.deleteGame(owner.principal, deletionBody(snapshot.gameId))
             : deleting.clearHistory(owner.principal, deletionBody())
         ).catch((error: unknown) => error);
-        await waiting.promise;
+        await waitForBlockedOperations(tx, blocker.rows[0]!.pid);
         await tx
           .update(authSessions)
           .set({ expiresAt: new Date(0) })
@@ -121,25 +131,10 @@ describe("history deletion transactions and concurrency", () => {
     const api = await harness.createAuthenticatedApi();
     const owner = await harness.account(api);
     const snapshot = await terminalGame(harness, api, owner);
-    const waiting = Promise.withResolvers<void>();
-    const deleting = createGameService(
-      {
-        ...api.repository,
-        write: (action) =>
-          api.repository.write((tx) =>
-            action({
-              ...tx,
-              lockAccount: (id) => {
-                waiting.resolve();
-                return tx.lockAccount(id);
-              },
-            }),
-          ),
-      },
-      options,
-    );
+    const deleting = createGameService(api.repository, options);
     let pending: Promise<unknown> | undefined;
     await api.database.db.transaction(async (tx) => {
+      const blocker = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
       await tx
         .select()
         .from(authUsers)
@@ -148,7 +143,7 @@ describe("history deletion transactions and concurrency", () => {
       pending = deleting
         .clearHistory(owner.principal, deletionBody())
         .catch((error: unknown) => error);
-      await waiting.promise;
+      await waitForBlockedOperations(tx, blocker.rows[0]!.pid);
       await tx.delete(authSessions).where(eq(authSessions.id, owner.principal.sessionId));
     });
     expect(await pending).toMatchObject({ code: "UNAUTHORIZED" });
@@ -163,63 +158,36 @@ describe("history deletion transactions and concurrency", () => {
       const owner = await harness.account(api);
       const previous = await terminalGame(harness, api, owner);
       const { snapshot: active } = await harness.createGame(api, owner.cookie);
-      const entered = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
-      const waiting = Promise.withResolvers<void>();
-      const first = createGameService(
-        {
-          ...api.repository,
-          write: (action) =>
-            api.repository.write((tx) =>
-              action({
-                ...tx,
-                deleteAccountHistory: async (userId, gameId) => {
-                  await tx.deleteAccountHistory(userId, gameId);
-                  entered.resolve();
-                  await release.promise;
-                },
-                updatePosition: async (...args) => {
-                  const result = await tx.updatePosition(...args);
-                  entered.resolve();
-                  await release.promise;
-                  return result;
-                },
-              }),
-            ),
-        },
-        options,
+      const first = createGameService(api.repository, options);
+      const second = createGameService(otherApi.repository, options);
+      let initial: Promise<unknown> | undefined;
+      let next: Promise<unknown> | undefined;
+      await api.database.db.transaction(async (tx) => {
+        const blocker = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        await tx
+          .select()
+          .from(authUsers)
+          .where(eq(authUsers.id, owner.principal.userId))
+          .for("update");
+        initial = (
+          order === "clear-first"
+            ? first.clearHistory(owner.principal, deletionBody())
+            : first.lifecycle(owner.principal, control(active, "abort"))
+        ).catch((error: unknown) => error);
+        await waitForBlockedOperations(tx, blocker.rows[0]!.pid);
+        next = (
+          order === "clear-first"
+            ? second.lifecycle(owner.principal, control(active, "abort"))
+            : second.clearHistory(owner.principal, deletionBody())
+        ).catch((error: unknown) => error);
+        await waitForBlockedOperations(tx, blocker.rows[0]!.pid, 2);
+      });
+      expect(await initial).toMatchObject(
+        order === "clear-first" ? { status: "deleted" } : { state: "aborted" },
       );
-      const second = createGameService(
-        {
-          ...otherApi.repository,
-          write: (action) =>
-            otherApi.repository.write((tx) =>
-              action({
-                ...tx,
-                lockAccount: (id) => {
-                  waiting.resolve();
-                  return tx.lockAccount(id);
-                },
-              }),
-            ),
-        },
-        options,
+      expect(await next).toMatchObject(
+        order === "clear-first" ? { state: "aborted" } : { status: "deleted" },
       );
-      const initial =
-        order === "clear-first"
-          ? first.clearHistory(owner.principal, deletionBody())
-          : first.lifecycle(owner.principal, control(active, "abort"));
-      await entered.promise;
-      const next =
-        order === "clear-first"
-          ? second.lifecycle(owner.principal, control(active, "abort"))
-          : second.clearHistory(owner.principal, deletionBody());
-      try {
-        await waiting.promise;
-      } finally {
-        release.resolve();
-      }
-      await Promise.all([initial, next]);
       const history = await second.history(owner.principal, { limit: 20 });
       expect(history.games.map((game) => game.gameId)).toEqual(
         order === "clear-first" ? [active.gameId] : [],

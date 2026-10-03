@@ -5,6 +5,8 @@ import { authSessions, authUsers, profiles, providerCredentials } from "@neuroch
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createGameService } from "../src/games/service.js";
+
 import { AccountGameHarness } from "./account-game-helpers.js";
 import { control } from "./ai-turn-helpers.js";
 import { createSandbox, WEB_ORIGIN } from "./helpers.js";
@@ -20,6 +22,18 @@ const harness = new AccountGameHarness();
 afterEach(() => harness.dispose());
 
 describe("scoped terminal history deletion", () => {
+  it.each(["deleteGame", "clearHistory"] as const)(
+    "%s returns a rejected promise for malformed service input",
+    async (method) => {
+      const api = await harness.createAuthenticatedApi();
+      const owner = await harness.account(api);
+      const service = createGameService(api.repository, { nodeEnv: "test", sandboxEnabled: true });
+      await expect(service[method](owner.principal, { confirm: false })).rejects.toMatchObject({
+        code: "INVALID_REQUEST",
+      });
+    },
+  );
+
   it.each(["individual", "clear"])(
     "%s deletes every dependent record atomically and permits repeats",
     async (operation) => {

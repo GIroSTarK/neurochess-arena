@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { GameHistoryEntry } from "@neurochess/contracts";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type AiIdentity, createAiApi } from "../api/ai-client";
@@ -9,6 +10,36 @@ import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 
 import { HistoryController } from "./controller";
+
+function GameParticipants({
+  game,
+  username,
+}: {
+  readonly game: GameHistoryEntry;
+  readonly username: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <dl className="grid min-w-0 gap-2">
+      {(["white", "black"] as const).map((color) => {
+        const seat = game.configuration.seats[color];
+        return (
+          <div key={color} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
+            <dt className="text-text-secondary">{t(`players.${color}`)}</dt>
+            <dd className="min-w-0 wrap-anywhere">
+              {seat.type === "human"
+                ? username
+                : t("history.model", {
+                    model: seat.modelId,
+                    provider: t(`setup.providers.${seat.provider}`),
+                  })}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
 
 export function GuestHistory({ sandboxEnabled }: { readonly sandboxEnabled: boolean }) {
   const { t } = useTranslation();
@@ -45,6 +76,7 @@ export function HistoryScreen({
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const listHeading = useRef<HTMLHeadingElement>(null);
+  const successId = useId();
   useEffect(() => controller.connect(), [controller]);
   useEffect(() => {
     if (state.success) listHeading.current?.focus();
@@ -60,7 +92,12 @@ export function HistoryScreen({
         {t("history.arena")}
       </a>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 ref={listHeading} tabIndex={-1} className="text-section font-semibold">
+        <h2
+          ref={listHeading}
+          tabIndex={-1}
+          aria-describedby={successId}
+          className="text-section font-semibold"
+        >
           {t("history.list")}
         </h2>
         <Button
@@ -76,7 +113,15 @@ export function HistoryScreen({
           {t("history.clear")}
         </Button>
       </div>
-      {state.success ? <p role="status">{t(`history.deleted.${state.success}`)}</p> : null}
+      <p
+        id={successId}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={state.success ? undefined : "sr-only"}
+      >
+        {state.success ? t(`history.deleted.${state.success}`) : ""}
+      </p>
       {state.phase === "loading" ? <p role="status">{t("history.loading")}</p> : null}
       {state.phase === "error" ? (
         <div className="grid gap-3">
@@ -90,6 +135,7 @@ export function HistoryScreen({
       <ul className="grid min-w-0 gap-4" aria-label={t("history.list")}>
         {state.result?.games.map((game) => {
           const date = dateFormat.format(new Date(game.finishedAt));
+          const gameReference = t("history.gameReference", { gameId: game.gameId });
           return (
             <li
               key={game.gameId}
@@ -106,24 +152,8 @@ export function HistoryScreen({
               <p className="text-label text-text-secondary">
                 {t(`history.modes.${game.configuration.mode}`)}
               </p>
-              <dl className="grid min-w-0 gap-2">
-                {(["white", "black"] as const).map((color) => {
-                  const seat = game.configuration.seats[color];
-                  return (
-                    <div key={color} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
-                      <dt className="text-text-secondary">{t(`players.${color}`)}</dt>
-                      <dd className="min-w-0 wrap-anywhere">
-                        {seat.type === "human"
-                          ? username
-                          : t("history.model", {
-                              model: seat.modelId,
-                              provider: t(`setup.providers.${seat.provider}`),
-                            })}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
+              <GameParticipants game={game} username={username} />
+              <p className="text-label wrap-anywhere text-text-secondary">{gameReference}</p>
               <p>
                 {t("game.resultWithScore", {
                   result: resultTitle(game, t),
@@ -141,7 +171,11 @@ export function HistoryScreen({
                 </a>
                 <Button
                   variant="secondary"
-                  aria-label={t("history.deleteLabel", { date, result: resultTitle(game, t) })}
+                  aria-label={t("history.deleteLabel", {
+                    date,
+                    result: resultTitle(game, t),
+                    gameReference,
+                  })}
                   aria-disabled={state.phase === "loading" || state.deleting}
                   onClick={() => controller.confirmGame(game)}
                 >
@@ -189,12 +223,21 @@ export function HistoryScreen({
           onCancel={controller.cancelDeletion}
         >
           {state.confirmation !== "all" ? (
-            <p className="mt-3 wrap-anywhere">
-              {t("history.gameSummary", {
-                date: dateFormat.format(new Date(state.confirmation.finishedAt)),
-                result: resultTitle(state.confirmation, t),
-              })}
-            </p>
+            <div className="mt-3 grid gap-3 wrap-anywhere">
+              <p>
+                {t("history.gameSummary", {
+                  date: dateFormat.format(new Date(state.confirmation.finishedAt)),
+                  result: resultTitle(state.confirmation, t),
+                })}
+              </p>
+              <p className="text-label text-text-secondary">
+                {t(`history.modes.${state.confirmation.configuration.mode}`)}
+              </p>
+              <GameParticipants game={state.confirmation} username={username} />
+              <p className="text-label text-text-secondary">
+                {t("history.gameReference", { gameId: state.confirmation.gameId })}
+              </p>
+            </div>
           ) : null}
           {state.deletionError ? (
             <p role="alert" className="mt-3 text-danger">

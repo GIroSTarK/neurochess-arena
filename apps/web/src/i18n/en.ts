@@ -22,7 +22,8 @@ export const en = {
     older: "Older games",
     refresh: "Refresh history",
     delete: "Delete game",
-    deleteLabel: "Delete game · {{date}} · {{result}}",
+    deleteLabel: "Delete game · {{date}} · {{result}} · {{gameReference}}",
+    gameReference: "Game reference: {{gameId}}",
     deleteTitle: "Delete this game?",
     deleteHint:
       "Permanently remove this finished game and its moves, players, commentary, invocation attempts, replay, PGN and execution records from your account. This cannot be undone. Other games, saved provider keys and your profile are kept.",
@@ -34,6 +35,7 @@ export const en = {
     deleted: { game: "Game deleted.", history: "Finished game history cleared." },
     deletionErrors: {
       unfinished: "This game is still in progress. Stop it in Arena before deleting it.",
+      rejected: "Deletion was rejected. Cancel and refresh history before trying again.",
       unconfirmed:
         "Deletion could not be confirmed. Cancel and refresh history to check the result, or try again.",
     },

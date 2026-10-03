@@ -2,7 +2,7 @@ import type { GameHistoryEntry, GameHistoryResponse } from "@neurochess/contract
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure } from "../api/failures";
-import { GAME_ID } from "../test/fixtures";
+import { GAME_ID, OTHER_GAME_ID } from "../test/fixtures";
 
 import { HistoryController } from "./controller";
 
@@ -34,6 +34,93 @@ function fixture() {
 }
 
 describe("history mutation lifetimes", () => {
+  it.each(["game", "history"])(
+    "restores a usable page when %s deletion fails after cancelling a read",
+    async (scope) => {
+      const { api, controller } = fixture();
+      const delayed = Promise.withResolvers<GameHistoryResponse>();
+      const disconnect = controller.connect();
+      try {
+        await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+        if (scope === "game") controller.confirmGame(entry);
+        else controller.confirmClear();
+        api.history.mockImplementationOnce(() => delayed.promise);
+        controller.reload();
+        api.deleteGame.mockRejectedValue(new ApiFailure("network"));
+        api.clearHistory.mockRejectedValue(new ApiFailure("network"));
+        await controller.deleteConfirmed();
+        controller.cancelDeletion();
+        expect(controller.getSnapshot()).toMatchObject({
+          phase: "ready",
+          result: page,
+          confirmation: null,
+          deleting: false,
+        });
+        const refreshed = { games: [{ ...entry, gameId: OTHER_GAME_ID }], nextCursor: null };
+        api.history.mockResolvedValue(refreshed);
+        controller.reload();
+        await vi.waitFor(() => expect(controller.getSnapshot().result).toEqual(refreshed));
+        delayed.resolve(page);
+        await delayed.promise;
+        expect(controller.getSnapshot().result).toEqual(refreshed);
+      } finally {
+        delayed.resolve(page);
+        disconnect();
+      }
+    },
+  );
+
+  it.each(["reload", "older", "retry"] as const)(
+    "clears a deletion acknowledgement when a later %s starts",
+    async (action) => {
+      const { api, controller } = fixture();
+      const disconnect = controller.connect();
+      try {
+        await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+        controller.confirmGame(entry);
+        api.history.mockResolvedValue({
+          games: [{ ...entry, gameId: OTHER_GAME_ID }],
+          nextCursor: entry.finishedAt + "_" + OTHER_GAME_ID,
+        });
+        await controller.deleteConfirmed();
+        expect(controller.getSnapshot().success).toBe("game");
+        controller[action]();
+        expect(controller.getSnapshot().success).toBeNull();
+        await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+        expect(controller.getSnapshot().success).toBeNull();
+      } finally {
+        disconnect();
+      }
+    },
+  );
+
+  it.each([
+    [new ApiFailure("api", "INVALID_REQUEST"), "rejected"],
+    [new ApiFailure("api", "FORBIDDEN"), "rejected"],
+    [new ApiFailure("api", "NOT_FOUND"), "rejected"],
+    [new ApiFailure("api", "INTERNAL_SERVER_ERROR"), "unconfirmed"],
+    [new ApiFailure("network"), "unconfirmed"],
+    [new ApiFailure("timeout"), "unconfirmed"],
+    [new ApiFailure("malformed"), "unconfirmed"],
+  ] as const)("classifies deletion failure %o as %s", async (error, expected) => {
+    const { api, controller } = fixture();
+    const disconnect = controller.connect();
+    try {
+      await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+      controller.confirmGame(entry);
+      api.deleteGame.mockRejectedValue(error);
+      await controller.deleteConfirmed();
+      expect(controller.getSnapshot()).toMatchObject({
+        deletionError: expected,
+        result: page,
+        deleting: false,
+        success: null,
+      });
+    } finally {
+      disconnect();
+    }
+  });
+
   it.each(["identity", "pagehide", "disconnect"])(
     "fences a pending deletion and clears private confirmation on %s",
     async (boundary) => {
