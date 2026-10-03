@@ -233,6 +233,12 @@ export function accountHarness(database: DatabaseConnection) {
         if (!state) return reply.code(400).send({});
         const callback = new URL(`/api/auth/callback/${input.provider}`, API_ORIGIN);
         callback.searchParams.set("state", state);
+        callback.searchParams.set(
+          "iss",
+          input.provider === "google"
+            ? "https://accounts.google.com"
+            : "https://github.com/login/oauth",
+        );
         if (input.cancel) callback.searchParams.set("error", "access_denied");
         else {
           const code = randomUUID();

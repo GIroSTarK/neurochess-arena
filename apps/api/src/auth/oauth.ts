@@ -73,7 +73,8 @@ export function oauthPolicy(): BetterAuthPlugin {
       // identity/profile projection and bind its state to the chosen provider.
       for (const provider of context.socialProviders) {
         const id = authOAuthProviderSchema.parse(provider.id);
-        provider.issuer = id === "google" ? "https://accounts.google.com" : "https://github.com";
+        provider.issuer =
+          id === "google" ? "https://accounts.google.com" : "https://github.com/login/oauth";
         const exchange = provider.validateAuthorizationCode;
         const getUserInfo = provider.getUserInfo;
         provider.validateAuthorizationCode = async (input) => {

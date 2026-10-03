@@ -319,7 +319,7 @@ describe.each(["google", "github"] as const)(
               prompt: "consent",
               iss: "https://accounts.google.com",
             }
-          : {},
+          : { iss: "https://github.com/login/oauth" },
       );
       expect(response.statusCode).toBe(303);
       expect(response.headers.location).toBe(`${environment.WEB_ORIGIN}/?auth=signed-in`);
