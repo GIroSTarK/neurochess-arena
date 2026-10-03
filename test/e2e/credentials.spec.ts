@@ -265,6 +265,9 @@ test("account switching clears saved selections and raw keys and fences delayed 
   context,
   browser,
 }) => {
+  const savedKey = "first-account-fixture-1234";
+  const sessionKey = "old-page-fixture";
+  const privateValues = observeCredentialPrivacy(page, [savedKey, sessionKey]);
   const otherContext = await browser.newContext();
   await otherContext.addCookies([
     {
@@ -285,7 +288,7 @@ test("account switching clears saved selections and raw keys and fences delayed 
   }
   await credentialAccount(page);
   await page.goto("/account/credentials");
-  const saved = await saveCredential(page, "Only first account", "first-account-fixture-1234");
+  const saved = await saveCredential(page, "Only first account", savedKey);
   await page.goto("/");
   const white = page.getByRole("group", { name: "White", exact: true });
   await expect(white.getByLabel("Credential source")).toHaveAttribute("aria-disabled", "false");
@@ -293,7 +296,7 @@ test("account switching clears saved selections and raw keys and fences delayed 
   await page
     .getByRole("group", { name: "Black", exact: true })
     .getByLabel("API key", { exact: true })
-    .fill("old-page-fixture");
+    .fill(sessionKey);
   const held = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   await page.route(API_ORIGIN + "/providers/models", async (route) => {
@@ -306,6 +309,7 @@ test("account switching clears saved selections and raw keys and fences delayed 
   try {
     await white.getByRole("button", { name: "Load models", exact: true }).click();
     await held.promise;
+    await privateValues();
     await switching.goto(WEB_ORIGIN + "/auth/sign-in");
     await switching.getByLabel("Email", { exact: true }).fill(second.email);
     await switching.getByLabel("Password", { exact: true }).fill(second.password);
@@ -324,9 +328,10 @@ test("account switching clears saved selections and raw keys and fences delayed 
         .getByRole("group", { name: "Black", exact: true })
         .getByLabel("API key", { exact: true }),
     ).toHaveValue("");
+    await privateValues();
     await switching.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
-    await observeCredentialPrivacy(page, ["old-page-fixture", "first-account-fixture-1234"])();
+    await privateValues();
   } finally {
     release.resolve();
     await page.unrouteAll({ behavior: "wait" });
