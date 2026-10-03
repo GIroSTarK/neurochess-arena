@@ -118,6 +118,26 @@ function controlDeliveryFailure(failed: boolean) {
   return delivery;
 }
 
+it("deletes recovery tokens and rejects old verification links after same-email registration", async () => {
+  await register();
+  const oldLink = mailbox.link();
+  expect((await verify(oldLink)).statusCode).toBe(303);
+  const cookie = await signIn();
+  const token = await requestReset();
+  const deleted = await post("delete-account", { confirm: true }, cookie);
+  expect(deleted.statusCode, deleted.body).toBe(200);
+  expect((await session(cookie)).json()).toBeNull();
+  expect(await database.db.select().from(authUsers).where(eq(authUsers.email, email))).toEqual([]);
+  expect((await post("reset-password", { token, newPassword })).statusCode).toBe(400);
+  await register();
+  expect((await verify(oldLink)).statusCode).toBe(401);
+  expect(
+    (await database.db.select().from(authUsers).where(eq(authUsers.email, email)))[0]
+      ?.emailVerified,
+  ).toBe(false);
+  expect((await verify(mailbox.link())).statusCode).toBe(303);
+});
+
 async function requestReset() {
   const response = await post("request-password-reset", { email });
   expect(response.statusCode).toBe(200);

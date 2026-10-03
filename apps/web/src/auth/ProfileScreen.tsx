@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { accountError, type AccountErrorCode } from "../api/auth-client";
 import { Button } from "../ui/Button";
 
+import { AccountDeletion } from "./AccountDeletion";
 import { AccountField } from "./AccountField";
 import { AccountFrame } from "./AccountFrame";
 import { Avatar } from "./Avatar";
@@ -108,6 +109,7 @@ export function ProfileScreen({
           {t("account.return")}
         </a>
       ) : null}
+      <AccountDeletion />
     </AccountFrame>
   );
 }

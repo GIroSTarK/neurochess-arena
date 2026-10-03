@@ -4,6 +4,7 @@ export const gameIdentityIntentSchema = z.enum(["account", "guest"]).optional();
 export const expectedAccountSchema = z.union([z.uuid(), z.literal("guest")]).optional();
 
 export const authEmptyRequestSchema = z.strictObject({});
+export const authDeleteAccountRequestSchema = z.strictObject({ confirm: z.literal(true) });
 export const authOAuthProviderSchema = z.enum(["google", "github"]);
 export const authOAuthSignInRequestSchema = z.strictObject({ provider: authOAuthProviderSchema });
 export const authOAuthSignInResponseSchema = z.strictObject({ url: z.url().max(8192) });
@@ -60,6 +61,7 @@ export const authSuccessResponseSchema = authSignOutResponseSchema;
 export const authErrorCodeSchema = z.enum([
   "AUTH_INVALID_REQUEST",
   "AUTH_UNAUTHORIZED",
+  "AUTH_REAUTH_REQUIRED",
   "AUTH_FORBIDDEN",
   "AUTH_NOT_FOUND",
   "AUTH_RATE_LIMITED",

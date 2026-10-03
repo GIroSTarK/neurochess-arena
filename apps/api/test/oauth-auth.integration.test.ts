@@ -186,6 +186,28 @@ function expectFailure(response: Awaited<ReturnType<typeof callback>>, code = "A
 describe.each(["google", "github"] as const)(
   "%s OAuth through the real auth integration",
   (provider) => {
+    it("requires fresh OAuth authentication before deleting every device session and login", async () => {
+      const first = sessionCookie(await callback(await start(provider)));
+      const accountSession = (await session(first)).json<{ user: { id: string } }>();
+      const userId = accountSession.user.id;
+      await database.db
+        .update(authSessions)
+        .set({ createdAt: new Date(Date.now() - 6 * 60_000) })
+        .where(eq(authSessions.userId, userId));
+      expect((await post("delete-account", { confirm: true }, first)).json()).toMatchObject({
+        code: "AUTH_REAUTH_REQUIRED",
+      });
+      const second = sessionCookie(await callback(await start(provider)));
+      const deleted = await post("delete-account", { confirm: true }, second);
+      expect(deleted.statusCode, deleted.body).toBe(200);
+      for (const cookie of [first, second]) expect((await session(cookie)).json()).toBeNull();
+      expect(await database.db.select().from(authUsers).where(eq(authUsers.id, userId))).toEqual(
+        [],
+      );
+      expect(
+        await database.db.select().from(authAccounts).where(eq(authAccounts.userId, userId)),
+      ).toEqual([]);
+    });
     it("requires chosen-username onboarding, supports renames and preserves avatar removal on returning sign-in", async () => {
       const cookie = sessionCookie(await callback(await start(provider)));
       const read = (value = cookie) => app.inject({ url: "/profile", headers: { cookie: value } });

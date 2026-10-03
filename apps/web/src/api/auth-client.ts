@@ -1,5 +1,6 @@
 import {
   authAcceptedResponseSchema,
+  authDeleteAccountRequestSchema,
   authEmailRequestSchema,
   type AuthErrorCode,
   authErrorResponseSchema,
@@ -140,6 +141,14 @@ export function createAuthApi(apiBaseUrl: string, options: { fetch?: typeof fetc
       ),
     signOut: (signal: AbortSignal, expectedAccount: string) =>
       request("/api/auth/sign-out", authSuccessResponseSchema, signal, {}, expectedAccount),
+    deleteAccount: (signal: AbortSignal, expectedAccount: string) =>
+      request(
+        "/api/auth/delete-account",
+        authSuccessResponseSchema,
+        signal,
+        input(authDeleteAccountRequestSchema, { confirm: true }),
+        expectedAccount,
+      ),
     async social(provider: AuthOAuthProvider, signal: AbortSignal) {
       const result = await request(
         "/api/auth/sign-in/social",
