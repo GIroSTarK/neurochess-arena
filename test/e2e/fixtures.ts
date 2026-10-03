@@ -16,12 +16,19 @@ import { API_ORIGIN } from "./environment";
 
 export { expect } from "@playwright/test";
 
-export const test = base.extend<{ expectedGameDetails404s: Set<string> }>({
+export const test = base.extend<{
+  expectedGameDetails404s: Set<string>;
+  allowedIdentity401s: Set<string>;
+}>({
   // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
   expectedGameDetails404s: async ({}, use) => {
     await use(new Set<string>());
   },
-  page: async ({ page, expectedGameDetails404s }, use) => {
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
+  allowedIdentity401s: async ({}, use) => {
+    await use(new Set<string>());
+  },
+  page: async ({ page, expectedGameDetails404s, allowedIdentity401s }, use) => {
     await page.context().addCookies([
       {
         name: "neurochess_test_client",
@@ -73,12 +80,16 @@ export const test = base.extend<{ expectedGameDetails404s: Set<string> }>({
         const deletedPrivateGame =
           message.text().includes("404 (Not Found)") &&
           expectedGameDetails404s.delete(message.location().url);
+        const expiredIdentity =
+          message.text().includes("401 (Unauthorized)") &&
+          allowedIdentity401s.has(message.location().url);
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
           !accountRejection &&
           !avatarUnavailable &&
-          !deletedPrivateGame
+          !deletedPrivateGame &&
+          !expiredIdentity
         ) {
           errors.push("Application console " + message.type());
         }

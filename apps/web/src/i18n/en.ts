@@ -307,7 +307,7 @@ export const en = {
     openSandbox: "Return to Sandbox",
     retry: "Retry loading",
     newGame: "New game",
-    private: "Private guest game",
+    private: "Private game",
     replayError: "Replay could not be loaded. Try again.",
     exportError: "PGN could not be loaded. Try again.",
     providerError: "{{color}} · {{message}}",
