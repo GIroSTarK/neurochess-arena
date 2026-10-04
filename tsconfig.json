@@ -5,6 +5,9 @@
     { "path": "packages/chess" },
     { "path": "packages/database" },
     { "path": "apps/api" },
-    { "path": "apps/web" }
+    { "path": "apps/web" },
+    // Package configs exclude tests; this reference lets editors resolve test files to their
+    // project instead of an inferred one that lacks the Vitest and jest-dom types.
+    { "path": "tsconfig.tests.json" }
   ]
 }

@@ -25,7 +25,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.tests.json --pretty false",
+    "typecheck": "tsc -b --pretty false",
     "test": "npm run test:unit && npm run test:integration && npm run test:architecture",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
