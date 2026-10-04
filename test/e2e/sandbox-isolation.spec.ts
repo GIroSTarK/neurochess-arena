@@ -1,8 +1,8 @@
-import { gameDetailsSchema, type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN } from "./environment";
-import { expect, playMove, readSnapshot, startSandbox, test } from "./fixtures";
+import { expect, playMove, readSnapshot, startSandbox, submitGame, test } from "./fixtures";
 
 async function startAi(page: Page, mode: "ai_vs_ai" | "ai_vs_human") {
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
@@ -19,14 +19,10 @@ async function startAi(page: Page, mode: "ai_vs_ai" | "ai_vs_human") {
     await model.press("ArrowDown");
     await model.press("Enter");
   }
-  const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game", exact: true }).click();
-  const { snapshot } = gameDetailsSchema.parse(await (await creation).json());
+  const { details } = await submitGame(page);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  return readSnapshot(page, snapshot.gameId);
+  return readSnapshot(page, details.snapshot.gameId);
 }
 
 for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {

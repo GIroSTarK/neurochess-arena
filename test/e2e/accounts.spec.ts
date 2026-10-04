@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import AxeBuilder from "@axe-core/playwright";
-import { gameDetailsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
-import { expect, test } from "./fixtures";
+import { expect, submitGame, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
 const password = "browser account fixture 🌙";
@@ -66,13 +65,8 @@ async function startAccountGame(page: Page) {
   await model.fill("model-a");
   await model.press("ArrowDown");
   await model.press("Enter");
-  const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game", exact: true }).click();
-  const response = await creation;
+  const { response, details } = await submitGame(page);
   expect(response.request().headers()["x-neurochess-identity"]).toBe("account");
-  const details = gameDetailsSchema.parse(await response.json());
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
   return details.snapshot.gameId;
 }

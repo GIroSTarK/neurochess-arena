@@ -135,6 +135,20 @@ export function square(page: Page, coordinate: string): Locator {
   return page.locator('[data-square="' + coordinate + '"]');
 }
 
+export async function submitGame(page: Page) {
+  const creation = page.waitForResponse(
+    (response) =>
+      response.url() === API_ORIGIN + "/games" && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Start game", exact: true }).click();
+  const response = await creation;
+  expect(response.status(), "Game creation must return HTTP 201").toBe(201);
+  const body: unknown = await response.json().catch(() => undefined);
+  const details = gameDetailsSchema.safeParse(body);
+  if (!details.success) throw new Error("Game creation returned invalid game details");
+  return { response, details: details.data };
+}
+
 export async function startSandbox(page: Page, touch: boolean): Promise<GameSnapshot> {
   await page.goto("/sandbox");
   await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");

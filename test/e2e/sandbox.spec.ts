@@ -161,10 +161,13 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
   const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/sandbox/games" && response.status() === 201,
+    (response) =>
+      response.url() === API_ORIGIN + "/sandbox/games" && response.request().method() === "POST",
   );
   await activate(page.getByRole("button", { name: "New game" }), touch);
-  const next = gameSnapshotSchema.parse(await (await creation).json());
+  const response = await creation;
+  expect(response.status(), "Sandbox game creation must return HTTP 201").toBe(201);
+  const next = gameSnapshotSchema.parse(await response.json());
   expect(next.gameId).not.toBe(current.gameId);
   expect(next.version).toBe(0);
   expect(next.moves).toEqual([]);

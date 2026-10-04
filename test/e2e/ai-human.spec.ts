@@ -1,9 +1,18 @@
 import AxeBuilder from "@axe-core/playwright";
-import { gameDetailsSchema, type MoveCommand } from "@neurochess/contracts";
+import type { MoveCommand } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN } from "./environment";
-import { acceptedMove, activate, expect, playMove, readSnapshot, square, test } from "./fixtures";
+import {
+  acceptedMove,
+  activate,
+  expect,
+  playMove,
+  readSnapshot,
+  square,
+  submitGame,
+  test,
+} from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
 async function start(page: Page, color: "white" | "black", key = "match-fixture") {
@@ -20,11 +29,7 @@ async function start(page: Page, color: "white" | "black", key = "match-fixture"
   await model.fill("model-a");
   await model.press("ArrowDown");
   await model.press("Enter");
-  const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game", exact: true }).click();
-  const details = gameDetailsSchema.parse(await (await creation).json());
+  const { details } = await submitGame(page);
   expect(details.configuration).toMatchObject({
     mode: "ai_vs_human",
     seats: { [color]: { type: "human" } },
@@ -57,6 +62,29 @@ async function resign(page: Page, color: "white" | "black") {
     }),
   ).toBeVisible();
 }
+
+test("rejected game creation fails at the status assertion without exposing the response body", async ({
+  page,
+}) => {
+  const sentinel = "private-creation-response-sentinel";
+  await page.route(API_ORIGIN + "/games", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    return route.fulfill({ status: 409, json: { message: sentinel } });
+  });
+  const creation = start(page, "white");
+  await expect(creation).rejects.toThrow("Game creation must return HTTP 201");
+  await expect(creation).rejects.not.toThrow(sentinel);
+});
+
+test("malformed game creation details produce a safe contract failure", async ({ page }) => {
+  await page.route(API_ORIGIN + "/games", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    return route.fulfill({ status: 201, json: { snapshot: "private-creation-response-sentinel" } });
+  });
+  await expect(start(page, "white")).rejects.toThrow(
+    /^Game creation returned invalid game details$/,
+  );
+});
 
 for (const human of ["white", "black"] as const) {
   test(`${human} human plays a natural match with AI-first coordination and private replay`, async ({

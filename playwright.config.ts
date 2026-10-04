@@ -14,7 +14,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : "50%",
   timeout: 45_000,
   expect: { timeout: 8_000 },
-  reporter: "list",
+  reporter: [["list"], ["./test/e2e/duration-reporter.ts"]],
   globalSetup: "./test/e2e/global-setup.ts",
   outputDir: join(tmpdir(), "neurochess-playwright-results"),
   use: {

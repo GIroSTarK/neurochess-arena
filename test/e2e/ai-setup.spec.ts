@@ -1,10 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
-import { gameDetailsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
-import { expect, startSandbox, test } from "./fixtures";
+import { expect, startSandbox, submitGame, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
@@ -245,11 +244,7 @@ test("setup uses protected discovery and hands off an independently configured g
   expect((await new AxeBuilder({ page }).include("#arena-setup").analyze()).violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("setup-ready.png"), fullPage: true });
   await expectPrivate();
-  const created = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game" }).click();
-  const game = gameDetailsSchema.parse(await (await created).json());
+  const { details: game } = await submitGame(page);
   await expect(page.getByRole("status")).toContainText("Handoff received");
   expect(game.configuration?.seats).toMatchObject({
     white: { provider: "openai", modelId: "fixture/model-a", parameters: { temperature: 0.4 } },

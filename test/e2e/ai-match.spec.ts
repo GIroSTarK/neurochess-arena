@@ -1,12 +1,12 @@
 import { text as streamText } from "node:stream/consumers";
 
 import AxeBuilder from "@axe-core/playwright";
-import { gameDetailsSchema, type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN } from "./environment";
-import { expect, test } from "./fixtures";
+import { expect, submitGame, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
@@ -31,11 +31,7 @@ async function start(page: Page, white = "match-fixture", black = "match-fixture
   await page.goto("/");
   await configure(page, "White", white);
   await configure(page, "Black", black);
-  const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game", exact: true }).click();
-  const details = gameDetailsSchema.parse(await (await creation).json());
+  const { details } = await submitGame(page);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
   return details.snapshot;
 }

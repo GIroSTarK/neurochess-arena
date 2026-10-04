@@ -1,14 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  type AiProvider,
-  credentialMetadataSchema,
-  gameDetailsSchema,
-} from "@neurochess/contracts";
+import { type AiProvider, credentialMetadataSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
-import { expect } from "./fixtures";
+import { expect, submitGame } from "./fixtures";
 
 export async function credentialAccount(page: Page) {
   const email = `${randomUUID()}@example.com`;
@@ -111,11 +107,7 @@ export async function configureCredential(
 }
 
 export async function startCredentialGame(page: Page) {
-  const creation = page.waitForResponse(
-    (response) => response.url() === API_ORIGIN + "/games" && response.status() === 201,
-  );
-  await page.getByRole("button", { name: "Start game", exact: true }).click();
-  const game = gameDetailsSchema.parse(await (await creation).json());
+  const { details: game } = await submitGame(page);
   await expect(page.getByRole("grid")).toBeVisible();
   return game;
 }

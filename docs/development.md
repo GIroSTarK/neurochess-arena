@@ -459,7 +459,11 @@ Each browser context has an isolated guest. Per-test cleanup deletes guests/game
 
 Screenshots and failure context default to `neurochess-playwright-results` in the OS temporary directory, outside the repository. For Codex tasks, pass `--output=<absolute task artifact directory>/playwright` after `npm run test:e2e --` to follow the task's artifact-storage rules; redirect command logs to that directory too. Traces, HARs, and videos are disabled so authentication and guest cookie headers are not recorded.
 
+The duration reporter writes `durations.json` in the same output directory. It records the run status/start/duration and each attempt's project, source location, static test title, repeat/retry index, status and duration in milliseconds. Its field allowlist excludes errors, console output, steps, attachments and configuration metadata. Keep credentials and runtime values out of test titles. Collection-only runs do not replace duration evidence.
+
 CI runs on pull requests and pushes to `master`. The `checks` job runs Compose and migration checks, `npm run verify`, and the built-service startup check `npm run smoke`. In parallel, the `e2e` matrix runs `desktop` and `mobile-touch` on separate runners, each with its own PostgreSQL service, shared-package build, Chromium installation, and one Playwright worker. All jobs retain a 15-minute timeout. The final `verify` check runs even when a dependency fails, is cancelled, or is skipped, and passes only when both `checks` and the entire E2E matrix succeed.
+
+Each E2E matrix job uses its own runner-temporary output directory. Completed browser runs upload `e2e-durations-<project>`; failed runs also upload `e2e-failures-<project>` with only failure PNGs and the duration report. Both artifacts expire after seven days. Raw logs, failure-context files, downloads and authentication state are excluded from uploads.
 
 Automated checks do not certify screen-reader behavior or every browser engine. Consult the [current validation limits](design-system/validation.md) for remaining coverage gaps. Report each run in the change summary, PR, or CI; update that document only when a gap changes.
 

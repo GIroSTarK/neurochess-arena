@@ -114,7 +114,28 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Test browser project
-        run: npm run test:e2e -- --project=${{ matrix.project }}
+        id: browser-tests
+        run: npm run test:e2e -- --project=${{ matrix.project }} --output="$RUNNER_TEMP/neurochess-e2e-${{ matrix.project }}"
+
+      - name: Upload browser durations
+        if: ${{ !cancelled() && steps.browser-tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-durations-${{ matrix.project }}
+          path: ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/durations.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload browser failure evidence
+        if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failures-${{ matrix.project }}
+          path: |
+            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/**/test-failed-*.png
+            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/durations.json
+          if-no-files-found: warn
+          retention-days: 7
 
   verify:
     if: ${{ always() }}
