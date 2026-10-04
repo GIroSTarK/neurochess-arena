@@ -49,10 +49,28 @@ async function fixture() {
       controller.setModel(color, "fixture/model-a");
     }
   }
-  return { api, credentials, controller, disconnect, ready };
+  return { api, credentials, controller, disconnect, ready, lifetime };
 }
 
 describe("independent AI setup", () => {
+  it("aborts discovery immediately when its credential owner ends before screen unmount", async () => {
+    const { controller, api, credentials, lifetime } = await fixture();
+    controller.setKey("white", "white-sentinel-key");
+    const pending = deferred<ModelDiscoveryResult>();
+    api.discover.mockReturnValue(pending.promise);
+    const discovering = controller.discover("white");
+    await vi.waitFor(() => expect(api.discover).toHaveBeenCalledOnce());
+    lifetime.abort();
+    expect(api.discover.mock.calls[0]![1].aborted).toBe(true);
+    const stopped = controller.getSnapshot();
+    pending.resolve({ ok: true, models: setupModels("openai") });
+    await discovering;
+    expect(controller.getSnapshot()).toBe(stopped);
+    expect(stopped.seats.white.models).toEqual([]);
+    expect(() => credentials.require("white", "openai")).toThrow();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
   it("selects saved references per seat, cancels obsolete discovery and invalidates removed selections", async () => {
     const { controller, api, credentials } = await fixture();
     controller.updateSavedCredentials([saved]);

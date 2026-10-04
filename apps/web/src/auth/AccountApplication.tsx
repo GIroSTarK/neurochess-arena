@@ -2,6 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { createAuthApi } from "../api/auth-client";
+import type { AccountPage } from "../app/navigation";
+import type { AuthForm } from "../app/route-urls";
 import { CredentialsScreen } from "../credentials/CredentialsScreen";
 import { GuestHistory, HistoryScreen } from "../history/HistoryScreen";
 import { MatchScreen } from "../match/MatchScreen";
@@ -11,28 +13,30 @@ import { AccountFrame } from "./AccountFrame";
 import { AuthScreen } from "./AuthScreen";
 import { AccountContext } from "./context";
 import { AccountController } from "./controller";
-import { type AuthEntry, authHref, consumeAuthEntry } from "./navigation";
+import { type AuthEntry, authHref } from "./navigation";
 import { ProfileScreen } from "./ProfileScreen";
 
 export function AccountApplication({
   apiBaseUrl,
   sandboxEnabled,
-  entry: initialEntry,
+  entry,
+  page,
+  form = "sign-in",
 }: {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
-  readonly entry?: AuthEntry;
+  readonly entry: AuthEntry;
+  readonly page: AccountPage;
+  readonly form?: AuthForm;
 }) {
   const { t } = useTranslation();
-  const [entry] = useState(() => initialEntry ?? consumeAuthEntry());
   const [controller] = useState(() => new AccountController(createAuthApi(apiBaseUrl)));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => controller.connect(), [controller]);
-  const authPage =
-    window.location.pathname.startsWith("/auth/") || entry.verified || entry.error !== null;
-  const credentialPage = window.location.pathname === "/account/credentials";
-  const profilePage = window.location.pathname === "/account" || credentialPage;
-  const historyPage = window.location.pathname === "/history";
+  const authPage = page === "auth" || entry.verified || entry.error !== null;
+  const credentialPage = page === "credentials";
+  const profilePage = page === "profile" || credentialPage;
+  const historyPage = page === "history";
   return (
     <AccountContext value={{ controller, state }}>
       {state.deletion === "deleted" && state.phase !== "account" ? (
@@ -46,7 +50,7 @@ export function AccountApplication({
           </Button>
         </AccountFrame>
       ) : authPage ? (
-        <AuthScreen entry={entry} sandboxEnabled={sandboxEnabled} />
+        <AuthScreen key={form} kind={form} entry={entry} sandboxEnabled={sandboxEnabled} />
       ) : historyPage && state.phase === "guest" ? (
         <GuestHistory sandboxEnabled={sandboxEnabled} />
       ) : state.phase === "account" && credentialPage ? (

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
+import type { AuthForm } from "../app/route-urls";
 import { Button } from "../ui/Button";
 
 import { AccountField } from "./AccountField";
@@ -16,8 +17,7 @@ import { useRequiredAccount } from "./context";
 import { type AuthEntry, authHref } from "./navigation";
 import { PasswordField } from "./PasswordField";
 
-type FormKind = "sign-in" | "sign-up" | "verify" | "forgot-password" | "reset-password";
-const forms: Record<FormKind, "signIn" | "signUp" | "verify" | "forgot" | "reset"> = {
+const forms: Record<AuthForm, "signIn" | "signUp" | "verify" | "forgot" | "reset"> = {
   "sign-in": "signIn",
   "sign-up": "signUp",
   verify: "verify",
@@ -28,14 +28,14 @@ const forms: Record<FormKind, "signIn" | "signUp" | "verify" | "forgot" | "reset
 export function AuthScreen({
   entry,
   sandboxEnabled,
+  kind,
 }: {
   readonly entry: AuthEntry;
   readonly sandboxEnabled: boolean;
+  readonly kind: AuthForm;
 }) {
   const { t } = useTranslation();
   const account = useRequiredAccount();
-  const requested = window.location.pathname.slice("/auth/".length) as FormKind;
-  const kind = Object.hasOwn(forms, requested) ? requested : "sign-in";
   const title = forms[kind];
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);

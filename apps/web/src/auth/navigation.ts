@@ -1,16 +1,8 @@
-import { authErrorCodeSchema, gameParamsSchema } from "@neurochess/contracts";
+import { authErrorCodeSchema } from "@neurochess/contracts";
 
-export function safeReturnTo(value: string | null): string {
-  if (value === "/" || value === "/history") return value;
-  if (!value?.startsWith("/?")) return "/";
-  const url = new URL(value, window.location.origin);
-  const gameId = url.searchParams.get("game");
-  const parsed = gameParamsSchema.safeParse({ gameId });
-  if (url.hash || url.searchParams.size !== 1 || !parsed.success) {
-    return "/";
-  }
-  return "/?game=" + parsed.data.gameId.toLowerCase();
-}
+import { safeReturnTo } from "./urls";
+
+export { authHref, safeReturnTo } from "./urls";
 
 export function consumeAuthEntry() {
   const url = new URL(window.location.href);
@@ -50,11 +42,3 @@ export function consumeAuthEntry() {
 }
 
 export type AuthEntry = ReturnType<typeof consumeAuthEntry>;
-
-export function authHref(
-  page: "sign-in" | "sign-up" | "verify" | "forgot-password",
-  returnTo = "/",
-) {
-  const destination = safeReturnTo(returnTo);
-  return `/auth/${page}${destination === "/" ? "" : "?returnTo=" + encodeURIComponent(destination)}`;
-}

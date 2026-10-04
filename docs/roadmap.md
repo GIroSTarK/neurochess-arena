@@ -101,6 +101,13 @@ Deliverables:
 
 Exit condition: registered and guest lifecycle rules match the product specification, including deletion and credential-security tests.
 
+## Navigation and route data migration — before Phase 4
+
+**Status:** In progress
+
+- [x] Explicit page/form selection and controller entry, cleanup, and creation handoffs; native navigation retains its current URLs.
+- [ ] React Router Data mode, canonical game paths, route-owned reads and ordinary form actions, and migration acceptance coverage.
+
 ## Phase 4 — Private online human games
 
 Deliverables:
