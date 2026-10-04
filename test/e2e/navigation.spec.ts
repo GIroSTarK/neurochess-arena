@@ -247,11 +247,20 @@ test("Back restores history scroll after its delayed private read finishes", asy
   await expect(
     page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
   ).toHaveCount(20);
-  await page.evaluate(() => window.scrollTo({ top: 600, behavior: "instant" }));
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(600);
-  await page
-    .getByRole("link", { name: "Arena", exact: true })
-    .evaluate((link: HTMLAnchorElement) => link.click());
+  expect(
+    await page.getByRole("link", { name: "Arena", exact: true }).evaluate(
+      (link: HTMLAnchorElement) =>
+        new Promise<number>((resolve) => {
+          requestAnimationFrame(() => {
+            // Navigate before the browser delivers the scroll event that caches this position.
+            window.scrollTo({ top: 600, behavior: "instant" });
+            const top = window.scrollY;
+            link.click();
+            resolve(top);
+          });
+        }),
+    ),
+  ).toBe(600);
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Loading game history…", { exact: true })).toBeVisible();

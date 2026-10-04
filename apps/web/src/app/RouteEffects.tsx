@@ -74,16 +74,31 @@ export function RouteEffects({
     });
     return () => cancelAnimationFrame(frame);
   }, [location, action, navigation]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    let departed = false;
     const record = () => {
+      if (departed) return;
       const cache = positions.current;
       cache.set(location.key, { left: window.scrollX, top: window.scrollY });
       const oldest = cache.keys().next().value;
       if (cache.size > 50 && oldest) cache.delete(oldest);
     };
+    const unsubscribe = navigation.subscribe((destination) => {
+      if (destination.pathname === location.pathname && destination.search === location.search) {
+        // Cancellation can return to this entry without a React commit in between.
+        departed = false;
+      } else {
+        // Capture before the old page shrinks, even if its scroll event is still queued.
+        record();
+        departed = true;
+      }
+    });
     window.addEventListener("scroll", record, { passive: true });
-    return () => window.removeEventListener("scroll", record);
-  }, [location.key]);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("scroll", record);
+    };
+  }, [location.key, location.pathname, location.search, navigation]);
   return pending.state !== "idle" ? (
     <div
       role="status"

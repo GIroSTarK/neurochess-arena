@@ -40,8 +40,17 @@ export interface RouteOwner {
 // Lives with the router, never in router results or browser history state.
 export class RouteNavigation {
   private readonly owners = new Set<RouteOwner>();
+  private readonly listeners = new Set<(location: RouteAddress) => void>();
   private focusHandoff: string | null = null;
   private destination: RouteAddress | null = null;
+
+  subscribe(listener: (location: RouteAddress) => void) {
+    this.listeners.add(listener);
+    if (this.destination) listener(this.destination);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
 
   register(owner: RouteOwner) {
     this.owners.add(owner);
@@ -53,6 +62,7 @@ export class RouteNavigation {
 
   departing(location: RouteAddress) {
     this.destination = location;
+    for (const listener of this.listeners) listener(location);
     for (const owner of this.owners) if (!owner.accepts(location)) owner.end();
     if (this.focusHandoff !== location.pathname) this.focusHandoff = null;
   }
