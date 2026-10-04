@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+
+import { authHref, gameHref, parseGameId, safeReturnTo } from "./route-urls";
+
+const id = "abcdef00-1234-4000-8000-000000000001";
+
+describe("canonical route URLs prepared for the Data router", () => {
+  it("normalizes UUIDs and emits private game paths without a trailing slash", () => {
+    expect(parseGameId(id.toUpperCase())).toBe(id);
+    expect(gameHref("arena", id.toUpperCase())).toBe("/games/" + id);
+    expect(gameHref("sandbox", id)).toBe("/sandbox/games/" + id);
+  });
+
+  it.each([undefined, null, "", "invalid", id + "/", "%2f" + id, "../" + id, [id]])(
+    "rejects invalid game identity %j before construction",
+    (value) => {
+      expect(parseGameId(value)).toBeNull();
+      if (typeof value === "string") expect(() => gameHref("arena", value)).toThrow();
+    },
+  );
+
+  it("allows only public entry, history, and validated public game return paths", () => {
+    expect(safeReturnTo("/history")).toBe("/history");
+    expect(safeReturnTo("/games/" + id.toUpperCase())).toBe("/games/" + id);
+    expect(authHref("sign-in", "/games/" + id)).toBe(
+      "/auth/sign-in?returnTo=%2Fgames%2Fabcdef00-1234-4000-8000-000000000001",
+    );
+  });
+
+  it.each([
+    null,
+    "https://evil.test",
+    "//evil.test",
+    "/\\evil.test",
+    "/account",
+    "/sandbox",
+    "/sandbox/games/" + id,
+    "/?game=" + id,
+    "/?game=",
+    "/history/",
+    "/history?next=/",
+    "/Games/" + id,
+    "/games/",
+    "/games/bad",
+    "/games/" + id + "/",
+    "/games/" + id + "/extra",
+    "/games/" + id + "?game=" + id,
+    "/games/" + id + "#token=secret",
+    "/games/%2f" + id,
+    "/games/" + id + "%2f",
+  ])("rejects unsupported or unsafe return paths %s", (value) => {
+    expect(safeReturnTo(value)).toBe("/");
+    expect(authHref("sign-up", value ?? "/")).toBe("/auth/sign-up");
+  });
+});

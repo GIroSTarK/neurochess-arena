@@ -1,10 +1,10 @@
-import { lazy, Suspense, useSyncExternalStore } from "react";
+import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 
 import { AccountApplication } from "../auth/AccountApplication";
-import type { AuthEntry } from "../auth/navigation";
+import { type AuthEntry, consumeAuthEntry } from "../auth/navigation";
 
 import { DocumentMetadata } from "./DocumentMetadata";
-import { readAppPage, subscribeToNavigation } from "./navigation";
+import { accountPage, appPage, authForm, readPathname, subscribeToNavigation } from "./navigation";
 import { SandboxLoadingScreen } from "./SandboxLoadingScreen";
 import { StaticScreen } from "./StaticScreen";
 
@@ -36,7 +36,9 @@ export interface AppProps {
 }
 
 export function App({ apiBaseUrl, sandboxEnabled, authEntry }: AppProps) {
-  const requestedPage = useSyncExternalStore(subscribeToNavigation, readAppPage);
+  const pathname = useSyncExternalStore(subscribeToNavigation, readPathname);
+  const requestedPage = appPage(pathname);
+  const [entry] = useState(() => authEntry ?? consumeAuthEntry());
   if (
     import.meta.env.DEV &&
     requestedPage === "reference" &&
@@ -74,7 +76,9 @@ export function App({ apiBaseUrl, sandboxEnabled, authEntry }: AppProps) {
         <AccountApplication
           apiBaseUrl={apiBaseUrl}
           sandboxEnabled={sandboxEnabled && SandboxScreen !== null}
-          {...(authEntry ? { entry: authEntry } : {})}
+          page={accountPage(pathname)}
+          form={authForm(pathname)}
+          entry={entry}
         />
       ) : (
         <StaticScreen page={page} sandboxEnabled={sandboxEnabled && SandboxScreen !== null} />

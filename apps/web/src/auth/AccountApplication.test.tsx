@@ -7,6 +7,8 @@ import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixture
 import { createHttpMock } from "../test/http";
 import { renderLocalized } from "../test/render";
 
+import { AccountApplication } from "./AccountApplication";
+
 const session = {
   user: { id: GAME_ID, email: "private@example.com", emailVerified: true },
   session: { expiresAt: "2027-10-01T00:00:00.000Z" },
@@ -22,6 +24,30 @@ afterEach(() => {
 });
 
 describe("account presentation", () => {
+  it("selects the auth form from explicit props rather than the document pathname", async () => {
+    window.history.replaceState(null, "", "/account");
+    const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
+    vi.stubGlobal("fetch", http.fetch);
+    renderLocalized(
+      <AccountApplication
+        apiBaseUrl="http://localhost:3001"
+        sandboxEnabled={false}
+        page="auth"
+        form="forgot-password"
+        entry={{
+          returnTo: "/",
+          verified: false,
+          error: null,
+          readResetToken: () => null,
+          clearResetToken: () => undefined,
+        }}
+      />,
+    );
+    expect(await screen.findByRole("button", { name: "Request reset link" })).toBeVisible();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    http.assertNoUnexpectedRequests();
+  });
+
   it.each(["focus", "profile-changed"])(
     "uses the refreshed username in an untouched form after a %s notification",
     async (notification) => {

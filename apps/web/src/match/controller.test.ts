@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
 import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
-import { GAME_ID, snapshot } from "../test/fixtures";
+import { GAME_ID, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
 import { MatchController } from "./controller";
 
@@ -60,7 +60,8 @@ function harness(initial = details) {
     ),
     pgn: vi.fn<AiApi["pgn"]>(),
   } satisfies AiApi;
-  const controller = new MatchController(api);
+  const navigation = { game: vi.fn(), setup: vi.fn() };
+  const controller = new MatchController(api, undefined, navigation);
   const disconnect = controller.connect();
   cleanups.push(disconnect);
   const keys = () => {
@@ -73,6 +74,7 @@ function harness(initial = details) {
     controller,
     keys,
     disconnect,
+    navigation,
     store: (next: GameSnapshot) => {
       stored = next;
     },
@@ -82,7 +84,6 @@ function harness(initial = details) {
 let cleanups: (() => void)[];
 beforeEach(() => {
   cleanups = [];
-  window.history.replaceState(null, "", "/");
   vi.useFakeTimers();
 });
 afterEach(() => {
@@ -91,6 +92,97 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("does not dispatch obsolete seeded recovery during a StrictMode reconnect", async () => {
+    const h = harness();
+    const entry = { kind: "game" as const, gameId: GAME_ID, details };
+    h.controller.connect(entry)();
+    h.controller.connect(entry);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    expect(h.api.details).not.toHaveBeenCalled();
+  });
+
+  it("accepts entry details without repeating the read and recovers at the supplied revision", async () => {
+    const h = harness();
+    await h.controller.enter({ kind: "game", gameId: GAME_ID, details });
+    expect(h.api.details).not.toHaveBeenCalled();
+    expect(h.api.snapshot).not.toHaveBeenCalled();
+    expect(h.api.lifecycle.mock.calls[0]?.[0]).toMatchObject({
+      action: "pause",
+      expectedVersion: 0,
+    });
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    expect(h.controller.getSnapshot().keys).toEqual({ white: false, black: false });
+  });
+
+  it("ends a lifetime immediately and idempotently, fencing an ignored turn cancellation", async () => {
+    const h = harness();
+    h.keys();
+    const credentials = h.controller.credentials!;
+    const pending = Promise.withResolvers<GameSnapshot>();
+    h.api.turn.mockReturnValue(pending.promise);
+    const starting = h.controller.created(details);
+    await vi.advanceTimersByTimeAsync(0);
+    const signal = h.api.turn.mock.calls[0]![2];
+    h.controller.endLifetime();
+    const stopped = h.controller.getSnapshot();
+    h.controller.endLifetime();
+    expect(h.controller.getSnapshot()).toBe(stopped);
+    expect(signal.aborted).toBe(true);
+    expect(() => credentials.require("white", "openai")).toThrow();
+    pending.resolve(snapshot(["e2e4"]));
+    await starting;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(h.controller.getSnapshot()).toBe(stopped);
+    expect(stopped.details).toBeNull();
+    expect(h.api.turn).toHaveBeenCalledTimes(1);
+    expect(h.api.controller).toHaveBeenCalledTimes(1);
+  });
+
+  it("fences an old entry read after reconnecting or choosing another game", async () => {
+    const h = harness();
+    const late = Promise.withResolvers<GameDetails>();
+    h.api.details.mockReturnValueOnce(late.promise);
+    const opening = h.controller.enter({ kind: "game", gameId: OTHER_GAME_ID });
+    const signal = h.api.details.mock.calls[0]![1];
+    await h.controller.enter({ kind: "game", gameId: GAME_ID, details });
+    expect(signal.aborted).toBe(true);
+    late.resolve({ ...details, snapshot: snapshot([], { gameId: OTHER_GAME_ID }) });
+    await opening;
+    expect(h.controller.getSnapshot().details?.snapshot.gameId).toBe(GAME_ID);
+    expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps setup credentials through a creation callback without reading or recovering the game", async () => {
+    const h = harness(humanGame("white"));
+    const credentials = h.controller.credentials;
+    h.keys();
+    await h.controller.created(humanGame("white"));
+    expect(h.navigation.game).toHaveBeenCalledWith(GAME_ID, "created");
+    expect(h.controller.credentials).toBe(credentials);
+    expect(h.controller.getSnapshot().keys.black).toBe(true);
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("active");
+    expect(h.api.details).not.toHaveBeenCalled();
+    expect(h.api.snapshot).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+    h.controller.endLifetime();
+    h.controller.connect({ kind: "game", gameId: GAME_ID });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
+    expect(h.controller.getSnapshot().keys.black).toBe(false);
+  });
+
+  it("rejects malformed targets and mismatched entry data before private reads or recovery", async () => {
+    const h = harness();
+    await h.controller.enter({ kind: "game", gameId: "../private" });
+    expect(h.controller.getSnapshot().phase).toBe("unavailable");
+    await h.controller.enter({ kind: "game", gameId: OTHER_GAME_ID, details });
+    expect(h.controller.getSnapshot().details).toBeNull();
+    expect(h.api.details).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+  });
+
   it("requires explicit saved selection after recovery and dispatches only on Next move", async () => {
     const h = harness();
     await h.controller.load(GAME_ID);
@@ -109,7 +201,7 @@ describe("page-owned Arena orchestration", () => {
     await h.controller.continue(true);
     expect(h.api.turn.mock.calls[0]?.[1]).toEqual({ credentialId: GAME_ID });
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
-    window.dispatchEvent(new Event("pagehide"));
+    h.controller.endLifetime();
     expect(h.controller.getSnapshot().keys).toEqual({ white: false, black: false });
   });
   it("does not restore an earlier provider-pause notice while an explicit retry is in flight", async () => {
@@ -361,7 +453,7 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.snapshot).toHaveBeenCalledTimes(1);
     const signal = h.api.snapshot.mock.calls.at(-1)![1];
 
-    window.dispatchEvent(new Event("pagehide"));
+    h.controller.endLifetime();
     expect(signal.aborted).toBe(true);
     pending.resolve(latest);
     await vi.advanceTimersByTimeAsync(0);
@@ -546,8 +638,8 @@ describe("page-owned Arena orchestration", () => {
   });
 
   it("requires only the AI key after human-turn recovery and never steps a human seat", async () => {
-    window.history.replaceState(null, "", "/?game=" + GAME_ID);
     const h = harness(humanGame("white"));
+    await h.controller.load(GAME_ID);
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     await h.controller.continue(false);
@@ -665,8 +757,8 @@ describe("page-owned Arena orchestration", () => {
   });
 
   it("recovers on refresh, blocks missing keys, and only steps after explicit action", async () => {
-    window.history.replaceState(null, "", "/?game=" + GAME_ID);
     const h = harness();
+    await h.controller.load(GAME_ID);
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.api.controller).not.toHaveBeenCalled();
@@ -688,7 +780,7 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.turn).toHaveBeenCalledTimes(1);
   });
 
-  it("halts on heartbeat failure and clears keys and pending requests on pagehide", async () => {
+  it("halts on heartbeat failure and clears keys and pending requests on lifetime end", async () => {
     const h = harness();
     h.keys();
     h.api.turn.mockReturnValue(new Promise(() => undefined));
@@ -698,7 +790,7 @@ describe("page-owned Arena orchestration", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(h.controller.getSnapshot().phase).toBe("uncertain");
     const signal = h.api.turn.mock.calls[0]?.[2];
-    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+    h.controller.endLifetime();
     expect(signal?.aborted).toBe(true);
     expect(h.controller.credentials).toBeNull();
     expect(h.controller.getSnapshot().details).toBeNull();
@@ -707,8 +799,8 @@ describe("page-owned Arena orchestration", () => {
   });
 
   it("access loss clears private state without a replacement guest bootstrap", async () => {
-    window.history.replaceState(null, "", "/?game=" + GAME_ID);
     const h = harness();
+    await h.controller.load(GAME_ID);
     await vi.advanceTimersByTimeAsync(0);
     h.api.lifecycle.mockRejectedValue(new ApiFailure("api", "UNAUTHORIZED"));
     await h.controller.lifecycle("abort");

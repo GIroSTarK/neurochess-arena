@@ -6,6 +6,14 @@ import { type AiIdentity, createAiApi } from "../api/ai-client";
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
+import {
+  appPage,
+  openBrowserGame,
+  openBrowserSetup,
+  readBrowserGameTarget,
+  readPathname,
+  subscribeToNavigation,
+} from "../app/navigation";
 import { ArenaDetails } from "../arena/ArenaDetails";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { ArenaLayout } from "../arena/ArenaLayout";
@@ -43,7 +51,11 @@ export function MatchScreen({
   const { t } = useTranslation();
   const account = useAccount();
   const [controller] = useState(
-    () => new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {})),
+    () =>
+      new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {}), undefined, {
+        game: (gameId) => openBrowserGame("arena", gameId, true),
+        setup: openBrowserSetup,
+      }),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const needsCredentials =
@@ -71,7 +83,28 @@ export function MatchScreen({
   ]);
   const identitySignal = identity?.signal;
   useEffect(() => {
-    const disconnect = controller.connect();
+    const navigate = () => {
+      if (appPage(readPathname()) !== "arena") {
+        controller.endLifetime();
+        return;
+      }
+      const target = readBrowserGameTarget();
+      void controller.enter(target.kind === "none" ? { kind: "setup" } : target);
+    };
+    const pagehide = () => controller.endLifetime();
+    const pageshow = (event: PageTransitionEvent) => {
+      if (event.persisted) navigate();
+    };
+    const unsubscribe = subscribeToNavigation(navigate);
+    window.addEventListener("pagehide", pagehide);
+    window.addEventListener("pageshow", pageshow);
+    const disconnect = () => {
+      unsubscribe();
+      window.removeEventListener("pagehide", pagehide);
+      window.removeEventListener("pageshow", pageshow);
+      controller.endLifetime();
+    };
+    if (!identitySignal?.aborted) navigate();
     identitySignal?.addEventListener("abort", disconnect, { once: true });
     if (identitySignal?.aborted) disconnect();
     return () => {
@@ -96,6 +129,7 @@ export function MatchScreen({
   if (state.phase === "setup" && controller.credentials) {
     return (
       <ArenaSetupScreen
+        key={state.keyEpoch}
         api={controller.api}
         credentials={controller.credentials}
         {...(savedCredentials ? { savedCredentials } : {})}

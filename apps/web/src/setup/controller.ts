@@ -74,8 +74,8 @@ export class SetupController {
   connect() {
     this.lifetime = new AbortController();
     window.addEventListener("pagehide", this.clearPage);
-    void this.checkExisting();
-    return () => {
+    const disconnect = () => {
+      this.credentials.signal.removeEventListener("abort", disconnect);
       window.removeEventListener("pagehide", this.clearPage);
       this.cancel();
       this.lifetime = null;
@@ -85,6 +85,10 @@ export class SetupController {
         this.publish({ ...this.state, phase: "checking", existingGameId: null, issue: null });
       }
     };
+    this.credentials.signal.addEventListener("abort", disconnect, { once: true });
+    if (this.credentials.signal.aborted) disconnect();
+    else void this.checkExisting();
+    return disconnect;
   }
 
   private cancel() {

@@ -37,6 +37,7 @@ export function createSessionCredentials(lifetime: AbortSignal) {
     keys.set(color, { provider, source: parsed.data });
   }
   return {
+    signal: lifetime,
     set(color: ChessColor, provider: AiProvider, apiKey: string) {
       set(color, provider, { apiKey });
     },

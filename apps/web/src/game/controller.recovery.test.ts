@@ -5,10 +5,94 @@ import { ApiFailure } from "../api/client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { harness } from "../test/sandbox-controller";
 
-import type { SandboxNavigation } from "./navigation";
+import { SandboxController } from "./controller";
 import type { SandboxState } from "./state";
 
 describe("sandbox recovery and navigation", () => {
+  it("does not dispatch obsolete seeded recovery during a StrictMode reconnect", async () => {
+    const { api, controller } = harness();
+    const initial = snapshot();
+    api.lifecycle.mockResolvedValue(snapshot([], { state: "paused", legalMoves: [], version: 1 }));
+    const entry = {
+      target: { kind: "game" as const, gameId: initial.gameId },
+      snapshot: initial,
+      readiness: true,
+    };
+    controller.connect(entry)();
+    controller.connect(entry);
+    await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
+    expect(api.lifecycle).toHaveBeenCalledTimes(1);
+    expect(api.snapshot).not.toHaveBeenCalled();
+    controller.endLifetime();
+  });
+
+  it("seeds readiness and recovery without repeating loader reads", async () => {
+    const { api } = harness();
+    const initial = snapshot();
+    const paused = snapshot([], { state: "paused", legalMoves: [], version: 1 });
+    api.lifecycle.mockResolvedValue(paused);
+    const onGame = vi.fn();
+    const controller = new SandboxController(api, undefined, onGame);
+    controller.connect({
+      target: { kind: "game", gameId: initial.gameId },
+      snapshot: initial,
+      readiness: true,
+    });
+    await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(paused));
+    expect(api.ready).not.toHaveBeenCalled();
+    expect(api.snapshot).not.toHaveBeenCalled();
+    expect(api.unfinished).not.toHaveBeenCalled();
+    expect(api.lifecycle).toHaveBeenCalledTimes(1);
+    expect(onGame).toHaveBeenCalledWith(initial.gameId, "recovered");
+    controller.endLifetime();
+  });
+
+  it("clears private state on lifetime end and ignores late discovery after reconnect", async () => {
+    const { api, controller } = harness();
+    const late = Promise.withResolvers<ReturnType<typeof snapshot> | null>();
+    api.unfinished.mockReturnValueOnce(late.promise);
+    controller.connect();
+    const signal = api.unfinished.mock.calls[0]![0];
+    controller.endLifetime();
+    const ended = controller.getSnapshot();
+    controller.endLifetime();
+    expect(controller.getSnapshot()).toBe(ended);
+    expect(signal.aborted).toBe(true);
+    controller.connect({ target: { kind: "none" }, snapshot: null, readiness: true });
+    late.resolve(snapshot());
+    await Promise.resolve();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "entry",
+      snapshot: null,
+      pendingCommand: null,
+    });
+    expect(api.lifecycle).not.toHaveBeenCalled();
+    expect(api.unfinished).toHaveBeenCalledTimes(1);
+    controller.endLifetime();
+  });
+
+  it("hands a newly created game to navigation without recovering it", async () => {
+    const { api } = harness();
+    const onGame = vi.fn();
+    const controller = new SandboxController(api, undefined, onGame);
+    controller.connect({ target: { kind: "none" }, snapshot: null, readiness: true });
+    await Promise.resolve();
+    await controller.start();
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      snapshot: { state: "active" },
+    });
+    expect(onGame).toHaveBeenCalledWith(snapshot().gameId, "created");
+    expect(api.snapshot).not.toHaveBeenCalled();
+    expect(api.lifecycle).not.toHaveBeenCalled();
+    controller.endLifetime();
+    expect(controller.getSnapshot()).toMatchObject({
+      snapshot: null,
+      replay: null,
+      pendingCommand: null,
+    });
+  });
+
   it("ignores obsolete discovery during duplicate mounts and pauses only the current recovery", async () => {
     const initial = snapshot(["e2e4"]);
     const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
@@ -186,24 +270,13 @@ describe("sandbox recovery and navigation", () => {
   });
 
   it("opens private URLs and ignores a late response after history navigation", async () => {
-    let listener: () => void = () => undefined;
-    let target = OTHER_GAME_ID;
-    const navigation: SandboxNavigation = {
-      read: () => ({ kind: "game" as const, gameId: target }),
-      open: vi.fn(),
-      subscribe: (next) => {
-        listener = next;
-        return () => undefined;
-      },
-    };
-    const { api, controller } = harness(snapshot(), navigation);
+    const { api, controller } = harness();
     const late = Promise.withResolvers<ReturnType<typeof snapshot>>();
     api.snapshot.mockReturnValueOnce(late.promise);
-    const disconnect = controller.connect();
-    target = snapshot().gameId;
+    const disconnect = controller.connect({ target: { kind: "game", gameId: OTHER_GAME_ID } });
     const paused = snapshot([], { state: "paused", legalMoves: [], version: 3 });
     api.snapshot.mockResolvedValue(paused);
-    listener();
+    void controller.enter({ target: { kind: "game", gameId: snapshot().gameId } });
     await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(paused));
     late.resolve(snapshot([], { gameId: OTHER_GAME_ID }));
     await Promise.resolve();
@@ -213,13 +286,8 @@ describe("sandbox recovery and navigation", () => {
   });
 
   it("treats an invalid game link as lost access without contacting the service", async () => {
-    const navigation: SandboxNavigation = {
-      read: () => ({ kind: "invalid" }),
-      open: vi.fn(),
-      subscribe: () => () => undefined,
-    };
-    const { api, controller } = harness(snapshot(), navigation);
-    await controller.recover();
+    const { api, controller } = harness();
+    await controller.enter({ target: { kind: "invalid" } });
     expect(controller.getSnapshot()).toMatchObject({
       phase: "access-error",
       snapshot: null,

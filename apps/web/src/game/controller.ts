@@ -1,8 +1,10 @@
+import type { GameSnapshot } from "@neurochess/contracts";
+
 import type { SandboxApi } from "../api/client";
+import type { GameTarget } from "../app/navigation";
 
 import { ArchiveController } from "./archive";
 import { failureNotice, isAccessCode, safeFailure } from "./failures";
-import type { SandboxNavigation } from "./navigation";
 import { OperationGate } from "./operations";
 import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
@@ -10,11 +12,15 @@ import { GameSession } from "./session";
 import { isTerminal, isUnfinished, type LifecycleAction, type SandboxState } from "./state";
 import { SandboxStore } from "./store";
 
-/**
- * Facade over the sandbox client. It composes the store, the serial operation gate, the game
- * session, paused recovery, and the terminal-game archive, and owns what is specific to the
- * sandbox entry flow: service readiness, guest bootstrap and creation, and URL history.
- */
+export interface SandboxEntry {
+  readonly target: GameTarget;
+  readonly snapshot?: GameSnapshot | null;
+  readonly readiness?: boolean;
+}
+
+export type SandboxGameNavigation = (gameId: string, reason: "created" | "recovered") => void;
+
+/** Composes command serialization, paused recovery, private replay, and explicit creation. */
 export class SandboxController {
   private readonly store = new SandboxStore();
   private readonly gate = new OperationGate();
@@ -22,12 +28,13 @@ export class SandboxController {
   private readonly session: GameSession;
   private readonly recovery: RecoveryController;
   private readinessAbort: AbortController | null = null;
-  private unsubscribeNavigation: (() => void) | null = null;
+  private target: GameTarget = { kind: "none" };
+  private ended = false;
 
   constructor(
     private readonly api: SandboxApi,
     commandId: () => string = () => crypto.randomUUID(),
-    private readonly navigation?: SandboxNavigation,
+    private readonly onGame?: SandboxGameNavigation,
     delivery: PgnDelivery = browserPgnDelivery,
   ) {
     const { store, gate } = this;
@@ -44,7 +51,10 @@ export class SandboxController {
       store,
       gate,
       commandId,
-      navigation,
+      onGame: (gameId) => {
+        this.target = { kind: "game", gameId };
+        this.onGame?.(gameId, "recovered");
+      },
       session: this.session,
     });
   }
@@ -52,23 +62,16 @@ export class SandboxController {
   readonly getSnapshot = (): SandboxState => this.store.get();
   readonly subscribe = (listener: () => void): (() => void) => this.store.subscribe(listener);
 
-  connect(): () => void {
+  connect(entry?: SandboxEntry): () => void {
+    if (entry) {
+      void this.enter(entry);
+      return () => this.disconnect();
+    }
+    this.ended = false;
     this.gate.connect();
     void this.checkReadiness();
-    this.unsubscribeNavigation?.();
-    this.unsubscribeNavigation =
-      this.navigation?.subscribe(() => {
-        // History navigation cancels obsolete requests and clears private view state.
-        this.gate.invalidate();
-        this.archive.cancel();
-        this.store.transition(
-          { snapshot: null, pendingCommand: null, phase: "entry" },
-          { notice: null },
-        );
-        void this.recovery.recover();
-      }) ?? null;
     const { snapshot, replay } = this.store.get();
-    if (!snapshot) void this.recovery.recover();
+    if (!snapshot) void this.recover();
     else if (isTerminal(snapshot) && !replay) void this.archive.loadReplay();
     return () => this.disconnect();
   }
@@ -77,8 +80,6 @@ export class SandboxController {
     this.gate.disconnect();
     this.readinessAbort?.abort();
     this.readinessAbort = null;
-    this.unsubscribeNavigation?.();
-    this.unsubscribeNavigation = null;
     this.archive.cancel();
     const { phase, snapshot, pendingCommand } = this.store.get();
     if (pendingCommand) {
@@ -104,6 +105,36 @@ export class SandboxController {
         { notice: "recovery-required" },
       );
     }
+  }
+
+  endLifetime(): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.disconnect();
+    this.session.endRecovery();
+    this.store.transition(
+      { phase: "entry", snapshot: null, pendingCommand: null },
+      { notice: null, invalidateInteraction: true },
+    );
+  }
+
+  async enter(entry: SandboxEntry): Promise<void> {
+    this.endLifetime();
+    this.ended = false;
+    this.gate.connect();
+    this.target = entry.target;
+    if (entry.target.kind !== "invalid") {
+      if (entry.readiness === undefined) void this.checkReadiness();
+      else this.store.setReadiness(entry.readiness ? "ready" : "unavailable");
+    }
+    await this.recovery.recover(this.target, entry.snapshot);
+  }
+
+  private acceptCreated(snapshot: GameSnapshot): void {
+    this.archive.cancel();
+    this.target = { kind: "game", gameId: snapshot.gameId };
+    this.session.accept(snapshot, "started", null);
+    this.onGame?.(snapshot.gameId, "created");
   }
 
   async checkReadiness(): Promise<void> {
@@ -143,9 +174,7 @@ export class SandboxController {
       if (!this.gate.isCurrent(operation)) return;
       const created = await this.api.create(operation.abort.signal);
       if (this.gate.isCurrent(operation)) {
-        this.archive.cancel();
-        this.navigation?.open(created.gameId);
-        this.session.accept(created, "started", null);
+        this.acceptCreated(created);
       }
     } catch (error: unknown) {
       if (!this.gate.isCurrent(operation)) return;
@@ -193,7 +222,7 @@ export class SandboxController {
   }
 
   recover(): Promise<void> {
-    return this.recovery.recover();
+    return this.recovery.recover(this.target);
   }
 
   loadReplay(): Promise<void> {

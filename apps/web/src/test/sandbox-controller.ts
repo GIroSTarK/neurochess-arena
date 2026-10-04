@@ -1,15 +1,14 @@
 import { vi } from "vitest";
 
 import { ApiFailure, type SandboxApi } from "../api/client";
-import { SandboxController } from "../game/controller";
-import type { SandboxNavigation } from "../game/navigation";
+import { SandboxController, type SandboxGameNavigation } from "../game/controller";
 import type { PgnDelivery } from "../game/pgn";
 
 import { snapshot } from "./fixtures";
 
 export function harness(
   initial = snapshot(),
-  navigation?: SandboxNavigation,
+  navigation?: SandboxGameNavigation,
   delivery?: PgnDelivery,
 ) {
   const api = {

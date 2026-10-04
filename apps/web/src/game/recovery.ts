@@ -1,9 +1,10 @@
 import type { GameSnapshot, LifecycleCommand } from "@neurochess/contracts";
 
 import { ApiFailure, type SandboxApi } from "../api/client";
+import type { GameTarget } from "../app/navigation";
+import { parseGameId } from "../app/route-urls";
 
 import { failureNotice, rejectionOf, safeFailure } from "./failures";
-import type { SandboxNavigation } from "./navigation";
 import type { Operation, OperationGate } from "./operations";
 import type { GameSession } from "./session";
 import { isTerminal } from "./state";
@@ -14,7 +15,7 @@ export interface RecoveryContext {
   readonly store: SandboxStore;
   readonly gate: OperationGate;
   readonly commandId: () => string;
-  readonly navigation: SandboxNavigation | undefined;
+  readonly onGame: (gameId: string) => void;
   readonly session: Pick<
     GameSession,
     "accept" | "loseAccess" | "readBack" | "validRevision" | "beginRecovery" | "endRecovery"
@@ -25,22 +26,21 @@ export interface RecoveryContext {
 const PAUSE_ATTEMPTS = 3;
 
 /**
- * Reopens an existing game as paused. The URL's game, or the guest's unfinished sandbox, is
+ * Reopens an existing game as paused. The selected game, or the guest's unfinished sandbox, is
  * read through guest authorization and then paused with the same versioned command as the
  * Pause control. Reads never change lifecycle, and no recovered active snapshot enables play.
  */
 export class RecoveryController {
   constructor(private readonly context: RecoveryContext) {}
 
-  async recover(): Promise<void> {
-    const { api, store, gate, navigation, session } = this.context;
+  async recover(target: GameTarget, entrySnapshot?: GameSnapshot | null): Promise<void> {
+    const { api, store, gate, session } = this.context;
     if (store.get().pendingCommand) return;
     const operation = gate.begin();
     if (!operation) return;
-    const target = navigation?.read() ?? { kind: "none" as const };
     const gameId =
       target.kind === "game"
-        ? target.gameId
+        ? parseGameId(target.gameId)
         : target.kind === "none"
           ? (store.get().snapshot?.gameId ?? null)
           : null;
@@ -52,11 +52,17 @@ export class RecoveryController {
       { notice: null },
     );
     try {
-      if (target.kind === "invalid") throw new ApiFailure("api", "NOT_FOUND");
-      const snapshot = gameId
-        ? await api.snapshot(gameId, operation.abort.signal)
-        : await api.unfinished(operation.abort.signal);
+      if (target.kind === "invalid" || (target.kind === "game" && !gameId)) {
+        throw new ApiFailure("api", "NOT_FOUND");
+      }
+      // Seeded entries also yield so a discarded mount cannot begin recovery writes.
+      const snapshot = await (entrySnapshot !== undefined
+        ? entrySnapshot
+        : gameId
+          ? api.snapshot(gameId, operation.abort.signal)
+          : api.unfinished(operation.abort.signal));
       if (!gate.isCurrent(operation)) return;
+      if (gameId && !snapshot) throw new ApiFailure("malformed");
       if (snapshot) {
         if (gameId && !session.validRevision(snapshot, gameId)) throw new ApiFailure("malformed");
         await this.pauseRecovered(operation, snapshot);
@@ -94,9 +100,9 @@ export class RecoveryController {
   }
 
   async pauseRecovered(operation: Operation, initial: GameSnapshot): Promise<void> {
-    const { api, store, gate, navigation, session } = this.context;
+    const { api, store, gate, onGame, session } = this.context;
     session.beginRecovery();
-    navigation?.open(initial.gameId, true);
+    onGame(initial.gameId);
     let snapshot = initial;
     for (let attempt = 0; attempt < PAUSE_ATTEMPTS; attempt += 1) {
       if (!gate.isCurrent(operation)) return;

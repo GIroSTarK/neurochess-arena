@@ -4,7 +4,6 @@ import {
   type CredentialMetadata,
   type GameDetails,
   type GameInvocations,
-  gameParamsSchema,
   type GameReplayResponse,
   type GameSnapshot,
   type LifecycleCommand,
@@ -16,6 +15,7 @@ import {
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
 import { createSessionCredentials } from "../api/session-credentials";
+import { parseGameId } from "../app/route-urls";
 import { browserPgnDelivery, type PgnDelivery } from "../position/pgn";
 
 export type MatchIssue =
@@ -51,6 +51,16 @@ const terminal = (snapshot: GameSnapshot) =>
   snapshot.state === "completed" || snapshot.state === "aborted";
 const colors = ["white", "black"] as const;
 
+export type MatchEntry =
+  | { readonly kind: "setup" }
+  | { readonly kind: "invalid" }
+  | { readonly kind: "game"; readonly gameId: string; readonly details?: GameDetails };
+
+export interface MatchNavigation {
+  game(gameId: string, reason: "created" | "recovered"): void;
+  setup(): void;
+}
+
 export function humanColor(details: GameDetails | null): ChessColor | null {
   const configuration = details?.configuration;
   return configuration?.mode === "ai_vs_human"
@@ -83,6 +93,7 @@ export class MatchController {
   private control: LifecycleCommand | null = null;
   private humanCommand: MoveCommand | null = null;
   private readonly listeners = new Set<() => void>();
+  private entry: MatchEntry = { kind: "setup" };
   private state: MatchState = {
     phase: "loading",
     details: null,
@@ -110,6 +121,7 @@ export class MatchController {
   constructor(
     readonly api: AiApi,
     private readonly delivery: PgnDelivery = browserPgnDelivery,
+    private readonly navigation?: MatchNavigation,
   ) {}
   readonly getSnapshot = () => this.state;
   readonly subscribe = (listener: () => void) => {
@@ -123,29 +135,22 @@ export class MatchController {
     this.listeners.forEach((listener) => listener());
   }
 
-  connect() {
-    this.openLifetime();
-    window.addEventListener("pagehide", this.pagehide);
-    window.addEventListener("pageshow", this.pageshow);
-    window.addEventListener("popstate", this.navigate);
-    void this.loadUrl();
-    return () => {
-      window.removeEventListener("pagehide", this.pagehide);
-      window.removeEventListener("pageshow", this.pageshow);
-      window.removeEventListener("popstate", this.navigate);
-      this.closeLifetime();
-    };
+  connect(entry: MatchEntry = this.entry) {
+    void this.enter(entry);
+    return () => this.endLifetime();
   }
   private openLifetime() {
     this.lifetime = new AbortController();
     this.credentials = createSessionCredentials(this.lifetime.signal);
     this.controllerId = crypto.randomUUID();
+    return this.lifetime.signal;
   }
   private stopRunning() {
     this.running = false;
     clearTimeout(this.nextTimer);
   }
-  private closeLifetime() {
+  endLifetime() {
+    if (!this.lifetime) return;
     this.stopRunning();
     this.clearInvocations();
     clearTimeout(this.heartbeatTimer);
@@ -154,7 +159,7 @@ export class MatchController {
     this.turn = null;
     this.control = null;
     this.humanCommand = null;
-    this.lifetime?.abort();
+    this.lifetime.abort();
     this.lifetime = null;
     this.credentials = null;
     this.publish({
@@ -172,33 +177,24 @@ export class MatchController {
       exportBusy: false,
       exportResult: null,
       startedGameId: null,
+      issue: null,
+      replayPly: 0,
     });
   }
-  private readonly pagehide = () => {
-    this.closeLifetime();
-    this.publish({ phase: "loading", details: null });
-  };
-  private readonly pageshow = (event: PageTransitionEvent) => {
-    if (event.persisted) this.navigate();
-  };
-  private readonly navigate = () => {
-    this.closeLifetime();
-    this.openLifetime();
-    void this.loadUrl();
-  };
   private live(signal: AbortSignal) {
     return !signal.aborted && this.lifetime !== null;
   }
-  private remember(gameId: string) {
-    window.history.replaceState(null, "", "/?game=" + gameId);
-  }
-  private async loadUrl() {
-    const id = new URL(window.location.href).searchParams.get("game");
-    if (!id) {
+  async enter(entry: MatchEntry): Promise<void> {
+    this.endLifetime();
+    const signal = this.openLifetime();
+    const id = entry.kind === "game" ? parseGameId(entry.gameId) : null;
+    this.entry =
+      entry.kind === "game" ? (id ? { kind: "game", gameId: id } : { kind: "invalid" }) : entry;
+    if (entry.kind === "setup") {
       this.publish({ phase: "setup", details: null, issue: null });
       return;
     }
-    if (!gameParamsSchema.safeParse({ gameId: id }).success) {
+    if (!id || entry.kind !== "game") {
       this.publish({
         phase: "unavailable",
         details: null,
@@ -206,33 +202,36 @@ export class MatchController {
       });
       return;
     }
-    await this.load(id);
-  }
-  async load(gameId: string) {
-    const signal = this.lifetime?.signal;
-    if (!signal || this.state.busy) return;
-    this.stopRunning();
-    this.clearInvocations();
     this.publish({ phase: "loading", details: null, issue: null, replay: null });
     try {
-      const details = await this.api.details(gameId, signal);
+      // Seeded entries also yield so a discarded mount cannot begin recovery writes.
+      const details = await (entry.details ?? this.api.details(id, signal));
       if (!this.live(signal)) return;
-      this.remember(details.snapshot.gameId);
+      if (parseGameId(details.snapshot.gameId) !== id) throw new ApiFailure("malformed");
       this.publish({ details, phase: "ready" });
+      this.navigation?.game(id, "recovered");
+      if (!this.live(signal)) return;
       void this.loadInvocations();
       if (terminal(details.snapshot)) await this.loadReplay();
-      else if (details.configuration) await this.recover();
+      else if (details.configuration) await this.recover(details.snapshot);
     } catch (error) {
       if (this.live(signal)) this.fail(error, "unavailable");
     }
   }
 
+  load(gameId: string) {
+    return this.enter({ kind: "game", gameId });
+  }
+
   async created(details: GameDetails) {
-    if (!this.lifetime || this.state.busy) return;
+    if (!this.lifetime || this.state.busy || this.state.phase !== "setup") return;
     this.clearInvocations();
-    this.remember(details.snapshot.gameId);
+    this.entry = { kind: "game", gameId: details.snapshot.gameId };
     this.publish({ details, phase: "ready", startedGameId: details.snapshot.gameId, issue: null });
     this.refreshKeys();
+    const signal = this.lifetime.signal;
+    this.navigation?.game(details.snapshot.gameId, "created");
+    if (!this.live(signal)) return;
     void this.loadInvocations();
     await this.continue(false, true);
   }
@@ -642,7 +641,7 @@ export class MatchController {
           };
     await this.sendControl(false);
   }
-  async recover() {
+  async recover(entrySnapshot?: GameSnapshot) {
     const signal = this.lifetime?.signal;
     if (!signal || this.state.busy || !this.state.details) return;
     this.stopRunning();
@@ -650,7 +649,8 @@ export class MatchController {
     clearTimeout(this.heartbeatTimer);
     this.publish({ phase: "recovering", busy: true });
     try {
-      const snapshot = await this.api.snapshot(this.state.details.snapshot.gameId, signal);
+      const snapshot =
+        entrySnapshot ?? (await this.api.snapshot(this.state.details.snapshot.gameId, signal));
       if (!this.live(signal)) return;
       this.adopt(snapshot);
       if (terminal(snapshot)) {
@@ -736,7 +736,7 @@ export class MatchController {
       error instanceof ApiFailure &&
       ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "")
     ) {
-      this.closeLifetime();
+      this.endLifetime();
       this.publish({
         phase: "unavailable",
         details: null,
@@ -841,10 +841,10 @@ export class MatchController {
   }
   newGame() {
     if (this.state.details && !terminal(this.state.details.snapshot)) return;
-    window.history.replaceState(null, "", "/");
-    this.navigate();
+    void this.enter({ kind: "setup" });
+    this.navigation?.setup();
   }
   retryLoad() {
-    this.navigate();
+    void this.enter(this.entry);
   }
 }
