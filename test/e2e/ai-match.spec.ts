@@ -2,7 +2,7 @@ import { text as streamText } from "node:stream/consumers";
 
 import AxeBuilder from "@axe-core/playwright";
 import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
-import type { Page } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN } from "./environment";
@@ -448,18 +448,50 @@ test("Stop remains usable during inference and late acknowledgements cannot revi
   page,
 }) => {
   const released = Promise.withResolvers<void>();
-  const entered = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<Request>();
+  let turnRequests = 0;
+  const countTurn = (request: Request) => {
+    if (request.method() === "POST" && request.url().endsWith("/ai-turn")) turnRequests++;
+  };
+  page.on("request", countTurn);
+  await page.clock.install();
   await page.route("**/ai-turn", async (route) => {
     const response = await route.fetch();
-    entered.resolve();
+    expect(response.status()).toBe(200);
+    entered.resolve(route.request());
     await released.promise;
-    await route.fulfill({ response }).catch(() => undefined);
+    await route.fulfill({ response });
   });
-  const game = await start(page);
-  await entered.promise;
-  await stop(page);
-  released.resolve();
-  const final = await read(page, game.gameId);
-  expect(final.state).toBe("aborted");
-  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.fen);
+  try {
+    const game = await start(page);
+    await page.getByLabel("Delay between moves").selectOption("500");
+    const request = await entered.promise;
+    expect(turnRequests).toBe(1);
+    await stop(page);
+    released.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+    const response = await request.response();
+    if (response) {
+      expect(await response.finished()).toBeNull();
+    } else {
+      expect(request.failure()?.errorText).toBe("net::ERR_ABORTED");
+    }
+
+    // Let response handling and a full playback delay elapse before checking the client.
+    await page.clock.runFor(1_000);
+    await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New game", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download PGN", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Pause|Resume|Next move|Stop)$/ })).toHaveCount(
+      0,
+    );
+    expect(turnRequests).toBe(1);
+    const final = await read(page, game.gameId);
+    expect(final.state).toBe("aborted");
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.fen);
+  } finally {
+    released.resolve();
+    await page.unrouteAll({ behavior: "wait" });
+    page.off("request", countTurn);
+  }
 });
