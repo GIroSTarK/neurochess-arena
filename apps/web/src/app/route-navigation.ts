@@ -41,15 +41,18 @@ export interface RouteOwner {
 export class RouteNavigation {
   private readonly owners = new Set<RouteOwner>();
   private focusHandoff: string | null = null;
+  private destination: RouteAddress | null = null;
 
   register(owner: RouteOwner) {
     this.owners.add(owner);
+    if (this.destination && !owner.accepts(this.destination)) owner.end();
     return () => {
       this.owners.delete(owner);
     };
   }
 
   departing(location: RouteAddress) {
+    this.destination = location;
     for (const owner of this.owners) if (!owner.accepts(location)) owner.end();
     if (this.focusHandoff !== location.pathname) this.focusHandoff = null;
   }

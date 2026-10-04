@@ -1,11 +1,19 @@
 import type { RouteObject } from "react-router";
 
-import { MatchRouteLayout } from "../match/MatchRouteLayout";
+import { AccountApplication } from "../auth/AccountApplication";
+import {
+  ArenaRoute,
+  AuthRoute,
+  CredentialsRoute,
+  HistoryRoute,
+  ProfileRoute,
+} from "../auth/AccountRoutes";
+import { authAction, publicLoader } from "../auth/route-data";
 
 import { type AppRouteContext, RouteContext } from "./route-context";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 import { RouteNotice } from "./RouteNotice";
-import { PublicRoute, RouteRoot } from "./RouteRoot";
+import { RouteRoot } from "./RouteRoot";
 import { StaticScreen } from "./StaticScreen";
 
 declare const __ARENA_REFERENCE_ENABLED__: boolean;
@@ -14,13 +22,36 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
   const sandboxEnabled = context.sandboxEnabled && import.meta.env.SANDBOX_ENABLED === "true";
   const enabledContext = { ...context, sandboxEnabled };
   const publicPages: RouteObject[] = [
-    { path: "history", handle: { page: "history", accountPage: "history" } },
-    { path: "account", handle: { page: "account", accountPage: "profile" } },
-    { path: "account/credentials", handle: { page: "account", accountPage: "credentials" } },
+    {
+      id: "history",
+      path: "history",
+      handle: { page: "history" },
+      loader: publicLoader(context.runtime, true),
+      element: <HistoryRoute />,
+    },
+    {
+      id: "account",
+      path: "account",
+      handle: { page: "account" },
+      loader: publicLoader(context.runtime, false),
+      action: authAction(context.runtime),
+      element: <ProfileRoute />,
+    },
+    {
+      id: "credentials",
+      path: "account/credentials",
+      handle: { page: "account" },
+      loader: publicLoader(context.runtime, false),
+      element: <CredentialsRoute />,
+    },
     ...(["sign-in", "sign-up", "verify", "forgot-password", "reset-password"] as const).map(
       (form) => ({
         path: `auth/${form}`,
-        handle: { page: "account", accountPage: "auth", form },
+        id: `auth-${form}`,
+        handle: { page: "account" },
+        loader: publicLoader(context.runtime, false),
+        action: authAction(context.runtime, form),
+        element: <AuthRoute kind={form} />,
       }),
     ),
   ];
@@ -37,18 +68,29 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       children: [
         {
           id: "public",
-          element: <PublicRoute />,
+          element: <AccountApplication />,
           children: [
             {
               id: "arena",
-              element: <MatchRouteLayout />,
-              handle: { page: "arena", accountPage: "arena" },
+              element: <ArenaRoute />,
+              handle: { page: "arena" },
               children: [
-                { index: true, element: <></> },
-                { path: "games/:gameId", caseSensitive: true, element: <></> },
+                {
+                  id: "arena-entry",
+                  index: true,
+                  loader: publicLoader(context.runtime, true, true),
+                  element: <></>,
+                },
+                {
+                  id: "arena-game",
+                  path: "games/:gameId",
+                  caseSensitive: true,
+                  loader: publicLoader(context.runtime, true, true),
+                  element: <></>,
+                },
               ],
             },
-            ...publicPages.map((route) => ({ ...route, caseSensitive: true, element: <></> })),
+            ...publicPages.map((route) => ({ ...route, caseSensitive: true })),
           ],
         },
         // Literal build flags exclude the entire optional branches from the module graph.

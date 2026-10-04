@@ -2,14 +2,12 @@ import { createContext, useContext } from "react";
 
 import type { AuthEntry } from "../auth/navigation";
 
-import type { AccountPage, AppPage } from "./navigation";
+import type { AppPage } from "./navigation";
 import type { RouteNavigation } from "./route-navigation";
-import type { AuthForm } from "./route-urls";
+import type { RouteRuntime } from "./route-runtime";
 
 export interface RouteMetadata {
   readonly page: AppPage;
-  readonly accountPage?: AccountPage;
-  readonly form?: AuthForm;
 }
 
 export interface AppRouteContext {
@@ -17,6 +15,7 @@ export interface AppRouteContext {
   readonly sandboxEnabled: boolean;
   readonly authEntry?: AuthEntry;
   readonly navigation: RouteNavigation;
+  readonly runtime: RouteRuntime;
 }
 
 export const RouteContext = createContext<AppRouteContext | null>(null);

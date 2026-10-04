@@ -1,10 +1,13 @@
 import { createContext, useContext } from "react";
+import type { FetcherWithComponents } from "react-router";
 
 import type { AccountController, AccountState } from "./controller";
+import type { AuthActionData } from "./route-data";
 
 export const AccountContext = createContext<{
   controller: AccountController;
   state: AccountState;
+  commands: FetcherWithComponents<AuthActionData>;
 } | null>(null);
 export const useAccount = () => useContext(AccountContext);
 

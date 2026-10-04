@@ -4,9 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderApp, renderLocalized } from "../test/render";
-
-import { AccountApplication } from "./AccountApplication";
+import { renderApp } from "../test/render";
 
 const session = {
   user: { id: GAME_ID, email: "private@example.com", emailVerified: true },
@@ -23,26 +21,13 @@ afterEach(() => {
 });
 
 describe("account presentation", () => {
-  it("selects the auth form from explicit props rather than the document pathname", async () => {
+  it("selects the auth form from the matched route rather than the document pathname", async () => {
     window.history.replaceState(null, "", "/account");
     const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(
-      <AccountApplication
-        apiBaseUrl="http://localhost:3001"
-        sandboxEnabled={false}
-        page="auth"
-        form="forgot-password"
-        entry={{
-          active: true,
-          returnTo: "/",
-          verified: false,
-          error: null,
-          readResetToken: () => null,
-          clearResetToken: () => undefined,
-          retire: () => undefined,
-        }}
-      />,
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/auth/forgot-password"] },
     );
     expect(await screen.findByRole("button", { name: "Request reset link" })).toBeVisible();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
@@ -246,7 +231,10 @@ describe("account presentation", () => {
     });
     vi.stubGlobal("fetch", http.fetch);
     renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
-    await userEvent.type(screen.getByLabelText("Password", { exact: true }), "old-password-canary");
+    await userEvent.type(
+      await screen.findByLabelText("Password", { exact: true }),
+      "old-password-canary",
+    );
     act(() => {
       window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
       window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
@@ -276,7 +264,13 @@ describe("account presentation", () => {
     });
     vi.stubGlobal("fetch", http.fetch);
     renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
+    await screen.findByRole("heading", { name: "Set up a game" });
     await userEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+    await waitFor(() =>
+      expect(http.fetch.mock.calls.some(([url]) => requestPath(url) === "/api/auth/sign-out")).toBe(
+        true,
+      ),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not complete/);
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     http.assertNoUnexpectedRequests();

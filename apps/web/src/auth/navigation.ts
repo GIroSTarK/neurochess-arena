@@ -24,6 +24,9 @@ export function readAuthEntry(url: URL, consumeReset = false) {
       return active;
     },
     readResetToken: () => resetToken,
+    get hasResetToken() {
+      return resetToken !== null;
+    },
     clearResetToken: () => {
       resetToken = null;
     },

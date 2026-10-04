@@ -1,0 +1,147 @@
+import type { AiIdentity } from "../api/ai-client";
+import { AccountFailure, type AuthApi } from "../api/auth-client";
+import { AccountController } from "../auth/controller";
+import { type AuthEntry, readAuthEntry } from "../auth/navigation";
+
+export type PublicAccess = "guest" | "account" | "onboarding" | "required" | "unavailable";
+export interface PublicIdentity {
+  readonly generation: number;
+  readonly access: PublicAccess;
+  readonly identity: AiIdentity | null;
+}
+export interface ScopedRouteData<T> {
+  readonly generation: number;
+  data: T | null;
+}
+
+function waitFor<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const cancel = () => reject(new AccountFailure("cancelled"));
+    if (signal.aborted) {
+      cancel();
+      return;
+    }
+    signal.addEventListener("abort", cancel, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancel));
+  });
+}
+
+export class RouteRuntime {
+  readonly account: AccountController;
+  private disconnect: (() => void) | null = null;
+  private readonly results = new Set<WeakRef<ScopedRouteData<unknown>>>();
+  private generation = 0;
+  private readonly unsubscribe: () => void;
+  private readonly actions = new Set<AbortController>();
+  private location: { key: string; pathname: string; search: string; hash: string } | null = null;
+
+  constructor(
+    api: AuthApi,
+    private readonly bootstrap?: AuthEntry,
+  ) {
+    this.account = new AccountController(api);
+    this.unsubscribe = this.account.subscribe(() => {
+      const generation = this.account.getSnapshot().revision;
+      if (generation === this.generation) return;
+      this.generation = generation;
+      // Clear the actual values shared with loader/action/fetcher caches immediately.
+      // Revalidation alone keeps old data alive until every new loader completes.
+      for (const reference of this.results) {
+        const result = reference.deref();
+        if (result) result.data = null;
+      }
+      this.results.clear();
+    });
+  }
+
+  entry(url: URL): AuthEntry {
+    return this.bootstrap?.active ? this.bootstrap : readAuthEntry(url);
+  }
+
+  navigating(location: { key: string; pathname: string; search: string; hash: string }) {
+    const previous = this.location;
+    this.location = location;
+    const hashOnly =
+      previous?.pathname === location.pathname &&
+      previous.search === location.search &&
+      previous.hash !== location.hash;
+    if (previous?.key === location.key || hashOnly) return;
+    for (const action of this.actions) action.abort();
+    this.actions.clear();
+  }
+
+  beginAction(signal: AbortSignal) {
+    const abort = new AbortController();
+    this.actions.add(abort);
+    return {
+      signal: AbortSignal.any([signal, abort.signal]),
+      release: () => {
+        this.actions.delete(abort);
+      },
+    };
+  }
+
+  async resolvePublicIdentity(signal: AbortSignal, requireProfile = true): Promise<PublicIdentity> {
+    const cancelled = () => signal.aborted;
+    if (cancelled()) throw new AccountFailure("cancelled");
+    this.disconnect ??= this.account.connect(false);
+    await waitFor(this.account.resolve(), signal);
+    if (
+      this.account.getSnapshot().phase === "changing" ||
+      this.account.getSnapshot().phase === "checking"
+    ) {
+      await new Promise<void>((resolve, reject) => {
+        const cancel = () => {
+          unsubscribe();
+          reject(new AccountFailure("cancelled"));
+        };
+        const unsubscribe = this.account.subscribe(() => {
+          const { phase } = this.account.getSnapshot();
+          if (phase === "changing" || phase === "checking") return;
+          unsubscribe();
+          signal.removeEventListener("abort", cancel);
+          resolve();
+        });
+        signal.addEventListener("abort", cancel, { once: true });
+        if (cancelled()) cancel();
+      });
+    }
+    if (cancelled()) throw new AccountFailure("cancelled");
+    const state = this.account.getSnapshot();
+    const access =
+      state.phase === "account" && requireProfile && !state.profile?.completed
+        ? "onboarding"
+        : state.phase;
+    if (access === "changing" || access === "checking") throw new AccountFailure("cancelled");
+    return {
+      generation: state.revision,
+      access,
+      identity:
+        access === "guest" || access === "account" ? this.account.identity(requireProfile) : null,
+    };
+  }
+
+  result<T>(generation: number, data: T): ScopedRouteData<T> {
+    const result = {
+      generation,
+      data: generation === this.account.getSnapshot().revision ? data : null,
+    };
+    for (const reference of this.results) if (!reference.deref()) this.results.delete(reference);
+    this.results.add(new WeakRef(result));
+    return result;
+  }
+
+  stop() {
+    for (const action of this.actions) action.abort();
+    this.actions.clear();
+    const disconnect = this.disconnect;
+    this.disconnect = null;
+    disconnect?.();
+  }
+
+  dispose() {
+    this.stop();
+    this.bootstrap?.retire();
+    this.unsubscribe();
+  }
+}

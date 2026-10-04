@@ -1,14 +1,8 @@
-import {
-  authEmailRequestSchema,
-  type AuthOAuthProvider,
-  authPasswordSchema,
-  authSignInRequestSchema,
-} from "@neurochess/contracts";
-import { useEffect, useRef, useState } from "react";
+import type { AuthOAuthProvider } from "@neurochess/contracts";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useFetcher } from "react-router";
 
-import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
 import type { AuthForm } from "../app/route-urls";
 import { Button } from "../ui/Button";
 
@@ -17,6 +11,7 @@ import { AccountFrame } from "./AccountFrame";
 import { useRequiredAccount } from "./context";
 import { type AuthEntry, authHref } from "./navigation";
 import { PasswordField } from "./PasswordField";
+import type { AuthActionData } from "./route-data";
 
 const forms: Record<AuthForm, "signIn" | "signUp" | "verify" | "forgot" | "reset"> = {
   "sign-in": "signIn",
@@ -36,114 +31,71 @@ export function AuthScreen({
   readonly kind: AuthForm;
 }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const account = useRequiredAccount();
+  const fetcher = useFetcher<AuthActionData>();
+  const resetFetcher = fetcher.reset;
   const title = forms[kind];
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);
-  const lifetime = useRef<AbortController | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AccountErrorCode | null>(entry.error);
-  const [notice, setNotice] = useState<"accepted" | "resetDone" | null>(null);
-  const [invalid, setInvalid] = useState<"email" | "password" | null>(null);
+  const busy = fetcher.state !== "idle";
+  const outcome = fetcher.data?.generation === account.state.revision ? fetcher.data.data : null;
+  const error = outcome && "error" in outcome ? outcome.error : entry.error;
+  const notice = outcome && "notice" in outcome ? outcome.notice : null;
+  const invalid = outcome && "invalid" in outcome ? outcome.invalid : null;
+  const action = `/auth/${kind}${entry.returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(entry.returnTo)}`;
   useEffect(() => {
-    let abort = new AbortController();
-    lifetime.current = abort;
-    const clear = () => {
-      abort.abort();
-      entry.clearResetToken();
-      form.current?.reset();
-    };
-    const restore = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      abort = new AbortController();
-      lifetime.current = abort;
+    if (!busy) pending.current = false;
+  }, [busy]);
+  useEffect(() => {
+    form.current?.reset();
+    if (!account.controller.transitionPending) {
+      resetFetcher();
       pending.current = false;
-      setBusy(false);
+    }
+  }, [account.controller, account.state.revision, resetFetcher]);
+  useEffect(() => {
+    const element = form.current;
+    const clear = () => {
+      entry.clearResetToken();
+      element?.reset();
+      resetFetcher();
+      pending.current = false;
     };
     window.addEventListener("pagehide", clear);
-    window.addEventListener("pageshow", restore);
     return () => {
       window.removeEventListener("pagehide", clear);
-      window.removeEventListener("pageshow", restore);
-      abort.abort();
+      element?.reset();
     };
-  }, [entry]);
+  }, [entry, resetFetcher]);
 
-  async function perform(provider?: AuthOAuthProvider) {
-    const signal = lifetime.current?.signal;
-    const isCancelled = () => !signal || signal.aborted;
-    if (!signal || isCancelled() || pending.current || !form.current) return;
-    const data = new FormData(form.current);
-    const emailValue = data.get("email");
-    const email = typeof emailValue === "string" ? emailValue.trim() : "";
-    const passwordValue = data.get("password");
-    const password = typeof passwordValue === "string" ? passwordValue : "";
-    if (!provider) {
-      if (kind !== "reset-password" && !authEmailRequestSchema.safeParse({ email }).success) {
-        setInvalid("email");
-        return;
-      }
-      if (
-        ((kind === "sign-up" || kind === "reset-password") &&
-          !authPasswordSchema.safeParse(password).success) ||
-        (kind === "sign-in" && !authSignInRequestSchema.safeParse({ email, password }).success)
-      ) {
-        setInvalid("password");
-        return;
-      }
-    }
-    pending.current = true;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    setInvalid(null);
+  function perform(provider?: AuthOAuthProvider) {
+    if (pending.current || busy || !form.current) return;
+    const data = provider ? new FormData() : new FormData(form.current);
+    data.set("intent", provider ? "oauth" : kind);
+    if (provider) data.set("provider", provider);
     const passwordField = form.current.elements.namedItem("password");
     if (passwordField instanceof HTMLInputElement) {
       passwordField.value = "";
       passwordField.dispatchEvent(new Event("input", { bubbles: true }));
     }
-    try {
-      const api = account.controller.api;
-      if (provider) {
-        const url = await account.controller.transition((signal) => api.social(provider, signal));
-        if (!isCancelled()) window.location.assign(url);
-      } else if (kind === "sign-in") {
-        await account.controller.transition((signal) => api.signIn({ email, password }, signal));
-        if (!isCancelled()) void navigate(entry.returnTo, { replace: true });
-      } else if (kind === "reset-password") {
-        const token = entry.readResetToken();
-        if (!token) throw new AccountFailure("AUTH_INVALID_TOKEN");
-        await account.controller.transition((signal) => api.reset(token, password, signal));
-        entry.clearResetToken();
-        if (!isCancelled()) setNotice("resetDone");
-      } else {
-        if (kind === "sign-up") await api.register({ email, password }, signal);
-        else if (kind === "verify") await api.resend(email, signal);
-        else await api.forgot(email, signal);
-        if (!isCancelled()) setNotice("accepted");
-      }
-    } catch (error) {
-      if (!isCancelled() && accountError(error) !== "cancelled") setError(accountError(error));
-    } finally {
-      pending.current = false;
-      if (!isCancelled()) setBusy(false);
-    }
+    pending.current = true;
+    void fetcher.submit(data, { method: "post", action });
   }
   const hasPassword = kind === "sign-in" || kind === "sign-up" || kind === "reset-password";
-  const invalidReset =
-    kind === "reset-password" && !entry.readResetToken() && notice !== "resetDone";
+  const invalidReset = kind === "reset-password" && !entry.hasResetToken && notice !== "resetDone";
   return (
     <AccountFrame title={t(`account.titles.${title}`)} sandboxEnabled={sandboxEnabled}>
       <p className="text-body text-text-secondary">{t("account.separation")}</p>
       {entry.verified ? <p role="status">{t("account.verified")}</p> : null}
-      <form
+      <fetcher.Form
         ref={form}
+        method="post"
+        action={action}
         noValidate
         className="grid min-w-0 gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          void perform();
+          perform();
         }}
       >
         {kind !== "reset-password" ? (
@@ -201,14 +153,14 @@ export function AuthScreen({
                 key={provider}
                 variant="secondary"
                 aria-disabled={busy}
-                onClick={() => void perform(provider)}
+                onClick={() => perform(provider)}
               >
                 {t(`account.${provider}`)}
               </Button>
             ))}
           </div>
         ) : null}
-      </form>
+      </fetcher.Form>
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-label">
         {kind !== "sign-in" ? (
           <Link

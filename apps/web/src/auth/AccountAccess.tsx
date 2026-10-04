@@ -4,8 +4,28 @@ import { Link, useLocation } from "react-router";
 import { Button } from "../ui/Button";
 
 import { Avatar } from "./Avatar";
-import { useAccount } from "./context";
+import { useAccount, useRequiredAccount } from "./context";
 import { authHref, safeReturnTo } from "./navigation";
+
+function SignOutButton() {
+  const { t } = useTranslation();
+  const { commands: fetcher, state } = useRequiredAccount();
+  return (
+    <fetcher.Form method="post" action="/account">
+      <input type="hidden" name="expectedAccount" value={state.session?.user.id ?? ""} />
+      <Button
+        type="submit"
+        name="intent"
+        value="sign-out"
+        variant="quiet"
+        padding="compact"
+        aria-disabled={fetcher.state !== "idle"}
+      >
+        {t("account.signOut")}
+      </Button>
+    </fetcher.Form>
+  );
+}
 
 export function AccountAccess() {
   const { t } = useTranslation();
@@ -33,9 +53,7 @@ export function AccountAccess() {
         >
           {t("credentials.navigation")}
         </Link>
-        <Button variant="quiet" padding="compact" onClick={() => void account.controller.signOut()}>
-          {t("account.signOut")}
-        </Button>
+        <SignOutButton />
         {account.state.issue ? (
           <p role="alert" className="w-full max-w-xl text-label text-danger">
             {t(`account.errors.${account.state.issue}`)}

@@ -127,6 +127,16 @@ Keep the mode owner mounted across setup/game leaves and register its memory-onl
 
 Static hosting must return the web HTML for these document paths while preserving assets and the separate API origin. Do not proxy all `/games/*` or `/sandbox/*` web requests to the API. Verify the selected host's fallback at deployment. Roll back only to a frontend that supports canonical paths, or use a forward fix; an older frontend cannot open newly shared game links even with HTML fallback.
 
+### Public identity and authentication data
+
+Public leaf loaders and auth actions use `app/route-runtime.ts` and `auth/route-data.ts`. Call `resolvePublicIdentity(request.signal, requireProfile)` in every protected leaf before private work; parent loaders run independently. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.
+
+The runtime lives with the router, independently of React effect replay. Dispose the router when removing its provider; the application test renderer does both on unmount. Mode layouts adopt handoffs during layout and start entry work after commit, so StrictMode replay can cancel before a recovery command is dispatched. Owners registering during a pending departure must observe that destination immediately.
+
+Return generation-scoped values through the runtime and check their generation before rendering. Invalidation clears the values shared with router caches immediately; revalidation alone cannot hide obsolete data while a new read is pending. Keep session/profile projections in the account service, and preserve its BroadcastChannel, focus/pageshow, interval, expected-account, and request-cancellation fences. Refreshing a profile for the same identity must not replace a game owner.
+
+Auth forms submit to route actions and use fetchers for same-page acknowledgements. Return only bounded error/field codes and notices. Keep passwords in bounded form/request memory, clear fields after submission, and reset forms/fetchers on external identity changes and pagehide. Reset actions read the token from the bootstrap closure only when submitted; StrictMode replay does not consume it. Success, route departure, and pagehide destroy it. OAuth leaves through the existing validated provider URL. Sign-out includes the displayed account expectation, so a delayed submission cannot revoke a replacement account.
+
 ## Sandbox UI
 
 Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` provides the separate [AI-versus-AI flow](#arena-controller-api); loading setup reads unfinished-game discovery without creating a guest. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.

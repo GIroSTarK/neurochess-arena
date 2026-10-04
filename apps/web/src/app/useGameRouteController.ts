@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
 import { GameRouteLifetime } from "./game-route-lifetime";
@@ -41,6 +41,9 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
       ),
     [lifetime, key, signal],
   );
+  // Adopt route handoffs during layout, but start reads after commit so StrictMode
+  // can cancel its first effect setup before any recovery command is dispatched.
+  useEffect(() => lifetime.activate(), [lifetime, key, signal]);
   useLayoutEffect(() => () => lifetime.end(), [lifetime]);
   return { controller: lifetime.controller, stopped, retry: lifetime.retry };
 }

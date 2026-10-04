@@ -14,6 +14,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   private stopped = false;
   private target: GameTarget = { kind: "none" };
   private signal: AbortSignal | undefined;
+  private pendingEntry = false;
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -56,6 +57,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   };
 
   readonly end = () => {
+    this.pendingEntry = false;
     this.handoff = null;
     this.publish(true);
     this.controller.endLifetime();
@@ -67,6 +69,12 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     this.enter(this.controller, this.target);
   };
 
+  activate() {
+    if (!this.pendingEntry) return;
+    this.pendingEntry = false;
+    this.retry();
+  }
+
   connect(target: GameTarget, signal?: AbortSignal) {
     this.target = target;
     this.signal = signal;
@@ -74,6 +82,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     const handedOff = key !== null && this.handoff === key && !this.stopped;
     this.key = key;
     this.handoff = null;
+    this.pendingEntry = !handedOff;
     const unregister = this.navigation.register(this);
     const pageshow = (event: PageTransitionEvent) => {
       if (event.persisted) this.retry();
@@ -81,8 +90,8 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     window.addEventListener("pagehide", this.end);
     window.addEventListener("pageshow", pageshow);
     signal?.addEventListener("abort", this.end, { once: true });
-    if (!handedOff) this.retry();
     return () => {
+      this.pendingEntry = false;
       unregister();
       window.removeEventListener("pagehide", this.end);
       window.removeEventListener("pageshow", pageshow);

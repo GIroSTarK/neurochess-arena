@@ -62,6 +62,9 @@ export class AccountController {
 
   constructor(readonly api: AuthApi) {}
   readonly getSnapshot = () => this.state;
+  get transitionPending() {
+    return this.operation !== null && !this.operation.signal.aborted;
+  }
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -88,7 +91,12 @@ export class AccountController {
     this.checking?.abort.abort();
     this.checking = null;
   }
-  connect() {
+  private cancelOperation() {
+    const operation = this.operation;
+    this.operation = null;
+    operation?.abort();
+  }
+  connect(refreshOnConnect = true) {
     if (typeof BroadcastChannel !== "undefined") {
       this.channel = new BroadcastChannel("neurochess.identity");
       this.channel.onmessage = (event: MessageEvent<unknown>) => {
@@ -99,7 +107,7 @@ export class AccountController {
         }
         if (event.data !== "changing" && event.data !== "changed") return;
         this.cancelCheck();
-        this.operation?.abort();
+        this.cancelOperation();
         this.invalidate(event.data === "changing" ? "changing" : "checking");
         clearTimeout(this.remoteTimer);
         if (event.data === "changed") void this.refresh();
@@ -117,14 +125,14 @@ export class AccountController {
     };
     const hide = () => {
       this.cancelCheck();
-      this.operation?.abort();
+      this.cancelOperation();
       this.invalidate();
     };
     window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", focus);
     window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", focus);
-    void this.refresh();
+    if (refreshOnConnect) void this.refresh();
     return () => {
       clearInterval(timer);
       clearTimeout(this.remoteTimer);
@@ -136,6 +144,14 @@ export class AccountController {
       this.channel = null;
       hide();
     };
+  }
+
+  resolve(): Promise<void> {
+    if (this.checking) return this.checking.promise;
+    if (this.state.phase === "checking" || Date.now() - this.lastCheckedAt >= 15_000) {
+      return this.refresh();
+    }
+    return Promise.resolve();
   }
 
   refresh(): Promise<void> {
@@ -235,6 +251,7 @@ export class AccountController {
     };
   }
   async chooseGuest() {
+    this.cancelOperation();
     this.publish({ deletion: "none" });
     this.expectedAccount = false;
     rememberIntent(false);
@@ -245,22 +262,34 @@ export class AccountController {
   async transition<T>(
     operation: (signal: AbortSignal) => Promise<T>,
     deleting = false,
+    signal?: AbortSignal,
   ): Promise<T> {
-    this.operation?.abort();
+    if (signal?.aborted) throw new AccountFailure("cancelled");
+    this.cancelOperation();
     this.cancelCheck();
     const abort = new AbortController();
     this.operation = abort;
+    const cancel = () => abort.abort();
+    signal?.addEventListener("abort", cancel, { once: true });
     this.expectedAccount = true;
     this.publish({ deletion: deleting ? "pending" : "none" });
     rememberIntent(true);
     this.invalidate("changing");
     this.channel?.postMessage("changing");
+    let rejectCancellation: (() => void) | undefined;
+    const cancellation = new Promise<never>((_resolve, reject) => {
+      rejectCancellation = () => reject(new AccountFailure("cancelled"));
+      abort.signal.addEventListener("abort", rejectCancellation, { once: true });
+      if (abort.signal.aborted) rejectCancellation();
+    });
     try {
-      const result = await operation(abort.signal);
+      const result = await Promise.race([operation(abort.signal), cancellation]);
       if (abort.signal.aborted) throw new AccountFailure("cancelled");
       return result;
     } finally {
-      if (!abort.signal.aborted) {
+      signal?.removeEventListener("abort", cancel);
+      if (rejectCancellation) abort.signal.removeEventListener("abort", rejectCancellation);
+      if (this.operation === abort && (!abort.signal.aborted || signal?.aborted)) {
         this.publish({ phase: "checking" });
         this.channel?.postMessage("changed");
         await this.refresh();
@@ -268,11 +297,11 @@ export class AccountController {
       if (this.operation === abort) this.operation = null;
     }
   }
-  async signOut() {
+  async signOut(signal?: AbortSignal) {
     const expectedAccount = this.state.session?.user.id;
     if (!expectedAccount) return;
     try {
-      await this.transition((signal) => this.api.signOut(signal, expectedAccount));
+      await this.transition((signal) => this.api.signOut(signal, expectedAccount), false, signal);
     } catch (error) {
       if (accountError(error) !== "cancelled") this.publish({ issue: accountError(error) });
     }

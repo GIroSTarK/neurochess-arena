@@ -73,5 +73,14 @@ export function renderApp(
       <App router={router} />
     </I18nextProvider>
   );
-  return { ...render(strict ? <StrictMode>{element}</StrictMode> : element), router };
+  const result = render(strict ? <StrictMode>{element}</StrictMode> : element);
+  return {
+    ...result,
+    router,
+    unmount: () => {
+      result.unmount();
+      router.dispose();
+      routers.delete(router);
+    },
+  };
 }

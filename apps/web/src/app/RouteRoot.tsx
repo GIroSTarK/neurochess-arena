@@ -1,9 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useMatches, useParams } from "react-router";
 
-import { AccountApplication } from "../auth/AccountApplication";
-import { useRouteAuthEntry } from "../auth/useRouteAuthEntry";
-
 import { DocumentMetadata } from "./DocumentMetadata";
 import { PageContext, type RouteMetadata, useAppRoute } from "./route-context";
 import { gameRouteTarget } from "./route-navigation";
@@ -39,22 +36,5 @@ export function RouteRoot() {
         <Outlet />
       )}
     </PageContext>
-  );
-}
-
-export function PublicRoute() {
-  const { apiBaseUrl, sandboxEnabled, authEntry } = useAppRoute();
-  const metadata = useMetadata();
-  const entry = useRouteAuthEntry(authEntry);
-  return (
-    <AccountApplication
-      apiBaseUrl={apiBaseUrl}
-      sandboxEnabled={sandboxEnabled}
-      page={metadata.accountPage ?? "arena"}
-      form={metadata.form ?? "sign-in"}
-      entry={entry}
-    >
-      <Outlet />
-    </AccountApplication>
   );
 }
