@@ -9,7 +9,7 @@ import {
 } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
-import { credentialAccount } from "./credential-helpers";
+import { createAccount } from "./account-helpers";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
@@ -46,7 +46,7 @@ test("history reopens canonical results on another session without controllers, 
   page,
   newContext,
 }, testInfo) => {
-  const account = await credentialAccount(page);
+  const account = await createAccount(page.request);
   let completed = await create(page);
   const gameId = completed.gameId;
   expect(
@@ -173,7 +173,7 @@ test("history reopens canonical results on another session without controllers, 
 test("history pages remain bounded, recover from load errors, and fit mobile and expanded text", async ({
   page,
 }, testInfo) => {
-  await credentialAccount(page);
+  await createAccount(page.request);
   const ids: string[] = [];
   for (let index = 0; index < 21; index++) ids.push((await stop(page)).gameId);
   let fail = true;
@@ -278,7 +278,7 @@ test("guest guidance and account privacy survive a switch to another account", a
     "href",
     "/auth/sign-in?returnTo=%2Fhistory",
   );
-  await credentialAccount(page);
+  await createAccount(page.request);
   const original = await stop(page);
   await page.goto("/history");
   await expect(page.locator(`a[href="/?game=${original.gameId}"]`)).toBeVisible();
@@ -286,7 +286,7 @@ test("guest guidance and account privacy survive a switch to another account", a
   await expect(page.getByRole("link", { name: /Open replay/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
   expect((await page.request.get(`${API_ORIGIN}/games/${original.gameId}/pgn`)).status()).toBe(401);
-  await credentialAccount(page);
+  await createAccount(page.request);
   await page.goto("/history");
   await expect(page.getByText(/No completed or aborted games yet/)).toBeVisible();
   expect((await page.request.get(`${API_ORIGIN}/games/${original.gameId}/replay`)).status()).toBe(
@@ -298,7 +298,7 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
   page,
   expectedGame404s,
 }, testInfo) => {
-  const account = await credentialAccount(page);
+  const account = await createAccount(page.request);
   const deleted = await stop(page);
   const retained = await stop(page);
   const active = await create(page);

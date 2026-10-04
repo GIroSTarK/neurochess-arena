@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { gameDetailsSchema } from "@neurochess/contracts";
 
-import { credentialAccount } from "./credential-helpers";
+import { createAccount } from "./account-helpers";
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
@@ -12,7 +12,7 @@ test("account deletion confirms full scope, clears another tab and rejects old p
   page,
   context,
 }) => {
-  const owner = await credentialAccount(page);
+  const owner = await createAccount(page.request);
   const credentialId = randomUUID();
   const headers = { origin: WEB_ORIGIN };
   expect(
@@ -90,7 +90,7 @@ test("account deletion confirms full scope, clears another tab and rejects old p
 test("a lost deletion response reports uncertainty without retrying or claiming success", async ({
   page,
 }) => {
-  await credentialAccount(page);
+  await createAccount(page.request);
   await page.goto("/account");
   let requests = 0;
   await page.route(API_ORIGIN + "/api/auth/delete-account", async (route) => {

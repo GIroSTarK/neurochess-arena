@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
+import { createAccount } from "./account-helpers";
 import { observeCredentialPrivacy } from "./credential-privacy";
-import { API_ORIGIN, WEB_ORIGIN } from "./environment";
+import { API_ORIGIN } from "./environment";
 import { expect, submitGame, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
@@ -173,16 +174,20 @@ test("a stale Sign out cannot revoke the replacement account cookie", async ({
   context,
   newContext,
 }) => {
-  const otherContext = await newContext({ baseURL: WEB_ORIGIN });
-  const otherPage = await otherContext.newPage();
-  const replacementName = await register(otherPage, emailFor());
+  const otherContext = await newContext();
+  const replacementAccount = await createAccount(otherContext.request);
   const replacementCookies = (await otherContext.cookies(API_ORIGIN)).filter(
     (cookie) => cookie.name !== "neurochess_test_client",
   );
-  const replacement = await otherPage.request.get(API_ORIGIN + "/api/auth/get-session");
+  const replacement = await otherContext.request.get(API_ORIGIN + "/api/auth/get-session");
   const replacementId = ((await replacement.json()) as { user: { id: string } }).user.id;
   await otherContext.close();
-  await register(page, emailFor());
+  const originalAccount = await createAccount(page.request);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: originalAccount.username, exact: true }),
+  ).toBeVisible();
   const original = await page.request.get(API_ORIGIN + "/api/auth/get-session");
   const originalId = ((await original.json()) as { user: { id: string } }).user.id;
   const release = Promise.withResolvers<void>();
@@ -198,7 +203,9 @@ test("a stale Sign out cannot revoke the replacement account cookie", async ({
     expect(rejected.status()).toBe(401);
     expect(rejected.request().headers()["x-neurochess-expected-account"]).toBe(originalId);
     release.resolve();
-    await expect(page.getByRole("link", { name: replacementName, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: replacementAccount.username, exact: true }),
+    ).toBeVisible();
     const remaining = await page.request.get(API_ORIGIN + "/api/auth/get-session");
     expect(((await remaining.json()) as { user: { id: string } }).user.id).toBe(replacementId);
   } finally {
@@ -212,12 +219,13 @@ test("a second tab switches accounts during discovery and discards the old page'
   context,
   newContext,
 }) => {
-  const secondEmail = emailFor();
-  const otherContext = await newContext({ baseURL: WEB_ORIGIN });
-  const otherAccountPage = await otherContext.newPage();
-  const secondName = await register(otherAccountPage, secondEmail);
+  const otherContext = await newContext();
+  const secondAccount = await createAccount(otherContext.request);
   await otherContext.close();
-  const firstName = await register(page, emailFor());
+  const firstAccount = await createAccount(page.request);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  await expect(page.getByRole("link", { name: firstAccount.username, exact: true })).toBeVisible();
   let discoveryHeld = false;
   const release = Promise.withResolvers<void>();
   await page.route(API_ORIGIN + "/providers/models", async (route) => {
@@ -237,12 +245,12 @@ test("a second tab switches accounts during discovery and discards the old page'
       })
       .toBe(true);
     switching = await context.newPage();
-    await login(switching, secondEmail);
+    await login(switching, secondAccount.email, secondAccount.password);
     await expect(switching.getByRole("heading", { name: "Set up a game" })).toBeVisible();
-    await expect(page.getByRole("link", { name: secondName })).toBeVisible();
+    await expect(page.getByRole("link", { name: secondAccount.username })).toBeVisible();
     release.resolve();
     await page.unrouteAll({ behavior: "wait" });
-    await expect(page.getByRole("link", { name: firstName })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: firstAccount.username })).toHaveCount(0);
     await expect(seat.getByLabel("API key", { exact: true })).toHaveValue("");
     await expect(seat.getByRole("combobox", { name: "Model", exact: true })).toHaveAttribute(
       "aria-disabled",

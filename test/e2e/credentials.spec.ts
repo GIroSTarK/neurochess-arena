@@ -5,12 +5,8 @@ import { and, eq } from "drizzle-orm";
 
 import { integrationDatabase } from "../database";
 
-import {
-  configureCredential,
-  credentialAccount,
-  saveCredential,
-  startCredentialGame,
-} from "./credential-helpers";
+import { createAccount } from "./account-helpers";
+import { configureCredential, saveCredential, startCredentialGame } from "./credential-helpers";
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, readSnapshot, test } from "./fixtures";
@@ -20,7 +16,7 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
   test(`account AI seats use ${combination} sources and recover only after explicit selection`, async ({
     page,
   }, testInfo) => {
-    await credentialAccount(page);
+    await createAccount(page.request);
     const whiteKey = "white-fixture-1234";
     const blackKey = "black-fixture-5678";
     const privateValues = observeCredentialPrivacy(page, [whiteKey, blackKey]);
@@ -117,7 +113,7 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
 
 for (const human of ["white", "black"] as const) {
   test(`a ${human} human recovers with only the opposing saved AI credential`, async ({ page }) => {
-    await credentialAccount(page);
+    await createAccount(page.request);
     await page.goto("/account/credentials");
     const saved = await saveCredential(page, "Opponent key", "opponent-fixture-1234", "google");
     await page.goto("/");
@@ -150,7 +146,7 @@ test("settings confirms individual revoke and clear-all, and revocation removes 
   page,
   context,
 }, testInfo) => {
-  await credentialAccount(page);
+  await createAccount(page.request);
   await page.goto("/account/credentials");
   const first = await saveCredential(page, "First saved", "first-fixture-1234");
   await saveCredential(page, "Second saved", "second-fixture-5678");
@@ -199,7 +195,7 @@ for (const failure of ["deleted", "undecryptable", "rejected"] as const) {
   test(`a ${failure} saved key pauses and permits explicit session-key recovery`, async ({
     page,
   }) => {
-    await credentialAccount(page);
+    await createAccount(page.request);
     await page.goto("/account/credentials");
     const saved = await saveCredential(
       page,
@@ -268,13 +264,13 @@ test("account switching clears saved selections and raw keys and fences delayed 
   const privateValues = observeCredentialPrivacy(page, [savedKey, sessionKey]);
   const otherContext = await newContext();
   const otherPage = await otherContext.newPage();
-  let second: Awaited<ReturnType<typeof credentialAccount>>;
+  let second: Awaited<ReturnType<typeof createAccount>>;
   try {
-    second = await credentialAccount(otherPage);
+    second = await createAccount(otherPage.request);
   } finally {
     await otherContext.close();
   }
-  await credentialAccount(page);
+  await createAccount(page.request);
   await page.goto("/account/credentials");
   const saved = await saveCredential(page, "Only first account", savedKey);
   await page.goto("/");
@@ -330,7 +326,7 @@ test("account switching clears saved selections and raw keys and fences delayed 
 test("credential settings and selectors fit expanded text and remain keyboard accessible", async ({
   page,
 }, testInfo) => {
-  await credentialAccount(page);
+  await createAccount(page.request);
   await page.goto("/account/credentials");
   await saveCredential(page, "A".repeat(64), "long-label-fixture-1234", "openrouter");
   await setPseudoLocalization(page, true);

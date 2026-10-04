@@ -7,12 +7,8 @@ import { and, eq } from "drizzle-orm";
 
 import { integrationDatabase } from "../database";
 
-import {
-  configureCredential,
-  credentialAccount,
-  saveCredential,
-  startCredentialGame,
-} from "./credential-helpers";
+import { createAccount } from "./account-helpers";
+import { configureCredential, saveCredential, startCredentialGame } from "./credential-helpers";
 import { observeCredentialPrivacy } from "./credential-privacy";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, readSnapshot, test } from "./fixtures";
@@ -31,7 +27,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     newContext,
     allowedIdentity401s,
   }, testInfo) => {
-    const account = await credentialAccount(page);
+    const account = await createAccount(page.request);
     const identity = (await (
       await page.request.get(API_ORIGIN + "/api/auth/get-session")
     ).json()) as { user: { id: string } };

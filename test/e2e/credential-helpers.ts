@@ -1,51 +1,8 @@
-import { randomUUID } from "node:crypto";
-
 import { type AiProvider, credentialMetadataSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
-import { API_ORIGIN, WEB_ORIGIN } from "./environment";
+import { API_ORIGIN } from "./environment";
 import { expect, submitGame } from "./fixtures";
-
-export async function credentialAccount(page: Page) {
-  const email = `${randomUUID()}@example.com`;
-  const password = "credential browser fixture 🌙";
-  const headers = { origin: WEB_ORIGIN };
-  expect(
-    (
-      await page.request.post(API_ORIGIN + "/api/auth/sign-up/email", {
-        headers,
-        data: { email, password },
-      })
-    ).ok(),
-  ).toBe(true);
-  let link = "";
-  await expect
-    .poll(async () => {
-      const response = await page.request.post(API_ORIGIN + "/__test__/mail", {
-        data: { email, kind: "verification" },
-      });
-      const body = (await response.json()) as { link: string | null };
-      link = body.link ?? "";
-      return Boolean(link);
-    })
-    .toBe(true);
-  expect((await page.request.get(link)).ok()).toBe(true);
-  expect(
-    (
-      await page.request.post(API_ORIGIN + "/api/auth/sign-in/email", {
-        headers,
-        data: { email, password },
-      })
-    ).ok(),
-  ).toBe(true);
-  const username = "Keys_" + randomUUID().slice(0, 8);
-  expect(
-    (
-      await page.request.post(API_ORIGIN + "/profile/onboarding", { headers, data: { username } })
-    ).ok(),
-  ).toBe(true);
-  return { email, password, username };
-}
 
 export async function saveCredential(
   page: Page,
