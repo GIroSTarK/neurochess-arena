@@ -1,9 +1,8 @@
-import { profileUsernameSchema } from "@neurochess/contracts";
+import type { ProfileResponse } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 
-import { accountError, type AccountErrorCode } from "../api/auth-client";
 import { Button } from "../ui/Button";
 
 import { AccountDeletion } from "./AccountDeletion";
@@ -11,62 +10,58 @@ import { AccountField } from "./AccountField";
 import { AccountFrame } from "./AccountFrame";
 import { Avatar } from "./Avatar";
 import { useRequiredAccount } from "./context";
+import type { AuthActionData } from "./route-data";
 
 export function ProfileScreen({
   returnTo,
   sandboxEnabled,
+  profile,
 }: {
   readonly returnTo: string;
   readonly sandboxEnabled: boolean;
+  readonly profile: ProfileResponse;
 }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { controller, state } = useRequiredAccount();
-  const profile = state.profile;
+  const { state, profileCommands: fetcher } = useRequiredAccount();
+  const reset = fetcher.reset;
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);
-  const lifetime = useRef<AbortController | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AccountErrorCode | null>(null);
-  const [invalid, setInvalid] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [removingAvatar, setRemovingAvatar] = useState(false);
+  const busy = fetcher.state !== "idle";
+  const outcome = fetcher.data?.generation === state.revision ? fetcher.data.data : null;
+  const error = outcome && "error" in outcome ? outcome.error : null;
+  const invalid = outcome && "invalid" in outcome;
+  const saved = outcome && "notice" in outcome && outcome.notice === "saved";
+  const action = `/account${returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo)}`;
   const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   useEffect(() => {
-    const abort = new AbortController();
-    lifetime.current = abort;
-    return () => abort.abort();
-  }, []);
-  if (!profile) return null;
-  async function save(remove = false) {
-    const signal = lifetime.current?.signal;
-    const cancelled = () => !signal || signal.aborted;
-    if (cancelled() || pending.current || !form.current) return;
-    const username = profileUsernameSchema.safeParse(new FormData(form.current).get("username"));
-    if (!remove && !username.success) {
-      setInvalid(true);
-      return;
-    }
+    const element = form.current;
+    const clear = () => {
+      element?.reset();
+      reset();
+    };
+    window.addEventListener("pagehide", clear);
+    return () => {
+      window.removeEventListener("pagehide", clear);
+      element?.reset();
+    };
+  }, [reset]);
+  function save(remove = false) {
+    if (busy || pending.current || !form.current || !state.session) return;
+    const data = remove ? new FormData() : new FormData(form.current);
+    data.set("intent", remove ? "remove-avatar" : "save-profile");
+    data.set("expectedAccount", state.session.user.id);
+    setRemovingAvatar(remove);
     pending.current = true;
-    setBusy(true);
-    setError(null);
-    setInvalid(false);
-    setSaved(false);
-    try {
-      await controller.saveProfile(
-        remove ? { avatar: "remove" } : { username: username.success ? username.data : "" },
-      );
-      if (cancelled()) return;
-      if (!remove) setUsernameDraft(null);
-      setSaved(true);
-      if (!profile?.completed && !remove) void navigate(returnTo, { replace: true });
-    } catch (error) {
-      if (!cancelled() && accountError(error) !== "cancelled") setError(accountError(error));
-    } finally {
-      if (!cancelled()) {
-        pending.current = false;
-        setBusy(false);
-      }
-    }
+    reset();
+    void fetcher.submit(data, { method: "post", action }).finally(() => {
+      pending.current = false;
+    });
+  }
+  const [acknowledged, setAcknowledged] = useState<AuthActionData | undefined>(undefined);
+  if (saved && fetcher.data !== acknowledged) {
+    setAcknowledged(fetcher.data);
+    if (!removingAvatar) setUsernameDraft(null);
   }
   return (
     <AccountFrame
@@ -77,19 +72,21 @@ export function ProfileScreen({
       <div className="flex flex-wrap items-center gap-4">
         <Avatar avatar={profile.avatar} />
         {profile.avatar.source !== "initials" ? (
-          <Button variant="secondary" aria-disabled={busy} onClick={() => void save(true)}>
+          <Button variant="secondary" aria-disabled={busy} onClick={() => save(true)}>
             {t("account.removeAvatar")}
           </Button>
         ) : null}
         <p className="text-label text-text-secondary">{t("account.avatarHint")}</p>
       </div>
-      <form
+      <fetcher.Form
         ref={form}
+        method="post"
+        action={action}
         noValidate
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          void save();
+          save();
         }}
       >
         <AccountField
@@ -116,7 +113,7 @@ export function ProfileScreen({
         <Button variant="primary" type="submit" aria-disabled={busy}>
           {t(profile.completed ? "account.saveProfile" : "account.finishProfile")}
         </Button>
-      </form>
+      </fetcher.Form>
       {profile.completed ? (
         <Link to={returnTo} className="inline-flex min-h-target items-center text-accent underline">
           {t("account.return")}

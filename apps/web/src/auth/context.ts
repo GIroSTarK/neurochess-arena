@@ -8,6 +8,7 @@ export const AccountContext = createContext<{
   controller: AccountController;
   state: AccountState;
   commands: FetcherWithComponents<AuthActionData>;
+  profileCommands: FetcherWithComponents<AuthActionData>;
 } | null>(null);
 export const useAccount = () => useContext(AccountContext);
 

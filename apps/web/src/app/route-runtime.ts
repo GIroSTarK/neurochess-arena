@@ -48,6 +48,12 @@ export class RouteRuntime {
       const state = this.account.getSnapshot();
       const generation = state.revision;
       if (generation === this.generation) {
+        for (const reference of this.results) {
+          const result = reference.deref();
+          if (result?.data && typeof result.data === "object" && "profile" in result.data) {
+            result.data.profile = state.profile;
+          }
+        }
         if (state.phase === "account" && state.profile?.completed) {
           // Completing onboarding unlocks previously gated leaf reads without
           // changing identity or ending an already-authorized game owner.

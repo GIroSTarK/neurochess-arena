@@ -32,6 +32,36 @@ afterEach(() => {
 });
 
 describe("identity changes across router data", () => {
+  it("publishes completed onboarding before its guard unmounts the form", async () => {
+    let completed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () =>
+        jsonResponse(completed ? profile : { ...profile, completed: false, username: null }),
+      "POST /profile/onboarding": () => {
+        completed = true;
+        return jsonResponse(profile);
+      },
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const channel = new BroadcastChannel("neurochess.identity");
+    const messages: unknown[] = [];
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      messages.push(event.data);
+    };
+    try {
+      renderApp(options, { initialEntries: ["/"], strict: true });
+      await userEvent.type(await screen.findByLabelText("Username"), "Player");
+      await userEvent.click(screen.getByRole("button", { name: "Finish profile" }));
+      await screen.findByRole("heading", { name: "Set up a game" });
+      await waitFor(() => expect(messages).toContain("profile-changed"));
+      http.assertNoUnexpectedRequests();
+    } finally {
+      channel.close();
+    }
+  });
   it("defers canceled sign-in reconciliation while outside the public branch", async () => {
     const pending = Promise.withResolvers<Response>();
     const http = createHttpMock({

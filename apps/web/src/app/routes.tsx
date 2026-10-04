@@ -8,7 +8,8 @@ import {
   HistoryRoute,
   ProfileRoute,
 } from "../auth/AccountRoutes";
-import { authAction, publicLoader } from "../auth/route-data";
+import { authAction, profileLoader, publicLoader } from "../auth/route-data";
+import { credentialRouteData } from "../credentials/route-data";
 import { historyRouteData } from "../history/route-data";
 import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
 
@@ -35,7 +36,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       id: "account",
       path: "account",
       handle: { page: "account" },
-      loader: publicLoader(context.runtime, false),
+      loader: profileLoader(context.runtime),
       action: authAction(context.runtime),
       element: <ProfileRoute />,
     },
@@ -43,7 +44,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       id: "credentials",
       path: "account/credentials",
       handle: { page: "account" },
-      loader: publicLoader(context.runtime, false),
+      ...credentialRouteData(context),
       element: <CredentialsRoute />,
     },
     ...(["sign-in", "sign-up", "verify", "forgot-password", "reset-password"] as const).map(

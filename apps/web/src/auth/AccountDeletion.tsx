@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -10,7 +10,8 @@ import { authHref } from "./navigation";
 
 export function AccountDeletion() {
   const { t } = useTranslation();
-  const { controller, state } = useRequiredAccount();
+  const { commands, state } = useRequiredAccount();
+  const pending = useRef(false);
   const [confirming, setConfirming] = useState(false);
   return (
     <section
@@ -43,7 +44,26 @@ export function AccountDeletion() {
             <Button variant="secondary" onClick={() => setConfirming(false)}>
               {t("actions.cancel")}
             </Button>
-            <Button variant="danger" onClick={() => void controller.deleteAccount()}>
+            <Button
+              variant="danger"
+              aria-disabled={commands.state !== "idle"}
+              onClick={() => {
+                if (pending.current || commands.state !== "idle" || !state.session) return;
+                pending.current = true;
+                void commands
+                  .submit(
+                    {
+                      intent: "delete-account",
+                      confirm: "true",
+                      expectedAccount: state.session.user.id,
+                    },
+                    { method: "post", action: "/account" },
+                  )
+                  .finally(() => {
+                    pending.current = false;
+                  });
+              }}
+            >
               {t("account.deletion.confirm")}
             </Button>
           </div>

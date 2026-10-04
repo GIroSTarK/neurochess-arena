@@ -36,7 +36,6 @@ import type { ArenaRouteData } from "./route-data";
 import { TelemetryPanel } from "./TelemetryPanel";
 
 export function MatchScreen({
-  apiBaseUrl,
   sandboxEnabled,
   identity,
   controller,
@@ -44,7 +43,6 @@ export function MatchScreen({
   onRetry,
   entry,
 }: {
-  readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
   readonly identity?: AiIdentity;
   readonly controller: MatchController;
@@ -60,20 +58,20 @@ export function MatchScreen({
     state.phase === "setup" ||
     (state.details?.configuration != null &&
       (state.details.snapshot.state === "active" || state.details.snapshot.state === "paused"));
-  const { catalog, state: savedState } = useCredentials(
-    apiBaseUrl,
+  const { refresh, state: savedState } = useCredentials(
     identity,
     !stopped && needsCredentials,
     entry?.credentials ?? undefined,
   );
-  const savedCredentials = catalog.api
-    ? {
-        ...savedState,
-        onRefresh: () => {
-          void catalog.refresh();
-        },
-      }
-    : undefined;
+  const savedCredentials =
+    identity?.intent === "account"
+      ? {
+          ...savedState,
+          onRefresh: () => {
+            void refresh();
+          },
+        }
+      : undefined;
   useEffect(() => {
     if (savedState.phase === "ready") controller.reconcileSavedCredentials(savedState.credentials);
   }, [

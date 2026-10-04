@@ -111,7 +111,8 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] Arena entry loaders, committed paused recovery, and live creation handoffs without duplicate initial reads.
 - [x] Sandbox entry loaders, committed recovery, creation handoffs, and isolated lazy build boundaries.
 - [x] History entry/cursor loaders and confirmed deletion actions with scoped cache invalidation and explicit uncertain-write recovery.
-- [ ] Account and credential form actions, followed by complete migration acceptance coverage.
+- [x] Account/profile and credential loaders/actions, scoped metadata refresh, and explicit uncertain-save reconciliation.
+- [ ] Complete migration acceptance coverage and final routing audit.
 
 ## Phase 4 — Private online human games
 

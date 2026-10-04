@@ -306,11 +306,15 @@ export class AccountController {
       if (accountError(error) !== "cancelled") this.publish({ issue: accountError(error) });
     }
   }
-  async deleteAccount() {
+  async deleteAccount(signal?: AbortSignal) {
     const expectedAccount = this.state.session?.user.id;
     if (!expectedAccount || this.operation || this.state.deletion === "pending") return;
     try {
-      await this.transition((signal) => this.api.deleteAccount(signal, expectedAccount), true);
+      await this.transition(
+        (signal) => this.api.deleteAccount(signal, expectedAccount),
+        true,
+        signal,
+      );
       this.publish({ deletion: "deleted" });
     } catch (error) {
       const code = accountError(error);
@@ -324,8 +328,11 @@ export class AccountController {
       });
     }
   }
-  async saveProfile(value: ProfileUpdateRequest) {
-    const signal = this.lifetime.signal;
+  async saveProfile(value: ProfileUpdateRequest, requestSignal?: AbortSignal) {
+    const signal = AbortSignal.any([
+      this.lifetime.signal,
+      ...(requestSignal ? [requestSignal] : []),
+    ]);
     const cancelled = () => signal.aborted;
     await this.refresh();
     if (cancelled() || this.state.phase !== "account") throw new AccountFailure("cancelled");

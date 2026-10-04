@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
-import { Outlet, useFetcher } from "react-router";
+import { useEffect, useSyncExternalStore } from "react";
+import { Outlet, useFetcher, useLocation } from "react-router";
 
 import { useAppRoute } from "../app/route-context";
 
@@ -11,8 +11,16 @@ export function AccountApplication() {
   const controller = runtime.account;
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const commands = useFetcher<AuthActionData>();
+  // Completing onboarding replaces its guarded form before the action finishes
+  // broadcasting the profile change and returning its redirect.
+  const profileCommands = useFetcher<AuthActionData>();
+  const resetProfile = profileCommands.reset;
+  const location = useLocation();
+  useEffect(() => {
+    resetProfile();
+  }, [resetProfile, state.revision, location.key]);
   return (
-    <AccountContext value={{ controller, state, commands }}>
+    <AccountContext value={{ controller, state, commands, profileCommands }}>
       <Outlet />
     </AccountContext>
   );

@@ -56,10 +56,11 @@ export function PublicPage({
   }
   const current = result?.generation === state.revision && result.data !== null;
   if (current && state.phase === "account") {
-    if (requireProfile && !state.profile?.completed) {
+    if (requireProfile && state.profile && !state.profile.completed) {
       return (
         <ProfileScreen
           key={state.revision}
+          profile={state.profile}
           returnTo={entry.returnTo}
           sandboxEnabled={sandboxEnabled}
         />

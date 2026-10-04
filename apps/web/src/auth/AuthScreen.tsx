@@ -40,7 +40,12 @@ export function AuthScreen({
   const busy = fetcher.state !== "idle";
   const outcome = fetcher.data?.generation === account.state.revision ? fetcher.data.data : null;
   const error = outcome && "error" in outcome ? outcome.error : entry.error;
-  const notice = outcome && "notice" in outcome ? outcome.notice : null;
+  const notice =
+    outcome &&
+    "notice" in outcome &&
+    (outcome.notice === "accepted" || outcome.notice === "resetDone")
+      ? outcome.notice
+      : null;
   const invalid = outcome && "invalid" in outcome ? outcome.invalid : null;
   const action = `/auth/${kind}${entry.returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(entry.returnTo)}`;
   useEffect(() => {

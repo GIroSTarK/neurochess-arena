@@ -47,7 +47,6 @@ export function MatchRoute({
   return (
     <MatchScreen
       controller={controller}
-      apiBaseUrl={apiBaseUrl}
       sandboxEnabled={sandboxEnabled}
       identity={identity}
       stopped={stopped}

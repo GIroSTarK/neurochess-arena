@@ -28,6 +28,156 @@ afterEach(() => {
 });
 
 describe("credential settings", () => {
+  it.each(["invalid", "forbidden"])(
+    "retains the uncertain save UUID when an explicit retry is %s",
+    async (rejection) => {
+      const ids: string[] = [];
+      let rejectRetry = true;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(session),
+        "GET /profile": () => jsonResponse(profile),
+        "GET /credentials": () => jsonResponse({ credentials: [] }),
+        "POST /credentials": (init) => {
+          ids.push((JSON.parse(requestBody(init)) as { credentialId: string }).credentialId);
+          if (ids.length === 1) throw new Error("Lost acknowledgement");
+          return errorResponse(rejectRetry ? "CREDENTIAL_FORBIDDEN" : "CREDENTIAL_CONFLICT", 409);
+        },
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      renderApp(
+        { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+        { initialEntries: ["/account/credentials"] },
+      );
+      await screen.findByText(/No saved keys yet/);
+      const fill = async () => {
+        await userEvent.type(screen.getByLabelText("Label"), "Arena key");
+        await userEvent.type(
+          screen.getByLabelText("API key", { exact: true }),
+          "save-fixture-1234",
+        );
+      };
+      const submit = async () => {
+        await userEvent.click(screen.getByRole("checkbox"));
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Save key" })).toHaveAttribute(
+            "aria-disabled",
+            "false",
+          ),
+        );
+        await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+      };
+      await fill();
+      await submit();
+      await screen.findByText(/The operation could not be confirmed/);
+      if (rejection === "forbidden") await fill();
+      await submit();
+      await waitFor(() =>
+        expect(screen.queryByText(/The operation could not be confirmed/)).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole("alert")).toBeVisible();
+      rejectRetry = false;
+      await fill();
+      await submit();
+      await screen.findByText(/This save may already exist/);
+      expect(ids).toHaveLength(rejection === "invalid" ? 2 : 3);
+      expect(new Set(ids).size).toBe(1);
+      expect(screen.queryByText(/Key saved/)).not.toBeInTheDocument();
+      http.assertNoUnexpectedRequests();
+    },
+  );
+
+  it("keeps the save UUID after a retry conflict when fresh metadata still cannot find it", async () => {
+    const ids: string[] = [];
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+      "POST /credentials": (init) => {
+        ids.push((JSON.parse(requestBody(init)) as { credentialId: string }).credentialId);
+        if (ids.length === 1) throw new Error("Lost acknowledgement");
+        return errorResponse("CREDENTIAL_CONFLICT", 409);
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/account/credentials"] },
+    );
+    await screen.findByText(/No saved keys yet/);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await userEvent.type(screen.getByLabelText("Label"), "Arena key");
+      await userEvent.type(screen.getByLabelText("API key", { exact: true }), "save-fixture-1234");
+      await userEvent.click(screen.getByRole("checkbox"));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Save key" })).toHaveAttribute(
+          "aria-disabled",
+          "false",
+        ),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+      await screen.findByText(
+        attempt === 0 ? /The operation could not be confirmed/ : /This save may already exist/,
+      );
+    }
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(1);
+    expect(screen.queryByText(/Key saved/)).not.toBeInTheDocument();
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("resets submitted keys and fetcher results when identity changes during a save", async () => {
+    let switched = false;
+    const pending = Promise.withResolvers<Response>();
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () =>
+        jsonResponse(
+          switched
+            ? { ...session, user: { ...session.user, id: "20000000-0000-4000-8000-000000000002" } }
+            : session,
+        ),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+      "POST /credentials": () => pending.promise,
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/account/credentials"] },
+    );
+    await screen.findByText(/No saved keys yet/);
+    await userEvent.type(screen.getByLabelText("Label"), "Old account key");
+    await userEvent.type(
+      screen.getByLabelText("API key", { exact: true }),
+      "old-secret-canary-1234",
+    );
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+    expect(screen.getByLabelText("API key", { exact: true })).toHaveValue("");
+    await waitFor(() =>
+      expect([...router.state.fetchers.values()].some((item) => item.state === "submitting")).toBe(
+        true,
+      ),
+    );
+    switched = true;
+    await act(async () => fireEvent(window, new Event("focus")));
+    await waitFor(() =>
+      expect([...router.state.fetchers.values()].every((item) => item.state === "idle")).toBe(true),
+    );
+    await act(async () => pending.resolve(jsonResponse(saved, 201)));
+    await screen.findByText(/No saved keys yet/);
+    expect(screen.queryByText(/Key saved/)).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(
+      JSON.stringify([
+        router.state.loaderData,
+        router.state.actionData,
+        [...router.state.fetchers],
+        router.state.location.state,
+      ]),
+    ).not.toMatch(/old-secret|Old account key/);
+    http.assertNoUnexpectedRequests();
+  });
+
   it("keeps an uncertain save blocked when focus supersedes its reconciliation read", async () => {
     window.history.replaceState(null, "", "/account/credentials");
     const reconciliation = Promise.withResolvers<Response>();
@@ -218,6 +368,7 @@ describe("credential settings", () => {
     window.history.replaceState(null, "", "/account/credentials");
     const response = Promise.withResolvers<Response>();
     let other = false;
+    let reads = 0;
     const http = createHttpMock({
       "GET /api/auth/get-session": () =>
         jsonResponse(
@@ -226,12 +377,15 @@ describe("credential settings", () => {
             : session,
         ),
       "GET /profile": () => jsonResponse(other ? { ...profile, username: "OtherPlayer" } : profile),
-      "GET /credentials": () => (other ? jsonResponse({ credentials: [] }) : response.promise),
+      "GET /credentials": () =>
+        other || ++reads === 1 ? jsonResponse({ credentials: [] }) : response.promise,
     });
     vi.stubGlobal("fetch", http.fetch);
     renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Saved provider keys" });
     await userEvent.type(screen.getByLabelText("API key", { exact: true }), "old-page-canary");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh saved keys" }));
+    await waitFor(() => expect(reads).toBe(2));
     const input = screen.getByLabelText("API key", { exact: true });
     await act(async () => {
       fireEvent(window, new Event("pagehide"));

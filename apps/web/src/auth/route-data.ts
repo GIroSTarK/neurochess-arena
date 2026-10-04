@@ -3,8 +3,12 @@ import {
   authOAuthProviderSchema,
   authPasswordSchema,
   authSignInRequestSchema,
+  gameParamsSchema,
+  type ProfileResponse,
+  profileUsernameSchema,
 } from "@neurochess/contracts";
 import { type ActionFunctionArgs, type LoaderFunctionArgs, replace } from "react-router";
+import { z } from "zod";
 
 import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
 import { gameRouteTarget } from "../app/route-navigation";
@@ -12,11 +16,42 @@ import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-r
 import type { AuthForm } from "../app/route-urls";
 
 export type PublicRouteData = ScopedRouteData<{ access: PublicAccess }>;
+export type ProfileRouteData = ScopedRouteData<{
+  access: PublicAccess;
+  profile: ProfileResponse | null;
+}>;
 export type AuthOutcome =
-  | { notice: "accepted" | "resetDone" }
+  | { notice: "accepted" | "resetDone" | "saved" | "deleted" }
   | { error: AccountErrorCode }
-  | { invalid: "email" | "password" };
+  | { invalid: "email" | "password" | "username" };
 export type AuthActionData = ScopedRouteData<AuthOutcome>;
+
+const expectedAccount = gameParamsSchema.shape.gameId;
+const accountIntent = z.discriminatedUnion("intent", [
+  z.strictObject({
+    intent: z.literal("save-profile"),
+    username: profileUsernameSchema,
+    expectedAccount,
+  }),
+  z.strictObject({ intent: z.literal("remove-avatar"), expectedAccount }),
+  z.strictObject({
+    intent: z.literal("delete-account"),
+    confirm: z.literal("true"),
+    expectedAccount,
+  }),
+]);
+
+export function profileLoader(runtime: RouteRuntime) {
+  return async ({ request }: LoaderFunctionArgs): Promise<ProfileRouteData | null> => {
+    try {
+      const { generation, access } = await runtime.resolvePublicIdentity(request.signal, false);
+      return runtime.result(generation, { access, profile: runtime.account.getSnapshot().profile });
+    } catch (error) {
+      if (accountError(error) === "cancelled") return null;
+      throw new AccountFailure("AUTH_UNAVAILABLE");
+    }
+  };
+}
 
 export function publicLoader(runtime: RouteRuntime, requireProfile: boolean, arena = false) {
   return async ({ request, params }: LoaderFunctionArgs): Promise<PublicRouteData | null> => {
@@ -47,6 +82,51 @@ export function authAction(runtime: RouteRuntime, kind?: AuthForm) {
       if (request.method !== "POST") return result({ error: "AUTH_INVALID_REQUEST" });
       const data = await request.formData();
       const intent = data.get("intent");
+      if (
+        !kind &&
+        (intent === "save-profile" || intent === "remove-avatar" || intent === "delete-account")
+      ) {
+        const parsed = accountIntent.safeParse(Object.fromEntries(data));
+        if (!parsed.success || new Set(data.keys()).size !== [...data].length) {
+          return result(
+            intent === "save-profile" &&
+              !profileUsernameSchema.safeParse(data.get("username")).success
+              ? { invalid: "username" }
+              : { error: "AUTH_INVALID_REQUEST" },
+          );
+        }
+        const resolved = await runtime.resolvePublicIdentity(signal, false);
+        generation = resolved.generation;
+        if (
+          resolved.access !== "account" ||
+          parsed.data.expectedAccount !== resolved.identity?.expectedAccount
+        ) {
+          return result({ error: "AUTH_UNAUTHORIZED" });
+        }
+        if (cancelled()) return null;
+        if (parsed.data.intent === "delete-account") {
+          await account.deleteAccount(signal);
+          generation = account.getSnapshot().revision;
+          const state = account.getSnapshot();
+          return cancelled()
+            ? null
+            : result(
+                state.deletion === "deleted"
+                  ? { notice: "deleted" }
+                  : { error: state.issue ?? "AUTH_UNAVAILABLE" },
+              );
+        }
+        const onboarding = !account.getSnapshot().profile?.completed;
+        await account.saveProfile(
+          parsed.data.intent === "remove-avatar"
+            ? { avatar: "remove" }
+            : { username: parsed.data.username },
+          signal,
+        );
+        if (cancelled()) return null;
+        if (onboarding && parsed.data.intent === "save-profile") return replace(entry.returnTo);
+        return result({ notice: "saved" });
+      }
       if (intent !== kind && intent !== "oauth" && intent !== "sign-out" && intent !== "guest") {
         return result({ error: "AUTH_INVALID_REQUEST" });
       }

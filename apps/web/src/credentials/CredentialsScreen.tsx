@@ -1,79 +1,83 @@
 import type { CredentialMetadata } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 
 import type { AiIdentity } from "../api/ai-client";
-import { credentialError, type CredentialFailure } from "../api/credential-client";
 import { AccountFrame } from "../auth/AccountFrame";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 
+import type { CredentialActionData, CredentialRouteData } from "./route-data";
 import { SaveCredentialForm } from "./SaveCredentialForm";
 import { useCredentials } from "./use-credentials";
 
 export function CredentialsScreen({
-  apiBaseUrl,
   identity,
   sandboxEnabled,
   returnTo,
 }: {
-  readonly apiBaseUrl: string;
   readonly identity: AiIdentity;
   readonly sandboxEnabled: boolean;
   readonly returnTo: string;
 }) {
   const { t, i18n } = useTranslation();
-  const { catalog, state } = useCredentials(apiBaseUrl, identity);
+  const loader = useLoaderData<CredentialRouteData | null>();
+  const { state, refresh, version } = useCredentials(identity, true, undefined, loader);
+  const mutation = useFetcher<CredentialActionData | null>();
+  const reset = mutation.reset;
   const [confirmation, setConfirmation] = useState<CredentialMetadata | "all" | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<CredentialFailure["code"] | null>(null);
+  const busy = mutation.state !== "idle";
+  const outcome = mutation.data?.data;
+  const error = outcome && "error" in outcome ? outcome.error : null;
+  const [acknowledged, setAcknowledged] = useState<CredentialActionData | null>(null);
   const pending = useRef(false);
-  const operation = useRef<AbortController | null>(null);
   const listHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const clear = () => {
-      operation.current?.abort();
+      reset();
       pending.current = false;
-      setBusy(false);
       setConfirmation(null);
-      setError(null);
     };
     window.addEventListener("pagehide", clear);
     return () => {
-      operation.current?.abort();
+      reset();
       window.removeEventListener("pagehide", clear);
     };
-  }, []);
-  async function remove() {
-    if (!confirmation || pending.current || !catalog.api) return;
-    pending.current = true;
-    setBusy(true);
-    setError(null);
-    const abort = new AbortController();
-    operation.current = abort;
-    try {
-      if (confirmation === "all") await catalog.api.clear(abort.signal);
-      else await catalog.api.revoke(confirmation.credentialId, abort.signal);
-      if (abort.signal.aborted || catalog.api.signal.aborted) return;
-      setConfirmation(null);
+  }, [reset]);
+  if (outcome && "success" in outcome && mutation.data !== acknowledged) {
+    setAcknowledged(mutation.data ?? null);
+    setConfirmation(null);
+  }
+  useEffect(() => {
+    if (acknowledged) {
       listHeading.current?.focus();
-      await catalog.changed();
-    } catch (error) {
-      if (!abort.signal.aborted && credentialError(error) !== "cancelled") {
-        setError(credentialError(error));
-      }
-    } finally {
-      if (!abort.signal.aborted) {
-        pending.current = false;
-        setBusy(false);
-      }
+      void refresh();
     }
+  }, [acknowledged, refresh]);
+  function remove() {
+    if (!confirmation || busy || pending.current || !identity.expectedAccount) return;
+    pending.current = true;
+    reset();
+    void mutation
+      .submit(
+        {
+          ...(confirmation === "all"
+            ? { intent: "clear" }
+            : { intent: "revoke", credentialId: confirmation.credentialId }),
+          confirm: "true",
+          expectedAccount: identity.expectedAccount,
+        },
+        { method: "post", action: "/account/credentials" },
+      )
+      .finally(() => {
+        pending.current = false;
+      });
   }
   return (
     <AccountFrame title={t("credentials.title")} sandboxEnabled={sandboxEnabled}>
       <p className="text-body text-text-secondary">{t("credentials.description")}</p>
-      <SaveCredentialForm catalog={catalog} />
+      <SaveCredentialForm identity={identity} catalog={state} version={version} refresh={refresh} />
       <section className="grid min-w-0 gap-4 border-t border-divider pt-6">
         <h2 ref={listHeading} tabIndex={-1} className="text-section font-semibold">
           {t("credentials.list")}
@@ -108,7 +112,7 @@ export function CredentialsScreen({
                 aria-label={t("credentials.revokeLabel", { label: item.label })}
                 aria-disabled={busy}
                 onClick={() => {
-                  setError(null);
+                  reset();
                   setConfirmation(item);
                 }}
               >
@@ -118,14 +122,14 @@ export function CredentialsScreen({
           ))}
         </ul>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => void catalog.refresh()}>
+          <Button variant="secondary" onClick={() => void refresh()}>
             {t("credentials.refresh")}
           </Button>
           <Button
             variant="secondary"
             aria-disabled={busy || state.credentials.length === 0}
             onClick={() => {
-              setError(null);
+              reset();
               setConfirmation("all");
             }}
           >
@@ -154,7 +158,7 @@ export function CredentialsScreen({
             <Button variant="secondary" aria-disabled={busy} onClick={() => setConfirmation(null)}>
               {t("actions.cancel")}
             </Button>
-            <Button variant="danger" aria-disabled={busy} onClick={() => void remove()}>
+            <Button variant="danger" aria-disabled={busy} onClick={remove}>
               {t(
                 busy
                   ? "account.working"

@@ -60,7 +60,18 @@ describe("committed Arena route data", () => {
       "GET /api/auth/get-session": () => jsonResponse(session),
       "GET /profile": () => jsonResponse(profile),
       "GET /games/unfinished": () => jsonResponse({ game: null }),
-      "GET /credentials": () => jsonResponse({ credentials: [] }),
+      "GET /credentials": () =>
+        jsonResponse({
+          credentials: [
+            {
+              credentialId: GAME_ID,
+              provider: "openai",
+              label: "Saved choice",
+              maskedSuffix: "1234",
+              createdAt: "2026-10-01T00:00:00.000Z",
+            },
+          ],
+        }),
     });
     vi.stubGlobal("fetch", http.fetch);
     const { router } = renderApp(options, { initialEntries: ["/"], strict: true });
@@ -70,8 +81,12 @@ describe("committed Arena route data", () => {
     expect(reads("/games/unfinished")).toHaveLength(1);
     expect(reads("/credentials")).toHaveLength(1);
     expect(router.state.loaderData["arena-entry"]).toMatchObject({
-      data: { entry: { kind: "setup" }, credentials: { phase: "ready", credentials: [] } },
+      data: {
+        entry: { kind: "setup" },
+        credentials: { phase: "ready", credentials: [{ label: "Saved choice" }] },
+      },
     });
+    expect(screen.getAllByRole("option", { name: /Saved choice/ })).toHaveLength(2);
   });
 
   it("retries a failed entry through fresh loader data, then recovers only once", async () => {
