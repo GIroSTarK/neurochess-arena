@@ -35,6 +35,7 @@ export function gameRouteKey(mode: GameMode, location: RouteAddress): string | n
 export interface RouteOwner {
   readonly accepts: (location: RouteAddress) => boolean;
   readonly end: () => void;
+  readonly hasHandoff?: (location: RouteAddress) => boolean;
 }
 
 // Lives with the router, never in router results or browser history state.
@@ -58,6 +59,10 @@ export class RouteNavigation {
     return () => {
       this.owners.delete(owner);
     };
+  }
+
+  hasHandoff(location: RouteAddress) {
+    return [...this.owners].some((owner) => owner.hasHandoff?.(location));
   }
 
   departing(location: RouteAddress) {

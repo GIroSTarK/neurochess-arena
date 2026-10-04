@@ -13,7 +13,12 @@ import { PieceIcon } from "../board/PieceIcon";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
 
-import { type SetupApi, SetupController, type SetupCredentials } from "./controller";
+import {
+  type SetupApi,
+  SetupController,
+  type SetupCredentials,
+  type SetupEntry,
+} from "./controller";
 import { parameterErrors, setupConfiguration, type SetupIssue } from "./state";
 
 /** The page owner supplies the credential lifetime and takes responsibility for the created game. */
@@ -24,6 +29,8 @@ export function ArenaSetupScreen({
   onCreated,
   onReturnToGame,
   savedCredentials,
+  entry,
+  onRetry,
 }: {
   readonly api: SetupApi;
   readonly credentials: SetupCredentials;
@@ -31,11 +38,14 @@ export function ArenaSetupScreen({
   readonly onCreated: (game: GameDetails) => void;
   readonly onReturnToGame: (gameId: string) => void;
   readonly savedCredentials?: SavedCredentialChoices;
+  readonly entry?: SetupEntry;
+  readonly onRetry?: () => void;
 }) {
   const { t } = useTranslation();
   const [controller] = useState(() => new SetupController(api, credentials));
+  const [initialEntry] = useState(entry);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
-  useEffect(() => controller.connect(), [controller]);
+  useEffect(() => controller.connect(initialEntry), [controller, initialEntry]);
   useEffect(() => {
     if (savedCredentials?.phase === "ready") {
       controller.updateSavedCredentials(savedCredentials.credentials);
@@ -202,7 +212,13 @@ export function ArenaSetupScreen({
               {t("setup.returnToGame")}
             </Button>
           ) : state.phase === "unavailable" ? (
-            <Button variant="primary" onClick={() => void controller.checkExisting()}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (onRetry && state.issue?.code !== "creation_uncertain") onRetry();
+                else void controller.checkExisting();
+              }}
+            >
               {t("setup.checkAgain")}
             </Button>
           ) : (

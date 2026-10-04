@@ -22,6 +22,10 @@ import {
 
 export type SetupApi = Pick<AiApi, "bootstrap" | "discover" | "create" | "unfinished">;
 export type SetupCredentials = ReturnType<typeof createSessionCredentials>;
+export interface SetupEntry {
+  readonly existingGameId: string | null;
+  readonly issue: SetupIssue | null;
+}
 
 const colors = ["white", "black"] as const;
 const accessLost = (error: unknown) =>
@@ -71,7 +75,7 @@ export class SetupController {
     });
   }
 
-  connect() {
+  connect(entry: SetupEntry = { existingGameId: null, issue: null }) {
     this.lifetime = new AbortController();
     window.addEventListener("pagehide", this.clearPage);
     const disconnect = () => {
@@ -87,7 +91,14 @@ export class SetupController {
     };
     this.credentials.signal.addEventListener("abort", disconnect, { once: true });
     if (this.credentials.signal.aborted) disconnect();
-    else void this.checkExisting();
+    else {
+      this.publish({
+        ...this.state,
+        phase: entry.issue ? "unavailable" : entry.existingGameId ? "conflict" : "editing",
+        existingGameId: entry.existingGameId,
+        issue: entry.issue,
+      });
+    }
     return disconnect;
   }
 

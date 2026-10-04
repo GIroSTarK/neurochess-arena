@@ -7,7 +7,14 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppRouter } from "../app/router";
-import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestBody, requestPath } from "../test/fixtures";
+import {
+  GAME_ID,
+  jsonResponse,
+  OTHER_GAME_ID,
+  requestBody,
+  requestPath,
+  snapshot,
+} from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 
 import { readAuthEntry } from "./navigation";
@@ -172,6 +179,8 @@ describe("public route data", () => {
     const http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(signedIn ? session : null),
       "GET /profile": () => jsonResponse(profile),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({ snapshot: snapshot(), configuration: null }),
       "POST /api/auth/sign-in/email": () => {
         signedIn = true;
         return jsonResponse({ success: true });
@@ -191,6 +200,9 @@ describe("public route data", () => {
     });
     expect(router.state.location.pathname).toBe(path);
     expect(router.state.historyAction).toBe("REPLACE");
+    expect(router.state.loaderData["arena-game"]).toMatchObject({
+      data: { entry: { kind: "game", gameId: GAME_ID } },
+    });
     expect(
       JSON.stringify([
         router.state.loaderData,

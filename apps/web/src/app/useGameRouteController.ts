@@ -12,6 +12,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   create: ConstructorParameters<typeof GameRouteLifetime<T>>[1],
   enter: (controller: T, target: GameTarget) => void,
   signal?: AbortSignal,
+  entry?: { readonly data: unknown; readonly refresh: () => void },
 ) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -33,6 +34,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   const stopped = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot);
   const target = gameRouteTarget(mode, location, gameId);
   const key = target.kind === "game" ? target.gameId : target.kind;
+  useLayoutEffect(() => lifetime.updateEntry(enter, entry?.data, entry?.refresh));
   useLayoutEffect(
     () =>
       lifetime.connect(
@@ -43,7 +45,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   );
   // Adopt route handoffs during layout, but start reads after commit so StrictMode
   // can cancel its first effect setup before any recovery command is dispatched.
-  useEffect(() => lifetime.activate(), [lifetime, key, signal]);
+  useEffect(() => lifetime.activate(), [lifetime, key, signal, entry?.data]);
   useLayoutEffect(() => () => lifetime.end(), [lifetime]);
   return { controller: lifetime.controller, stopped, retry: lifetime.retry };
 }

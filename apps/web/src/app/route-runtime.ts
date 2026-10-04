@@ -14,6 +14,9 @@ export interface ScopedRouteData<T> {
   data: T | null;
 }
 
+const onboardingResult = (data: unknown) =>
+  typeof data === "object" && data !== null && "access" in data && data.access === "onboarding";
+
 function waitFor<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const cancel = () => reject(new AccountFailure("cancelled"));
@@ -41,8 +44,21 @@ export class RouteRuntime {
   ) {
     this.account = new AccountController(api);
     this.unsubscribe = this.account.subscribe(() => {
-      const generation = this.account.getSnapshot().revision;
-      if (generation === this.generation) return;
+      const state = this.account.getSnapshot();
+      const generation = state.revision;
+      if (generation === this.generation) {
+        if (state.phase === "account" && state.profile?.completed) {
+          // Completing onboarding unlocks previously gated leaf reads without
+          // changing identity or ending an already-authorized game owner.
+          for (const reference of this.results) {
+            const result = reference.deref();
+            if (result && onboardingResult(result.data)) {
+              result.data = null;
+            }
+          }
+        }
+        return;
+      }
       this.generation = generation;
       // Clear the actual values shared with loader/action/fetcher caches immediately.
       // Revalidation alone keeps old data alive until every new loader completes.
@@ -122,9 +138,12 @@ export class RouteRuntime {
   }
 
   result<T>(generation: number, data: T): ScopedRouteData<T> {
+    const state = this.account.getSnapshot();
+    const onboardingCompleted =
+      state.phase === "account" && state.profile?.completed && onboardingResult(data);
     const result = {
       generation,
-      data: generation === this.account.getSnapshot().revision ? data : null,
+      data: generation === state.revision && !onboardingCompleted ? data : null,
     };
     for (const reference of this.results) if (!reference.deref()) this.results.delete(reference);
     this.results.add(new WeakRef(result));

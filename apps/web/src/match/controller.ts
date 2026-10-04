@@ -54,7 +54,8 @@ const colors = ["white", "black"] as const;
 export type MatchEntry =
   | { readonly kind: "setup" }
   | { readonly kind: "invalid" }
-  | { readonly kind: "game"; readonly gameId: string; readonly details?: GameDetails };
+  | { readonly kind: "unavailable"; readonly code: "access" | "unavailable" }
+  | { readonly kind: "game"; readonly gameId: string; readonly details: GameDetails };
 
 export interface MatchNavigation {
   game(gameId: string, reason: "created" | "recovered"): void;
@@ -93,7 +94,6 @@ export class MatchController {
   private control: LifecycleCommand | null = null;
   private humanCommand: MoveCommand | null = null;
   private readonly listeners = new Set<() => void>();
-  private entry: MatchEntry = { kind: "setup" };
   private state: MatchState = {
     phase: "loading",
     details: null,
@@ -135,7 +135,7 @@ export class MatchController {
     this.listeners.forEach((listener) => listener());
   }
 
-  connect(entry: MatchEntry = this.entry) {
+  connect(entry: MatchEntry = { kind: "setup" }) {
     void this.enter(entry);
     return () => this.endLifetime();
   }
@@ -188,8 +188,6 @@ export class MatchController {
     this.endLifetime();
     const signal = this.openLifetime();
     const id = entry.kind === "game" ? parseGameId(entry.gameId) : null;
-    this.entry =
-      entry.kind === "game" ? (id ? { kind: "game", gameId: id } : { kind: "invalid" }) : entry;
     if (entry.kind === "setup") {
       this.publish({ phase: "setup", details: null, issue: null });
       return;
@@ -198,14 +196,14 @@ export class MatchController {
       this.publish({
         phase: "unavailable",
         details: null,
-        issue: { kind: "notice", code: "access" },
+        issue: { kind: "notice", code: entry.kind === "unavailable" ? entry.code : "access" },
       });
       return;
     }
     this.publish({ phase: "loading", details: null, issue: null, replay: null });
     try {
       // Seeded entries also yield so a discarded mount cannot begin recovery writes.
-      const details = await (entry.details ?? this.api.details(id, signal));
+      const details = await Promise.resolve(entry.details);
       if (!this.live(signal)) return;
       if (parseGameId(details.snapshot.gameId) !== id) throw new ApiFailure("malformed");
       this.publish({ details, phase: "ready" });
@@ -219,14 +217,9 @@ export class MatchController {
     }
   }
 
-  load(gameId: string) {
-    return this.enter({ kind: "game", gameId });
-  }
-
   async created(details: GameDetails) {
     if (!this.lifetime || this.state.busy || this.state.phase !== "setup") return;
     this.clearInvocations();
-    this.entry = { kind: "game", gameId: details.snapshot.gameId };
     this.publish({ details, phase: "ready", startedGameId: details.snapshot.gameId, issue: null });
     this.refreshKeys();
     const signal = this.lifetime.signal;
@@ -841,10 +834,7 @@ export class MatchController {
   }
   newGame() {
     if (this.state.details && !terminal(this.state.details.snapshot)) return;
-    void this.enter({ kind: "setup" });
+    this.endLifetime();
     this.navigation?.setup();
-  }
-  retryLoad() {
-    void this.enter(this.entry);
   }
 }

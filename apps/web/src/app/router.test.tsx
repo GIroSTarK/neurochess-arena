@@ -314,18 +314,23 @@ describe("Data router integration", () => {
   }
 
   it("preserves the created match and keys across leaf routes and ordinary revalidation", async () => {
-    const { router, signal } = await startGame();
+    const { router, signal, turn } = await startGame();
     expect(router.state.location.pathname).toBe(gamePath);
     expect(router.state.historyAction).toBe("REPLACE");
     expect(signal().aborted).toBe(false);
     expect(screen.getByRole("grid")).toContainElement(document.activeElement as HTMLElement);
+    expect(http.fetch.mock.calls.some(([url]) => requestPath(url).endsWith("/details"))).toBe(
+      false,
+    );
+    await act(async () => turn.resolve(jsonResponse(snapshot(["e2e4"]))));
+    expect(await screen.findByRole("button", { name: /e4.*White pawn/i })).toBeVisible();
     await act(() => router.revalidate());
+    expect(screen.getByRole("button", { name: /e4.*White pawn/i })).toBeVisible();
     expect(signal().aborted).toBe(false);
     const requests = http.fetch.mock.calls.map(([url]) => requestPath(url));
     expect(requests.filter((path) => path.endsWith("/ai-turn"))).toHaveLength(1);
-    expect(
-      requests.filter((path) => path.endsWith("/details") || path.endsWith("/lifecycle")),
-    ).toEqual([]);
+    expect(requests.filter((path) => path.endsWith("/details"))).toHaveLength(1);
+    expect(requests.filter((path) => path.endsWith("/lifecycle"))).toEqual([]);
     expect(
       JSON.stringify({
         data: router.state.loaderData,

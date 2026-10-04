@@ -30,7 +30,7 @@ export class CredentialCatalog {
     this.request = null;
     this.publish({ credentials: [], phase: "loading" });
   };
-  connect() {
+  connect(initial?: CredentialCatalogState) {
     if (!this.api) return () => undefined;
     this.connected = true;
     const refresh = () => {
@@ -45,7 +45,8 @@ export class CredentialCatalog {
       this.channel.onmessage = refresh;
     }
     const timer = setInterval(refresh, 15_000);
-    refresh();
+    if (initial) this.publish(initial);
+    else refresh();
     return () => {
       this.connected = false;
       clearInterval(timer);

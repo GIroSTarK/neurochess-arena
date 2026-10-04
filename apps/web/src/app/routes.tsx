@@ -9,6 +9,7 @@ import {
   ProfileRoute,
 } from "../auth/AccountRoutes";
 import { authAction, publicLoader } from "../auth/route-data";
+import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
 
 import { type AppRouteContext, RouteContext } from "./route-context";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
@@ -78,14 +79,14 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
                 {
                   id: "arena-entry",
                   index: true,
-                  loader: publicLoader(context.runtime, true, true),
+                  ...arenaSetupLoader(context),
                   element: <></>,
                 },
                 {
                   id: "arena-game",
                   path: "games/:gameId",
                   caseSensitive: true,
-                  loader: publicLoader(context.runtime, true, true),
+                  ...arenaGameLoader(context),
                   element: <></>,
                 },
               ],

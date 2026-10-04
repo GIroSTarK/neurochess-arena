@@ -1,11 +1,16 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 
 import type { AiIdentity } from "../api/ai-client";
 import { createCredentialApi } from "../api/credential-client";
 
-import { CredentialCatalog } from "./catalog";
+import { CredentialCatalog, type CredentialCatalogState } from "./catalog";
 
-export function useCredentials(apiBaseUrl: string, identity?: AiIdentity, enabled = true) {
+export function useCredentials(
+  apiBaseUrl: string,
+  identity?: AiIdentity,
+  enabled = true,
+  initial?: CredentialCatalogState,
+) {
   const [catalog] = useState(
     () =>
       new CredentialCatalog(
@@ -13,6 +18,7 @@ export function useCredentials(apiBaseUrl: string, identity?: AiIdentity, enable
       ),
   );
   const state = useSyncExternalStore(catalog.subscribe, catalog.getSnapshot);
-  useEffect(() => (enabled ? catalog.connect() : undefined), [catalog, enabled]);
+  const entry = useEffectEvent(() => initial);
+  useEffect(() => (enabled ? catalog.connect(entry()) : undefined), [catalog, enabled]);
   return { catalog, state };
 }

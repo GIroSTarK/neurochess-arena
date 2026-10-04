@@ -53,6 +53,16 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it("connects from committed discovery without a second mount read", async () => {
+    const { controller, api, disconnect } = await fixture();
+    expect(api.unfinished).not.toHaveBeenCalled();
+    disconnect();
+    const reconnect = controller.connect({ existingGameId: GAME_ID, issue: null });
+    cleanup.push(reconnect);
+    expect(controller.getSnapshot().phase).toBe("conflict");
+    expect(controller.getSnapshot().existingGameId).toBe(GAME_ID);
+    expect(api.unfinished).not.toHaveBeenCalled();
+  });
   it("aborts discovery immediately when its credential owner ends before screen unmount", async () => {
     const { controller, api, credentials, lifetime } = await fixture();
     controller.setKey("white", "white-sentinel-key");
@@ -351,7 +361,7 @@ describe("independent AI setup", () => {
     expect(api.create).toHaveBeenCalledTimes(1);
   });
 
-  it("drops a late creation handoff after unmount and reads the existing game on reconnect", async () => {
+  it("drops a late creation handoff after unmount and adopts fresh discovery on reconnect", async () => {
     const { controller, api, ready, disconnect, credentials } = await fixture();
     await ready();
     const configuration = setupConfiguration(controller.getSnapshot());
@@ -364,8 +374,7 @@ describe("independent AI setup", () => {
     pending.resolve({ snapshot: snapshot(), configuration });
     expect(await starting).toBeNull();
     expect(() => credentials.require("white", "openai")).toThrow();
-    api.unfinished.mockResolvedValueOnce({ snapshot: snapshot(), configuration });
-    const reconnect = controller.connect();
+    const reconnect = controller.connect({ existingGameId: GAME_ID, issue: null });
     cleanup.push(reconnect);
     await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("conflict"));
   });

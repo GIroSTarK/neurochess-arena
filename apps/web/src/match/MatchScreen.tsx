@@ -3,13 +3,12 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
-import { type AiIdentity, createAiApi } from "../api/ai-client";
+import type { AiIdentity } from "../api/ai-client";
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { gameHref } from "../app/route-urls";
 import { RouteNotice } from "../app/RouteNotice";
-import { useGameRouteController } from "../app/useGameRouteController";
 import { ArenaDetails } from "../arena/ArenaDetails";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { ArenaLayout } from "../arena/ArenaLayout";
@@ -30,42 +29,43 @@ import { Button } from "../ui/Button";
 import { StableText } from "../ui/StableText";
 
 import { CommentaryPanel } from "./CommentaryPanel";
-import { humanColor, MatchController, matchKeysReady } from "./controller";
+import { humanColor, type MatchController, matchKeysReady } from "./controller";
 import { InvocationEvents } from "./InvocationEvents";
 import { PausedCredentials } from "./PausedCredentials";
+import type { ArenaRouteData } from "./route-data";
 import { TelemetryPanel } from "./TelemetryPanel";
 
 export function MatchScreen({
   apiBaseUrl,
   sandboxEnabled,
   identity,
+  controller,
+  stopped,
+  onRetry,
+  entry,
 }: {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
   readonly identity?: AiIdentity;
+  readonly controller: MatchController;
+  readonly stopped: boolean;
+  readonly onRetry: () => void;
+  readonly entry: ArenaRouteData["data"];
 }) {
   const { t } = useTranslation();
   const account = useAccount();
   const navigate = useNavigate();
-  const { controller, stopped, retry } = useGameRouteController(
-    "arena",
-    (navigation) =>
-      new MatchController(
-        createAiApi(apiBaseUrl, identity ? { identity } : {}),
-        undefined,
-        navigation,
-      ),
-    (controller, target) => {
-      void controller.enter(target.kind === "none" ? { kind: "setup" } : target);
-    },
-    identity?.signal,
-  );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const needsCredentials =
     state.phase === "setup" ||
-    state.details?.snapshot.state === "active" ||
-    state.details?.snapshot.state === "paused";
-  const { catalog, state: savedState } = useCredentials(apiBaseUrl, identity, needsCredentials);
+    (state.details?.configuration != null &&
+      (state.details.snapshot.state === "active" || state.details.snapshot.state === "paused"));
+  const { catalog, state: savedState } = useCredentials(
+    apiBaseUrl,
+    identity,
+    !stopped && needsCredentials,
+    entry?.credentials ?? undefined,
+  );
   const savedCredentials = catalog.api
     ? {
         ...savedState,
@@ -99,7 +99,7 @@ export function MatchScreen({
   }, [state.startedGameId]);
 
   if (stopped) {
-    return <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={retry} />;
+    return <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={onRetry} />;
   }
 
   if (state.phase === "setup" && controller.credentials) {
@@ -108,6 +108,8 @@ export function MatchScreen({
         key={state.keyEpoch}
         api={controller.api}
         credentials={controller.credentials}
+        {...(entry?.entry?.kind === "setup" ? { entry: entry.entry } : {})}
+        onRetry={onRetry}
         {...(savedCredentials ? { savedCredentials } : {})}
         sandboxEnabled={sandboxEnabled}
         onCreated={(game) => {
@@ -250,7 +252,7 @@ export function MatchScreen({
         <div className="mx-auto grid max-w-[1120px] gap-4">
           <p>{issueText ?? t("match.loading")}</p>
           {state.phase === "unavailable" ? (
-            <Button variant="secondary" onClick={() => controller.retryLoad()}>
+            <Button variant="secondary" onClick={onRetry}>
               {t("match.retry")}
             </Button>
           ) : null}

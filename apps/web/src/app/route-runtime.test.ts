@@ -74,6 +74,28 @@ describe("public identity runtime", () => {
     http.assertNoUnexpectedRequests();
   });
 
+  it("invalidates gated entry data on profile completion without ending account authority", async () => {
+    let completed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () =>
+        jsonResponse({ ...profile, completed, username: completed ? "Player" : null }),
+    });
+    const runtime = runtimeFor(http);
+    const game = await runtime.resolvePublicIdentity(new AbortController().signal);
+    const account = await runtime.resolvePublicIdentity(new AbortController().signal, false);
+    const gated = runtime.result(game.generation, { access: "onboarding", entry: null });
+    const management = runtime.result(account.generation, { access: "account" });
+    completed = true;
+    await runtime.account.refresh();
+    expect(gated.data).toBeNull();
+    expect(management.data).toEqual({ access: "account" });
+    expect(account.identity?.signal.aborted).toBe(false);
+    expect(runtime.account.getSnapshot().revision).toBe(account.generation);
+    expect(runtime.result(game.generation, { access: "onboarding", entry: null }).data).toBeNull();
+    http.assertNoUnexpectedRequests();
+  });
+
   it("clears issued values immediately, aborts old authority, and fences results arriving after a switch", async () => {
     let current = session;
     const http = createHttpMock({

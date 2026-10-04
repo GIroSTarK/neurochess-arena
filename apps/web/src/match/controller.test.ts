@@ -75,6 +75,12 @@ function harness(initial = details) {
     keys,
     disconnect,
     navigation,
+    enter: () =>
+      controller.enter({
+        kind: "game",
+        gameId: initial.snapshot.gameId,
+        details: { ...initial, snapshot: stored },
+      }),
     store: (next: GameSnapshot) => {
       stored = next;
     },
@@ -140,18 +146,26 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.controller).toHaveBeenCalledTimes(1);
   });
 
-  it("fences an old entry read after reconnecting or choosing another game", async () => {
+  it("fences an old recovery response after committing entry data for another game", async () => {
     const h = harness();
-    const late = Promise.withResolvers<GameDetails>();
-    h.api.details.mockReturnValueOnce(late.promise);
-    const opening = h.controller.enter({ kind: "game", gameId: OTHER_GAME_ID });
-    const signal = h.api.details.mock.calls[0]![1];
+    const late = Promise.withResolvers<GameSnapshot>();
+    h.api.lifecycle.mockReturnValueOnce(late.promise);
+    const other = snapshot([], { gameId: OTHER_GAME_ID });
+    const opening = h.controller.enter({
+      kind: "game",
+      gameId: OTHER_GAME_ID,
+      details: { ...details, snapshot: other },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const signal = h.api.lifecycle.mock.calls[0]![1];
     await h.controller.enter({ kind: "game", gameId: GAME_ID, details });
     expect(signal.aborted).toBe(true);
-    late.resolve({ ...details, snapshot: snapshot([], { gameId: OTHER_GAME_ID }) });
+    late.resolve(
+      snapshot([], { gameId: OTHER_GAME_ID, state: "paused", legalMoves: [], version: 1 }),
+    );
     await opening;
     expect(h.controller.getSnapshot().details?.snapshot.gameId).toBe(GAME_ID);
-    expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
+    expect(h.api.lifecycle).toHaveBeenCalledTimes(2);
   });
 
   it("keeps setup credentials through a creation callback without reading or recovering the game", async () => {
@@ -167,7 +181,7 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.snapshot).not.toHaveBeenCalled();
     expect(h.api.lifecycle).not.toHaveBeenCalled();
     h.controller.endLifetime();
-    h.controller.connect({ kind: "game", gameId: GAME_ID });
+    h.controller.connect({ kind: "game", gameId: GAME_ID, details: humanGame("white") });
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.controller.getSnapshot().keys.black).toBe(false);
@@ -175,7 +189,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("rejects malformed targets and mismatched entry data before private reads or recovery", async () => {
     const h = harness();
-    await h.controller.enter({ kind: "game", gameId: "../private" });
+    await h.controller.enter({ kind: "game", gameId: "../private", details });
     expect(h.controller.getSnapshot().phase).toBe("unavailable");
     await h.controller.enter({ kind: "game", gameId: OTHER_GAME_ID, details });
     expect(h.controller.getSnapshot().details).toBeNull();
@@ -185,7 +199,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("requires explicit saved selection after recovery and dispatches only on Next move", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     const saved = {
       credentialId: GAME_ID,
       provider: "openai" as const,
@@ -215,7 +229,7 @@ describe("page-owned Arena orchestration", () => {
       ...records,
       version: h.controller.getSnapshot().details!.snapshot.version,
     }));
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await h.controller.loadInvocations();
     expect(h.controller.getSnapshot().issue?.kind).toBe("provider");
     h.controller.setKey("white", "white-secret");
@@ -245,7 +259,7 @@ describe("page-owned Arena orchestration", () => {
     const h = harness(game);
     const records = invocationRecords();
     h.api.invocations.mockResolvedValue(records);
-    await h.controller.load(GAME_ID);
+    await h.enter();
     expect(h.controller.getSnapshot().invocations).toEqual(records);
     const refreshed = structuredClone(records);
     refreshed.turns[1]!.attempts[0]!.durationMs = 900;
@@ -268,14 +282,15 @@ describe("page-owned Arena orchestration", () => {
     const h = harness(game);
     const pending = Promise.withResolvers<Awaited<ReturnType<AiApi["invocations"]>>>();
     h.api.invocations.mockReturnValue(pending.promise);
-    await h.controller.load(GAME_ID);
+    await h.enter();
     const signal = h.api.invocations.mock.calls[0]![1];
     h.controller.newGame();
+    expect(h.navigation.setup).toHaveBeenCalledOnce();
     expect(signal.aborted).toBe(true);
     pending.resolve(invocationRecords());
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot()).toMatchObject({
-      phase: "setup",
+      phase: "loading",
       invocations: null,
       invocationsLoading: false,
     });
@@ -292,7 +307,7 @@ describe("page-owned Arena orchestration", () => {
       ...records,
       version: h.controller.getSnapshot().details!.snapshot.version,
     }));
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const received = h.controller.getSnapshot().invocations;
     expect(received?.turns).toEqual(records.turns);
@@ -372,7 +387,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("synchronizes a passive game when telemetry reports a newer server revision", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const cached = h.controller.getSnapshot();
     const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
@@ -414,7 +429,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("retries telemetry synchronization after a failed snapshot read", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const cached = h.controller.getSnapshot();
     const latest = snapshot(["e2e4"], { version: cached.details!.snapshot.version + 2 });
@@ -440,7 +455,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("discards telemetry synchronization returning after the page lifetime ends", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const latest = snapshot(["e2e4"], {
       version: h.controller.getSnapshot().details!.snapshot.version + 2,
@@ -468,7 +483,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("discards a telemetry synchronization superseded by explicit recovery", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const latest = snapshot(["e2e4"], {
       version: h.controller.getSnapshot().details!.snapshot.version + 2,
@@ -493,7 +508,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("rejects telemetry older than the accepted snapshot without synchronizing", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     const cached = h.controller.getSnapshot();
     h.api.snapshot.mockClear();
@@ -639,7 +654,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("requires only the AI key after human-turn recovery and never steps a human seat", async () => {
     const h = harness(humanGame("white"));
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     await h.controller.continue(false);
@@ -758,7 +773,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("recovers on refresh, blocks missing keys, and only steps after explicit action", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.api.controller).not.toHaveBeenCalled();
@@ -800,7 +815,7 @@ describe("page-owned Arena orchestration", () => {
 
   it("access loss clears private state without a replacement guest bootstrap", async () => {
     const h = harness();
-    await h.controller.load(GAME_ID);
+    await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     h.api.lifecycle.mockRejectedValue(new ApiFailure("api", "UNAUTHORIZED"));
     await h.controller.lifecycle("abort");

@@ -15,12 +15,15 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   private target: GameTarget = { kind: "none" };
   private signal: AbortSignal | undefined;
   private pendingEntry = false;
+  private entryData: unknown;
+  private refreshEntry: (() => void) | undefined;
+  private refreshPending = false;
   private readonly listeners = new Set<() => void>();
 
   constructor(
     private readonly mode: GameMode,
     create: (navigation: GameNavigation) => T,
-    private readonly enter: (controller: T, target: GameTarget) => void,
+    private enter: (controller: T, target: GameTarget) => void,
     private readonly navigate: (href: string, replace: boolean) => void,
     private readonly navigation: RouteNavigation,
   ) {
@@ -33,7 +36,8 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
         this.navigate(href, this.mode === "arena" || reason === "recovered");
       },
       setup: () => {
-        this.handoff = "setup";
+        if (this.mode === "arena") this.end();
+        else this.handoff = "setup";
         this.navigate(this.mode === "arena" ? "/" : "/sandbox", true);
       },
     });
@@ -56,8 +60,26 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     return key !== null && key === (this.handoff ?? this.key);
   };
 
+  readonly hasHandoff = (destination: RouteAddress) =>
+    this.handoff !== null && !this.stopped && this.accepts(destination);
+
+  updateEntry(
+    enter: (controller: T, target: GameTarget) => void,
+    data?: unknown,
+    refresh?: () => void,
+  ) {
+    this.enter = enter;
+    this.refreshEntry = refresh;
+    if (this.refreshPending && data !== this.entryData) {
+      this.refreshPending = false;
+      this.pendingEntry = true;
+    }
+    this.entryData = data;
+  }
+
   readonly end = () => {
     this.pendingEntry = false;
+    this.refreshPending = false;
     this.handoff = null;
     this.publish(true);
     this.controller.endLifetime();
@@ -65,14 +87,25 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
 
   readonly retry = () => {
     if (this.signal?.aborted) return;
+    if (this.refreshEntry) {
+      if (this.refreshPending) return;
+      this.refreshPending = true;
+      this.refreshEntry();
+      return;
+    }
+    this.startEntry();
+  };
+
+  private startEntry() {
+    if (this.signal?.aborted) return;
     this.publish(false);
     this.enter(this.controller, this.target);
-  };
+  }
 
   activate() {
     if (!this.pendingEntry) return;
     this.pendingEntry = false;
-    this.retry();
+    this.startEntry();
   }
 
   connect(target: GameTarget, signal?: AbortSignal) {
