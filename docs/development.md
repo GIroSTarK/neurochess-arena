@@ -145,6 +145,8 @@ Auth forms submit to route actions and use fetchers for same-page acknowledgemen
 
 ## Sandbox UI
 
+`game/SandboxRoute.tsx` and `game/route-data.ts` load lazily behind the Sandbox flag. Entry loaders own readiness and guest-authorized discovery/snapshot reads; `useSandbox` consumes committed results. Keep Start, versioned recovery, command reconciliation, replay and PGN in the controller. Revalidation may update readiness or clear denied access, but must not repeat recovery, replace a live snapshot, or reset an uncertain command. Retry connection and failed entry reads use loader revalidation; command retries retain their original payloads. Reference fixtures use their own API-independent branch.
+
 Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` provides the separate [AI-versus-AI flow](#arena-controller-api); loading setup reads unfinished-game discovery without creating a guest. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.
 
 One guest controls White and Black. Select a source and a highlighted destination, or use the [board keyboard controls](design-system.md#keyboard-and-chess-interaction). Promotion always requires an explicit piece choice. Flip board changes presentation only. Pieces, turn, result, and SAN history stay unchanged until an authoritative response arrives.

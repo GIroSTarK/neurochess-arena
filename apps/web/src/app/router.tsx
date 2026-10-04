@@ -64,6 +64,7 @@ export function createAppRouter(
     const destination = state.navigation.location ?? state.location;
     runtime.navigating(destination);
     navigation.departing(destination);
+    if (state.navigation.state === "idle") navigation.arrived(state.location);
     if (destination.pathname !== initial.pathname || destination.search !== initial.search) {
       options.authEntry?.retire();
     }

@@ -1,7 +1,7 @@
 import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
-import { API_ORIGIN } from "./environment";
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, playMove, readSnapshot, startSandbox, submitGame, test } from "./fixtures";
 
 async function startAi(page: Page, mode: "ai_vs_ai" | "ai_vs_human") {
@@ -93,6 +93,22 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
         ...pausedAi,
         version: pausedAi.version + 1,
       });
+      expect(await readSnapshot(page, sandbox.gameId)).toEqual(recoveredSandbox);
+
+      await page.goBack();
+      await expect(page).toHaveURL(WEB_ORIGIN + "/");
+      await expect(page.getByRole("button", { name: "Return to game", exact: true })).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp("/sandbox/games/" + sandbox.gameId + "$"));
+      await expect(page.getByRole("grid")).toHaveAttribute("data-fen", recoveredSandbox.fen);
+      await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+      expect(await readSnapshot(page, sandbox.gameId)).toEqual(recoveredSandbox);
+      await page.goForward();
+      await expect(page).toHaveURL(WEB_ORIGIN + "/");
+      await expect(page.getByRole("button", { name: "Return to game", exact: true })).toBeVisible();
+      await page.goForward();
+      await expect(page).toHaveURL(new RegExp("/games/" + pausedAi.gameId + "$"));
+      await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
       expect(await readSnapshot(page, sandbox.gameId)).toEqual(recoveredSandbox);
     });
   }

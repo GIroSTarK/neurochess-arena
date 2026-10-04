@@ -10,6 +10,9 @@ interface GameNavigation {
 export class GameRouteLifetime<T extends { endLifetime(): void }> {
   readonly controller: T;
   private key: string | null = null;
+  private committedKey: string | null = null;
+  private routeRevision = 0;
+  private connectedRevision = 0;
   private handoff: string | null = null;
   private stopped = false;
   private target: GameTarget = { kind: "none" };
@@ -44,6 +47,10 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   }
 
   readonly getSnapshot = () => this.stopped;
+  readonly getRouteRevision = (target: GameTarget) => {
+    const key = target.kind === "game" ? target.gameId : target.kind === "none" ? "setup" : null;
+    return key === this.committedKey ? this.routeRevision : this.connectedRevision;
+  };
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -61,7 +68,17 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   };
 
   readonly hasHandoff = (destination: RouteAddress) =>
-    this.handoff !== null && !this.stopped && this.accepts(destination);
+    this.handoff !== null &&
+    this.handoff !== this.committedKey &&
+    !this.stopped &&
+    this.accepts(destination);
+
+  readonly arrived = (destination: RouteAddress) => {
+    const key = gameRouteKey(this.mode, destination);
+    if (key === this.committedKey) return;
+    this.committedKey = key;
+    this.routeRevision++;
+  };
 
   updateEntry(
     enter: (controller: T, target: GameTarget) => void,
@@ -112,6 +129,8 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     this.target = target;
     this.signal = signal;
     const key = target.kind === "game" ? target.gameId : target.kind === "none" ? "setup" : null;
+    if (this.routeRevision === 0) this.committedKey = key;
+    this.connectedRevision = this.routeRevision;
     const handedOff = key !== null && this.handoff === key && !this.stopped;
     this.key = key;
     this.handoff = null;

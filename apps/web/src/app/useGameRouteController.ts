@@ -32,7 +32,10 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
       ),
   );
   const stopped = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot);
+  // A loaded handoff and immediate Back can both commit before React renders.
+  // Reconnect that history entry even if its final target matches the previous render.
   const target = gameRouteTarget(mode, location, gameId);
+  const routeRevision = lifetime.getRouteRevision(target);
   const key = target.kind === "game" ? target.gameId : target.kind;
   useLayoutEffect(() => lifetime.updateEntry(enter, entry?.data, entry?.refresh));
   useLayoutEffect(
@@ -41,11 +44,11 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
         key === "none" || key === "invalid" ? { kind: key } : { kind: "game", gameId: key },
         signal,
       ),
-    [lifetime, key, signal],
+    [lifetime, key, signal, routeRevision],
   );
   // Adopt route handoffs during layout, but start reads after commit so StrictMode
   // can cancel its first effect setup before any recovery command is dispatched.
-  useEffect(() => lifetime.activate(), [lifetime, key, signal, entry?.data]);
+  useEffect(() => lifetime.activate(), [lifetime, key, signal, entry?.data, routeRevision]);
   useLayoutEffect(() => () => lifetime.end(), [lifetime]);
   return { controller: lifetime.controller, stopped, retry: lifetime.retry };
 }

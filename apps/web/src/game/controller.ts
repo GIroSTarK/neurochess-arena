@@ -9,13 +9,23 @@ import { OperationGate } from "./operations";
 import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
-import { isTerminal, isUnfinished, type LifecycleAction, type SandboxState } from "./state";
+import {
+  isTerminal,
+  isUnfinished,
+  type LifecycleAction,
+  type SandboxNotice,
+  type SandboxState,
+} from "./state";
 import { SandboxStore } from "./store";
 
 export interface SandboxEntry {
   readonly target: GameTarget;
   readonly snapshot?: GameSnapshot | null;
   readonly readiness?: boolean;
+  readonly issue?: {
+    readonly phase: "unavailable" | "access-error" | "recovery-required";
+    readonly notice: SandboxNotice;
+  };
 }
 
 export type SandboxGameNavigation = (gameId: string, reason: "created" | "recovered") => void;
@@ -127,7 +137,14 @@ export class SandboxController {
       if (entry.readiness === undefined) void this.checkReadiness();
       else this.store.setReadiness(entry.readiness ? "ready" : "unavailable");
     }
-    await this.recovery.recover(this.target, entry.snapshot);
+    if (entry.issue) {
+      this.store.transition(
+        { phase: entry.issue.phase, snapshot: null, pendingCommand: null },
+        { notice: entry.issue.notice },
+      );
+    } else {
+      await this.recovery.recover(this.target, entry.snapshot);
+    }
   }
 
   private acceptCreated(snapshot: GameSnapshot): void {
@@ -135,6 +152,14 @@ export class SandboxController {
     this.target = { kind: "game", gameId: snapshot.gameId };
     this.session.accept(snapshot, "started", null);
     this.onGame?.(snapshot.gameId, "created");
+  }
+
+  setReadiness(ready: boolean): void {
+    const readiness = ready ? "ready" : "unavailable";
+    const previous = this.store.get().readiness;
+    if (this.gate.isConnected() && previous !== readiness) {
+      this.store.setReadiness(readiness, previous === "unavailable" || !ready);
+    }
   }
 
   async checkReadiness(): Promise<void> {

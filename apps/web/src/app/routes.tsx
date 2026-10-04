@@ -103,16 +103,27 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
                 caseSensitive: true,
                 handle: { page: "sandbox" },
                 lazy: async () => {
-                  try {
-                    const { SandboxRouteLayout } = await import("../game/SandboxRouteLayout");
-                    return { Component: SandboxRouteLayout };
-                  } catch {
-                    throw new Error("ROUTE_MODULE_UNAVAILABLE");
-                  }
+                  const { Component } = await loadSandboxRoute(enabledContext);
+                  return { Component };
                 },
                 children: [
-                  { index: true, element: <></> },
-                  { path: "games/:gameId", caseSensitive: true, element: <></> },
+                  {
+                    id: "sandbox-entry",
+                    index: true,
+                    element: <></>,
+                    lazy: async () => {
+                      return (await loadSandboxRoute(enabledContext)).entry;
+                    },
+                  },
+                  {
+                    id: "sandbox-game",
+                    path: "games/:gameId",
+                    caseSensitive: true,
+                    element: <></>,
+                    lazy: async () => {
+                      return (await loadSandboxRoute(enabledContext)).game;
+                    },
+                  },
                 ],
               } satisfies RouteObject,
             ]
@@ -144,4 +155,20 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       ],
     },
   ];
+}
+
+async function loadSandboxRoute(context: AppRouteContext) {
+  try {
+    const [{ SandboxRoute }, { sandboxEntryLoader, sandboxGameLoader }] = await Promise.all([
+      import("../game/SandboxRoute"),
+      import("../game/route-data"),
+    ]);
+    return {
+      Component: SandboxRoute,
+      entry: sandboxEntryLoader(context),
+      game: sandboxGameLoader(context),
+    };
+  } catch {
+    throw new Error("ROUTE_MODULE_UNAVAILABLE");
+  }
 }

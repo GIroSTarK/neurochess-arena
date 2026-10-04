@@ -109,7 +109,8 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] React Router Data mode, canonical private game paths, shared mode lifetimes, and navigation acceptance coverage.
 - [x] Shared route identity runtime, public leaf guards, and authentication actions with scoped cache invalidation.
 - [x] Arena entry loaders, committed paused recovery, and live creation handoffs without duplicate initial reads.
-- [ ] Sandbox and History reads, account and credential form actions, followed by complete migration acceptance coverage.
+- [x] Sandbox entry loaders, committed recovery, creation handoffs, and isolated lazy build boundaries.
+- [ ] History reads, account and credential form actions, followed by complete migration acceptance coverage.
 
 ## Phase 4 — Private online human games
 

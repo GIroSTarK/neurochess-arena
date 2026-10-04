@@ -7,12 +7,16 @@ import type { SandboxState } from "../state";
 export function CommandRecovery({
   state,
   controller,
+  onRetryRecovery,
+  onRetryConnection,
 }: {
   readonly state: SandboxState;
   readonly controller: Pick<
     SandboxController,
     "recover" | "retryCommand" | "synchronize" | "checkReadiness"
   >;
+  readonly onRetryRecovery?: () => void;
+  readonly onRetryConnection?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -44,7 +48,8 @@ export function CommandRecovery({
         <Button
           variant="primary"
           onClick={() => {
-            void controller.recover();
+            if (onRetryRecovery) onRetryRecovery();
+            else void controller.recover();
           }}
         >
           {t("actions.retryRecovery")}
@@ -54,7 +59,8 @@ export function CommandRecovery({
         <Button
           variant="secondary"
           onClick={() => {
-            void controller.checkReadiness();
+            if (onRetryConnection) onRetryConnection();
+            else void controller.checkReadiness();
           }}
         >
           {t("actions.retryConnection")}

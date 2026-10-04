@@ -32,7 +32,7 @@ import { useSandbox } from "./useSandbox";
 export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const helpId = useId();
-  const { state, controller, stopped, retry } = useSandbox(apiBaseUrl);
+  const { state, controller, stopped, retry, recover, checkReadiness } = useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const board = useRef<ChessboardHandle>(null);
   const view = sandboxPresentation(state, t);
@@ -139,7 +139,12 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 action={<StartButton state={state} controller={controller} />}
               />
               <StatusFeedback {...status} />
-              <CommandRecovery state={state} controller={controller} />
+              <CommandRecovery
+                state={state}
+                controller={controller}
+                onRetryRecovery={recover}
+                onRetryConnection={checkReadiness}
+              />
             </>
           ) : undefined
         }
@@ -239,7 +244,12 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                     </div>
                   </>
                 )}
-                <CommandRecovery state={state} controller={controller} />
+                <CommandRecovery
+                  state={state}
+                  controller={controller}
+                  onRetryRecovery={recover}
+                  onRetryConnection={checkReadiness}
+                />
               </div>
             </ArenaDetails>
           ) : (

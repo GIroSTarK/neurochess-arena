@@ -36,6 +36,7 @@ export interface RouteOwner {
   readonly accepts: (location: RouteAddress) => boolean;
   readonly end: () => void;
   readonly hasHandoff?: (location: RouteAddress) => boolean;
+  readonly arrived?: (location: RouteAddress) => void;
 }
 
 // Lives with the router, never in router results or browser history state.
@@ -63,6 +64,10 @@ export class RouteNavigation {
 
   hasHandoff(location: RouteAddress) {
     return [...this.owners].some((owner) => owner.hasHandoff?.(location));
+  }
+
+  arrived(location: RouteAddress) {
+    for (const owner of this.owners) owner.arrived?.(location);
   }
 
   departing(location: RouteAddress) {

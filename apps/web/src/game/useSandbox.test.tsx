@@ -1,79 +1,48 @@
-import { act, fireEvent, renderHook, waitFor } from "@testing-library/react";
-import { type ReactNode, StrictMode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { act, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
+import { jsonResponse, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
+import { renderApp } from "../test/render";
 
 import { useSandbox } from "./useSandbox";
 
-function RouteWrapper({ children }: { readonly children: ReactNode }) {
-  return (
-    <MemoryRouter initialEntries={[window.location.pathname]}>
-      <Routes>
-        <Route path="/sandbox" element={children} />
-        <Route path="/sandbox/games/:gameId" element={children} />
-      </Routes>
-    </MemoryRouter>
-  );
-}
-
-describe("useSandbox", () => {
+describe("useSandbox with the application data routes", () => {
   let http: ReturnType<typeof createHttpMock>;
   afterEach(() => http.assertNoUnexpectedRequests());
 
-  it("keeps one connected controller across renders", async () => {
-    window.history.replaceState(null, "", "/sandbox");
+  it("keeps one controller across loader revalidation without repeating initial reads in effects", async () => {
     http = createHttpMock({
       "GET /ready": () => jsonResponse({ status: "ready" }),
       "GET /sandbox/games/unfinished": () => jsonResponse({ snapshot: null }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    const { result, rerender, unmount } = renderHook(() => useSandbox("http://localhost:3001"), {
-      wrapper: RouteWrapper,
-    });
-    const { controller } = result.current;
-    await waitFor(() => expect(result.current.state.readiness).toBe("ready"));
-    expect(result.current.state.phase).toBe("entry");
-    rerender();
-    rerender();
-    expect(result.current.controller).toBe(controller);
-    expect(http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/ready")).toHaveLength(1);
-    unmount();
-  });
-
-  it("clears an active game on pagehide and requires paused recovery on persisted pageshow", async () => {
-    window.history.replaceState(null, "", "/sandbox/games/" + GAME_ID);
-    let stored = snapshot([], { state: "paused", legalMoves: [], version: 1 });
-    http = createHttpMock({
-      "GET /ready": () => jsonResponse({ status: "ready" }),
-      [`GET /games/${GAME_ID}`]: () => jsonResponse(stored),
-      [`POST /games/${GAME_ID}/lifecycle`]: () => {
-        stored = snapshot([], { state: "paused", legalMoves: [], version: 3 });
-        return jsonResponse(stored);
+    let current: ReturnType<typeof useSandbox> | undefined;
+    function Probe() {
+      current = useSandbox("http://localhost:3001");
+      return null;
+    }
+    const { router, unmount } = renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: true },
+      {
+        initialEntries: ["/sandbox"],
+        strict: true,
+        configureRoutes(routes) {
+          const sandbox = routes[0]!.children!.find((route) => route.id === "sandbox")!;
+          sandbox.lazy = async () => ({ Component: Probe });
+        },
       },
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const { result, unmount } = renderHook(() => useSandbox("http://localhost:3001"), {
-      wrapper: ({ children }) => (
-        <StrictMode>
-          <RouteWrapper>{children}</RouteWrapper>
-        </StrictMode>
-      ),
-    });
-    await waitFor(() => expect(result.current.state.phase).toBe("ready"));
-    const controller = result.current.controller;
-    stored = snapshot([], { version: 2 });
-    await act(() => fireEvent(window, new PageTransitionEvent("pagehide", { persisted: true })));
-    expect(result.current.state.snapshot).toBeNull();
-    await act(() => fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true })));
-    await waitFor(() => expect(result.current.state.snapshot?.version).toBe(3));
-    expect(result.current.state.snapshot?.state).toBe("paused");
-    expect(result.current.controller).toBe(controller);
+    );
+    await waitFor(() => expect(current?.state.readiness).toBe("ready"));
+    const controller = current!.controller;
+    expect(current!.state.phase).toBe("entry");
+    expect(http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/ready")).toHaveLength(1);
+    await act(() => router.revalidate());
+    expect(current!.controller).toBe(controller);
+    expect(http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/ready")).toHaveLength(2);
     expect(
-      http.fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/lifecycle")),
-    ).toHaveLength(1);
+      http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/sandbox/games/unfinished"),
+    ).toHaveLength(2);
     unmount();
     expect(controller.getSnapshot().snapshot).toBeNull();
   });
