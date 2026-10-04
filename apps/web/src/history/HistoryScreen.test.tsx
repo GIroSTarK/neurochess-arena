@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GAME_ID, jsonResponse, OTHER_GAME_ID } from "../test/fixtures";
+import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 import { renderApp } from "../test/render";
 
@@ -36,11 +36,110 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 function visit() {
-  window.history.replaceState(null, "", "/history");
-  return renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
+  return renderApp(
+    { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+    { initialEntries: ["/history"] },
+  );
 }
 
 describe("private history presentation", () => {
+  it("supersedes a slow cursor read when the current History link reloads the newest page", async () => {
+    const pending = Promise.withResolvers<Response>();
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () => jsonResponse({ games: [entry], nextCursor: cursor }),
+      [`GET ${nextPath}`]: () => pending.promise,
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = visit();
+    await screen.findByText("Page 1");
+    await userEvent.click(screen.getByRole("button", { name: "Older games" }));
+    await vi.waitFor(() =>
+      expect(
+        http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/games/history"),
+      ).toHaveLength(2),
+    );
+    await userEvent.click(screen.getByRole("link", { name: "History" }));
+    await vi.waitFor(() => expect(router.state.navigation.state).toBe("idle"));
+    await act(async () => {
+      pending.resolve(
+        jsonResponse({ games: [{ ...entry, gameId: OTHER_GAME_ID }], nextCursor: null }),
+      );
+    });
+    expect(screen.getByText("Page 1")).toBeVisible();
+    expect(screen.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
+      "href",
+      "/games/" + GAME_ID,
+    );
+    expect(screen.getByRole("button", { name: "Older games" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("uses one initial route read, keeps pagination out of the address, and re-enters on the newest page", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () => jsonResponse({ games: [entry], nextCursor: cursor }),
+      [`GET ${nextPath}`]: () =>
+        jsonResponse({ games: [{ ...entry, gameId: OTHER_GAME_ID }], nextCursor: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = visit();
+    await screen.findByRole("link", { name: /Open replay/ });
+    expect(
+      http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/games/history"),
+    ).toHaveLength(1);
+    expect(router.state.loaderData.history).toMatchObject({ data: { page: { games: [entry] } } });
+    await userEvent.click(screen.getByRole("button", { name: "Older games" }));
+    await screen.findByText("Page 2");
+    expect(router.state.location.pathname + router.state.location.search).toBe("/history");
+    await act(async () => {
+      await router.navigate("/not-found");
+    });
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    await screen.findByText("Page 1");
+    expect(screen.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
+      "href",
+      "/games/" + GAME_ID,
+    );
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("clears the loader cache before a confirmed deletion refresh completes", async () => {
+    let removed = false;
+    const pending = Promise.withResolvers<Response>();
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () =>
+        removed ? pending.promise : jsonResponse({ games: [entry], nextCursor: null }),
+      [`POST /games/${GAME_ID}/delete`]: () => {
+        removed = true;
+        return jsonResponse({ status: "deleted" });
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = visit();
+    await userEvent.click(await screen.findByRole("button", { name: /Delete game ·/ }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete game" }),
+    );
+    await screen.findByText("Game deleted.");
+    expect(router.state.loaderData.history).toMatchObject({ data: { page: null } });
+    expect(screen.queryByRole("link", { name: /Open replay/ })).not.toBeInTheDocument();
+    await act(async () => {
+      pending.resolve(jsonResponse({}));
+    });
+    await screen.findByText("Game history could not be loaded. Try again.");
+    expect(screen.queryByRole("link", { name: /Open replay/ })).not.toBeInTheDocument();
+    http.assertNoUnexpectedRequests();
+  });
   it("confirms one game separately, initially focuses Cancel, and prevents duplicate deletion", async () => {
     let removed = false;
     const pending = Promise.withResolvers<Response>();
@@ -73,6 +172,11 @@ describe("private history presentation", () => {
     dialog = screen.getByRole("dialog");
     await userEvent.dblClick(within(dialog).getByRole("button", { name: "Delete game" }));
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Please wait…" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
@@ -200,11 +304,100 @@ describe("private history presentation", () => {
     expect(screen.getByText("Finished game history cleared.")).toBeVisible();
     expect(screen.queryByRole("link", { name: /Open replay/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Your games are still saved/)).not.toBeInTheDocument();
+    expect(
+      http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/games/history"),
+    ).toHaveLength(3);
     await userEvent.click(screen.getByRole("button", { name: "Retry history" }));
     await screen.findByText(/No completed or aborted games yet/);
     expect(screen.getByText("Page 1")).toBeVisible();
     http.assertNoUnexpectedRequests();
   });
+
+  it("retains the cursor stack when refreshing the newest page fails from an older page", async () => {
+    let fail = false;
+    const thirdCursor = "2026-09-01T12:00:00.000001Z_" + OTHER_GAME_ID;
+    const thirdPath =
+      "/games/history?" + new URLSearchParams({ limit: "20", cursor: thirdCursor }).toString();
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () => {
+        if (fail) throw new TypeError("offline");
+        return jsonResponse({ games: [entry], nextCursor: cursor });
+      },
+      [`GET ${nextPath}`]: () =>
+        jsonResponse({ games: [{ ...entry, gameId: OTHER_GAME_ID }], nextCursor: thirdCursor }),
+      [`GET ${thirdPath}`]: () => jsonResponse({ games: [], nextCursor: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    visit();
+    await screen.findByText("Page 1");
+    await userEvent.click(screen.getByRole("button", { name: "Older games" }));
+    await screen.findByText("Page 2");
+    fail = true;
+    await userEvent.click(screen.getByRole("button", { name: "Refresh history" }));
+    await screen.findByRole("alert");
+    expect(screen.getByText("Page 2")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Older games" }));
+    await screen.findByText("Page 3");
+    await userEvent.click(screen.getByRole("button", { name: "Newer games" }));
+    await screen.findByText("Page 2");
+    expect(screen.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
+      "href",
+      "/games/" + OTHER_GAME_ID,
+    );
+    http.assertNoUnexpectedRequests();
+  });
+
+  it.each(["account switch", "pagehide"])(
+    "clears loader and pagination caches during %s, including a late read",
+    async (boundary) => {
+      let current = session;
+      const delayed = Promise.withResolvers<Response>();
+      let reads = 0;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(current),
+        "GET /profile": () => jsonResponse(profile),
+        "GET /games/history?limit=20": () => {
+          if (++reads === 2) return delayed.promise;
+          return jsonResponse(
+            reads === 1 ? { games: [entry], nextCursor: cursor } : { games: [], nextCursor: null },
+          );
+        },
+        [`GET ${nextPath}`]: () =>
+          jsonResponse({ games: [{ ...entry, gameId: OTHER_GAME_ID }], nextCursor: null }),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      const { router } = visit();
+      const issued: unknown[] = [];
+      router.subscribe((state) => {
+        for (const result of Object.values(state.loaderData)) issued.push(result);
+        for (const fetcher of state.fetchers.values()) if (fetcher.data) issued.push(fetcher.data);
+      });
+      await screen.findByText("Page 1");
+      await userEvent.click(screen.getByRole("button", { name: "Older games" }));
+      await screen.findByText("Page 2");
+      expect(JSON.stringify(issued)).toContain(OTHER_GAME_ID);
+      await userEvent.click(screen.getByRole("button", { name: "Newer games" }));
+      await vi.waitFor(() => expect(reads).toBe(2));
+      await act(async () => {
+        if (boundary === "account switch") {
+          current = { ...session, user: { ...session.user, id: OTHER_GAME_ID } };
+          fireEvent(window, new Event("focus"));
+        } else fireEvent(window, new Event("pagehide"));
+      });
+      expect(screen.queryByRole("link", { name: /Open replay/ })).not.toBeInTheDocument();
+      expect(JSON.stringify(issued)).not.toContain("model-a");
+      await act(async () => {
+        delayed.resolve(jsonResponse({ games: [entry], nextCursor: cursor }));
+        if (boundary === "pagehide") fireEvent(window, new Event("pageshow"));
+      });
+      await screen.findByText(/No completed or aborted games yet/);
+      expect(JSON.stringify(issued)).not.toContain("model-a");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      http.assertNoUnexpectedRequests();
+    },
+  );
   it("explains guest history and returns sign-in to history without making game requests", async () => {
     const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
     vi.stubGlobal("fetch", http.fetch);

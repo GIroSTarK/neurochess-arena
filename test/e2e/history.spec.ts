@@ -173,7 +173,9 @@ test("history reopens canonical results on another session without controllers, 
 test("history pages remain bounded, recover from load errors, and fit mobile and expanded text", async ({
   page,
 }, testInfo) => {
-  await createAccount(page.request);
+  const account = await createAccount(page.request);
+  let documentLoads = 0;
+  page.on("load", () => documentLoads++);
   const ids: string[] = [];
   for (let index = 0; index < 21; index++) ids.push((await stop(page)).gameId);
   let fail = true;
@@ -193,13 +195,22 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   await older.focus();
   await older.press("Enter");
   await expect(rows).toHaveCount(1);
+  await expect(page).toHaveURL(WEB_ORIGIN + "/history");
   await expect(older).toBeFocused();
   await expect(rows.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
     "href",
     "/games/" + ids[0]!,
   );
+  await page.getByRole("link", { name: account.username, exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Username", exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(20);
+  await older.click();
+  await expect(rows).toHaveCount(1);
   await newer.click();
   await expect(rows).toHaveCount(20);
+  expect(documentLoads).toBe(1);
   for (const width of testInfo.project.name === "desktop" ? [1024, 1440] : [320, 390, 768]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const enlarged of [false, true]) {
@@ -218,6 +229,8 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   const clearing = page.getByRole("button", { name: "Clear history", exact: true });
+  await older.click();
+  await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
   await clearing.click();
   const confirmation = page.getByRole("dialog", { name: "Clear all finished games?" });
   await expect(confirmation.getByRole("button", { name: "Cancel" })).toBeFocused();
@@ -260,11 +273,15 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   await confirmation.getByRole("button", { name: "Clear history", exact: true }).click();
   await expect(confirmation.getByRole("alert")).toContainText("Deletion could not be confirmed");
   expect((await page.request.get(`${API_ORIGIN}/games/${ids[0]!}/pgn`)).status()).toBe(200);
+  fail = true;
   await confirmation.getByRole("button", { name: "Clear history", exact: true }).click();
   await expect(page.getByText("Finished game history cleared.")).toBeVisible();
   await expect(rows).toHaveCount(0);
-  await expect(page.getByText(/No completed or aborted games yet/)).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("Game history could not be loaded");
   await expect(page.getByRole("heading", { name: "Finished games" })).toBeFocused();
+  await page.getByRole("button", { name: "Retry history" }).click();
+  await expect(page.getByText(/No completed or aborted games yet/)).toBeVisible();
+  await expect(page.getByText("Finished game history cleared.")).toHaveCount(0);
   await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
   for (const id of ids) {
     expect((await page.request.get(`${API_ORIGIN}/games/${id}/pgn`)).status()).toBe(404);

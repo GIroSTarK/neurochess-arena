@@ -1,9 +1,8 @@
 import type { GameHistoryEntry } from "@neurochess/contracts";
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
-import { type AiIdentity, createAiApi } from "../api/ai-client";
 import { gameHref } from "../app/route-urls";
 import { resultTitle } from "../arena/result";
 import { AccountFrame } from "../auth/AccountFrame";
@@ -11,7 +10,7 @@ import { authHref } from "../auth/navigation";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 
-import { HistoryController } from "./controller";
+import { useHistory } from "./use-history";
 
 function GameParticipants({
   game,
@@ -62,24 +61,16 @@ export function GuestHistory({ sandboxEnabled }: { readonly sandboxEnabled: bool
 }
 
 export function HistoryScreen({
-  apiBaseUrl,
-  identity,
   username,
   sandboxEnabled,
 }: {
-  readonly apiBaseUrl: string;
-  readonly identity: AiIdentity;
   readonly username: string;
   readonly sandboxEnabled: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const [controller] = useState(
-    () => new HistoryController(createAiApi(apiBaseUrl, { identity }), identity.signal),
-  );
-  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const state = useHistory();
   const listHeading = useRef<HTMLHeadingElement>(null);
   const successId = useId();
-  useEffect(() => controller.connect(), [controller]);
   useEffect(() => {
     if (state.success) listHeading.current?.focus();
   }, [state.success]);
@@ -110,7 +101,7 @@ export function HistoryScreen({
             !state.result ||
             (state.page === 0 && state.result.games.length === 0)
           }
-          onClick={controller.confirmClear}
+          onClick={state.confirmClear}
         >
           {t("history.clear")}
         </Button>
@@ -128,7 +119,7 @@ export function HistoryScreen({
       {state.phase === "error" ? (
         <div className="grid gap-3">
           <p role="alert">{t("history.loadError")}</p>
-          <Button variant="secondary" onClick={controller.retry}>
+          <Button variant="secondary" onClick={state.retry}>
             {t("history.retry")}
           </Button>
         </div>
@@ -179,7 +170,7 @@ export function HistoryScreen({
                     gameReference,
                   })}
                   aria-disabled={state.phase === "loading" || state.deleting}
-                  onClick={() => controller.confirmGame(game)}
+                  onClick={() => state.confirmGame(game)}
                 >
                   {t("history.delete")}
                 </Button>
@@ -195,7 +186,7 @@ export function HistoryScreen({
             <Button
               variant="secondary"
               aria-disabled={state.phase === "loading" || state.deleting || state.page === 0}
-              onClick={controller.newer}
+              onClick={state.newer}
             >
               {t("history.newer")}
             </Button>
@@ -204,14 +195,14 @@ export function HistoryScreen({
               aria-disabled={
                 state.phase === "loading" || state.deleting || !state.result.nextCursor
               }
-              onClick={controller.older}
+              onClick={state.older}
             >
               {t("history.older")}
             </Button>
             <Button
               variant="quiet"
               aria-disabled={state.phase === "loading" || state.deleting}
-              onClick={controller.reload}
+              onClick={state.reload}
             >
               {t("history.refresh")}
             </Button>
@@ -222,7 +213,7 @@ export function HistoryScreen({
         <Dialog
           title={t(state.confirmation === "all" ? "history.clearTitle" : "history.deleteTitle")}
           description={t(state.confirmation === "all" ? "history.clearHint" : "history.deleteHint")}
-          onCancel={controller.cancelDeletion}
+          onCancel={state.cancelDeletion}
         >
           {state.confirmation !== "all" ? (
             <div className="mt-3 grid gap-3 wrap-anywhere">
@@ -246,19 +237,23 @@ export function HistoryScreen({
               {t(`history.deletionErrors.${state.deletionError}`)}
             </p>
           ) : null}
-          <div className="mt-6 flex flex-wrap gap-3">
+          <state.Form
+            method="post"
+            action="/history"
+            className="mt-6 flex flex-wrap gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              state.deleteConfirmed();
+            }}
+          >
             <Button
               variant="secondary"
               aria-disabled={state.deleting}
-              onClick={controller.cancelDeletion}
+              onClick={state.cancelDeletion}
             >
               {t("actions.cancel")}
             </Button>
-            <Button
-              variant="danger"
-              aria-disabled={state.deleting}
-              onClick={() => void controller.deleteConfirmed()}
-            >
+            <Button type="submit" variant="danger" aria-disabled={state.deleting}>
               {t(
                 state.deleting
                   ? "account.working"
@@ -267,7 +262,7 @@ export function HistoryScreen({
                     : "history.delete",
               )}
             </Button>
-          </div>
+          </state.Form>
         </Dialog>
       ) : null}
     </AccountFrame>

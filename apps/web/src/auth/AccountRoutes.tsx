@@ -66,17 +66,15 @@ export function CredentialsRoute() {
 
 export function HistoryRoute() {
   const { t } = useTranslation();
-  const { apiBaseUrl, sandboxEnabled } = useAppRoute();
-  const { controller, state } = useRequiredAccount();
+  const { sandboxEnabled } = useAppRoute();
+  const { state } = useRequiredAccount();
   return (
     <PublicPage>
       {state.phase === "guest" ? (
         <GuestHistory sandboxEnabled={sandboxEnabled} />
       ) : (
         <HistoryScreen
-          apiBaseUrl={apiBaseUrl}
           sandboxEnabled={sandboxEnabled}
-          identity={controller.identity()}
           username={state.profile?.username ?? t("account.label")}
         />
       )}

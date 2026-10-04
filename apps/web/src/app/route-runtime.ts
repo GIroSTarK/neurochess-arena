@@ -17,15 +17,16 @@ export interface ScopedRouteData<T> {
 const onboardingResult = (data: unknown) =>
   typeof data === "object" && data !== null && "access" in data && data.access === "onboarding";
 
-function waitFor<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+export function waitForRouteResult<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const cancel = () => reject(new AccountFailure("cancelled"));
+    // Observe transport rejection even when cancellation already won the race.
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancel));
     if (signal.aborted) {
       cancel();
       return;
     }
     signal.addEventListener("abort", cancel, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancel));
   });
 }
 
@@ -101,7 +102,7 @@ export class RouteRuntime {
     const cancelled = () => signal.aborted;
     if (cancelled()) throw new AccountFailure("cancelled");
     this.disconnect ??= this.account.connect(false);
-    await waitFor(this.account.resolve(), signal);
+    await waitForRouteResult(this.account.resolve(), signal);
     if (
       this.account.getSnapshot().phase === "changing" ||
       this.account.getSnapshot().phase === "checking"

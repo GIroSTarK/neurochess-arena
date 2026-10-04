@@ -9,6 +9,7 @@ import {
   ProfileRoute,
 } from "../auth/AccountRoutes";
 import { authAction, publicLoader } from "../auth/route-data";
+import { historyRouteData } from "../history/route-data";
 import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
 
 import { type AppRouteContext, RouteContext } from "./route-context";
@@ -27,7 +28,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       id: "history",
       path: "history",
       handle: { page: "history" },
-      loader: publicLoader(context.runtime, true),
+      ...historyRouteData(context),
       element: <HistoryRoute />,
     },
     {
