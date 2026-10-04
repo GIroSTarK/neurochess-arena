@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure } from "../api/client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
-import { harness, started } from "../test/sandbox-controller";
+import { enterSandbox, harness, started } from "../test/sandbox-controller";
 
 import type { SandboxState } from "./state";
 
 describe("sandbox entry and commands", () => {
   it("starts only on action, serializes bootstrap and immediately deduplicates creation", async () => {
     const { api, controller } = harness();
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     expect(api.bootstrap).not.toHaveBeenCalled();
     const cookie = Promise.withResolvers<void>();
     api.bootstrap.mockReturnValue(cookie.promise);
@@ -26,7 +26,7 @@ describe("sandbox entry and commands", () => {
 
   it("does not create a game if guest bootstrap fails", async () => {
     const { api, controller } = harness();
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     api.bootstrap.mockRejectedValue(new ApiFailure("network"));
     await controller.start();
     expect(api.create).not.toHaveBeenCalled();
@@ -36,7 +36,7 @@ describe("sandbox entry and commands", () => {
   it("reopens an authorized creation conflict and preserves its paused lifecycle", async () => {
     const { api, controller } = harness();
     const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 12 });
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     api.create.mockRejectedValue(new ApiFailure("api", "GAME_CONFLICT", paused));
     await controller.start();
     await controller.submit("e7e5");
@@ -235,7 +235,7 @@ describe("sandbox entry and commands", () => {
 
   it("keeps service readiness separate from sandbox availability and requires explicit retry", async () => {
     const { api, controller } = harness();
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     api.create.mockRejectedValueOnce(new ApiFailure("api", "NOT_FOUND"));
     await controller.start();
     expect(controller.getSnapshot()).toMatchObject({
@@ -251,26 +251,25 @@ describe("sandbox entry and commands", () => {
 
   it("does not start while the service is unavailable", async () => {
     const { api, controller } = harness();
-    api.ready.mockResolvedValue(false);
-    await controller.checkReadiness();
+    await enterSandbox(controller);
+    controller.setReadiness(false);
     await controller.start();
     expect(api.bootstrap).not.toHaveBeenCalled();
-    api.ready.mockResolvedValue(true);
-    await controller.checkReadiness();
+    controller.setReadiness(true);
     expect(api.bootstrap).not.toHaveBeenCalled();
     await controller.start();
     expect(api.create).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores a late creation after disconnect and a newer request generation", async () => {
+  it("ignores late creation after route departure and a new entry", async () => {
     const { api, controller } = harness();
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     const first = Promise.withResolvers<ReturnType<typeof snapshot>>();
     api.create.mockReturnValueOnce(first.promise);
     const oldRequest = controller.start();
     await vi.waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
-    controller.disconnect();
-    const disconnect = controller.connect();
+    controller.endLifetime();
+    await enterSandbox(controller);
     await vi.waitFor(() => expect(controller.getSnapshot().readiness).toBe("ready"));
     const newer = snapshot([], { gameId: OTHER_GAME_ID });
     api.create.mockResolvedValue(newer);
@@ -278,25 +277,23 @@ describe("sandbox entry and commands", () => {
     first.resolve(snapshot());
     await oldRequest;
     expect(controller.getSnapshot().snapshot).toBe(newer);
-    disconnect();
+    controller.endLifetime();
   });
 
-  it("ignores a late move response after a newer retry has completed", async () => {
+  it("clears an uncertain move on departure and ignores its late response after re-entry", async () => {
     const { api, controller } = await started();
     const first = Promise.withResolvers<ReturnType<typeof snapshot>>();
     api.move.mockReturnValueOnce(first.promise);
     const oldRequest = controller.submit("e2e4");
-    const original = controller.getSnapshot().pendingCommand;
-    controller.disconnect();
-    const disconnect = controller.connect();
-    const newer = snapshot(["e2e4", "e7e5"]);
-    api.move.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", newer));
-    await controller.retryCommand();
+    controller.endLifetime();
+    expect(controller.getSnapshot()).toMatchObject({ snapshot: null, pendingCommand: null });
+    const paused = snapshot(["e2e4", "e7e5"], { state: "paused", legalMoves: [], version: 3 });
+    await enterSandbox(controller, paused);
     first.resolve(snapshot(["e2e4"]));
     await oldRequest;
-    expect(api.move.mock.calls[1]?.[0]).toBe(original);
-    expect(controller.getSnapshot().snapshot).toBe(newer);
-    disconnect();
+    expect(api.move).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot()).toMatchObject({ snapshot: paused, pendingCommand: null });
+    controller.endLifetime();
   });
 
   it("rejects regressing or wrong-game responses instead of replacing the accepted board", async () => {

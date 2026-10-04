@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure, type SandboxApi } from "../api/client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
-import { harness } from "../test/sandbox-controller";
+import { enterSandbox, harness } from "../test/sandbox-controller";
 
 import type { PgnDelivery } from "./pgn";
 import type { SandboxState } from "./state";
@@ -18,7 +18,7 @@ describe("private terminal replay and export", () => {
     result.api.replay.mockResolvedValue(
       gameReplayResponseSchema.parse({ snapshot: initial, initialFen: snapshot().fen }),
     );
-    await result.controller.checkReadiness();
+    await enterSandbox(result.controller);
     await result.controller.start();
     await vi.waitFor(() => expect(result.controller.getSnapshot().replay).not.toBeNull());
     return { ...result, delivery };
@@ -235,40 +235,26 @@ describe("private terminal replay and export", () => {
   });
 
   it.each(["response", "failure"] as const)(
-    "clears a cancelled replay reload and ignores its late %s during a retry",
+    "clears private replay on departure and ignores its late %s after re-entry",
     async (outcome) => {
       const { api, controller, initial } = await terminal();
-      const replay = controller.getSnapshot().replay;
+      const replay = controller.getSnapshot().replay!;
       const cancelled = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
       const retry = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
       api.replay.mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(retry.promise);
-      controller.selectPly(1);
       const interrupted = controller.loadReplay();
-      controller.selectPly(2);
-
-      controller.disconnect();
+      controller.endLifetime();
       expect(api.replay.mock.calls[1]?.[1].aborted).toBe(true);
-      const retained = { replay, replayPly: 2, replayPhase: "idle", replayNotice: null };
-      expect(controller.getSnapshot()).toMatchObject(retained);
-      const disconnect = controller.connect();
-      expect(controller.getSnapshot()).toMatchObject(retained);
-      expect(api.replay).toHaveBeenCalledTimes(2);
-
-      const next = controller.loadReplay();
-      if (outcome === "response") cancelled.resolve(replay!);
+      expect(controller.getSnapshot()).toMatchObject({ snapshot: null, replay: null });
+      await enterSandbox(controller, initial);
+      if (outcome === "response") cancelled.resolve(replay);
       else cancelled.reject(new ApiFailure("cancelled"));
       await interrupted;
-      expect(controller.getSnapshot()).toMatchObject({ ...retained, replayPhase: "loading" });
-      await controller.loadReplay();
-      expect(api.replay).toHaveBeenCalledTimes(3);
-
-      retry.resolve(replay!);
-      await next;
-      expect(controller.getSnapshot()).toMatchObject({
-        ...retained,
-        replayPly: initial.moves.length,
-      });
-      disconnect();
+      expect(controller.getSnapshot()).toMatchObject({ replay: null, replayPhase: "loading" });
+      retry.resolve(replay);
+      await vi.waitFor(() => expect(controller.getSnapshot().replay).toEqual(replay));
+      expect(controller.getSnapshot().replayPly).toBe(initial.moves.length);
+      controller.endLifetime();
     },
   );
 
@@ -282,13 +268,13 @@ describe("private terminal replay and export", () => {
     const cancelled = Promise.withResolvers<typeof replay>();
     const retry = Promise.withResolvers<typeof replay>();
     api.replay.mockReturnValueOnce(cancelled.promise).mockReturnValueOnce(retry.promise);
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     await controller.start();
 
-    controller.disconnect();
+    controller.endLifetime();
     expect(api.replay.mock.calls[0]?.[1].aborted).toBe(true);
     expect(controller.getSnapshot()).toMatchObject({ replay: null, replayPhase: "idle" });
-    const disconnect = controller.connect();
+    await enterSandbox(controller, initial);
     expect(api.replay).toHaveBeenCalledTimes(2);
     cancelled.resolve(replay);
     await cancelled.promise;
@@ -297,7 +283,7 @@ describe("private terminal replay and export", () => {
     retry.resolve(replay);
     await vi.waitFor(() => expect(controller.getSnapshot().replayPhase).toBe("idle"));
     expect(controller.getSnapshot()).toMatchObject({ replay, replayPly: initial.moves.length });
-    disconnect();
+    controller.endLifetime();
   });
 
   it.each(["copy", "download"] as const)(
@@ -310,9 +296,9 @@ describe("private terminal replay and export", () => {
       const interrupted = controller.exportPgn(action);
       expect(controller.getSnapshot().exportPhase).toBe("loading");
 
-      controller.disconnect();
+      controller.endLifetime();
       expect(api.pgn.mock.calls[0]?.[1].aborted).toBe(true);
-      const disconnect = controller.connect();
+      await enterSandbox(controller, initial);
       expect(controller.getSnapshot().exportPhase).toBe("idle");
       expect(api.pgn).toHaveBeenCalledTimes(1);
 
@@ -329,33 +315,35 @@ describe("private terminal replay and export", () => {
         action === "copy" ? "copied" : "downloaded",
       );
       expect(delivery[action]).toHaveBeenCalledTimes(1);
-      disconnect();
+      controller.endLifetime();
     },
   );
 
   it.each(["manual", "error"] as const)(
-    "preserves settled %s export state and replay selection across reconnect",
+    "clears settled %s export state and replay selection on departure",
     async (phase) => {
-      const { api, controller, delivery } = await terminal();
+      const { api, controller, delivery, initial } = await terminal();
       if (phase === "manual") delivery.copy.mockResolvedValueOnce(false);
       else api.pgn.mockRejectedValueOnce(new ApiFailure("network"));
       await controller.exportPgn("copy");
       controller.selectPly(1);
-      const { exportPhase, exportText, exportNotice, replay, replayPly } = controller.getSnapshot();
-      expect(exportPhase).toBe(phase);
-
-      controller.disconnect();
-      const disconnect = controller.connect();
+      expect(controller.getSnapshot().exportPhase).toBe(phase);
+      controller.endLifetime();
       expect(controller.getSnapshot()).toMatchObject({
-        exportPhase,
-        exportText,
-        exportNotice,
-        replay,
-        replayPly,
+        snapshot: null,
+        replay: null,
+        exportText: null,
+      });
+      await enterSandbox(controller, initial);
+      expect(controller.getSnapshot()).toMatchObject({
+        exportPhase: "idle",
+        exportText: null,
+        exportNotice: null,
+        replayPly: initial.moves.length,
       });
       expect(api.pgn).toHaveBeenCalledTimes(1);
-      expect(api.replay).toHaveBeenCalledTimes(1);
-      disconnect();
+      expect(api.replay).toHaveBeenCalledTimes(2);
+      controller.endLifetime();
     },
   );
 
@@ -444,7 +432,7 @@ describe("private terminal replay and export", () => {
     const { api, controller } = harness(initial);
     const late = Promise.withResolvers<Awaited<ReturnType<SandboxApi["replay"]>>>();
     api.replay.mockReturnValue(late.promise);
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     await controller.start();
     api.pgn.mockRejectedValue(new ApiFailure("api", "NOT_FOUND"));
     await controller.exportPgn("copy");
@@ -469,7 +457,7 @@ describe("private terminal replay and export", () => {
     api.replay.mockResolvedValueOnce(
       gameReplayResponseSchema.parse({ snapshot: replay, initialFen: snapshot().fen }),
     );
-    await controller.checkReadiness();
+    await enterSandbox(controller);
     await controller.start();
     await vi.waitFor(() => expect(controller.getSnapshot().replayPhase).toBe("error"));
     expect(controller.getSnapshot()).toMatchObject({

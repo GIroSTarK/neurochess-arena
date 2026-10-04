@@ -12,17 +12,19 @@ export function AccountFrame({
   children,
   sandboxEnabled,
   page = "account",
+  focusHeading = false,
 }: {
   readonly title: string;
   readonly children: ReactNode;
   readonly sandboxEnabled: boolean;
   readonly page?: AppPage;
+  readonly focusHeading?: boolean;
 }) {
   const { t } = useTranslation();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    heading.current?.focus();
-  }, [title]);
+    if (focusHeading) heading.current?.focus({ preventScroll: true });
+  }, [focusHeading]);
   return (
     <AppShell
       mainId="account-main"

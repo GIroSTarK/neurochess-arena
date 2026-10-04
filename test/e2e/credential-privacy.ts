@@ -4,8 +4,18 @@ import { expect } from "./fixtures";
 
 export function observeCredentialPrivacy(page: Page, sentinels: readonly string[]) {
   let requestUrlContainsKey = false;
+  let referrerContainsKey = false;
+  let diagnosticContainsKey = false;
+  const containsKey = (value: string) => sentinels.some((key) => value.includes(key));
   page.on("request", (request) => {
-    if (sentinels.some((key) => request.url().includes(key))) requestUrlContainsKey = true;
+    if (containsKey(request.url())) requestUrlContainsKey = true;
+    if (containsKey(request.headers().referer ?? "")) referrerContainsKey = true;
+  });
+  page.on("console", (message) => {
+    if (containsKey(message.text())) diagnosticContainsKey = true;
+  });
+  page.on("pageerror", (error) => {
+    if (containsKey(error.message)) diagnosticContainsKey = true;
   });
 
   return async function expectPrivate() {
@@ -19,6 +29,8 @@ export function observeCredentialPrivacy(page: Page, sentinels: readonly string[
         name: containsKey(window.name),
         url: containsKey(location.href),
         history: containsKey(JSON.stringify(history.state)),
+        referrer: containsKey(document.referrer),
+        rendered: containsKey(document.body.textContent),
       };
     }, sentinels);
     expect(exposed).toEqual({
@@ -28,9 +40,13 @@ export function observeCredentialPrivacy(page: Page, sentinels: readonly string[
       name: false,
       url: false,
       history: false,
+      referrer: false,
+      rendered: false,
     });
     const cookies = JSON.stringify(await page.context().cookies());
     expect(sentinels.some((key) => cookies.includes(key))).toBe(false);
     expect(requestUrlContainsKey).toBe(false);
+    expect(referrerContainsKey).toBe(false);
+    expect(diagnosticContainsKey).toBe(false);
   };
 }

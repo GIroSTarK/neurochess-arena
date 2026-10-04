@@ -79,7 +79,6 @@ export function readyState({
 
 export function mockController() {
   return {
-    checkReadiness: vi.fn<SandboxController["checkReadiness"]>().mockResolvedValue(),
     start: vi.fn<SandboxController["start"]>().mockResolvedValue(),
     submit: vi.fn<SandboxController["submit"]>().mockResolvedValue(),
     lifecycle: vi.fn<SandboxController["lifecycle"]>().mockResolvedValue(),

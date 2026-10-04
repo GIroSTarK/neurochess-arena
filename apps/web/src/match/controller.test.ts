@@ -62,7 +62,8 @@ function harness(initial = details) {
   } satisfies AiApi;
   const navigation = { game: vi.fn(), setup: vi.fn() };
   const controller = new MatchController(api, undefined, navigation);
-  const disconnect = controller.connect();
+  void controller.enter({ kind: "setup" });
+  const disconnect = () => controller.endLifetime();
   cleanups.push(disconnect);
   const keys = () => {
     for (const color of ["white", "black"] as const) {
@@ -101,8 +102,9 @@ describe("page-owned Arena orchestration", () => {
   it("does not dispatch obsolete seeded recovery during a StrictMode reconnect", async () => {
     const h = harness();
     const entry = { kind: "game" as const, gameId: GAME_ID, details };
-    h.controller.connect(entry)();
-    h.controller.connect(entry);
+    void h.controller.enter(entry);
+    h.controller.endLifetime();
+    void h.controller.enter(entry);
     await vi.advanceTimersByTimeAsync(0);
     expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
@@ -181,7 +183,7 @@ describe("page-owned Arena orchestration", () => {
     expect(h.api.snapshot).not.toHaveBeenCalled();
     expect(h.api.lifecycle).not.toHaveBeenCalled();
     h.controller.endLifetime();
-    h.controller.connect({ kind: "game", gameId: GAME_ID, details: humanGame("white") });
+    void h.controller.enter({ kind: "game", gameId: GAME_ID, details: humanGame("white") });
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.controller.getSnapshot().keys.black).toBe(false);

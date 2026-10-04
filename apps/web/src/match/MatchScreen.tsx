@@ -100,13 +100,13 @@ export function MatchScreen({
     return <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={onRetry} />;
   }
 
-  if (state.phase === "setup" && controller.credentials) {
+  if (state.phase === "setup" && controller.credentials && entry?.entry?.kind === "setup") {
     return (
       <ArenaSetupScreen
         key={state.keyEpoch}
         api={controller.api}
         credentials={controller.credentials}
-        {...(entry?.entry?.kind === "setup" ? { entry: entry.entry } : {})}
+        entry={entry.entry}
         onRetry={onRetry}
         {...(savedCredentials ? { savedCredentials } : {})}
         sandboxEnabled={sandboxEnabled}

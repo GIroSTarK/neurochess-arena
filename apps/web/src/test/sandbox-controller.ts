@@ -1,3 +1,4 @@
+import type { GameSnapshot } from "@neurochess/contracts";
 import { vi } from "vitest";
 
 import { ApiFailure, type SandboxApi } from "../api/client";
@@ -31,7 +32,15 @@ export function harness(
 
 export async function started(initial = snapshot()) {
   const result = harness(initial);
-  await result.controller.checkReadiness();
+  await enterSandbox(result.controller);
   await result.controller.start();
   return result;
+}
+
+export function enterSandbox(controller: SandboxController, snapshot: GameSnapshot | null = null) {
+  return controller.enter({
+    target: snapshot ? { kind: "game", gameId: snapshot.gameId } : { kind: "none" },
+    snapshot,
+    readiness: true,
+  });
 }

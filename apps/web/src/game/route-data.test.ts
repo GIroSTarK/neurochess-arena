@@ -138,6 +138,7 @@ describe("Sandbox entry loaders", () => {
       entry: {
         target: { kind: "game", gameId: GAME_ID },
         readiness: false,
+        snapshot: null,
         issue: { phase: "recovery-required", notice: "malformed" },
       },
     });

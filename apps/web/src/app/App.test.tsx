@@ -41,6 +41,7 @@ async function start() {
   await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
   await userEvent.click(button);
   await waitFor(() => expect(button).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Opening page…")).not.toBeInTheDocument());
 }
 
 describe("localized sandbox application", () => {

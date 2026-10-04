@@ -73,7 +73,7 @@ it.each(["success", "failure", "lost response", "stale"])(
     );
     await act(async () => pending.resolve());
     if (outcome === "success") {
-      await screen.findByRole("heading", { name: "Account deleted" });
+      expect(await screen.findByRole("heading", { name: "Account deleted" })).toHaveFocus();
       expect(screen.queryByRole("textbox", { name: "Username" })).not.toBeInTheDocument();
     } else if (outcome === "stale") {
       await screen.findAllByText(/Sign in again, then return to Account/);

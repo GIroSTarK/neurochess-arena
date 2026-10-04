@@ -48,7 +48,11 @@ export function PublicPage({
     PublicRouteData | undefined;
   if (state.deletion === "deleted" && state.phase !== "account") {
     return (
-      <AccountFrame title={t("account.deletion.deleted")} sandboxEnabled={sandboxEnabled}>
+      <AccountFrame
+        title={t("account.deletion.deleted")}
+        sandboxEnabled={sandboxEnabled}
+        focusHeading
+      >
         <p role="status">{t("account.deletion.done")}</p>
         <GuestContinuation />
       </AccountFrame>

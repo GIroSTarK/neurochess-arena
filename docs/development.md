@@ -127,6 +127,18 @@ Keep the mode owner mounted across setup/game leaves and register its memory-onl
 
 Static hosting must return the web HTML for these document paths while preserving assets and the separate API origin. Do not proxy all `/games/*` or `/sandbox/*` web requests to the API. Verify the selected host's fallback at deployment. Roll back only to a frontend that supports canonical paths, or use a forward fix; an older frontend cannot open newly shared game links even with HTML fallback.
 
+After building, `npm run smoke` starts the built API and Vite preview. It checks that canonical Arena/Sandbox game paths, account/auth/History and unknown paths return the same SPA HTML without redirects; emitted scripts/styles retain their asset types and missing assets requested with a non-HTML Accept header return 404. Overlapping private paths on the API origin must still return JSON authorization/not-found responses even with an HTML Accept header. Use a running, migrated local database; an environment override may point the smoke API at the disposable test database after integration/browser suites stop.
+
+Vite preview's generic fallback also returns HTML for missing asset URLs when Accept permits HTML or `*/*`. The selected host must exclude static asset paths from its SPA fallback regardless of Accept and verify document routes, assets and the separate JSON API origin. Preview checks do not select a hosting provider or satisfy this actual-host deployment requirement.
+
+### Extending routes
+
+1. Register a case-sensitive leaf in `app/routes.tsx` with page metadata and a feature-owned `route-data.ts` loader/action. Preserve literal build gates and lazy module boundaries for development features.
+2. Validate URL parameters and action intents before requests. Resolve identity inside each protected leaf, pass cancellation through the validated clients, and return generation-scoped, bounded values. Keep secrets and return destinations out of router results/history state.
+3. Pass committed loader data to screen adapters. Require loader revalidation for entry retries; retain controller reads only for explicit command reconciliation, provider discovery, telemetry, replay and PGN. A canceled request never proves a write failed.
+4. Preserve shared game owners, creation handoffs and pending-departure cleanup. Define revalidation by cause so metadata/action refreshes cannot repeat recovery or reset live keys.
+5. Exercise the actual tree with `renderApp` and `createMemoryRouter`, then cover native link/history/focus behavior in Playwright. `renderLocalized` supplies an isolated router for presentation tests; the isolated setup harness owns its own entry loader and never mounts public identity loaders. Test-only routes remain outside the production tree and module graph.
+
 ### Public identity and authentication data
 
 Public leaf loaders and auth actions use `app/route-runtime.ts` and `auth/route-data.ts`. Call `resolvePublicIdentity(request.signal, requireProfile)` in every protected leaf before private work; parent loaders run independently. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.

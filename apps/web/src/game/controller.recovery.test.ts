@@ -3,10 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure } from "../api/client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
-import { harness } from "../test/sandbox-controller";
+import { enterSandbox, harness } from "../test/sandbox-controller";
 
 import { SandboxController } from "./controller";
-import type { SandboxState } from "./state";
 
 describe("sandbox recovery and navigation", () => {
   it("does not dispatch obsolete seeded recovery during a StrictMode reconnect", async () => {
@@ -18,8 +17,9 @@ describe("sandbox recovery and navigation", () => {
       snapshot: initial,
       readiness: true,
     };
-    controller.connect(entry)();
-    controller.connect(entry);
+    void controller.enter(entry);
+    controller.endLifetime();
+    await controller.enter(entry);
     await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe("ready"));
     expect(api.lifecycle).toHaveBeenCalledTimes(1);
     expect(api.snapshot).not.toHaveBeenCalled();
@@ -33,7 +33,7 @@ describe("sandbox recovery and navigation", () => {
     api.lifecycle.mockResolvedValue(paused);
     const onGame = vi.fn();
     const controller = new SandboxController(api, undefined, onGame);
-    controller.connect({
+    void controller.enter({
       target: { kind: "game", gameId: initial.gameId },
       snapshot: initial,
       readiness: true,
@@ -47,27 +47,29 @@ describe("sandbox recovery and navigation", () => {
     controller.endLifetime();
   });
 
-  it("clears private state on lifetime end and ignores late discovery after reconnect", async () => {
+  it("clears private state and ignores late explicit recovery after a new entry", async () => {
     const { api, controller } = harness();
-    const late = Promise.withResolvers<ReturnType<typeof snapshot> | null>();
-    api.unfinished.mockReturnValueOnce(late.promise);
-    controller.connect();
-    const signal = api.unfinished.mock.calls[0]![0];
+    const paused = snapshot([], { state: "paused", legalMoves: [], version: 1 });
+    await enterSandbox(controller, paused);
+    const late = Promise.withResolvers<ReturnType<typeof snapshot>>();
+    api.snapshot.mockReturnValueOnce(late.promise);
+    const recovering = controller.recover();
+    const signal = api.snapshot.mock.calls[0]![1];
     controller.endLifetime();
     const ended = controller.getSnapshot();
     controller.endLifetime();
     expect(controller.getSnapshot()).toBe(ended);
     expect(signal.aborted).toBe(true);
-    controller.connect({ target: { kind: "none" }, snapshot: null, readiness: true });
+    await enterSandbox(controller);
     late.resolve(snapshot());
-    await Promise.resolve();
+    await recovering;
     expect(controller.getSnapshot()).toMatchObject({
       phase: "entry",
       snapshot: null,
       pendingCommand: null,
     });
     expect(api.lifecycle).not.toHaveBeenCalled();
-    expect(api.unfinished).toHaveBeenCalledTimes(1);
+    expect(api.unfinished).not.toHaveBeenCalled();
     controller.endLifetime();
   });
 
@@ -75,7 +77,7 @@ describe("sandbox recovery and navigation", () => {
     const { api } = harness();
     const onGame = vi.fn();
     const controller = new SandboxController(api, undefined, onGame);
-    controller.connect({ target: { kind: "none" }, snapshot: null, readiness: true });
+    await enterSandbox(controller);
     await Promise.resolve();
     await controller.start();
     expect(controller.getSnapshot()).toMatchObject({
@@ -93,80 +95,35 @@ describe("sandbox recovery and navigation", () => {
     });
   });
 
-  it("ignores obsolete discovery during duplicate mounts and pauses only the current recovery", async () => {
+  it("clears a pending recovery on departure and fences its late acknowledgement", async () => {
     const initial = snapshot(["e2e4"]);
     const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
     const { api, controller } = harness(initial);
-    const obsolete = Promise.withResolvers<ReturnType<typeof snapshot> | null>();
-    const current = Promise.withResolvers<ReturnType<typeof snapshot> | null>();
-    api.unfinished.mockReturnValueOnce(obsolete.promise).mockReturnValueOnce(current.promise);
-    api.lifecycle.mockResolvedValue(paused);
-    controller.connect()();
-    const disconnect = controller.connect();
-    obsolete.resolve(initial);
-    await Promise.resolve();
-    expect(api.lifecycle).not.toHaveBeenCalled();
-    await controller.recover();
-    expect(api.unfinished).toHaveBeenCalledTimes(2);
-    current.resolve(initial);
-    await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(paused));
-    expect(api.lifecycle).toHaveBeenCalledTimes(1);
-    expect(api.bootstrap).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().phase).toBe("ready");
-    disconnect();
-  });
-
-  it("preserves an uncertain pause across remounts and ignores the obsolete accepted response", async () => {
-    const initial = snapshot(["e2e4"]);
-    const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
-    const { api, controller } = harness(initial);
-    const observed: Pick<SandboxState, "phase" | "snapshot" | "pendingCommand">[] = [];
-    const unsubscribe = controller.subscribe(() => observed.push(controller.getSnapshot()));
     const obsolete = Promise.withResolvers<ReturnType<typeof snapshot>>();
-    api.unfinished.mockResolvedValue(initial);
     api.lifecycle.mockReturnValueOnce(obsolete.promise);
-    const firstDisconnect = controller.connect();
+    const entering = enterSandbox(controller, initial);
     await vi.waitFor(() => expect(api.lifecycle).toHaveBeenCalledTimes(1));
-    const command = controller.getSnapshot().pendingCommand;
-    firstDisconnect();
-    const disconnect = controller.connect();
+    controller.endLifetime();
+    expect(controller.getSnapshot()).toMatchObject({ snapshot: null, pendingCommand: null });
+    await enterSandbox(controller, paused);
     obsolete.resolve(paused);
-    await Promise.resolve();
-    expect(controller.getSnapshot()).toMatchObject({
-      snapshot: initial,
-      pendingCommand: command,
-      phase: "uncertain",
-    });
-    expect(api.lifecycle).toHaveBeenCalledTimes(1);
-    api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", paused));
-    await controller.retryCommand();
-    expect(api.lifecycle.mock.calls[1]?.[0]).toBe(command);
+    await entering;
     expect(controller.getSnapshot()).toMatchObject({
       snapshot: paused,
       pendingCommand: null,
       phase: "ready",
     });
+    expect(api.lifecycle).toHaveBeenCalledTimes(1);
     expect(api.bootstrap).not.toHaveBeenCalled();
-    const playable = observed.filter(({ phase }) => phase === "ready");
-    expect(playable).not.toHaveLength(0);
-    for (const state of playable) {
-      expect(state).toMatchObject({ snapshot: paused, pendingCommand: null });
-    }
-    for (const state of observed.filter(({ pendingCommand }) => pendingCommand !== null)) {
-      expect(state.snapshot).toBe(initial);
-      expect(["recovering", "uncertain", "submitting"]).toContain(state.phase);
-    }
-    unsubscribe();
-    disconnect();
+    controller.endLifetime();
   });
 
-  it("discovers the existing game without bootstrap and requires an explicit resume", async () => {
+  it("adopts a discovered game without bootstrap and requires an explicit resume", async () => {
     const initial = snapshot(["e2e4"], { version: 7 });
     const paused = snapshot(["e2e4"], { state: "paused", version: 8, legalMoves: [] });
     const { api, controller } = harness(initial);
-    api.unfinished.mockResolvedValue(initial);
     api.lifecycle.mockResolvedValue(paused);
-    const disconnect = controller.connect();
+    await enterSandbox(controller, initial);
     await vi.waitFor(() =>
       expect(controller.getSnapshot()).toMatchObject({ phase: "ready", snapshot: paused }),
     );
@@ -179,19 +136,17 @@ describe("sandbox recovery and navigation", () => {
     api.lifecycle.mockResolvedValue(resumed);
     await controller.lifecycle({ action: "resume" });
     expect(controller.getSnapshot().snapshot).toEqual(resumed);
-    disconnect();
+    controller.endLifetime();
   });
 
   it("does not write when reopening a paused game and treats anonymous discovery as entry", async () => {
     const paused = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 9 });
     const { api, controller } = harness(paused);
-    api.unfinished.mockResolvedValueOnce(paused);
-    await controller.recover();
+    await enterSandbox(controller, paused);
     expect(api.lifecycle).not.toHaveBeenCalled();
     expect(controller.getSnapshot().snapshot).toEqual(paused);
     const anonymous = harness();
-    anonymous.api.unfinished.mockRejectedValue(new ApiFailure("api", "UNAUTHORIZED"));
-    await anonymous.controller.recover();
+    await enterSandbox(anonymous.controller);
     expect(anonymous.controller.getSnapshot()).toMatchObject({
       phase: "entry",
       snapshot: null,
@@ -202,13 +157,12 @@ describe("sandbox recovery and navigation", () => {
 
   it("bounds recovery conflict retries and never enables an active recovered board", async () => {
     const { api, controller } = harness();
-    api.unfinished.mockResolvedValue(snapshot());
     for (const version of [1, 2, 3]) {
       api.lifecycle.mockRejectedValueOnce(
         new ApiFailure("api", "GAME_CONFLICT", snapshot(["e2e4"], { version })),
       );
     }
-    await controller.recover();
+    await enterSandbox(controller, snapshot());
     expect(controller.getSnapshot()).toMatchObject({
       phase: "recovery-required",
       pendingCommand: null,
@@ -232,13 +186,12 @@ describe("sandbox recovery and navigation", () => {
 
   it("does not describe a game completed during recovery as paused", async () => {
     const { api, controller } = harness();
-    api.unfinished.mockResolvedValueOnce(snapshot(FOOLS_MATE.slice(0, 3)));
     const completed = snapshot(FOOLS_MATE);
     api.replay.mockResolvedValueOnce(
       gameReplayResponseSchema.parse({ snapshot: completed, initialFen: snapshot().fen }),
     );
     api.lifecycle.mockRejectedValueOnce(new ApiFailure("api", "GAME_CONFLICT", completed));
-    await controller.recover();
+    await enterSandbox(controller, snapshot(FOOLS_MATE.slice(0, 3)));
     expect(controller.getSnapshot()).toMatchObject({
       phase: "ready",
       snapshot: completed,
@@ -250,9 +203,8 @@ describe("sandbox recovery and navigation", () => {
 
   it("keeps a lost recovery pause uncertain and retries the identical command", async () => {
     const { api, controller } = harness(snapshot(["e2e4"]));
-    api.unfinished.mockResolvedValue(snapshot(["e2e4"]));
     api.lifecycle.mockRejectedValueOnce(new ApiFailure("timeout"));
-    await controller.recover();
+    await enterSandbox(controller, snapshot(["e2e4"]));
     const original = controller.getSnapshot().pendingCommand;
     expect(original).toMatchObject({ action: "pause", expectedVersion: 1 });
     expect(controller.getSnapshot().phase).toBe("uncertain");
@@ -269,25 +221,21 @@ describe("sandbox recovery and navigation", () => {
     });
   });
 
-  it("opens private URLs and ignores a late response after history navigation", async () => {
+  it("discards an obsolete seeded entry when the game parameter changes", async () => {
     const { api, controller } = harness();
-    const late = Promise.withResolvers<ReturnType<typeof snapshot>>();
-    api.snapshot.mockReturnValueOnce(late.promise);
-    const disconnect = controller.connect({ target: { kind: "game", gameId: OTHER_GAME_ID } });
+    const first = enterSandbox(controller, snapshot([], { gameId: OTHER_GAME_ID }));
     const paused = snapshot([], { state: "paused", legalMoves: [], version: 3 });
-    api.snapshot.mockResolvedValue(paused);
-    void controller.enter({ target: { kind: "game", gameId: snapshot().gameId } });
-    await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(paused));
-    late.resolve(snapshot([], { gameId: OTHER_GAME_ID }));
-    await Promise.resolve();
+    await enterSandbox(controller, paused);
+    await first;
     expect(controller.getSnapshot().snapshot).toEqual(paused);
-    expect(api.bootstrap).not.toHaveBeenCalled();
-    disconnect();
+    expect(api.snapshot).not.toHaveBeenCalled();
+    expect(api.lifecycle).not.toHaveBeenCalled();
+    controller.endLifetime();
   });
 
   it("treats an invalid game link as lost access without contacting the service", async () => {
     const { api, controller } = harness();
-    await controller.enter({ target: { kind: "invalid" } });
+    await controller.enter({ target: { kind: "invalid" }, snapshot: null, readiness: false });
     expect(controller.getSnapshot()).toMatchObject({
       phase: "access-error",
       snapshot: null,

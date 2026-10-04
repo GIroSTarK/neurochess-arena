@@ -20,8 +20,8 @@ import { SandboxStore } from "./store";
 
 export interface SandboxEntry {
   readonly target: GameTarget;
-  readonly snapshot?: GameSnapshot | null;
-  readonly readiness?: boolean;
+  readonly snapshot: GameSnapshot | null;
+  readonly readiness: boolean;
   readonly issue?: {
     readonly phase: "unavailable" | "access-error" | "recovery-required";
     readonly notice: SandboxNotice;
@@ -37,7 +37,6 @@ export class SandboxController {
   private readonly archive: ArchiveController;
   private readonly session: GameSession;
   private readonly recovery: RecoveryController;
-  private readinessAbort: AbortController | null = null;
   private target: GameTarget = { kind: "none" };
   private ended = false;
 
@@ -72,55 +71,11 @@ export class SandboxController {
   readonly getSnapshot = (): SandboxState => this.store.get();
   readonly subscribe = (listener: () => void): (() => void) => this.store.subscribe(listener);
 
-  connect(entry?: SandboxEntry): () => void {
-    if (entry) {
-      void this.enter(entry);
-      return () => this.disconnect();
-    }
-    this.ended = false;
-    this.gate.connect();
-    void this.checkReadiness();
-    const { snapshot, replay } = this.store.get();
-    if (!snapshot) void this.recover();
-    else if (isTerminal(snapshot) && !replay) void this.archive.loadReplay();
-    return () => this.disconnect();
-  }
-
-  disconnect(): void {
-    this.gate.disconnect();
-    this.readinessAbort?.abort();
-    this.readinessAbort = null;
-    this.archive.cancel();
-    const { phase, snapshot, pendingCommand } = this.store.get();
-    if (pendingCommand) {
-      this.store.transition(
-        { phase: "uncertain", snapshot, pendingCommand },
-        { notice: "uncertain" },
-      );
-    } else if (phase === "synchronizing") {
-      this.store.transition(
-        { phase: "sync-required", snapshot, pendingCommand: null },
-        { notice: "sync-required" },
-      );
-    } else if (phase === "starting") {
-      this.store.transition(
-        snapshot
-          ? { phase: "ready", snapshot, pendingCommand: null }
-          : { phase: "entry", snapshot: null, pendingCommand: null },
-        { notice: this.store.get().notice },
-      );
-    } else if (phase === "recovering") {
-      this.store.transition(
-        { phase: "recovery-required", snapshot, pendingCommand: null },
-        { notice: "recovery-required" },
-      );
-    }
-  }
-
   endLifetime(): void {
     if (this.ended) return;
     this.ended = true;
-    this.disconnect();
+    this.gate.disconnect();
+    this.archive.cancel();
     this.session.endRecovery();
     this.store.transition(
       { phase: "entry", snapshot: null, pendingCommand: null },
@@ -134,8 +89,7 @@ export class SandboxController {
     this.gate.connect();
     this.target = entry.target;
     if (entry.target.kind !== "invalid") {
-      if (entry.readiness === undefined) void this.checkReadiness();
-      else this.store.setReadiness(entry.readiness ? "ready" : "unavailable");
+      this.store.setReadiness(entry.readiness ? "ready" : "unavailable");
     }
     if (entry.issue) {
       this.store.transition(
@@ -160,23 +114,6 @@ export class SandboxController {
     if (this.gate.isConnected() && previous !== readiness) {
       this.store.setReadiness(readiness, previous === "unavailable" || !ready);
     }
-  }
-
-  async checkReadiness(): Promise<void> {
-    if (!this.gate.isConnected() || this.readinessAbort) return;
-    const abort = new AbortController();
-    this.readinessAbort = abort;
-    const isRetry = this.store.get().readiness === "unavailable";
-    this.store.setReadiness("checking");
-    let readiness: "ready" | "unavailable" = "unavailable";
-    try {
-      readiness = (await this.api.ready(abort.signal)) ? "ready" : "unavailable";
-    } catch {
-      // Readiness does not decide sandbox availability or replace a guest.
-    }
-    if (!this.gate.isConnected() || abort.signal.aborted) return;
-    this.readinessAbort = null;
-    this.store.setReadiness(readiness, isRetry || readiness === "unavailable");
   }
 
   /** Bootstraps the guest cookie, then creates a sandbox game. Only this explicit action bootstraps. */

@@ -11,7 +11,7 @@ import { isTerminal } from "./state";
 import type { SandboxStore } from "./store";
 
 export interface RecoveryContext {
-  readonly api: Pick<SandboxApi, "snapshot" | "unfinished" | "lifecycle">;
+  readonly api: Pick<SandboxApi, "snapshot" | "lifecycle">;
   readonly store: SandboxStore;
   readonly gate: OperationGate;
   readonly commandId: () => string;
@@ -26,9 +26,8 @@ export interface RecoveryContext {
 const PAUSE_ATTEMPTS = 3;
 
 /**
- * Reopens an existing game as paused. The selected game, or the guest's unfinished sandbox, is
- * read through guest authorization and then paused with the same versioned command as the
- * Pause control. Reads never change lifecycle, and no recovered active snapshot enables play.
+ * Adopts loader entry data, or re-reads a known game for explicit command recovery, then pauses
+ * through a versioned command. No recovered active snapshot enables play.
  */
 export class RecoveryController {
   constructor(private readonly context: RecoveryContext) {}
@@ -44,8 +43,6 @@ export class RecoveryController {
         : target.kind === "none"
           ? (store.get().snapshot?.gameId ?? null)
           : null;
-    // Anonymous discovery may find nothing; a linked game must exist and be accessible.
-    const discovery = target.kind === "none" && gameId === null;
     session.beginRecovery();
     store.transition(
       { phase: "recovering", snapshot: store.get().snapshot, pendingCommand: null },
@@ -60,7 +57,7 @@ export class RecoveryController {
         ? entrySnapshot
         : gameId
           ? api.snapshot(gameId, operation.abort.signal)
-          : api.unfinished(operation.abort.signal));
+          : null);
       if (!gate.isCurrent(operation)) return;
       if (gameId && !snapshot) throw new ApiFailure("malformed");
       if (snapshot) {
@@ -76,19 +73,7 @@ export class RecoveryController {
     } catch (error: unknown) {
       if (!gate.isCurrent(operation)) return;
       const failure = safeFailure(error);
-      if (discovery && failure.code === "UNAUTHORIZED") {
-        session.endRecovery();
-        store.transition(
-          { phase: "entry", snapshot: null, pendingCommand: null },
-          { notice: null },
-        );
-      } else if (discovery && failure.code === "NOT_FOUND") {
-        session.endRecovery();
-        store.transition(
-          { phase: "unavailable", snapshot: null, pendingCommand: null },
-          { notice: "sandbox-unavailable" },
-        );
-      } else if (!session.loseAccess(failure)) {
+      if (!session.loseAccess(failure)) {
         store.transition(
           { phase: "recovery-required", snapshot: store.get().snapshot, pendingCommand: null },
           { notice: failureNotice(failure) },

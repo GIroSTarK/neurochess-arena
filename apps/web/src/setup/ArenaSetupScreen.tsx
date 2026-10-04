@@ -38,8 +38,8 @@ export function ArenaSetupScreen({
   readonly onCreated: (game: GameDetails) => void;
   readonly onReturnToGame: (gameId: string) => void;
   readonly savedCredentials?: SavedCredentialChoices;
-  readonly entry?: SetupEntry;
-  readonly onRetry?: () => void;
+  readonly entry: SetupEntry;
+  readonly onRetry: () => void;
 }) {
   const { t } = useTranslation();
   const [controller] = useState(() => new SetupController(api, credentials));
@@ -215,7 +215,7 @@ export function ArenaSetupScreen({
             <Button
               variant="primary"
               onClick={() => {
-                if (onRetry && state.issue?.code !== "creation_uncertain") onRetry();
+                if (state.issue?.code !== "creation_uncertain") onRetry();
                 else void controller.checkExisting();
               }}
             >

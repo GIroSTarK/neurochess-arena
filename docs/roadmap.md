@@ -103,7 +103,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 ## Navigation and route data migration — before Phase 4
 
-**Status:** In progress
+**Status:** Complete
 
 - [x] Explicit page/form selection and controller entry, cleanup, and creation handoffs.
 - [x] React Router Data mode, canonical private game paths, shared mode lifetimes, and navigation acceptance coverage.
@@ -112,7 +112,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] Sandbox entry loaders, committed recovery, creation handoffs, and isolated lazy build boundaries.
 - [x] History entry/cursor loaders and confirmed deletion actions with scoped cache invalidation and explicit uncertain-write recovery.
 - [x] Account/profile and credential loaders/actions, scoped metadata refresh, and explicit uncertain-save reconciliation.
-- [ ] Complete migration acceptance coverage and final routing audit.
+- [x] Complete migration acceptance coverage and final routing audit.
 
 ## Phase 4 — Private online human games
 

@@ -60,12 +60,12 @@ export function renderApp(
           ? readAuthEntry(new URL(initialEntries.at(-1)!, "https://arena.invalid"))
           : consumeAuthEntry()),
     },
-    initialEntries
-      ? (routes) => {
-          configureRoutes?.(routes);
-          return createMemoryRouter(routes, { initialEntries });
-        }
-      : undefined,
+    (routes) => {
+      configureRoutes?.(routes);
+      return createMemoryRouter(routes, {
+        initialEntries: initialEntries ?? [window.location.pathname + window.location.search],
+      });
+    },
   );
   routers.add(router);
   const element = (

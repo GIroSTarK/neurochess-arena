@@ -135,10 +135,6 @@ export class MatchController {
     this.listeners.forEach((listener) => listener());
   }
 
-  connect(entry: MatchEntry = { kind: "setup" }) {
-    void this.enter(entry);
-    return () => this.endLifetime();
-  }
   private openLifetime() {
     this.lifetime = new AbortController();
     this.credentials = createSessionCredentials(this.lifetime.signal);

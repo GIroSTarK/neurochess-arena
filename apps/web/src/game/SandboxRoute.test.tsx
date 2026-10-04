@@ -132,6 +132,39 @@ describe("committed Sandbox route data", () => {
     expect(reads(apiPath + "/lifecycle")).toHaveLength(0);
   });
 
+  it("clears the previous board before a changed game parameter loads and recovers only the committed game", async () => {
+    const pending = Promise.withResolvers<Response>();
+    const first = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
+    const second = snapshot(["d2d4"], {
+      gameId: OTHER_GAME_ID,
+      state: "paused",
+      legalMoves: [],
+      version: 2,
+    });
+    http = createHttpMock({
+      "GET /ready": () => jsonResponse({ status: "ready" }),
+      [`GET ${apiPath}`]: () => jsonResponse(first),
+      [`GET /games/${OTHER_GAME_ID}`]: () => pending.promise,
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = renderApp(options, { initialEntries: [gamePath] });
+    await screen.findByRole("button", { name: "Resume" });
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", first.fen);
+    let opening: Promise<void>;
+    await act(async () => {
+      opening = router.navigate("/sandbox/games/" + OTHER_GAME_ID);
+    });
+    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(screen.getByText("Opening page…")).toBeVisible();
+    await act(async () => {
+      pending.resolve(jsonResponse(second));
+      await opening;
+    });
+    expect(await screen.findByRole("grid")).toHaveAttribute("data-fen", second.fen);
+    expect(router.state.location.pathname).toBe("/sandbox/games/" + OTHER_GAME_ID);
+    expect(http.fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it("retries failed entry reads through the loader without retaining raw errors", async () => {
     let failed = true;
     http = createHttpMock({

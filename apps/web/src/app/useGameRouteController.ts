@@ -1,23 +1,23 @@
-import { useContext, useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
 import { GameRouteLifetime } from "./game-route-lifetime";
 import type { GameTarget } from "./navigation";
-import { RouteContext } from "./route-context";
-import { gameRouteTarget, RouteNavigation } from "./route-navigation";
+import { useAppRoute } from "./route-context";
+import { gameRouteTarget } from "./route-navigation";
 import type { GameMode } from "./route-urls";
 
 export function useGameRouteController<T extends { endLifetime(): void }>(
   mode: GameMode,
   create: ConstructorParameters<typeof GameRouteLifetime<T>>[1],
   enter: (controller: T, target: GameTarget) => void,
-  signal?: AbortSignal,
-  entry?: { readonly data: unknown; readonly refresh: () => void },
+  signal: AbortSignal | undefined,
+  entry: { readonly data: unknown; readonly refresh: () => void },
 ) {
   const navigate = useNavigate();
   const location = useLocation();
   const { gameId } = useParams();
-  const context = useContext(RouteContext);
+  const context = useAppRoute();
   const [lifetime] = useState(
     () =>
       new GameRouteLifetime(
@@ -28,7 +28,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
           // Adopt the handoff before another history action can target the previous leaf.
           void navigate(href, { replace, flushSync: true });
         },
-        context?.navigation ?? new RouteNavigation(),
+        context.navigation,
       ),
   );
   const stopped = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot);
@@ -37,7 +37,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   const target = gameRouteTarget(mode, location, gameId);
   const routeRevision = lifetime.getRouteRevision(target);
   const key = target.kind === "game" ? target.gameId : target.kind;
-  useLayoutEffect(() => lifetime.updateEntry(enter, entry?.data, entry?.refresh));
+  useLayoutEffect(() => lifetime.updateEntry(enter, entry.data, entry.refresh));
   useLayoutEffect(
     () =>
       lifetime.connect(
@@ -48,7 +48,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   );
   // Adopt route handoffs during layout, but start reads after commit so StrictMode
   // can cancel its first effect setup before any recovery command is dispatched.
-  useEffect(() => lifetime.activate(), [lifetime, key, signal, entry?.data, routeRevision]);
+  useEffect(() => lifetime.activate(), [lifetime, key, signal, entry.data, routeRevision]);
   useLayoutEffect(() => () => lifetime.end(), [lifetime]);
   return { controller: lifetime.controller, stopped, retry: lifetime.retry };
 }

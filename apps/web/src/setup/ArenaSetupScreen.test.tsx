@@ -56,6 +56,8 @@ function fixture(models = setupModels, saved?: readonly CredentialMetadata[]) {
       <ArenaSetupScreen
         api={createAiApi("https://api.example.test", { fetch })}
         credentials={credentials}
+        entry={{ existingGameId: null, issue: null }}
+        onRetry={vi.fn()}
         sandboxEnabled
         onCreated={onCreated}
         onReturnToGame={onReturnToGame}

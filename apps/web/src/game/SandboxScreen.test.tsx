@@ -16,22 +16,32 @@ import { SandboxScreen } from "./SandboxScreen";
 import type { SandboxState } from "./state";
 
 const sandbox = vi.hoisted(() => ({
-  useSandbox: vi.fn<() => { state: SandboxState; controller: ReturnType<typeof mockController> }>(),
+  useSandbox: vi.fn<
+    () => {
+      state: SandboxState;
+      controller: ReturnType<typeof mockController>;
+      recover: () => void;
+      checkReadiness: () => void;
+    }
+  >(),
 }));
 
 vi.mock("./useSandbox", () => sandbox);
 
 function renderSandbox(state: SandboxState = readyState()) {
   const controller = mockController();
-  sandbox.useSandbox.mockReturnValue({ state, controller });
+  const checkReadiness = vi.fn();
+  const actions = { controller, recover: controller.recover, checkReadiness };
+  sandbox.useSandbox.mockReturnValue({ state, ...actions });
   const { rerender, ...rendered } = renderLocalized(
     <SandboxScreen apiBaseUrl="http://localhost:3001" />,
   );
   return {
     ...rendered,
     controller,
+    checkReadiness,
     rerender: (nextState: SandboxState) => {
-      sandbox.useSandbox.mockReturnValue({ state: nextState, controller });
+      sandbox.useSandbox.mockReturnValue({ state: nextState, ...actions });
       rerender(<SandboxScreen apiBaseUrl="http://localhost:3001" />);
     },
   };
@@ -257,7 +267,7 @@ describe.each([
   it.each(["checking", "unavailable"] as const)(
     "stays focusable but rejects activation while readiness is %s",
     async (readiness) => {
-      const { controller, rerender } = renderSandbox({ ...state, readiness });
+      const { controller, rerender, checkReadiness } = renderSandbox({ ...state, readiness });
       const control = screen.getByRole("button", { name: label });
       expect(control).toHaveAttribute("aria-disabled", "true");
       expect(control).not.toBeDisabled();
@@ -268,7 +278,7 @@ describe.each([
       expect(controller.start).not.toHaveBeenCalled();
       if (readiness === "unavailable") {
         await user.click(screen.getByRole("button", { name: "Retry connection" }));
-        expect(controller.checkReadiness).toHaveBeenCalledTimes(1);
+        expect(checkReadiness).toHaveBeenCalledTimes(1);
       }
       rerender(state);
       expect(screen.getByRole("button", { name: label })).toBe(control);

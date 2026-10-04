@@ -40,8 +40,8 @@ function entryLoader(context: SandboxContext, kind: "setup" | "game") {
         ? api.snapshot(target.gameId, request.signal)
         : api.unfinished(request.signal)
       ).then(
-        (snapshot): SandboxEntry => ({ target, snapshot }),
-        (error: unknown): SandboxEntry => {
+        (snapshot): Omit<SandboxEntry, "readiness"> => ({ target, snapshot }),
+        (error: unknown): Omit<SandboxEntry, "readiness"> => {
           const failure = safeFailure(error);
           if (target.kind === "none" && failure.code === "UNAUTHORIZED") {
             return { target, snapshot: null };
@@ -49,6 +49,7 @@ function entryLoader(context: SandboxContext, kind: "setup" | "game") {
           const unavailable = target.kind === "none" && failure.code === "NOT_FOUND";
           return {
             target,
+            snapshot: null,
             issue: {
               phase: unavailable
                 ? "unavailable"

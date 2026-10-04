@@ -58,6 +58,12 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
   expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel") as unknown)).toBe(
     "same-document",
   );
+  await page.goForward();
+  await expect(page).toHaveURL(/\/sandbox$/);
+  await expect(sandbox).toHaveAttribute("aria-current", "page");
+  expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel") as unknown)).toBe(
+    "same-document",
+  );
   await activate(sandbox, testInfo.project.name === "mobile-touch");
   await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
   await activate(arena, testInfo.project.name === "mobile-touch");
@@ -196,12 +202,74 @@ test("obsolete and mixed game links stay unavailable without discovery or redire
     "/sandbox?game=" + gameId + "&game=",
     "/games/" + gameId + "?game=" + gameId,
     "/sandbox/games/" + gameId + "?game=",
+    "/games/invalid",
+    "/games/" + gameId + "/extra",
+    "/games/" + gameId + "%2Fextra",
+    "/GAMES/" + gameId,
+    "/sandbox/games/" + gameId + "/extra",
+    "/sandbox/games/" + gameId + "%2Fextra",
+    "/Sandbox/games/" + gameId,
+    "/unknown-route",
   ]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
     expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(path);
   }
   expect(calls).toEqual([]);
+});
+
+test("canonical game links open an authorized new tab without navigating the source", async ({
+  page,
+  context,
+}, testInfo) => {
+  const current = await startSandbox(page, testInfo.project.name === "mobile-touch");
+  await page.goto("/games/" + current.gameId);
+  const link = page.getByRole("link", { name: "Return to Sandbox" });
+  await expect(link).toHaveAttribute("href", "/sandbox/games/" + current.gameId);
+  await page.evaluate(() => Object.assign(window, { navigationSentinel: "source-document" }));
+  const destination = await link.getAttribute("href");
+  const other =
+    testInfo.project.name === "desktop"
+      ? await Promise.all([
+          context.waitForEvent("page"),
+          link.click({ modifiers: ["Control"] }),
+        ]).then(([tab]) => tab)
+      : await context.newPage();
+  try {
+    if (testInfo.project.name !== "desktop") await other.goto(destination!);
+    await expect(other).toHaveURL(WEB_ORIGIN + "/sandbox/games/" + current.gameId);
+    await expect(other.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+    await expect(other.getByRole("main")).toHaveCount(1);
+    await other.reload();
+    await expect(other.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(WEB_ORIGIN + "/games/" + current.gameId);
+    expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel") as unknown)).toBe(
+      "source-document",
+    );
+  } finally {
+    await other.close();
+  }
+});
+
+test("keyboard route changes and native skip links focus a single main with reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/auth/sign-in");
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  const history = page.getByRole("link", { name: "History", exact: true });
+  await history.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Private game history" })).toBeVisible();
+  await expect(page.getByRole("main")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Private game history" })).toBeFocused();
+  await expect(history).toHaveAttribute("aria-current", "page");
+  const skip = page.getByRole("link", { name: /Skip to/ });
+  await skip.focus();
+  await expect(skip).toBeInViewport();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+  expect(new URL(page.url()).hash).toBe("#account-main");
 });
 
 test("a failed lazy module has safe navigation and an explicit reload recovery", async ({
@@ -263,7 +331,9 @@ test("Back restores history scroll after its delayed private read finishes", asy
   ).toBe(600);
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   await page.goBack();
-  await expect(page.getByText("Loading game history…", { exact: true })).toBeVisible();
+  await expect.poll(() => reads).toBe(2);
+  await expect(page.getByText("Opening page…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Finished games" })).toHaveCount(0);
   release.resolve();
   await expect(
     page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),

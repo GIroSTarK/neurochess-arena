@@ -5,6 +5,7 @@ import type { RouteObject } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { consumeAuthEntry } from "../auth/navigation";
+import { createWebI18n } from "../i18n";
 import { setupModels } from "../test/ai-setup";
 import {
   FOOLS_MATE,
@@ -89,6 +90,50 @@ describe("Data router integration", () => {
     expect(screen.getByRole("link", { name: "Return to Arena" })).toHaveAttribute("href", gamePath);
     expect(JSON.stringify(router.state.location.state)).not.toContain("returnTo");
   });
+
+  it.each(["arena", "sandbox"] as const)(
+    "keeps one localized main and leaves replay focus/scroll alone on %s revalidation",
+    async (mode) => {
+      const terminal = snapshot(FOOLS_MATE);
+      http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(null),
+        "GET /ready": () => jsonResponse({ status: "ready" }),
+        [`GET /games/${GAME_ID}`]: () => jsonResponse(terminal),
+        [`GET /games/${GAME_ID}/details`]: () =>
+          jsonResponse({ snapshot: terminal, configuration }),
+        [`GET /games/${GAME_ID}/replay`]: () =>
+          jsonResponse({ snapshot: terminal, initialFen: snapshot().fen }),
+        [`GET /games/${GAME_ID}/invocations`]: () =>
+          jsonResponse({ gameId: GAME_ID, version: terminal.version, turns: [] }),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      const i18n = createWebI18n();
+      i18n.addResourceBundle("fr", "translation", {
+        app: { title: "Arène", arena: "Arène" },
+        sandbox: { title: "Bac à sable", documentTitle: "Bac à sable · Arène" },
+      });
+      await i18n.changeLanguage("fr");
+      const { router } = renderApp(options, {
+        i18n,
+        initialEntries: [(mode === "arena" ? "" : "/sandbox") + gamePath],
+      });
+      await screen.findByRole("heading", { name: "Black wins by checkmate" });
+      expect(screen.getAllByRole("main")).toHaveLength(1);
+      expect(document.documentElement.lang).toBe("fr");
+      expect(document.title).toBe(mode === "arena" ? "Arène" : "Bac à sable · Arène");
+      expect(
+        screen.getByRole("link", { name: mode === "arena" ? "Arène" : "Bac à sable" }),
+      ).toHaveAttribute("aria-current", "page");
+      const flip = screen.getByRole("button", { name: "Flip board" });
+      act(() => flip.focus());
+      const scroll = vi.spyOn(window, "scrollTo");
+      await act(() => router.revalidate());
+      expect(flip).toHaveFocus();
+      expect(scroll).not.toHaveBeenCalled();
+      expect(screen.getByRole("status")).toHaveTextContent("Black wins");
+      expect(http.fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    },
+  );
 
   it("keeps reset tokens across StrictMode replay but destroys them on departure and Back", async () => {
     http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });

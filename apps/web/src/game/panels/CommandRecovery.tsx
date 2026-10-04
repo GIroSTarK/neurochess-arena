@@ -11,12 +11,9 @@ export function CommandRecovery({
   onRetryConnection,
 }: {
   readonly state: SandboxState;
-  readonly controller: Pick<
-    SandboxController,
-    "recover" | "retryCommand" | "synchronize" | "checkReadiness"
-  >;
-  readonly onRetryRecovery?: () => void;
-  readonly onRetryConnection?: () => void;
+  readonly controller: Pick<SandboxController, "retryCommand" | "synchronize">;
+  readonly onRetryRecovery: () => void;
+  readonly onRetryConnection: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -45,24 +42,12 @@ export function CommandRecovery({
         </div>
       ) : null}
       {state.phase === "recovery-required" ? (
-        <Button
-          variant="primary"
-          onClick={() => {
-            if (onRetryRecovery) onRetryRecovery();
-            else void controller.recover();
-          }}
-        >
+        <Button variant="primary" onClick={onRetryRecovery}>
           {t("actions.retryRecovery")}
         </Button>
       ) : null}
       {state.readiness === "unavailable" ? (
-        <Button
-          variant="secondary"
-          onClick={() => {
-            if (onRetryConnection) onRetryConnection();
-            else void controller.checkReadiness();
-          }}
-        >
+        <Button variant="secondary" onClick={onRetryConnection}>
           {t("actions.retryConnection")}
         </Button>
       ) : null}

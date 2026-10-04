@@ -30,6 +30,7 @@ describe.each(["production", "development"] as const)(
       const modules = chunks.flatMap((chunk) => chunk.moduleIds);
       expect(modules.filter((id) => sandboxModules.test(id))).toEqual([]);
       expect(modules.filter((id) => id.includes("/apps/web/src/reference/"))).toEqual([]);
+      expect(modules.filter((id) => id.includes("/test/e2e/"))).toEqual([]);
       expect(
         modules.filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
       ).not.toEqual([]);
@@ -39,6 +40,9 @@ describe.each(["production", "development"] as const)(
 
     it("loads enabled Sandbox through a separate dynamic entry without reference fixtures", async () => {
       const chunks = await productionChunks(true, nodeEnv);
+      expect(
+        chunks.flatMap((chunk) => chunk.moduleIds).filter((id) => id.includes("/test/e2e/")),
+      ).toEqual([]);
       expect(
         chunks
           .flatMap((chunk) => chunk.moduleIds)
