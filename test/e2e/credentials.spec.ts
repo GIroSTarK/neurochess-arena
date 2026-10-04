@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import AxeBuilder from "@axe-core/playwright";
 import { credentialListResponseSchema, type ProviderCredentialSource } from "@neurochess/contracts";
 import { providerCredentials } from "@neurochess/database";
@@ -263,22 +261,12 @@ for (const failure of ["deleted", "undecryptable", "rejected"] as const) {
 test("account switching clears saved selections and raw keys and fences delayed discovery", async ({
   page,
   context,
-  browser,
+  newContext,
 }) => {
   const savedKey = "first-account-fixture-1234";
   const sessionKey = "old-page-fixture";
   const privateValues = observeCredentialPrivacy(page, [savedKey, sessionKey]);
-  const otherContext = await browser.newContext();
-  await otherContext.addCookies([
-    {
-      name: "neurochess_test_client",
-      value: randomUUID(),
-      url: API_ORIGIN,
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    },
-  ]);
+  const otherContext = await newContext();
   const otherPage = await otherContext.newPage();
   let second: Awaited<ReturnType<typeof credentialAccount>>;
   try {

@@ -171,22 +171,14 @@ test("other tabs observe onboarding and profile edits without losing keys or pau
 test("a stale Sign out cannot revoke the replacement account cookie", async ({
   page,
   context,
-  browser,
+  newContext,
 }) => {
-  const otherContext = await browser.newContext({ baseURL: WEB_ORIGIN });
-  await otherContext.addCookies([
-    {
-      name: "neurochess_test_client",
-      value: randomUUID(),
-      url: API_ORIGIN,
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    },
-  ]);
+  const otherContext = await newContext({ baseURL: WEB_ORIGIN });
   const otherPage = await otherContext.newPage();
   const replacementName = await register(otherPage, emailFor());
-  const replacementCookies = await otherContext.cookies(API_ORIGIN);
+  const replacementCookies = (await otherContext.cookies(API_ORIGIN)).filter(
+    (cookie) => cookie.name !== "neurochess_test_client",
+  );
   const replacement = await otherPage.request.get(API_ORIGIN + "/api/auth/get-session");
   const replacementId = ((await replacement.json()) as { user: { id: string } }).user.id;
   await otherContext.close();
@@ -218,21 +210,11 @@ test("a stale Sign out cannot revoke the replacement account cookie", async ({
 test("a second tab switches accounts during discovery and discards the old page's secrets and late result", async ({
   page,
   context,
-  browser,
+  newContext,
 }) => {
   const secondEmail = emailFor();
-  const otherContext = await browser.newContext({ baseURL: WEB_ORIGIN });
+  const otherContext = await newContext({ baseURL: WEB_ORIGIN });
   const otherAccountPage = await otherContext.newPage();
-  await otherContext.addCookies([
-    {
-      name: "neurochess_test_client",
-      value: randomUUID(),
-      url: API_ORIGIN,
-      httpOnly: true,
-      secure: true,
-      sameSite: "Lax",
-    },
-  ]);
   const secondName = await register(otherAccountPage, secondEmail);
   await otherContext.close();
   const firstName = await register(page, emailFor());
@@ -308,7 +290,7 @@ test("unverified sign-in offers resend, a verified profile can be renamed, and c
   await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: renamed })).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await context.clearCookies();
+  await context.clearCookies({ name: /^(?!neurochess_test_client$)/ });
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
   await expect(page.getByLabel("Username", { exact: true })).toHaveCount(0);

@@ -387,12 +387,15 @@ test("confirms both resignation colors and abortion with accessible cancellation
 
 test("an isolated browser guest cannot open, replay or export another guest's private URL", async ({
   page,
-  browser,
+  newContext,
+  allowedIdentity401s,
+  expectedGame404s,
 }, testInfo) => {
   const initial = await startSandbox(page, testInfo.project.name === "mobile-touch");
-  const isolated = await browser.newContext();
+  const isolated = await newContext();
   try {
     const stranger = await isolated.newPage();
+    allowedIdentity401s.set(stranger, new Set([`${API_ORIGIN}/games/${initial.gameId}`]));
     await stranger.goto(page.url());
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
@@ -416,6 +419,8 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
         })
       ).status(),
     ).toBe(200);
+    allowedIdentity401s.delete(stranger);
+    expectedGame404s.set(stranger, new Set([`${API_ORIGIN}/games/${initial.gameId}`]));
     await stranger.reload();
     await expect(stranger.getByRole("button", { name: "Start sandbox again" })).toBeVisible();
     await expect(stranger.getByRole("grid")).toHaveAttribute("aria-readonly", "true");

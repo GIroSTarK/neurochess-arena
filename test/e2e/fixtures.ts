@@ -7,7 +7,16 @@ import {
   moveCommandSchema,
 } from "@neurochess/contracts";
 import { games, guestSessions } from "@neurochess/database";
-import { expect, type Locator, type Page, type Response, test as base } from "@playwright/test";
+import {
+  type BrowserContext,
+  type BrowserContextOptions,
+  type ConsoleMessage,
+  expect,
+  type Locator,
+  type Page,
+  type Response,
+  test as base,
+} from "@playwright/test";
 import { inArray } from "drizzle-orm";
 
 import { integrationDatabase } from "../database";
@@ -17,28 +26,21 @@ import { API_ORIGIN } from "./environment";
 export { expect } from "@playwright/test";
 
 export const test = base.extend<{
-  expectedGameDetails404s: Set<string>;
-  allowedIdentity401s: Set<string>;
+  expectedGame404s: Map<Page, Set<string>>;
+  allowedIdentity401s: Map<Page, Set<string>>;
+  instrumentContext: (context: BrowserContext) => Promise<void>;
+  newContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
 }>({
   // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
-  expectedGameDetails404s: async ({}, use) => {
-    await use(new Set<string>());
+  expectedGame404s: async ({}, use) => {
+    await use(new Map<Page, Set<string>>());
   },
   // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
   allowedIdentity401s: async ({}, use) => {
-    await use(new Set<string>());
+    await use(new Map<Page, Set<string>>());
   },
-  page: async ({ page, expectedGameDetails404s, allowedIdentity401s }, use) => {
-    await page.context().addCookies([
-      {
-        name: "neurochess_test_client",
-        value: randomUUID(),
-        url: API_ORIGIN,
-        httpOnly: true,
-        secure: true,
-        sameSite: "Lax",
-      },
-    ]);
+  instrumentContext: async ({ expectedGame404s, allowedIdentity401s }, use) => {
+    const contexts = new Set<BrowserContext>();
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
@@ -60,10 +62,10 @@ export const test = base.extend<{
         );
       }
     };
-    page.on("response", record);
-    page.on("pageerror", () => errors.push("Uncaught application error"));
-    page.on("console", (message) => {
+    const recordError = () => errors.push("Uncaught application error");
+    const recordConsole = (message: ConsoleMessage) => {
       if (["error", "warning"].includes(message.type())) {
+        const page = message.page();
         // HTTP error statuses are expected during creation conflicts. Never
         // copy arbitrary console text or request/cookie headers into reports.
         const anonymousDiscovery =
@@ -78,11 +80,13 @@ export const test = base.extend<{
             message.location().url,
           ) && message.text().includes("net::ERR_FAILED");
         const deletedPrivateGame =
+          page !== null &&
           message.text().includes("404 (Not Found)") &&
-          expectedGameDetails404s.delete(message.location().url);
+          expectedGame404s.get(page)?.delete(message.location().url);
         const expiredIdentity =
+          page !== null &&
           message.text().includes("401 (Unauthorized)") &&
-          allowedIdentity401s.has(message.location().url);
+          allowedIdentity401s.get(page)?.has(message.location().url);
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
@@ -94,13 +98,33 @@ export const test = base.extend<{
           errors.push("Application console " + message.type());
         }
       }
-    });
+    };
     try {
-      await use(page);
+      await use(async (context) => {
+        if (contexts.has(context)) return;
+        await context.addCookies([
+          {
+            name: "neurochess_test_client",
+            value: randomUUID(),
+            url: API_ORIGIN,
+            httpOnly: true,
+            secure: true,
+            sameSite: "Lax",
+          },
+        ]);
+        contexts.add(context);
+        context.on("response", record);
+        context.on("weberror", recordError);
+        context.on("console", recordConsole);
+      });
       expect(errors).toEqual([]);
-      expect(expectedGameDetails404s.size).toBe(0);
+      for (const urls of expectedGame404s.values()) expect(urls.size).toBe(0);
     } finally {
-      page.off("response", record);
+      for (const context of contexts) {
+        context.off("response", record);
+        context.off("weberror", recordError);
+        context.off("console", recordConsole);
+      }
       await Promise.allSettled(reads);
       if (createdGames.size > 0) {
         const database = integrationDatabase();
@@ -122,6 +146,27 @@ export const test = base.extend<{
           await database.close();
         }
       }
+    }
+  },
+  context: async ({ context, instrumentContext }, use) => {
+    await instrumentContext(context);
+    await use(context);
+  },
+  newContext: async ({ browser, instrumentContext }, use) => {
+    const contexts: BrowserContext[] = [];
+    try {
+      await use(async (options) => {
+        const context = await browser.newContext(options);
+        contexts.push(context);
+        await instrumentContext(context);
+        return context;
+      });
+    } finally {
+      const closed = await Promise.allSettled(contexts.map((context) => context.close()));
+      expect(
+        closed.every((result) => result.status === "fulfilled"),
+        "Extra contexts close",
+      ).toBe(true);
     }
   },
 });

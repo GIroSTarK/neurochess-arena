@@ -44,7 +44,7 @@ async function stop(page: Page) {
 
 test("history reopens canonical results on another session without controllers, keys or provider work", async ({
   page,
-  browser,
+  newContext,
 }, testInfo) => {
   const account = await credentialAccount(page);
   let completed = await create(page);
@@ -103,7 +103,7 @@ test("history reopens canonical results on another session without controllers, 
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("link", { name: /Open replay/ })).toHaveCount(0);
 
-  const device = await browser.newContext({
+  const device = await newContext({
     viewport: page.viewportSize(),
     isMobile: testInfo.project.name === "mobile-touch",
     hasTouch: testInfo.project.name === "mobile-touch",
@@ -296,7 +296,7 @@ test("guest guidance and account privacy survive a switch to another account", a
 
 test("individual deletion retries an uncertain acknowledgement and removes private URL access while preserving unfinished play and keys", async ({
   page,
-  expectedGameDetails404s,
+  expectedGame404s,
 }, testInfo) => {
   const account = await credentialAccount(page);
   const deleted = await stop(page);
@@ -380,7 +380,7 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
       (await page.request.get(`${API_ORIGIN}/games/${deleted.gameId}${suffix}`)).status(),
     ).toBe(404);
   }
-  expectedGameDetails404s.add(`${API_ORIGIN}/games/${deleted.gameId}/details`);
+  expectedGame404s.set(page, new Set([`${API_ORIGIN}/games/${deleted.gameId}/details`]));
   await page.goto(`/?game=${deleted.gameId}`);
   await expect(
     page.locator("p").filter({

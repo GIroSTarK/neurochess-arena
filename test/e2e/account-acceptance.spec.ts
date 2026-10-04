@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { text as streamText } from "node:stream/consumers";
 
 import { gamePgnResponseSchema } from "@neurochess/contracts";
@@ -29,7 +28,7 @@ async function signIn(page: Page, account: { email: string; password: string }) 
 for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
   test(`${mode} survives originating-session expiry and completes through explicit recovery on another device`, async ({
     page,
-    browser,
+    newContext,
     allowedIdentity401s,
   }, testInfo) => {
     const account = await credentialAccount(page);
@@ -37,7 +36,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       await page.request.get(API_ORIGIN + "/api/auth/get-session")
     ).json()) as { user: { id: string } };
     const database = integrationDatabase();
-    const device = await browser.newContext({
+    const device = await newContext({
       viewport: page.viewportSize(),
       isMobile: testInfo.project.name === "mobile-touch",
       hasTouch: testInfo.project.name === "mobile-touch",
@@ -68,16 +67,6 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       await page.goto("/account/credentials");
       await page.getByLabel("API key", { exact: true }).fill(draftKey);
 
-      await device.addCookies([
-        {
-          name: "neurochess_test_client",
-          value: randomUUID(),
-          url: API_ORIGIN,
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-        },
-      ]);
       const recovered = await device.newPage();
       const recoveredPrivacy = observeCredentialPrivacy(recovered, sentinels);
       let bootstraps = 0;
@@ -106,7 +95,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
 
       // The catalog's focus refresh can reach the API before identity observation
       // clears it, or be aborted first. Only this expiry window permits its 401.
-      allowedIdentity401s.add(API_ORIGIN + "/credentials");
+      allowedIdentity401s.set(page, new Set([API_ORIGIN + "/credentials"]));
       const expired = await database.db
         .update(authSessions)
         .set({ expiresAt: new Date(Date.now() - 1_000) })
@@ -117,7 +106,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
       await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
       await expect(page.getByText("Cross-device Black", { exact: true })).toHaveCount(0);
-      allowedIdentity401s.clear();
+      allowedIdentity401s.delete(page);
       expect(
         (
           await page.request.get(`${API_ORIGIN}/games/${gameId}`, {

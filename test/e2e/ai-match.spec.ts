@@ -54,7 +54,7 @@ async function stop(page: Page) {
 
 test("public Arena completes a match, exposes private replay and PGN, and keeps the previous URL", async ({
   page,
-  context,
+  newContext,
 }, testInfo) => {
   const game = await start(page);
   const url = page.url();
@@ -79,7 +79,7 @@ test("public Arena completes a match, exposes private replay and PGN, and keeps 
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   await page.goto(url);
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
-  const stranger = await context.browser()!.newContext();
+  const stranger = await newContext();
   try {
     expect((await stranger.request.get(`${API_ORIGIN}/games/${game.gameId}/replay`)).status()).toBe(
       401,
