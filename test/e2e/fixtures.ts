@@ -28,6 +28,7 @@ export { expect } from "@playwright/test";
 export const test = base.extend<{
   expectedGame404s: Map<Page, Set<string>>;
   allowedIdentity401s: Map<Page, Set<string>>;
+  expectedModuleFailures: Map<Page, Set<string>>;
   instrumentContext: (context: BrowserContext) => Promise<void>;
   newContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
 }>({
@@ -39,7 +40,14 @@ export const test = base.extend<{
   allowedIdentity401s: async ({}, use) => {
     await use(new Map<Page, Set<string>>());
   },
-  instrumentContext: async ({ expectedGame404s, allowedIdentity401s }, use) => {
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
+  expectedModuleFailures: async ({}, use) => {
+    await use(new Map<Page, Set<string>>());
+  },
+  instrumentContext: async (
+    { expectedGame404s, allowedIdentity401s, expectedModuleFailures },
+    use,
+  ) => {
     const contexts = new Set<BrowserContext>();
     const createdGames = new Set<string>();
     const reads: Promise<void>[] = [];
@@ -87,13 +95,18 @@ export const test = base.extend<{
           page !== null &&
           message.text().includes("401 (Unauthorized)") &&
           allowedIdentity401s.get(page)?.has(message.location().url);
+        const failedModule =
+          page !== null &&
+          message.text().includes("net::ERR_FAILED") &&
+          expectedModuleFailures.get(page)?.delete(message.location().url);
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
           !accountRejection &&
           !avatarUnavailable &&
           !deletedPrivateGame &&
-          !expiredIdentity
+          !expiredIdentity &&
+          !failedModule
         ) {
           errors.push("Application console " + message.type());
         }
@@ -119,6 +132,7 @@ export const test = base.extend<{
       });
       expect(errors).toEqual([]);
       for (const urls of expectedGame404s.values()) expect(urls.size).toBe(0);
+      for (const urls of expectedModuleFailures.values()) expect(urls.size).toBe(0);
     } finally {
       for (const context of contexts) {
         context.off("response", record);

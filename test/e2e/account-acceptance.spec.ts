@@ -173,7 +173,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       await expect(
         page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
       ).toHaveCount(1);
-      await page.locator(`a[href="/?game=${gameId}"]`).click();
+      await page.locator(`a[href="/games/${gameId}"]`).click();
       await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
       await expect(page.getByLabel(/API key/)).toHaveCount(0);
       const canonical = gamePgnResponseSchema.parse(

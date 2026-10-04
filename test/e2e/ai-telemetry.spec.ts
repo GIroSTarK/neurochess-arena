@@ -31,8 +31,8 @@ async function start(page: Page, key: string, human?: "white" | "black") {
     await model.press("Enter");
   }
   await page.getByRole("button", { name: "Start game", exact: true }).click();
-  await expect(page).toHaveURL(/\?game=/);
-  return new URL(page.url()).searchParams.get("game")!;
+  await expect(page).toHaveURL(/\/games\/[\da-f-]+$/);
+  return new URL(page.url()).pathname.split("/").at(-1)!;
 }
 
 for (const human of [undefined, "white", "black"] as const) {

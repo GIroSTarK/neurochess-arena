@@ -1,19 +1,15 @@
 import type { ChessColor } from "@neurochess/contracts";
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router";
 
 import { type AiIdentity, createAiApi } from "../api/ai-client";
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
-import {
-  appPage,
-  openBrowserGame,
-  openBrowserSetup,
-  readBrowserGameTarget,
-  readPathname,
-  subscribeToNavigation,
-} from "../app/navigation";
+import { gameHref } from "../app/route-urls";
+import { RouteNotice } from "../app/RouteNotice";
+import { useGameRouteController } from "../app/useGameRouteController";
 import { ArenaDetails } from "../arena/ArenaDetails";
 import { ArenaHeader } from "../arena/ArenaHeader";
 import { ArenaLayout } from "../arena/ArenaLayout";
@@ -50,12 +46,19 @@ export function MatchScreen({
 }) {
   const { t } = useTranslation();
   const account = useAccount();
-  const [controller] = useState(
-    () =>
-      new MatchController(createAiApi(apiBaseUrl, identity ? { identity } : {}), undefined, {
-        game: (gameId) => openBrowserGame("arena", gameId, true),
-        setup: openBrowserSetup,
-      }),
+  const navigate = useNavigate();
+  const { controller, stopped, retry } = useGameRouteController(
+    "arena",
+    (navigation) =>
+      new MatchController(
+        createAiApi(apiBaseUrl, identity ? { identity } : {}),
+        undefined,
+        navigation,
+      ),
+    (controller, target) => {
+      void controller.enter(target.kind === "none" ? { kind: "setup" } : target);
+    },
+    identity?.signal,
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const needsCredentials =
@@ -81,37 +84,6 @@ export function MatchScreen({
     state.thinking,
     state.busy,
   ]);
-  const identitySignal = identity?.signal;
-  useEffect(() => {
-    const navigate = () => {
-      if (appPage(readPathname()) !== "arena") {
-        controller.endLifetime();
-        return;
-      }
-      const target = readBrowserGameTarget();
-      void controller.enter(target.kind === "none" ? { kind: "setup" } : target);
-    };
-    const pagehide = () => controller.endLifetime();
-    const pageshow = (event: PageTransitionEvent) => {
-      if (event.persisted) navigate();
-    };
-    const unsubscribe = subscribeToNavigation(navigate);
-    window.addEventListener("pagehide", pagehide);
-    window.addEventListener("pageshow", pageshow);
-    const disconnect = () => {
-      unsubscribe();
-      window.removeEventListener("pagehide", pagehide);
-      window.removeEventListener("pageshow", pageshow);
-      controller.endLifetime();
-    };
-    if (!identitySignal?.aborted) navigate();
-    identitySignal?.addEventListener("abort", disconnect, { once: true });
-    if (identitySignal?.aborted) disconnect();
-    return () => {
-      identitySignal?.removeEventListener("abort", disconnect);
-      disconnect();
-    };
-  }, [controller, identitySignal]);
   const helpId = useId();
   const board = useRef<ChessboardHandle>(null);
   const [flipped, setFlipped] = useState<{ gameId: string; color: ChessColor } | null>(null);
@@ -126,6 +98,10 @@ export function MatchScreen({
     if (!active || active === document.body || !active.isConnected) board.current?.focus();
   }, [state.startedGameId]);
 
+  if (stopped) {
+    return <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={retry} />;
+  }
+
   if (state.phase === "setup" && controller.credentials) {
     return (
       <ArenaSetupScreen
@@ -138,7 +114,7 @@ export function MatchScreen({
           void controller.created(game);
         }}
         onReturnToGame={(id) => {
-          void controller.load(id);
+          void navigate(gameHref("arena", id));
         }}
       />
     );
@@ -283,9 +259,9 @@ export function MatchScreen({
         <div className="grid gap-4">
           <p>{t(details.configuration === null ? "match.sandbox" : "match.unsupported")}</p>
           {details.configuration === null && sandboxEnabled ? (
-            <a className="text-accent underline" href={`/sandbox?game=${snapshot.gameId}`}>
+            <Link className="text-accent underline" to={gameHref("sandbox", snapshot.gameId)}>
               {t("match.openSandbox")}
-            </a>
+            </Link>
           ) : null}
         </div>
       ) : (

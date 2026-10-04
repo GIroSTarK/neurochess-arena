@@ -1,11 +1,23 @@
 import { act, fireEvent, renderHook, waitFor } from "@testing-library/react";
-import { StrictMode } from "react";
+import { type ReactNode, StrictMode } from "react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 
 import { useSandbox } from "./useSandbox";
+
+function RouteWrapper({ children }: { readonly children: ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={[window.location.pathname]}>
+      <Routes>
+        <Route path="/sandbox" element={children} />
+        <Route path="/sandbox/games/:gameId" element={children} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
 
 describe("useSandbox", () => {
   let http: ReturnType<typeof createHttpMock>;
@@ -18,7 +30,9 @@ describe("useSandbox", () => {
       "GET /sandbox/games/unfinished": () => jsonResponse({ snapshot: null }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    const { result, rerender, unmount } = renderHook(() => useSandbox("http://localhost:3001"));
+    const { result, rerender, unmount } = renderHook(() => useSandbox("http://localhost:3001"), {
+      wrapper: RouteWrapper,
+    });
     const { controller } = result.current;
     await waitFor(() => expect(result.current.state.readiness).toBe("ready"));
     expect(result.current.state.phase).toBe("entry");
@@ -30,7 +44,7 @@ describe("useSandbox", () => {
   });
 
   it("clears an active game on pagehide and requires paused recovery on persisted pageshow", async () => {
-    window.history.replaceState(null, "", "/sandbox?game=" + GAME_ID);
+    window.history.replaceState(null, "", "/sandbox/games/" + GAME_ID);
     let stored = snapshot([], { state: "paused", legalMoves: [], version: 1 });
     http = createHttpMock({
       "GET /ready": () => jsonResponse({ status: "ready" }),
@@ -42,7 +56,11 @@ describe("useSandbox", () => {
     });
     vi.stubGlobal("fetch", http.fetch);
     const { result, unmount } = renderHook(() => useSandbox("http://localhost:3001"), {
-      wrapper: StrictMode,
+      wrapper: ({ children }) => (
+        <StrictMode>
+          <RouteWrapper>{children}</RouteWrapper>
+        </StrictMode>
+      ),
     });
     await waitFor(() => expect(result.current.state.phase).toBe("ready"));
     const controller = result.current.controller;

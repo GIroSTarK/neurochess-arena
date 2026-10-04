@@ -6,6 +6,7 @@ import {
 } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router";
 
 import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
 import type { AuthForm } from "../app/route-urls";
@@ -35,6 +36,7 @@ export function AuthScreen({
   readonly kind: AuthForm;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const account = useRequiredAccount();
   const title = forms[kind];
   const form = useRef<HTMLFormElement>(null);
@@ -108,7 +110,7 @@ export function AuthScreen({
         if (!isCancelled()) window.location.assign(url);
       } else if (kind === "sign-in") {
         await account.controller.transition((signal) => api.signIn({ email, password }, signal));
-        if (!isCancelled()) window.location.assign(entry.returnTo);
+        if (!isCancelled()) void navigate(entry.returnTo, { replace: true });
       } else if (kind === "reset-password") {
         const token = entry.readResetToken();
         if (!token) throw new AccountFailure("AUTH_INVALID_TOKEN");
@@ -209,39 +211,39 @@ export function AuthScreen({
       </form>
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-label">
         {kind !== "sign-in" ? (
-          <a
+          <Link
             className="inline-flex min-h-target items-center text-accent underline"
-            href={authHref("sign-in", entry.returnTo)}
+            to={authHref("sign-in", entry.returnTo)}
           >
             {t("account.signIn")}
-          </a>
+          </Link>
         ) : null}
         {kind === "sign-in" ? (
-          <a
+          <Link
             className="inline-flex min-h-target items-center text-accent underline"
-            href={authHref("sign-up", entry.returnTo)}
+            to={authHref("sign-up", entry.returnTo)}
           >
             {t("account.titles.signUp")}
-          </a>
+          </Link>
         ) : null}
-        <a
+        <Link
           className="inline-flex min-h-target items-center text-accent underline"
-          href={authHref("verify", entry.returnTo)}
+          to={authHref("verify", entry.returnTo)}
         >
           {t("account.resend")}
-        </a>
-        <a
+        </Link>
+        <Link
           className="inline-flex min-h-target items-center text-accent underline"
-          href={authHref("forgot-password", entry.returnTo)}
+          to={authHref("forgot-password", entry.returnTo)}
         >
           {t("account.titles.forgot")}
-        </a>
-        <a
+        </Link>
+        <Link
           className="inline-flex min-h-target items-center text-accent underline"
-          href={entry.returnTo}
+          to={entry.returnTo}
         >
           {t("account.return")}
-        </a>
+        </Link>
       </div>
     </AccountFrame>
   );

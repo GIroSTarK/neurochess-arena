@@ -1,12 +1,12 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { createAuthApi } from "../api/auth-client";
 import type { AccountPage } from "../app/navigation";
 import type { AuthForm } from "../app/route-urls";
 import { CredentialsScreen } from "../credentials/CredentialsScreen";
 import { GuestHistory, HistoryScreen } from "../history/HistoryScreen";
-import { MatchScreen } from "../match/MatchScreen";
 import { Button } from "../ui/Button";
 
 import { AccountFrame } from "./AccountFrame";
@@ -22,14 +22,18 @@ export function AccountApplication({
   entry,
   page,
   form = "sign-in",
+  children,
 }: {
   readonly apiBaseUrl: string;
   readonly sandboxEnabled: boolean;
   readonly entry: AuthEntry;
   readonly page: AccountPage;
   readonly form?: AuthForm;
+  readonly children?: ReactNode;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [controller] = useState(() => new AccountController(createAuthApi(apiBaseUrl)));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => controller.connect(), [controller]);
@@ -44,13 +48,20 @@ export function AccountApplication({
           <p role="status">{t("account.deletion.done")}</p>
           <Button
             variant="secondary"
-            onClick={() => void controller.chooseGuest().then(() => window.location.assign("/"))}
+            onClick={() =>
+              void controller.chooseGuest().then(() => navigate("/", { replace: true }))
+            }
           >
             {t("account.guest")}
           </Button>
         </AccountFrame>
       ) : authPage ? (
-        <AuthScreen key={form} kind={form} entry={entry} sandboxEnabled={sandboxEnabled} />
+        <AuthScreen
+          key={form + location.pathname + location.search}
+          kind={form}
+          entry={entry}
+          sandboxEnabled={sandboxEnabled}
+        />
       ) : historyPage && state.phase === "guest" ? (
         <GuestHistory sandboxEnabled={sandboxEnabled} />
       ) : state.phase === "account" && credentialPage ? (
@@ -63,7 +74,7 @@ export function AccountApplication({
         />
       ) : state.phase === "account" && (profilePage || !state.profile?.completed) ? (
         <ProfileScreen
-          key={state.revision}
+          key={state.revision + location.pathname + location.search}
           returnTo={entry.returnTo}
           sandboxEnabled={sandboxEnabled}
         />
@@ -76,12 +87,7 @@ export function AccountApplication({
           sandboxEnabled={sandboxEnabled}
         />
       ) : !profilePage && (state.phase === "guest" || state.phase === "account") ? (
-        <MatchScreen
-          key={state.revision}
-          apiBaseUrl={apiBaseUrl}
-          sandboxEnabled={sandboxEnabled}
-          identity={controller.identity()}
-        />
+        <Fragment key={state.revision}>{children}</Fragment>
       ) : (
         <AccountFrame
           title={t(
@@ -100,16 +106,16 @@ export function AccountApplication({
           {state.phase === "required" || state.phase === "guest" ? (
             <>
               <p>{t("account.sessionEnded")}</p>
-              <a
-                href={authHref("sign-in", entry.returnTo)}
+              <Link
+                to={authHref("sign-in", entry.returnTo)}
                 className="inline-flex min-h-target items-center text-accent underline"
               >
                 {t("account.signIn")}
-              </a>
+              </Link>
               <Button
                 variant="secondary"
                 onClick={() =>
-                  void controller.chooseGuest().then(() => window.location.assign("/"))
+                  void controller.chooseGuest().then(() => navigate("/", { replace: true }))
                 }
               >
                 {t("account.guest")}

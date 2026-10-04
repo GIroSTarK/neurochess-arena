@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-04
 
 ## Architectural drivers
 
@@ -68,6 +68,16 @@ Responsibilities:
 - localize all user-facing text.
 
 The client is not authoritative for legal moves, game results, authorization, participant identity, or room state.
+
+#### Browser routing
+
+[ADR-0017](decisions/0017-data-router-and-canonical-game-paths.md) adopts one React Router Data-mode browser router, constructed before React render from explicit route objects in `app/routes.tsx`. Vite remains the bundler; there is no Framework-mode plugin or server rendering. Shared mode layouts span setup and game leaves. Route metadata drives titles and current navigation state, including Arena on `/games/:gameId` and Sandbox on `/sandbox/games/:gameId`.
+
+The root does not request identity. The public branch retains account observation and existing feature request owners; Sandbox/reference and unavailable routes remain outside it. Invalid game parameters, legacy entry queries, and mixed path/query targets are rejected locally before mounting request owners. The migration's remaining route-data ownership work is tracked in the [roadmap](roadmap.md#navigation-and-route-data-migration--before-phase-4).
+
+The router's pending-destination subscription ends gameplay lifetimes immediately. A short-lived memory-only handoff allows controller-accepted creation or discovered recovery to update the address without another entry read or pause; ordinary revalidation does not recreate the owner. Navigation to another game, departure, identity invalidation, and pagehide still clear requests, timers, keys, and private views. Canceled departure leaves controls stopped until explicit recovery. Route errors expose only localized bounded copy; fatal module/render failures offer reload and usable navigation. Auth fragments/callback fields are scrubbed before constructing the router, with reset tokens retained only in the bootstrap closure and destroyed on success, departure, or pagehide. Internal links use router navigation; validated OAuth departure, fatal reload, native hash focus, and file delivery remain browser operations.
+
+Explicit page changes focus main content; creation preserves accepted-Start board focus. Initial recovery, ordinary game updates, and revalidation do not move focus or scroll. Back/Forward restores bounded in-memory scroll coordinates keyed by router entry keys, without persisting private paths.
 
 ### Fastify API
 
@@ -181,7 +191,7 @@ Live commentary shows each AI seat's latest accepted move. Replay selects only t
 
 ### Sandbox web client
 
-The application shell separates the public AI Arena (`/`) from Sandbox (`/sandbox`). Vite exposes only the explicit `SANDBOX_ENABLED` value from the shared root environment to the web environment validator; it does not expose other server variables. The flag controls navigation, screen mounting, and a build-time import boundary: disabled builds omit the Sandbox client; enabled builds load it lazily on the Sandbox route, keeping navigation and a localized loading notice visible while it downloads. API authorization remains authoritative. Native page links leave the sandbox controller's lifetime; returning uses the existing paused-recovery flow. Mode screen adapters select explicit controller entries from browser URLs and handle navigation callbacks; controllers do not read location, change history, or subscribe to navigation.
+The application shell separates the public AI Arena (`/`) from Sandbox (`/sandbox`). Vite exposes only the explicit `SANDBOX_ENABLED` value from the shared root environment to the web environment validator; it does not expose other server variables. The flag controls navigation, screen mounting, and a build-time import boundary: disabled builds omit the Sandbox client; enabled builds load it lazily on the Sandbox route, keeping navigation and a localized loading notice visible while it downloads. API authorization remains authoritative. Router navigation ends the Sandbox controller's lifetime before a pending destination finishes loading; returning uses the existing paused-recovery flow. Shared mode route layouts select explicit controller entries from validated route parameters and handle navigation callbacks; controllers do not read location, change history, or subscribe to navigation.
 
 An entry may supply already-authorized, validated game data so the controller does not repeat the initial read. Entry recovery remains a versioned controller operation, separate from accepting a newly created game. Creation callbacks preserve the current owner and its page-memory credentials. Ending a lifetime immediately aborts requests, stops timers, clears credentials and private views, and fences late results; repeating cleanup is safe. Screen adapters end lifetimes on departure and `pagehide`, and recover on persisted `pageshow`. Setup discovery and creation share their credential owner's cancellation boundary.
 
@@ -234,7 +244,7 @@ The public `match` controller holds complete accepted snapshots, page-memory cre
 
 As specified in [ADR-0011](decisions/0011-ai-controller-presence-and-step.md), an authenticated owner claims a database controller lease with a page-memory UUID. Three-second heartbeats renew a 15-second lease; expired or replaced controllers cannot dispatch or accept provider outcomes. Every API instance sweeps expired presence at startup and every two seconds, committing an authoritative pause under the existing lock/receipt machinery. Initial unclaimed games also expire. During total API/database downtime the pause is deferred until service returns, while the persisted expiry still fences acceptance.
 
-Opening an unfinished game at `/?game=<uuid>` performs authorized reads followed by an explicit versioned pause without a controller UUID. This revokes any competing tab and outstanding execution, including a paused step. No GET changes lifecycle. The recovered tab needs missing keys and explicit Resume or Next move before claiming control. Navigation, close, refresh, and bfcache entry stop automatic requests and clear keys; unload delivery is not needed for server enforcement. Provider errors show only localized safe causes and require user-directed continuation.
+Opening an unfinished game at `/games/<uuid>` performs authorized reads followed by an explicit versioned pause without a controller UUID. This revokes any competing tab and outstanding execution, including a paused step. No GET changes lifecycle. The recovered tab needs missing keys and explicit Resume or Next move before claiming control. Navigation, close, refresh, and bfcache entry stop automatic requests and clear keys; unload delivery is not needed for server enforcement. Provider errors show only localized safe causes and require user-directed continuation.
 
 `step: true` authorizes one AI move while the stored game is paused. The executor resumes only its reconstructed in-memory aggregate to build legal context and apply the deterministic move. It persists the move and final paused or terminal position at one revision, without an intermediate active record or playable paused snapshot. Its reservations, failure budgets, and technical-loss policy are identical to ordinary AI turns.
 
@@ -347,7 +357,7 @@ After refresh, an AI game is restored as paused and requires explicit resume. Se
 
 The public web boundary resolves session and profile before mounting game controllers. It observes identity through a payload-free BroadcastChannel, focus/pageshow, and 15-second checks, with deduplicated checks at operation boundaries when the last observation is stale. Public game/provider requests send explicit `x-neurochess-identity` and `x-neurochess-expected-account` (the observed account UUID, or `guest`); profile and sign-out requests carry the latter. The expectation only rejects a mismatch with the cookie-derived principal and cannot grant authority. Sandbox keeps its guest-only server marker and ignores public expectations. Revoked/mismatched account operations clear the page before re-resolution. Session/profile-read races trigger an immediate bounded identity recheck. Profile-change notifications and periodic/focus checks refresh onboarding, usernames and avatars without ending the game lifetime of an unchanged identity.
 
-Identity changes cancel the old request lifetime, dispose controllers and keys, clear private profile/game/replay/telemetry/history state, and fence responses even if transport cancellation arrives late. Only the non-secret `neurochess.account-intent=account` marker survives in sessionStorage, so reload after cookie loss still requires sign-in or an explicit return to guest play. No account IDs, profiles, return targets, reset tokens, passwords or provider keys are persisted by the client. Native account navigation ends the match lifetime; returning to an unfinished game always uses paused recovery. OAuth returns to Arena; email/profile navigation accepts only Arena, private History, or a single validated private-game UUID.
+Identity changes cancel the old request lifetime, dispose controllers and keys, clear private profile/game/replay/telemetry/history state, and fence responses even if transport cancellation arrives late. Only the non-secret `neurochess.account-intent=account` marker survives in sessionStorage, so reload after cookie loss still requires sign-in or an explicit return to guest play. No account IDs, profiles, return targets, reset tokens, passwords or provider keys are persisted by the client. Account navigation ends the match lifetime; returning to an unfinished game always uses paused recovery. OAuth returns to Arena; email/profile navigation accepts only Arena, private History, or a single validated private-game UUID.
 
 ## Credential lifecycle
 
@@ -444,5 +454,7 @@ Phase 1 acceptance must additionally verify:
 ## Deployment constraints
 
 The web app can be hosted as static assets. The API hosting environment must support a long-running Node.js Fastify process and persistent WebSocket connections. PostgreSQL should be managed or backed up appropriately and reached over TLS. Both applications should be containerizable.
+
+The web origin must serve the SPA HTML for document requests to retained routes, including `/games/<uuid>` and `/sandbox/games/<uuid>`. These overlap API prefixes: do not proxy every `/games/*` or `/sandbox/*` web document request to the API. Preserve static-asset handling and the separately configured JSON API origin. Vite supplies this fallback locally; actual-host fallback verification remains a deployment requirement.
 
 The exact hosting providers, production region, email delivery service, observability service, and backup policy remain open decisions. Custom avatar uploads and their storage are deferred by the [profile policy](product.md#usernames-and-avatars).

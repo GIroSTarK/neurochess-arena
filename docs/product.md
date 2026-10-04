@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-04
 
 ## Vision
 
@@ -146,7 +146,11 @@ The [local development sandbox](architecture.md#local-development-sandbox) is a 
 
 Sandbox has an independent limit of one active or paused game per guest session. A session may therefore keep one unfinished public-mode game and one unfinished Sandbox game at the same time. Creation conflicts and unfinished-game recovery stay within their respective group; Sandbox actions do not change the public-mode game.
 
-Arena is the default page at `/`, with AI-versus-AI observation, AI-versus-human play with either color, and private game recovery at `/?game=<uuid>`. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox?game=<uuid>`.
+Arena is the default page at `/`, with AI-versus-AI observation, AI-versus-human play with either color, and private game recovery at `/games/<uuid>`. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox/games/<uuid>`.
+
+The same private game path covers live play, paused recovery, and completed/aborted replay. A game UUID grants no access. Old `/?game=<uuid>` and `/sandbox?game=<uuid>` links intentionally show Page unavailable without redirects, guest bootstrap, or unfinished-game discovery, including empty or duplicate `game` values. A `game` query also invalidates a game path. Entry URLs without that parameter keep unfinished-game discovery. Opening a game through the wrong mode preserves the authorized explanation and explicit link; it does not automatically change modes.
+
+In-app links and Back/Forward keep the document open. Leaving a game stops its controller and clears page-owned keys immediately, including while the destination loads; canceling a departure requires explicit recovery. Successful Start preserves its controller and keys while changing to the canonical game path. Reloading or returning later uses paused recovery.
 
 - Pause and Resume preserve the position and history. Abort stops play without awarding a win or loss. Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.

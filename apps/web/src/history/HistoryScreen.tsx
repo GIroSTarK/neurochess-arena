@@ -1,8 +1,10 @@
 import type { GameHistoryEntry } from "@neurochess/contracts";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { type AiIdentity, createAiApi } from "../api/ai-client";
+import { gameHref } from "../app/route-urls";
 import { resultTitle } from "../arena/result";
 import { AccountFrame } from "../auth/AccountFrame";
 import { authHref } from "../auth/navigation";
@@ -46,15 +48,15 @@ export function GuestHistory({ sandboxEnabled }: { readonly sandboxEnabled: bool
   return (
     <AccountFrame title={t("history.title")} sandboxEnabled={sandboxEnabled} page="history">
       <p>{t("history.guest")}</p>
-      <a
+      <Link
         className="inline-flex min-h-target items-center text-accent underline"
-        href={authHref("sign-in", "/history")}
+        to={authHref("sign-in", "/history")}
       >
         {t("account.signIn")}
-      </a>
-      <a className="inline-flex min-h-target items-center text-accent underline" href="/">
+      </Link>
+      <Link className="inline-flex min-h-target items-center text-accent underline" to="/">
         {t("history.arena")}
-      </a>
+      </Link>
     </AccountFrame>
   );
 }
@@ -88,9 +90,9 @@ export function HistoryScreen({
   return (
     <AccountFrame title={t("history.title")} sandboxEnabled={sandboxEnabled} page="history">
       <p className="text-body text-text-secondary">{t("history.description")}</p>
-      <a href="/" className="inline-flex min-h-target items-center text-accent underline">
+      <Link to="/" className="inline-flex min-h-target items-center text-accent underline">
         {t("history.arena")}
-      </a>
+      </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2
           ref={listHeading}
@@ -162,13 +164,13 @@ export function HistoryScreen({
                 })}
               </p>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <a
-                  href={"/?game=" + game.gameId}
+                <Link
+                  to={gameHref("arena", game.gameId)}
                   className="inline-flex min-h-target items-center text-accent underline"
                   aria-label={t("history.replayLabel", { date, result: resultTitle(game, t) })}
                 >
                   {t("history.replay")}
-                </a>
+                </Link>
                 <Button
                   variant="secondary"
                   aria-label={t("history.deleteLabel", {

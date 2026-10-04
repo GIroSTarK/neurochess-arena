@@ -2,10 +2,9 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "../app/App";
 import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderLocalized } from "../test/render";
+import { renderApp, renderLocalized } from "../test/render";
 
 import { AccountApplication } from "./AccountApplication";
 
@@ -35,11 +34,13 @@ describe("account presentation", () => {
         page="auth"
         form="forgot-password"
         entry={{
+          active: true,
           returnTo: "/",
           verified: false,
           error: null,
           readResetToken: () => null,
           clearResetToken: () => undefined,
+          retire: () => undefined,
         }}
       />,
     );
@@ -59,7 +60,7 @@ describe("account presentation", () => {
         "POST /profile": () => jsonResponse(current),
       });
       vi.stubGlobal("fetch", http.fetch);
-      renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+      renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
       await screen.findByRole("heading", { name: "Your profile" });
       expect(screen.getByLabelText("Username")).toHaveValue("Player");
       current = { ...profile, username: "Renamed" };
@@ -97,7 +98,7 @@ describe("account presentation", () => {
         },
       });
       vi.stubGlobal("fetch", http.fetch);
-      renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+      renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
       await screen.findByRole("heading", { name: "Your profile" });
       await userEvent.clear(screen.getByLabelText("Username"));
       await userEvent.type(screen.getByLabelText("Username"), " LocalDraft ");
@@ -148,7 +149,7 @@ describe("account presentation", () => {
         }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("button", { name: "Remove avatar" });
     await userEvent.clear(screen.getByLabelText("Username"));
     await userEvent.type(screen.getByLabelText("Username"), "LocalDraft");
@@ -192,7 +193,7 @@ describe("account presentation", () => {
         },
       });
       vi.stubGlobal("fetch", http.fetch);
-      renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+      renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
       await screen.findByRole("heading", { name: "Your profile" });
       await userEvent.clear(screen.getByLabelText("Username"));
       await userEvent.type(screen.getByLabelText("Username"), "LocalDraft");
@@ -225,7 +226,7 @@ describe("account presentation", () => {
         jsonResponse(switched ? { ...profile, username: "OtherPlayer" } : profile),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Your profile" });
     await userEvent.clear(screen.getByLabelText("Username"));
     await userEvent.type(screen.getByLabelText("Username"), "LocalDraft");
@@ -244,7 +245,7 @@ describe("account presentation", () => {
         jsonResponse({ status: "accepted", message: "receipt" }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await userEvent.type(screen.getByLabelText("Password", { exact: true }), "old-password-canary");
     act(() => {
       window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
@@ -274,7 +275,7 @@ describe("account presentation", () => {
         ),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await userEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not complete/);
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
@@ -288,7 +289,7 @@ describe("account presentation", () => {
         jsonResponse({ status: "accepted", message: "untrusted-canary" }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Create an account" });
     expect(screen.getByText(/Guest games stay separate/)).toBeInTheDocument();
     const user = userEvent.setup();
@@ -330,7 +331,7 @@ describe("account presentation", () => {
         ),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Choose your username" });
     await userEvent.type(screen.getByLabelText("Username"), "Player");
     await userEvent.click(screen.getByRole("button", { name: "Finish profile" }));
@@ -351,7 +352,7 @@ describe("account presentation", () => {
       "GET /credentials": () => jsonResponse({ credentials: [] }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Set up a game" });
     expect(screen.getByRole("link", { name: /Player/ })).toBeInTheDocument();
     current = null;

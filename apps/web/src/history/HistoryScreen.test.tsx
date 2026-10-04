@@ -2,10 +2,9 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "../app/App";
 import { GAME_ID, jsonResponse, OTHER_GAME_ID } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderLocalized } from "../test/render";
+import { renderApp } from "../test/render";
 
 const session = {
   user: { id: GAME_ID, email: "private@example.com", emailVerified: true },
@@ -38,7 +37,7 @@ afterEach(() => {
 });
 function visit() {
   window.history.replaceState(null, "", "/history");
-  return renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+  return renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
 }
 
 describe("private history presentation", () => {
@@ -247,7 +246,7 @@ describe("private history presentation", () => {
     vi.stubGlobal("fetch", http.fetch);
     visit();
     const replay = await screen.findByRole("link", { name: /Open replay/ });
-    expect(replay).toHaveAttribute("href", "/?game=" + GAME_ID);
+    expect(replay).toHaveAttribute("href", "/games/" + GAME_ID);
     expect(screen.getByText("Aborted", { exact: true })).toBeVisible();
     expect(screen.getByText("Player", { selector: "dd" })).toBeVisible();
     expect(screen.getByText(/model-a/)).toBeVisible();
@@ -258,7 +257,7 @@ describe("private history presentation", () => {
     await screen.findByText("Completed", { exact: true });
     expect(screen.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
       "href",
-      "/?game=" + OTHER_GAME_ID,
+      "/games/" + OTHER_GAME_ID,
     );
     expect(screen.getByRole("button", { name: "Older games" })).toHaveAttribute(
       "aria-disabled",

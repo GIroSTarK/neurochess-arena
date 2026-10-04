@@ -134,7 +134,7 @@ test("history reopens canonical results on another session without controllers, 
     await expect(
       review.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
     ).toHaveCount(2);
-    const replay = review.locator(`a[href="/?game=${gameId}"]`);
+    const replay = review.locator(`a[href="/games/${gameId}"]`);
     await replay.focus();
     await replay.press("Enter");
     await expect(review.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
@@ -156,7 +156,7 @@ test("history reopens canonical results on another session without controllers, 
     expect(stream).not.toBeNull();
     expect(await streamText(stream)).toBe(canonical.pgn);
     await review.getByRole("link", { name: "History", exact: true }).click();
-    await review.locator(`a[href="/?game=${stopped.gameId}"]`).click();
+    await review.locator(`a[href="/games/${stopped.gameId}"]`).click();
     await expect(review.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
     await expect(review.getByLabel(/API key/)).toHaveCount(0);
     expect(writes).toEqual([]);
@@ -196,7 +196,7 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   await expect(older).toBeFocused();
   await expect(rows.getByRole("link", { name: /Open replay/ })).toHaveAttribute(
     "href",
-    "/?game=" + ids[0]!,
+    "/games/" + ids[0]!,
   );
   await newer.click();
   await expect(rows).toHaveCount(20);
@@ -281,7 +281,7 @@ test("guest guidance and account privacy survive a switch to another account", a
   await createAccount(page.request);
   const original = await stop(page);
   await page.goto("/history");
-  await expect(page.locator(`a[href="/?game=${original.gameId}"]`)).toBeVisible();
+  await expect(page.locator(`a[href="/games/${original.gameId}"]`)).toBeVisible();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("link", { name: /Open replay/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
@@ -328,7 +328,7 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
   await page.goto("/history");
   const row = page
     .getByRole("listitem")
-    .filter({ has: page.locator(`a[href="/?game=${deleted.gameId}"]`) });
+    .filter({ has: page.locator(`a[href="/games/${deleted.gameId}"]`) });
   const trigger = row.getByRole("button", { name: /Delete game/ });
   await expect(trigger).toHaveAccessibleName(new RegExp(deleted.gameId));
   await trigger.click();
@@ -381,7 +381,7 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
     ).toBe(404);
   }
   expectedGame404s.set(page, new Set([`${API_ORIGIN}/games/${deleted.gameId}/details`]));
-  await page.goto(`/?game=${deleted.gameId}`);
+  await page.goto(`/games/${deleted.gameId}`);
   await expect(
     page.locator("p").filter({
       hasText: "This private game is unavailable to your session. Keys have been cleared.",
@@ -390,7 +390,7 @@ test("individual deletion retries an uncertain acknowledgement and removes priva
   await expect(page.getByRole("button", { name: "Download PGN" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
   await page.goto("/history");
-  await expect(page.locator(`a[href="/?game=${retained.gameId}"]`)).toBeVisible();
+  await expect(page.locator(`a[href="/games/${retained.gameId}"]`)).toBeVisible();
   await page.getByRole("button", { name: "Clear history", exact: true }).click();
   await page
     .getByRole("dialog")

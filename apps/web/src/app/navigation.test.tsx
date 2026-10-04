@@ -3,15 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderLocalized } from "../test/render";
-
-import { App } from "./App";
+import { renderApp } from "../test/render";
 
 function visit(path: string, sandboxEnabled: boolean) {
   window.history.replaceState(null, "", path);
-  return renderLocalized(
-    <App apiBaseUrl="http://localhost:3001" sandboxEnabled={sandboxEnabled} />,
-  );
+  return renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: sandboxEnabled });
 }
 
 describe("Arena and Sandbox routes", () => {
@@ -56,6 +52,7 @@ describe("Arena and Sandbox routes", () => {
     { name: "entry path", path: "/sandbox" },
     { name: "trailing slash", path: "/sandbox/" },
     { name: "game query", path: "/sandbox?game=" + GAME_ID },
+    { name: "game path", path: "/sandbox/games/" + GAME_ID },
   ])("blocks disabled Sandbox route: $name", ({ path }) => {
     visit(path, false);
     expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeInTheDocument();
@@ -71,6 +68,28 @@ describe("Arena and Sandbox routes", () => {
     visit("/missing?game=" + GAME_ID, true);
     expect(screen.getByRole("heading", { name: "Page unavailable" })).toBeInTheDocument();
     expect(http.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "/?game=" + GAME_ID,
+    "/?game=",
+    "/?game=" + GAME_ID + "&game=" + GAME_ID,
+    "/sandbox?game=" + GAME_ID,
+    "/sandbox?game=",
+    "/sandbox?game=" + GAME_ID + "&game=",
+    "/games/" + GAME_ID + "?game=" + GAME_ID,
+    "/sandbox/games/" + GAME_ID + "?game=",
+    "/games/invalid",
+    "/games/",
+    "/games/" + GAME_ID + "/extra",
+    "/games/" + GAME_ID + "%2fextra",
+    "/GAMES/" + GAME_ID,
+    "/sandbox/games/invalid",
+  ])("rejects unsupported game target %s before any API call", async (path) => {
+    visit(path, true);
+    expect(await screen.findByRole("heading", { name: "Page unavailable" })).toBeVisible();
+    expect(http.fetch).not.toHaveBeenCalled();
+    expect(window.location.pathname + window.location.search).toBe(path);
   });
 
   it.each(["/dev/arena", "/dev/arena/"])(
@@ -105,10 +124,10 @@ describe("Arena and Sandbox routes", () => {
     });
     vi.stubGlobal("fetch", http.fetch);
     const length = window.history.length;
-    visit("/sandbox?game=" + GAME_ID, true);
+    visit("/sandbox/games/" + GAME_ID, true);
     await screen.findByRole("button", { name: "Resume" });
-    expect(window.location.pathname).toBe("/sandbox");
-    expect(window.location.search).toBe("?game=" + GAME_ID);
+    expect(window.location.pathname).toBe("/sandbox/games/" + GAME_ID);
+    expect(window.location.search).toBe("");
     expect(window.history.length).toBe(length);
     expect(document.title).toBe("Development sandbox · Neurochess Arena");
     expect(screen.getByRole("link", { name: "Sandbox" })).toHaveAttribute("aria-current", "page");
@@ -122,7 +141,7 @@ describe("Arena and Sandbox routes", () => {
   it.each([true, false])(
     "resolves Arena game URLs through authorized details (enabled: %s)",
     async (enabled) => {
-      visit("/?game=" + GAME_ID, enabled);
+      visit("/games/" + GAME_ID, enabled);
       expect(
         await screen.findByText("This game belongs to the development Sandbox."),
       ).toBeInTheDocument();

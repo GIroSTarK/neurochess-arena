@@ -5,6 +5,7 @@ import "../../apps/web/src/styles.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter } from "react-router";
 
 import { createAiApi } from "../../apps/web/src/api/ai-client";
 import { createSessionCredentials } from "../../apps/web/src/api/session-credentials";
@@ -21,20 +22,22 @@ function SetupHarness() {
   const [handoff, setHandoff] = useState<string | null>(null);
   return (
     <I18nextProvider i18n={i18n}>
-      <p className="p-4 text-center text-label text-warning">
-        Test harness · Fictional models · No game controller
-      </p>
-      {handoff ? (
-        <p role="status">Handoff received: {handoff}</p>
-      ) : (
-        <ArenaSetupScreen
-          api={api}
-          credentials={credentials}
-          sandboxEnabled
-          onCreated={(game) => setHandoff(game.snapshot.gameId)}
-          onReturnToGame={setHandoff}
-        />
-      )}
+      <MemoryRouter>
+        <p className="p-4 text-center text-label text-warning">
+          Test harness · Fictional models · No game controller
+        </p>
+        {handoff ? (
+          <p role="status">Handoff received: {handoff}</p>
+        ) : (
+          <ArenaSetupScreen
+            api={api}
+            credentials={credentials}
+            sandboxEnabled
+            onCreated={(game) => setHandoff(game.snapshot.gameId)}
+            onReturnToGame={setHandoff}
+          />
+        )}
+      </MemoryRouter>
     </I18nextProvider>
   );
 }

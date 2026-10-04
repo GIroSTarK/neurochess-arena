@@ -22,6 +22,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0014](0014-encrypted-provider-credentials.md)                  | Accepted   | AES-256-GCM credential envelopes, authenticated context and key-loss/rotation boundaries |
 | [0015](0015-saved-credential-dispatch-and-revocation.md)        | Accepted   | Saved credential dispatch authorization, retries and in-flight revocation                |
 | [0016](0016-atomic-account-deletion.md)                         | Accepted   | Atomic account deletion, fresh identity checks and in-flight work fencing                |
+| [0017](0017-data-router-and-canonical-game-paths.md)            | Accepted   | Data router, canonical private game paths, and navigation lifetime boundaries            |
 
 ## Status values
 

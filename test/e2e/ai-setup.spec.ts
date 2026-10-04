@@ -311,10 +311,10 @@ test("setup ignores an existing Sandbox and explicit game URLs preserve the retu
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   await expect(page.getByLabel("Game mode")).toHaveAttribute("aria-disabled", "false");
   await expect(page.getByRole("button", { name: "Return to game" })).toHaveCount(0);
-  await page.goto("/?game=" + game.gameId);
+  await page.goto("/games/" + game.gameId);
   await expect(page.getByRole("link", { name: "Return to Sandbox" })).toHaveAttribute(
     "href",
-    `/sandbox?game=${game.gameId}`,
+    `/sandbox/games/${game.gameId}`,
   );
   await page.goto(DISABLED_WEB_ORIGIN + "/__test__/setup");
   await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();

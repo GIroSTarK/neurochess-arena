@@ -1,4 +1,12 @@
 export const en = {
+  routing: {
+    loading: "Loading page…",
+    pending: "Opening page…",
+    error: "This page could not be loaded.",
+    stopped: "Game controls stopped. Reopen the game to recover safely.",
+    retry: "Try again",
+    reload: "Reload page",
+  },
   history: {
     title: "Private game history",
     navigation: "History",

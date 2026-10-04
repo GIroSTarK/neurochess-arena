@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Link, useLocation } from "react-router";
 
 import { Button } from "../ui/Button";
 
@@ -9,28 +10,29 @@ import { authHref, safeReturnTo } from "./navigation";
 export function AccountAccess() {
   const { t } = useTranslation();
   const account = useAccount();
-  const returnTo = safeReturnTo(window.location.pathname + window.location.search);
+  const location = useLocation();
+  const returnTo = safeReturnTo(location.pathname + location.search);
   if (account?.state.phase === "account" && account.state.profile) {
     return (
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <a
-          href={"/account" + (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))}
+        <Link
+          to={"/account" + (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))}
           className="flex min-h-target max-w-full min-w-0 items-center gap-2 text-text hover:text-accent"
         >
           <Avatar avatar={account.state.profile.avatar} />
           <span className="max-w-48 min-w-0 break-words">
             {account.state.profile.username ?? t("account.profile")}
           </span>
-        </a>
-        <a
-          href={
+        </Link>
+        <Link
+          to={
             "/account/credentials" +
             (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))
           }
           className="inline-flex min-h-target items-center text-accent underline"
         >
           {t("credentials.navigation")}
-        </a>
+        </Link>
         <Button variant="quiet" padding="compact" onClick={() => void account.controller.signOut()}>
           {t("account.signOut")}
         </Button>
@@ -47,12 +49,12 @@ export function AccountAccess() {
       <span>
         {t(account?.state.phase === "guest" || !account ? "setup.session" : "account.label")}
       </span>
-      <a
+      <Link
         className="inline-flex min-h-target items-center text-accent underline"
-        href={authHref("sign-in", returnTo)}
+        to={authHref("sign-in", returnTo)}
       >
         {t("account.signIn")}
-      </a>
+      </Link>
     </div>
   );
 }

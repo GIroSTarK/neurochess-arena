@@ -1,6 +1,7 @@
 import type { CredentialMetadata } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import type { AiIdentity } from "../api/ai-client";
 import { credentialError, type CredentialFailure } from "../api/credential-client";
@@ -132,9 +133,9 @@ export function CredentialsScreen({
           </Button>
         </div>
       </section>
-      <a href={returnTo} className="inline-flex min-h-target items-center text-accent underline">
+      <Link to={returnTo} className="inline-flex min-h-target items-center text-accent underline">
         {t("account.return")}
-      </a>
+      </Link>
       {confirmation ? (
         <Dialog
           title={t(confirmation === "all" ? "credentials.clearTitle" : "credentials.revokeTitle")}

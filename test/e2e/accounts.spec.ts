@@ -47,12 +47,14 @@ async function register(page: Page, email: string) {
   await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
   const username = usernameFor();
   await page.getByLabel("Username", { exact: true }).fill(username);
-  // Onboarding reloads the same URL after briefly rendering setup in the old document.
-  await Promise.all([
-    page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()),
-    page.getByRole("button", { name: "Finish profile", exact: true }).click(),
-  ]);
+  await page.evaluate(() => {
+    Object.assign(window, { onboardingSentinel: "same-document" });
+  });
+  await page.getByRole("button", { name: "Finish profile", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  expect(await page.evaluate(() => Reflect.get(window, "onboardingSentinel") as unknown)).toBe(
+    "same-document",
+  );
   return username;
 }
 async function startAccountGame(page: Page) {
@@ -95,7 +97,7 @@ test("email registration, profile, account play, sign-out, paused return and pas
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
-  await login(page, email, password, "/?game=" + gameId);
+  await login(page, email, password, "/games/" + gameId);
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
   await expect(page.getByRole("link", { name: username })).toBeVisible();
@@ -116,7 +118,7 @@ test("email registration, profile, account play, sign-out, paused return and pas
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
   await resetPage.close();
-  await login(page, email, newPassword, "/?game=" + gameId);
+  await login(page, email, newPassword, "/games/" + gameId);
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
   await page.goto(resetLink);
   await page.getByLabel("Password", { exact: true }).fill(password);
@@ -282,6 +284,7 @@ test("unverified sign-in offers resend, a verified profile can be renamed, and c
   await login(page, email);
   await expect(page.getByRole("alert")).toContainText(/Verify your email/);
   await page.getByRole("link", { name: "Resend verification link" }).click();
+  await expect(page.getByRole("heading", { name: "Verify your email" })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Request verification link" }).click();
   await expect(page.getByText(/Request received/)).toBeVisible();

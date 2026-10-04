@@ -2,10 +2,9 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "../app/App";
 import { errorResponse, GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderLocalized } from "../test/render";
+import { renderApp } from "../test/render";
 
 const saved = {
   credentialId: GAME_ID,
@@ -52,7 +51,7 @@ describe("credential settings", () => {
       },
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByText(/No saved keys yet/);
     await userEvent.type(screen.getByLabelText("Label"), "Arena key");
     await userEvent.type(screen.getByLabelText("API key", { exact: true }), "save-fixture-1234");
@@ -107,7 +106,7 @@ describe("credential settings", () => {
       },
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByText(/No saved keys yet/);
     async function submit(label: string) {
       const button = await screen.findByRole("button", { name: "Save key" });
@@ -146,7 +145,7 @@ describe("credential settings", () => {
       },
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Saved provider keys" });
     await userEvent.type(screen.getByLabelText("Label"), "Arena key");
     await userEvent.type(screen.getByLabelText("API key", { exact: true }), "save-fixture-1234");
@@ -179,7 +178,7 @@ describe("credential settings", () => {
       },
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Saved provider keys" });
     const checkbox = screen.getByRole("checkbox", { name: "Save this key to my account" });
     expect(checkbox).not.toBeChecked();
@@ -230,7 +229,7 @@ describe("credential settings", () => {
       "GET /credentials": () => (other ? jsonResponse({ credentials: [] }) : response.promise),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByRole("heading", { name: "Saved provider keys" });
     await userEvent.type(screen.getByLabelText("API key", { exact: true }), "old-page-canary");
     const input = screen.getByLabelText("API key", { exact: true });
@@ -260,7 +259,7 @@ describe("credential settings", () => {
       "GET /credentials": () => jsonResponse({ credentials: [saved] }),
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     await screen.findByText("Arena key");
     signedIn = false;
     await act(async () => {

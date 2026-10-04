@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 
-import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
+import { createAccount } from "./account-helpers";
+import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, startSandbox, test } from "./fixtures";
 
 test("Arena checks unfinished games without bootstrapping and links to Sandbox on desktop and mobile", async ({
@@ -41,6 +42,9 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
     apiRequests.every((path) => ["/games/unfinished", "/api/auth/get-session"].includes(path)),
   ).toBe(true);
   await sandbox.focus();
+  await page.evaluate(() => {
+    Object.assign(window, { navigationSentinel: "same-document" });
+  });
   await expect(sandbox).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/sandbox$/);
@@ -51,6 +55,9 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
   await page.goBack();
   await expect(page).toHaveTitle("Neurochess Arena");
   await expect(arena).toHaveAttribute("aria-current", "page");
+  expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel") as unknown)).toBe(
+    "same-document",
+  );
   await activate(sandbox, testInfo.project.name === "mobile-touch");
   await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
   await activate(arena, testInfo.project.name === "mobile-touch");
@@ -77,7 +84,7 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
     fullPage: true,
   });
   apiRequests.length = 0;
-  for (const path of ["/sandbox", "/sandbox/", "/sandbox?game=invalid"]) {
+  for (const path of ["/sandbox", "/sandbox/", "/sandbox/games/invalid"]) {
     await page.goto(DISABLED_WEB_ORIGIN + path);
     await expect(page).toHaveTitle("Page unavailable · Neurochess Arena");
     await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
@@ -103,7 +110,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
-  await page.route("**/src/game/SandboxScreen.tsx", async (route) => {
+  await page.route("**/src/game/SandboxRouteLayout.tsx", async (route) => {
     sandboxRequested = true;
     await loading.promise;
     await route.continue();
@@ -115,9 +122,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   await expect(page.getByRole("heading", { name: "Set up a game", exact: true })).toBeVisible();
   expect(sandboxRequested).toBe(false);
   await page.getByRole("link", { name: "Sandbox", exact: true }).click();
-  await expect(page).toHaveURL(/\/sandbox$/);
-  await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
-  await expect(page.getByRole("status")).toHaveText("Loading sandbox…");
+  await expect(page.getByText("Opening page…", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
   await expect.poll(() => sandboxRequested).toBe(true);
@@ -128,9 +133,11 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   await page.screenshot({ path: testInfo.outputPath("sandbox-loading.png"), fullPage: true });
 
   loading.resolve();
+  await expect(page).toHaveURL(/\/sandbox$/);
+  await expect(page).toHaveTitle("Development sandbox · Neurochess Arena");
   await expect(page.getByRole("grid", { name: "Chessboard" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
-  await expect(page.getByText("Loading sandbox…")).toHaveCount(0);
+  await expect(page.getByText("Opening page…")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sandbox", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
@@ -148,11 +155,11 @@ test("Arena resolves a Sandbox game URL and links to its authorized recovery", a
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
-  await page.goto("/?game=" + current.gameId);
+  await page.goto("/games/" + current.gameId);
   const recoveryLink = page.getByRole("link", { name: "Return to Sandbox" });
   await expect(recoveryLink).toBeVisible();
-  await expect(recoveryLink).toHaveAttribute("href", `/sandbox?game=${current.gameId}`);
-  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(recoveryLink).toHaveAttribute("href", `/sandbox/games/${current.gameId}`);
+  expect(new URL(page.url()).pathname).toBe("/games/" + current.gameId);
   await expect(page.getByRole("grid")).toHaveCount(0);
   expect(apiRequests.length).toBeGreaterThan(0);
   expect(
@@ -161,7 +168,7 @@ test("Arena resolves a Sandbox game URL and links to its authorized recovery", a
     ),
   ).toBe(true);
   await page.goto(gameUrl);
-  await expect(page).toHaveURL(new RegExp("/sandbox\\?game=" + current.gameId + "$"));
+  await expect(page).toHaveURL(new RegExp("/sandbox/games/" + current.gameId + "$"));
   await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveAttribute("data-fen", current.fen);
   expect(await readSnapshot(page, current.gameId)).toEqual({
@@ -170,4 +177,87 @@ test("Arena resolves a Sandbox game URL and links to its authorized recovery", a
     version: current.version + 1,
     legalMoves: [],
   });
+});
+
+test("obsolete and mixed game links stay unavailable without discovery or redirects", async ({
+  page,
+}) => {
+  const gameId = "00000000-0000-4000-8000-000000000001";
+  const calls: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith(API_ORIGIN)) calls.push(new URL(request.url()).pathname);
+  });
+  for (const path of [
+    "/?game=" + gameId,
+    "/?game=",
+    "/?game=" + gameId + "&game=",
+    "/sandbox?game=" + gameId,
+    "/sandbox?game=",
+    "/sandbox?game=" + gameId + "&game=",
+    "/games/" + gameId + "?game=" + gameId,
+    "/sandbox/games/" + gameId + "?game=",
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
+    expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(path);
+  }
+  expect(calls).toEqual([]);
+});
+
+test("a failed lazy module has safe navigation and an explicit reload recovery", async ({
+  page,
+  expectedModuleFailures,
+}) => {
+  const moduleUrl = WEB_ORIGIN + "/src/game/SandboxRouteLayout.tsx";
+  expectedModuleFailures.set(page, new Set([moduleUrl]));
+  await page.route(moduleUrl, (route) => route.abort("failed"), { times: 1 });
+  await page.goto("/sandbox");
+  await expect(page.getByRole("heading", { name: "This page could not be loaded." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Reload page" }).click();
+  await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
+});
+
+test("Back restores history scroll after its delayed private read finishes", async ({ page }) => {
+  await createAccount(page.request);
+  const history = {
+    games: Array.from({ length: 20 }, (_, index) => ({
+      gameId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      finishedAt: "2026-10-01T12:00:00.123456Z",
+      configuration: {
+        mode: "ai_vs_ai",
+        seats: {
+          white: { type: "ai", provider: "openai", modelId: "fixture/model-a", parameters: {} },
+          black: { type: "ai", provider: "openai", modelId: "fixture/model-a", parameters: {} },
+        },
+      },
+      state: "aborted",
+      result: "*",
+      terminationReason: "aborted",
+    })),
+    nextCursor: null,
+  };
+  const release = Promise.withResolvers<void>();
+  let reads = 0;
+  await page.route(API_ORIGIN + "/games/history?limit=20", async (route) => {
+    if (++reads > 1) await release.promise;
+    await route.fulfill({ json: history });
+  });
+  await page.goto("/history");
+  await expect(
+    page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
+  ).toHaveCount(20);
+  await page.evaluate(() => window.scrollTo({ top: 600, behavior: "instant" }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(600);
+  await page
+    .getByRole("link", { name: "Arena", exact: true })
+    .evaluate((link: HTMLAnchorElement) => link.click());
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByText("Loading game history…", { exact: true })).toBeVisible();
+  release.resolve();
+  await expect(
+    page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
+  ).toHaveCount(20);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(600);
 });

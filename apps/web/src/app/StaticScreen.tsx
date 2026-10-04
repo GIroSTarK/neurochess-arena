@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Icon } from "../ui/Icon";
 
@@ -35,19 +36,19 @@ export function StaticScreen({
           {isArena ? t("arena.description") : t("notFound.description")}
         </p>
         {isArena && sandboxEnabled ? (
-          <a
-            href="/sandbox"
+          <Link
+            to="/sandbox"
             className="inline-flex min-h-11 items-center justify-center rounded-control border border-control-border bg-surface px-5 py-2 text-label font-medium text-text hover:bg-surface-raised"
           >
             {t("arena.openSandbox")}
-          </a>
+          </Link>
         ) : !isArena ? (
-          <a
-            href="/"
+          <Link
+            to="/"
             className="inline-flex min-h-11 items-center px-4 py-2 text-label text-accent underline underline-offset-4"
           >
             {t("notFound.backToArena")}
-          </a>
+          </Link>
         ) : null}
       </section>
     </AppShell>

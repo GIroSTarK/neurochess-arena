@@ -2,10 +2,9 @@ import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { App } from "../app/App";
 import { GAME_ID, jsonResponse, requestBody } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
-import { renderLocalized } from "../test/render";
+import { renderApp } from "../test/render";
 
 afterEach(() => {
   sessionStorage.clear();
@@ -56,7 +55,7 @@ it.each(["success", "failure", "lost response", "stale"])(
       },
     });
     vi.stubGlobal("fetch", http.fetch);
-    renderLocalized(<App apiBaseUrl="http://localhost:3001" sandboxEnabled={false} />);
+    renderApp({ apiBaseUrl: "http://localhost:3001", sandboxEnabled: false });
     const trigger = await screen.findByRole("button", { name: "Delete account" });
     await userEvent.click(trigger);
     const dialog = screen.getByRole("dialog");

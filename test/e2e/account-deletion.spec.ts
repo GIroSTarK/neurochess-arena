@@ -80,7 +80,7 @@ test("account deletion confirms full scope, clears another tab and rejects old p
   expect(await (await page.request.get(API_ORIGIN + "/api/auth/get-session")).json()).toBeNull();
   await privacy();
   await observer.close();
-  await page.goto("/?game=" + game);
+  await page.goto("/games/" + game);
   await expect(
     page.getByRole("heading", { name: "Sign in to continue", exact: true }),
   ).toBeVisible();

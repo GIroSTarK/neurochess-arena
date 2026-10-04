@@ -171,12 +171,14 @@ test("creates, recovers, completes, replays and exports a private game", async (
   expect(next.gameId).not.toBe(current.gameId);
   expect(next.version).toBe(0);
   expect(next.moves).toEqual([]);
+  await expect(page).toHaveURL(new RegExp("/sandbox/games/" + next.gameId + "$"));
   await expect(page.getByRole("heading", { name: "White to move" })).toBeVisible();
   await page.goBack();
+  await expect(page).toHaveURL(new RegExp("/sandbox/games/" + restored.gameId + "$"));
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   await expect(page.getByText("Your current game is open.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("status")).toContainText("Your game is open.");
-  expect(new URL(page.url()).searchParams.get("game")).toBe(restored.gameId);
+  expect(new URL(page.url()).pathname).toBe("/sandbox/games/" + restored.gameId);
   expect(await readSnapshot(page, restored.gameId)).toEqual(restored);
 });
 

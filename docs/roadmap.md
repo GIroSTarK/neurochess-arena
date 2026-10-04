@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–3 and the Sandbox presentation remake completed
 
-**Last updated:** 2026-10-03
+**Last updated:** 2026-10-04
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -105,8 +105,9 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 **Status:** In progress
 
-- [x] Explicit page/form selection and controller entry, cleanup, and creation handoffs; native navigation retains its current URLs.
-- [ ] React Router Data mode, canonical game paths, route-owned reads and ordinary form actions, and migration acceptance coverage.
+- [x] Explicit page/form selection and controller entry, cleanup, and creation handoffs.
+- [x] React Router Data mode, canonical private game paths, shared mode lifetimes, and navigation acceptance coverage.
+- [ ] Route-owned reads and ordinary form actions, followed by complete migration acceptance coverage.
 
 ## Phase 4 — Private online human games
 

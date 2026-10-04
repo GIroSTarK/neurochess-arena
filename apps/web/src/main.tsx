@@ -10,6 +10,7 @@ import { App } from "./app/App";
 import { ConfigurationError } from "./app/ConfigurationError";
 import { parseWebEnvironment } from "./app/env";
 import { ErrorBoundary } from "./app/ErrorBoundary";
+import { createAppRouter } from "./app/router";
 import { consumeAuthEntry } from "./auth/navigation";
 import { i18n } from "./i18n";
 
@@ -27,15 +28,16 @@ try {
     VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
     SANDBOX_ENABLED: import.meta.env.SANDBOX_ENABLED,
   });
+  const router = createAppRouter({
+    apiBaseUrl: environment.VITE_API_BASE_URL,
+    sandboxEnabled: environment.SANDBOX_ENABLED,
+    authEntry,
+  });
   root.render(
     <StrictMode>
       <I18nextProvider i18n={i18n}>
         <ErrorBoundary>
-          <App
-            authEntry={authEntry}
-            apiBaseUrl={environment.VITE_API_BASE_URL}
-            sandboxEnabled={environment.SANDBOX_ENABLED}
-          />
+          <App router={router} />
         </ErrorBoundary>
       </I18nextProvider>
     </StrictMode>,

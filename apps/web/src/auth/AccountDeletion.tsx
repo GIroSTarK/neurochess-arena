@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
@@ -22,12 +23,12 @@ export function AccountDeletion() {
         <p role="alert">{t("account.deletion.uncertain")}</p>
       ) : null}
       {state.issue === "AUTH_REAUTH_REQUIRED" ? (
-        <a
+        <Link
           className="inline-flex min-h-target items-center text-accent underline"
-          href={authHref("sign-in", "/")}
+          to={authHref("sign-in", "/")}
         >
           {t("account.deletion.signIn")}
-        </a>
+        </Link>
       ) : null}
       <Button variant="danger" onClick={() => setConfirming(true)}>
         {t("account.deletion.title")}

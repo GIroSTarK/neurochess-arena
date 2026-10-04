@@ -1,6 +1,7 @@
 import { profileUsernameSchema } from "@neurochess/contracts";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router";
 
 import { accountError, type AccountErrorCode } from "../api/auth-client";
 import { Button } from "../ui/Button";
@@ -19,18 +20,27 @@ export function ProfileScreen({
   readonly sandboxEnabled: boolean;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { controller, state } = useRequiredAccount();
   const profile = state.profile;
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);
+  const lifetime = useRef<AbortController | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AccountErrorCode | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [saved, setSaved] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
+  useEffect(() => {
+    const abort = new AbortController();
+    lifetime.current = abort;
+    return () => abort.abort();
+  }, []);
   if (!profile) return null;
   async function save(remove = false) {
-    if (pending.current || !form.current) return;
+    const signal = lifetime.current?.signal;
+    const cancelled = () => !signal || signal.aborted;
+    if (cancelled() || pending.current || !form.current) return;
     const username = profileUsernameSchema.safeParse(new FormData(form.current).get("username"));
     if (!remove && !username.success) {
       setInvalid(true);
@@ -45,14 +55,17 @@ export function ProfileScreen({
       await controller.saveProfile(
         remove ? { avatar: "remove" } : { username: username.success ? username.data : "" },
       );
+      if (cancelled()) return;
       if (!remove) setUsernameDraft(null);
       setSaved(true);
-      if (!profile?.completed && !remove) window.location.assign(returnTo);
+      if (!profile?.completed && !remove) void navigate(returnTo, { replace: true });
     } catch (error) {
-      if (accountError(error) !== "cancelled") setError(accountError(error));
+      if (!cancelled() && accountError(error) !== "cancelled") setError(accountError(error));
     } finally {
-      pending.current = false;
-      setBusy(false);
+      if (!cancelled()) {
+        pending.current = false;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -105,9 +118,9 @@ export function ProfileScreen({
         </Button>
       </form>
       {profile.completed ? (
-        <a href={returnTo} className="inline-flex min-h-target items-center text-accent underline">
+        <Link to={returnTo} className="inline-flex min-h-target items-center text-accent underline">
           {t("account.return")}
-        </a>
+        </Link>
       ) : null}
       <AccountDeletion />
     </AccountFrame>

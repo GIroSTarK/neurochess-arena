@@ -51,7 +51,7 @@ describe.each(["production", "development"] as const)(
           .filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
       ).not.toEqual([]);
       const sandbox = chunks.find((chunk) =>
-        chunk.facadeModuleId?.endsWith("/game/SandboxScreen.tsx"),
+        chunk.facadeModuleId?.endsWith("/game/SandboxRouteLayout.tsx"),
       )!;
       expect(sandbox).toBeDefined();
       expect(sandbox.isDynamicEntry).toBe(true);

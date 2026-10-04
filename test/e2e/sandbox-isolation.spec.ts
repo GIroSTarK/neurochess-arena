@@ -87,7 +87,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       });
       await page.getByRole("link", { name: "Arena", exact: true }).click();
       await page.getByRole("button", { name: "Return to game", exact: true }).click();
-      await expect(page).toHaveURL(new RegExp("/\\?game=" + pausedAi.gameId + "$"));
+      await expect(page).toHaveURL(new RegExp("/games/" + pausedAi.gameId + "$"));
       await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
       expect(await readSnapshot(page, pausedAi.gameId)).toEqual({
         ...pausedAi,

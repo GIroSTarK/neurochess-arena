@@ -5,6 +5,7 @@ import { afterEach } from "vitest";
 
 // Scrolling and focused-element visibility are verified in the browser suite.
 Element.prototype.scrollIntoView = () => undefined;
+window.scrollTo = () => undefined;
 // jsdom has no top layer; real modal inertness is checked in Playwright.
 HTMLDialogElement.prototype.showModal = function () {
   this.open = true;
