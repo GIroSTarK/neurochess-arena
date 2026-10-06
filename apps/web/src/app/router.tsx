@@ -60,13 +60,23 @@ export function createAppRouter(
     });
   };
   const unsubscribeAccount = runtime.account.subscribe(revalidateIdentity);
+  let visited = initial;
   const unsubscribeRouter = router.subscribe((state) => {
     const destination = state.navigation.location ?? state.location;
     runtime.navigating(destination);
     navigation.departing(destination);
     if (state.navigation.state === "idle") navigation.arrived(state.location);
-    if (destination.pathname !== initial.pathname || destination.search !== initial.search) {
-      options.authEntry?.retire();
+    const samePage =
+      destination.pathname === visited.pathname && destination.search === visited.search;
+    if (destination.key !== visited.key || !samePage) {
+      // An auth redirect or link back to the landing path is a new visit and must not keep its
+      // callback notice or reset input. A fragment-only skip link, or a submission to the
+      // current page whose action still reads that input, stays on the same visit.
+      const sameVisit =
+        samePage &&
+        (destination.hash !== visited.hash || state.navigation.formMethod !== undefined);
+      if (!sameVisit) options.authEntry?.retire();
+      visited = destination;
     }
     if (!isPublic(destination)) runtime.stop();
     revalidateIdentity();

@@ -303,6 +303,60 @@ describe("Data router integration", () => {
     expect(screen.queryByText(/Email verified/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["/?auth=email-verified", /Email verified/],
+    ["/?auth=oauth-error&code=AUTH_OAUTH_CANCELLED", /Provider sign-in was cancelled/],
+  ])("leaves the callback landing %s after signing in on it", async (landing, notice) => {
+    let signedIn = false;
+    const session = {
+      user: { id: OTHER_GAME_ID, email: "player@example.com", emailVerified: true },
+      session: { expiresAt: "2027-10-01T00:00:00.000Z" },
+    };
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(signedIn ? session : null),
+      "GET /profile": () =>
+        jsonResponse({
+          username: "Player",
+          completed: true,
+          avatar: { source: "initials", initials: "PL" },
+        }),
+      "POST /api/auth/sign-in/email": () => {
+        signedIn = true;
+        return jsonResponse({ success: true });
+      },
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    window.history.replaceState(null, "", landing);
+    const { router } = renderApp(
+      { ...options, authEntry: consumeAuthEntry() },
+      { initialEntries: ["/"] },
+    );
+    expect(await screen.findByText(notice)).toBeVisible();
+    await userEvent.type(screen.getByLabelText("Email"), "player@example.com");
+    await userEvent.type(screen.getByLabelText("Password", { exact: true }), "password-canary");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("heading", { name: "Set up a game" })).toBeVisible();
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
+  it("opens setup from a callback landing through a link to the same path", async () => {
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    window.history.replaceState(null, "", "/?auth=email-verified");
+    renderApp({ ...options, authEntry: consumeAuthEntry() }, { initialEntries: ["/"] });
+    expect(await screen.findByText(/Email verified/)).toBeVisible();
+    await userEvent.click(screen.getByRole("link", { name: "Return to Arena" }));
+    expect(await screen.findByRole("heading", { name: "Set up a game" })).toBeVisible();
+    expect(screen.queryByText(/Email verified/)).not.toBeInTheDocument();
+  });
+
   async function startGame(configureRoutes?: (routes: RouteObject[]) => void) {
     const turn = Promise.withResolvers<Response>();
     let turnSignal: AbortSignal | null | undefined;
@@ -398,6 +452,8 @@ describe("Data router integration", () => {
     expect(router.state.navigation.state).toBe("loading");
     expect(signal().aborted).toBe(true);
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Loading page…" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
     await act(() => router.navigate(gamePath));
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
     await act(async () => {
@@ -433,6 +489,66 @@ describe("Data router integration", () => {
     });
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  it("shows navigation progress instead of stopped controls while New game opens setup", async () => {
+    const terminal = snapshot(FOOLS_MATE);
+    const discovery = Promise.withResolvers<Response>();
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      [`GET /games/${GAME_ID}/details`]: () => jsonResponse({ snapshot: terminal, configuration }),
+      [`GET /games/${GAME_ID}/replay`]: () =>
+        jsonResponse({ snapshot: terminal, initialFen: snapshot().fen }),
+      [`GET /games/${GAME_ID}/invocations`]: () =>
+        jsonResponse({ gameId: GAME_ID, version: terminal.version, turns: [] }),
+      "GET /games/unfinished": () => discovery.promise,
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = renderApp(options, { initialEntries: [gamePath] });
+    await screen.findByRole("heading", { name: "Black wins by checkmate" });
+    await userEvent.click(screen.getByRole("button", { name: "New game" }));
+    expect(router.state.navigation.state).toBe("loading");
+    expect(screen.getByRole("heading", { name: "Loading page…" })).toBeVisible();
+    expect(screen.queryByText(/Game controls stopped/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    await act(async () => discovery.resolve(jsonResponse({ game: null })));
+    expect(await screen.findByRole("heading", { name: "Set up a game" })).toBeVisible();
+    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
+
+  it("shows navigation progress while leaving Sandbox, then requires recovery if canceled", async () => {
+    const slow = Promise.withResolvers<null>();
+    const terminal = snapshot(FOOLS_MATE);
+    const sandboxPath = "/sandbox/games/" + GAME_ID;
+    http = createHttpMock({
+      "GET /ready": () => jsonResponse({ status: "ready" }),
+      [`GET /games/${GAME_ID}`]: () => jsonResponse(terminal),
+      [`GET /games/${GAME_ID}/replay`]: () =>
+        jsonResponse({ snapshot: terminal, initialFen: snapshot().fen }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = renderApp(options, {
+      initialEntries: [sandboxPath],
+      configureRoutes(routes) {
+        routeById(routes, "history").loader = () => slow.promise;
+      },
+    });
+    await screen.findByRole("heading", { name: "Black wins by checkmate" });
+    let pending: Promise<void>;
+    await act(async () => {
+      pending = router.navigate("/history");
+    });
+    expect(router.state.navigation.state).toBe("loading");
+    expect(screen.getByRole("heading", { name: "Loading page…" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    await act(() => router.navigate(sandboxPath));
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
+    await act(async () => {
+      slow.resolve(null);
+      await pending;
+    });
+    expect(router.state.location.pathname).toBe(sandboxPath);
   });
 
   it("never adopts a late game A result after switching to game B within the same route pattern", async () => {

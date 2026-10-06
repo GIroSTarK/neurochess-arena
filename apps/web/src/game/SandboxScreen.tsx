@@ -32,7 +32,8 @@ import { useSandbox } from "./useSandbox";
 export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const helpId = useId();
-  const { state, controller, stopped, retry, recover, checkReadiness } = useSandbox(apiBaseUrl);
+  const { state, controller, stopped, departing, retry, recover, checkReadiness } =
+    useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const board = useRef<ChessboardHandle>(null);
   const view = sandboxPresentation(state, t);
@@ -71,7 +72,13 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     setOrientation((previous) => (previous === "white" ? "black" : "white"));
   }
 
-  if (stopped) return <RouteNotice kind="stopped" sandboxEnabled onRetry={retry} />;
+  if (stopped) {
+    return departing ? (
+      <RouteNotice kind="loading" sandboxEnabled />
+    ) : (
+      <RouteNotice kind="stopped" sandboxEnabled onRetry={retry} />
+    );
+  }
   return (
     <AppShell
       mainId="sandbox"

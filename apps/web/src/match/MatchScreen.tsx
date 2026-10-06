@@ -40,6 +40,7 @@ export function MatchScreen({
   identity,
   controller,
   stopped,
+  departing,
   onRetry,
   entry,
 }: {
@@ -47,6 +48,7 @@ export function MatchScreen({
   readonly identity?: AiIdentity;
   readonly controller: MatchController;
   readonly stopped: boolean;
+  readonly departing: boolean;
   readonly onRetry: () => void;
   readonly entry: ArenaRouteData["data"];
 }) {
@@ -97,7 +99,11 @@ export function MatchScreen({
   }, [state.startedGameId]);
 
   if (stopped) {
-    return <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={onRetry} />;
+    return departing ? (
+      <RouteNotice kind="loading" sandboxEnabled={sandboxEnabled} />
+    ) : (
+      <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={onRetry} />
+    );
   }
 
   if (state.phase === "setup" && controller.credentials && entry?.entry?.kind === "setup") {

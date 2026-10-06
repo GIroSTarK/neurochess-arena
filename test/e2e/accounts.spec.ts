@@ -43,8 +43,12 @@ async function register(page: Page, email: string) {
   await expect(page.getByText(/Request received/)).toBeVisible();
   await page.goto(await emailLink(page, email, "verification"));
   await expect(page.getByText("Email verified. Sign in to continue.")).toBeVisible();
-  await login(page, email);
+  // Sign in on the verification landing itself, as a user following the email link would.
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
+  await expect(page.getByText("Email verified. Sign in to continue.")).toHaveCount(0);
   const username = usernameFor();
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.evaluate(() => {

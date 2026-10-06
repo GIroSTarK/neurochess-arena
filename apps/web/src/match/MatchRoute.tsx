@@ -21,7 +21,7 @@ export function MatchRoute({
   const setupData = useRouteLoaderData<ArenaRouteData>("arena-entry");
   const result = gameData ?? setupData;
   const revalidator = useRevalidator();
-  const { controller, stopped, retry } = useGameRouteController(
+  const { controller, stopped, departing, retry } = useGameRouteController(
     "arena",
     (navigation) =>
       new MatchController(createAiApi(apiBaseUrl, { identity }), undefined, navigation),
@@ -50,6 +50,7 @@ export function MatchRoute({
       sandboxEnabled={sandboxEnabled}
       identity={identity}
       stopped={stopped}
+      departing={departing}
       onRetry={retry}
       entry={result?.data ?? null}
     />

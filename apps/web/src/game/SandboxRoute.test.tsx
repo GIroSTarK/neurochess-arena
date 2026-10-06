@@ -78,6 +78,32 @@ describe("committed Sandbox route data", () => {
     expect(screen.getByRole("button", { name: "Resume" })).toBeVisible();
   });
 
+  it("keeps focus and scroll when discovered recovery replaces the entry path", async () => {
+    let stored = snapshot(["e2e4"]);
+    http = createHttpMock({
+      "GET /ready": () => jsonResponse({ status: "ready" }),
+      "GET /sandbox/games/unfinished": () => jsonResponse({ snapshot: stored }),
+      [`POST ${apiPath}/lifecycle`]: () => {
+        stored = snapshot(["e2e4"], { state: "paused", legalMoves: [], version: 2 });
+        return jsonResponse(stored);
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) =>
+      frames.push(callback),
+    );
+    const scroll = vi.spyOn(window, "scrollTo");
+    const { router } = renderApp(options, { initialEntries: ["/sandbox"] });
+    await screen.findByRole("button", { name: "Resume" });
+    await waitFor(() => expect(router.state.location.pathname).toBe(gamePath));
+    act(() => {
+      for (const frame of frames.splice(0)) frame(0);
+    });
+    expect(document.activeElement).toBe(document.body);
+    expect(scroll).not.toHaveBeenCalled();
+  });
+
   it("updates readiness from explicit loader revalidation", async () => {
     let ready = false;
     http = createHttpMock({

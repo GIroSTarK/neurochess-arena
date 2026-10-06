@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useNavigation, useParams } from "react-router";
 
 import { GameRouteLifetime } from "./game-route-lifetime";
 import type { GameTarget } from "./navigation";
@@ -15,6 +15,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   entry: { readonly data: unknown; readonly refresh: () => void },
 ) {
   const navigate = useNavigate();
+  const routing = useNavigation().state !== "idle";
   const location = useLocation();
   const { gameId } = useParams();
   const context = useAppRoute();
@@ -50,5 +51,12 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   // can cancel its first effect setup before any recovery command is dispatched.
   useEffect(() => lifetime.activate(), [lifetime, key, signal, entry.data, routeRevision]);
   useLayoutEffect(() => () => lifetime.end(), [lifetime]);
-  return { controller: lifetime.controller, stopped, retry: lifetime.retry };
+  // A pending departure has already ended the lifetime. Only one that did not commit leaves
+  // this mount waiting for explicit recovery.
+  return {
+    controller: lifetime.controller,
+    stopped,
+    departing: stopped && routing,
+    retry: lifetime.retry,
+  };
 }

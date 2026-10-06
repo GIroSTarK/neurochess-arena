@@ -13,7 +13,7 @@ export function useSandbox(apiBaseUrl: string) {
   const result = gameData ?? setupData;
   const entry = result?.kind === "entry" ? result.entry : null;
   const revalidator = useRevalidator();
-  const { controller, stopped, retry } = useGameRouteController(
+  const { controller, stopped, departing, retry } = useGameRouteController(
     "sandbox",
     (navigation) => new SandboxController(createSandboxApi(apiBaseUrl), undefined, navigation.game),
     (controller) => {
@@ -46,5 +46,5 @@ export function useSandbox(apiBaseUrl: string) {
   const checkReadiness = () => {
     void revalidator.revalidate();
   };
-  return { controller, state, stopped, retry, recover, checkReadiness };
+  return { controller, state, stopped, departing, retry, recover, checkReadiness };
 }

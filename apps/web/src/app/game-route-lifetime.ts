@@ -35,7 +35,9 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
         if (this.key === gameId && !this.stopped) return;
         const href = gameHref(this.mode, gameId);
         this.handoff = gameId;
-        if (reason === "created") this.navigation.preserveFocus(href);
+        // Neither creation nor recovery is a page change: Start keeps its board focus, and
+        // recovery must not move focus or scroll.
+        this.navigation.preserveFocus(href);
         this.navigate(href, this.mode === "arena" || reason === "recovered");
       },
       setup: () => {

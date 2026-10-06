@@ -310,6 +310,20 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
   await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
   expect(await readSnapshot(page, current.gameId)).toEqual(paused);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  await page.goto("/sandbox");
+  await expect(page).toHaveURL(new RegExp("/sandbox/games/" + current.gameId + "$"));
+  await expect(page.getByRole("heading", { name: /^Game paused ·/ })).toBeVisible();
+  // Discovery on document load replaces the entry path without moving focus.
+  expect(
+    await page.evaluate(
+      () =>
+        new Promise<boolean>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => resolve(document.activeElement === document.body)),
+          ),
+        ),
+    ),
+  ).toBe(true);
 });
 
 test("confirms both resignation colors and abortion with accessible cancellation", async ({
