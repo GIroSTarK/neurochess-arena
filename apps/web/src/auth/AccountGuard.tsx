@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useMatches } from "react-router";
 
@@ -41,6 +41,7 @@ export function PublicPage({
 }) {
   const { t } = useTranslation();
   const { controller, state } = useRequiredAccount();
+  const [initialRevision] = useState(state.revision);
   const { sandboxEnabled, authEntry } = useAppRoute();
   const entry = useRouteAuthEntry(authEntry);
   const matches = useMatches();
@@ -86,6 +87,9 @@ export function PublicPage({
             : "account.loading",
       )}
       sandboxEnabled={sandboxEnabled}
+      focusHeading={
+        state.revision !== initialRevision && (required || state.phase === "unavailable")
+      }
     >
       {state.deletion === "uncertain" ? (
         <p role="alert">{t("account.deletion.uncertain")}</p>

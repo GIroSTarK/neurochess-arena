@@ -24,7 +24,7 @@ export function AccountFrame({
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusHeading) heading.current?.focus({ preventScroll: true });
-  }, [focusHeading]);
+  }, [focusHeading, title]);
   return (
     <AppShell
       mainId="account-main"

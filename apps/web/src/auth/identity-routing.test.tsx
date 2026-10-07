@@ -96,46 +96,66 @@ describe("identity changes across router data", () => {
     http.assertNoUnexpectedRequests();
   });
 
-  it("resets a pending fetcher and its submitted password on an external identity change, fencing a late acknowledgement", async () => {
-    const pending = Promise.withResolvers<Response>();
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(null),
-      "POST /api/auth/sign-up/email": () => pending.promise,
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const { router } = renderApp(options, { initialEntries: ["/auth/sign-up"] });
-    await userEvent.type(await screen.findByLabelText("Email"), "player@example.com");
-    await userEvent.type(
-      screen.getByLabelText("Password", { exact: true }),
-      "password-fetcher-canary",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
-    await waitFor(() =>
-      expect(
-        [...router.state.fetchers.values()].some((fetcher) => fetcher.state === "submitting"),
-      ).toBe(true),
-    );
-    const channel = new BroadcastChannel("neurochess.identity");
-    try {
-      await act(async () => {
-        channel.postMessage("changed");
+  it.each([
+    { path: "/auth/sign-up", endpoint: "/api/auth/sign-up/email", button: "Create account" },
+    { path: "/auth/sign-in", endpoint: "/api/auth/sign-in/email", button: "Sign in" },
+    { path: "/auth/sign-in", endpoint: "/api/auth/sign-in/social", button: "Continue with Google" },
+  ] as const)(
+    "clears a pending $button form on external identity change and fences its late acknowledgement",
+    async ({ path, endpoint, button }) => {
+      const pending = Promise.withResolvers<Response>();
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(null),
+        [`POST ${endpoint}`]: () => pending.promise,
       });
+      vi.stubGlobal("fetch", http.fetch);
+      const { router } = renderApp(options, { initialEntries: [path] });
+      await userEvent.type(await screen.findByLabelText("Email"), "player@example.com");
+      await userEvent.type(
+        screen.getByLabelText("Password", { exact: true }),
+        "password-fetcher-canary",
+      );
+      await userEvent.click(screen.getByRole("button", { name: button }));
       await waitFor(() =>
         expect(
-          [...router.state.fetchers.values()].every((fetcher) => fetcher.state === "idle"),
+          [...router.state.fetchers.values()].some((fetcher) => fetcher.state === "submitting"),
         ).toBe(true),
       );
-      expect(screen.getByLabelText("Password", { exact: true })).toHaveValue("");
-      expect(JSON.stringify([...router.state.fetchers])).not.toContain("password-fetcher-canary");
-      await act(async () =>
-        pending.resolve(jsonResponse({ status: "accepted", message: "receipt" })),
+      await waitFor(() =>
+        expect(http.fetch.mock.calls.some(([url]) => requestPath(url) === endpoint)).toBe(true),
       );
-      expect(screen.queryByText(/Request received/)).not.toBeInTheDocument();
-    } finally {
-      channel.close();
-    }
-    http.assertNoUnexpectedRequests();
-  });
+      const channel = new BroadcastChannel("neurochess.identity");
+      try {
+        await act(async () => {
+          channel.postMessage("changed");
+        });
+        await waitFor(() =>
+          expect(
+            [...router.state.fetchers.values()].every((fetcher) => fetcher.state === "idle"),
+          ).toBe(true),
+        );
+        expect(screen.getByLabelText("Password", { exact: true })).toHaveValue("");
+        expect(screen.getByLabelText("Email")).toHaveValue("");
+        expect(JSON.stringify([...router.state.fetchers])).not.toContain("password-fetcher-canary");
+        await act(async () =>
+          pending.resolve(
+            jsonResponse(
+              button === "Continue with Google"
+                ? { url: "https://accounts.google.com/o/oauth2/v2/auth?state=fixture" }
+                : button === "Sign in"
+                  ? { success: true }
+                  : { status: "accepted", message: "receipt" },
+            ),
+          ),
+        );
+        expect(screen.queryByText(/Request received/)).not.toBeInTheDocument();
+        expect(router.state.location.pathname).toBe(path);
+      } finally {
+        channel.close();
+      }
+      http.assertNoUnexpectedRequests();
+    },
+  );
 
   it("clears the actual loader, action and fetcher result objects before a replacement session read settles", async () => {
     let delayed = false;

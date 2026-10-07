@@ -34,7 +34,7 @@ export function gameRouteKey(mode: GameMode, location: RouteAddress): string | n
 
 export interface RouteOwner {
   readonly accepts: (location: RouteAddress) => boolean;
-  readonly end: () => void;
+  readonly depart: () => void;
   readonly hasHandoff?: (location: RouteAddress) => boolean;
   readonly arrived?: (location: RouteAddress) => void;
 }
@@ -56,7 +56,7 @@ export class RouteNavigation {
 
   register(owner: RouteOwner) {
     this.owners.add(owner);
-    if (this.destination && !owner.accepts(this.destination)) owner.end();
+    if (this.destination && !owner.accepts(this.destination)) owner.depart();
     return () => {
       this.owners.delete(owner);
     };
@@ -73,7 +73,7 @@ export class RouteNavigation {
   departing(location: RouteAddress) {
     this.destination = location;
     for (const listener of this.listeners) listener(location);
-    for (const owner of this.owners) if (!owner.accepts(location)) owner.end();
+    for (const owner of this.owners) if (!owner.accepts(location)) owner.depart();
     if (this.focusHandoff !== location.pathname) this.focusHandoff = null;
   }
 

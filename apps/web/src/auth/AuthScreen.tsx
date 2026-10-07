@@ -1,5 +1,5 @@
 import type { AuthOAuthProvider } from "@neurochess/contracts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useFetcher } from "react-router";
 
@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { AccountField } from "./AccountField";
 import { AccountFrame } from "./AccountFrame";
 import { useRequiredAccount } from "./context";
+import { authFormInvalid } from "./form-validation";
 import { type AuthEntry, authHref } from "./navigation";
 import { PasswordField } from "./PasswordField";
 import type { AuthActionData } from "./route-data";
@@ -37,6 +38,7 @@ export function AuthScreen({
   const title = forms[kind];
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);
+  const [localInvalid, setLocalInvalid] = useState<"email" | "password" | null>(null);
   const busy = fetcher.state !== "idle";
   const outcome = fetcher.data?.generation === account.state.revision ? fetcher.data.data : null;
   const error = outcome && "error" in outcome ? outcome.error : entry.error;
@@ -46,24 +48,34 @@ export function AuthScreen({
     (outcome.notice === "accepted" || outcome.notice === "resetDone")
       ? outcome.notice
       : null;
-  const invalid = outcome && "invalid" in outcome ? outcome.invalid : null;
+  const invalid = localInvalid ?? (outcome && "invalid" in outcome ? outcome.invalid : null);
   const action = `/auth/${kind}${entry.returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(entry.returnTo)}`;
   useEffect(() => {
     if (!busy) pending.current = false;
   }, [busy]);
   useEffect(() => {
-    form.current?.reset();
-    if (!account.controller.transitionPending) {
+    const controller = account.controller;
+    let revision = controller.getSnapshot().revision;
+    // Read the transition owner at invalidation time; it may have settled by
+    // the next React effect, even when this form initiated the change.
+    return controller.subscribe(() => {
+      const next = controller.getSnapshot().revision;
+      if (next === revision) return;
+      revision = next;
+      if (pending.current && controller.transitionPending) return;
+      form.current?.reset();
       resetFetcher();
+      setLocalInvalid(null);
       pending.current = false;
-    }
-  }, [account.controller, account.state.revision, resetFetcher]);
+    });
+  }, [account.controller, resetFetcher]);
   useEffect(() => {
     const element = form.current;
     const clear = () => {
       entry.clearResetToken();
       element?.reset();
       resetFetcher();
+      setLocalInvalid(null);
       pending.current = false;
     };
     window.addEventListener("pagehide", clear);
@@ -76,6 +88,19 @@ export function AuthScreen({
   function perform(provider?: AuthOAuthProvider) {
     if (pending.current || busy || !form.current) return;
     const data = provider ? new FormData() : new FormData(form.current);
+    if (!provider) {
+      const email = data.get("email");
+      const password = data.get("password");
+      const invalid = authFormInvalid(
+        kind,
+        typeof email === "string" ? email.trim() : "",
+        typeof password === "string" ? password : "",
+      );
+      setLocalInvalid(invalid);
+      if (invalid) return;
+    } else {
+      setLocalInvalid(null);
+    }
     data.set("intent", provider ? "oauth" : kind);
     if (provider) data.set("provider", provider);
     const passwordField = form.current.elements.namedItem("password");

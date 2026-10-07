@@ -28,6 +28,36 @@ afterEach(() => {
 });
 
 describe("credential settings", () => {
+  it("keeps the key and consent until the label passes local validation", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+      "POST /credentials": () => jsonResponse(saved, 201),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/account/credentials"] },
+    );
+    await userEvent.type(
+      await screen.findByLabelText("API key", { exact: true }),
+      "save-fixture-1234",
+    );
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+    await screen.findByRole("alert");
+    expect(screen.getByLabelText("API key", { exact: true })).toHaveValue("save-fixture-1234");
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(http.fetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    await userEvent.type(screen.getByLabelText("Label"), "Arena key");
+    await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+    await screen.findByText(/Key saved/);
+    expect(screen.getByLabelText("API key", { exact: true })).toHaveValue("");
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    http.assertNoUnexpectedRequests();
+  });
+
   it.each(["invalid", "forbidden"])(
     "retains the uncertain save UUID when an explicit retry is %s",
     async (rejection) => {
@@ -57,7 +87,8 @@ describe("credential settings", () => {
         );
       };
       const submit = async () => {
-        await userEvent.click(screen.getByRole("checkbox"));
+        const consent = screen.getByRole("checkbox");
+        if (!(consent as HTMLInputElement).checked) await userEvent.click(consent);
         await waitFor(() =>
           expect(screen.getByRole("button", { name: "Save key" })).toHaveAttribute(
             "aria-disabled",

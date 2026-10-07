@@ -1,4 +1,4 @@
-import { aiProviderSchema } from "@neurochess/contracts";
+import { aiProviderSchema, credentialSaveRequestSchema } from "@neurochess/contracts";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFetcher } from "react-router";
@@ -114,6 +114,18 @@ export function SaveCredentialForm({
     }
     const data = new FormData(form.current);
     const id = unconfirmed?.id ?? crypto.randomUUID();
+    const input = credentialSaveRequestSchema.safeParse({
+      credentialId: id,
+      provider: data.get("provider"),
+      label: data.get("label"),
+      apiKey: data.get("apiKey"),
+      save: true,
+    });
+    if (!input.success) {
+      setError("CREDENTIAL_INVALID_REQUEST");
+      setSaved(false);
+      return;
+    }
     data.set("intent", "save");
     data.set("save", "true");
     data.set("credentialId", id);

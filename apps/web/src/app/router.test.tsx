@@ -647,6 +647,8 @@ describe("Data router integration", () => {
     });
     expect(screen.getByRole("link", { name: "Arena" })).toBeVisible();
     expect(screen.getByText("Opening page…")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Loading page…" })).toBeVisible();
+    expect(screen.queryByText("Checking your session")).not.toBeInTheDocument();
     await act(async () => {
       chunk.reject(new Error("secret-route-error-canary"));
       await pending;

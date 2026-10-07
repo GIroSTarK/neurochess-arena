@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
-import { useLocation, useNavigate, useNavigation, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 
 import { GameRouteLifetime } from "./game-route-lifetime";
 import type { GameTarget } from "./navigation";
@@ -15,7 +15,6 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   entry: { readonly data: unknown; readonly refresh: () => void },
 ) {
   const navigate = useNavigate();
-  const routing = useNavigation().state !== "idle";
   const location = useLocation();
   const { gameId } = useParams();
   const context = useAppRoute();
@@ -32,7 +31,7 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
         context.navigation,
       ),
   );
-  const stopped = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot);
+  const status = useSyncExternalStore(lifetime.subscribe, lifetime.getSnapshot);
   // A loaded handoff and immediate Back can both commit before React renders.
   // Reconnect that history entry even if its final target matches the previous render.
   const target = gameRouteTarget(mode, location, gameId);
@@ -55,8 +54,8 @@ export function useGameRouteController<T extends { endLifetime(): void }>(
   // this mount waiting for explicit recovery.
   return {
     controller: lifetime.controller,
-    stopped,
-    departing: stopped && routing,
+    stopped: status !== "running",
+    departing: status === "departing",
     retry: lifetime.retry,
   };
 }

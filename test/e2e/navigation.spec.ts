@@ -4,6 +4,35 @@ import { createAccount } from "./account-helpers";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, startSandbox, test } from "./fixtures";
 
+for (const source of ["/", "/sandbox"]) {
+  test(`leaving ${source} never briefly announces stopped game controls`, async ({ page }) => {
+    await page.goto(source);
+    await expect(
+      source === "/"
+        ? page.getByRole("heading", { name: "Set up a game", exact: true })
+        : page.getByRole("button", { name: "Start sandbox", exact: true }),
+    ).toBeVisible();
+    const notices = await page.evaluateHandle(() => {
+      const observed: string[] = [];
+      new MutationObserver((records) => {
+        for (const record of records) {
+          const nodes = record.type === "characterData" ? [record.target] : record.addedNodes;
+          for (const node of nodes) {
+            if (node.textContent?.includes("Game controls stopped")) {
+              observed.push(node.textContent);
+            }
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+      return observed;
+    });
+    await page.getByRole("link", { name: "History", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Private game history" })).toBeVisible();
+    expect(await notices.jsonValue()).toEqual([]);
+    await notices.dispose();
+  });
+}
+
 test("Arena checks unfinished games without bootstrapping and links to Sandbox on desktop and mobile", async ({
   page,
 }, testInfo) => {
@@ -129,6 +158,8 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   expect(sandboxRequested).toBe(false);
   await page.getByRole("link", { name: "Sandbox", exact: true }).click();
   await expect(page.getByText("Opening page…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Loading page…", exact: true })).toBeVisible();
+  await expect(page.getByText("Checking your session", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Arena", exact: true })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
   await expect.poll(() => sandboxRequested).toBe(true);

@@ -167,7 +167,7 @@ describe("Sandbox entry loaders", () => {
     const unregister = navigation.register({
       accepts: (url) => url.pathname === gamePath,
       hasHandoff: (url) => url.pathname === gamePath,
-      end: () => undefined,
+      depart: () => undefined,
     });
     expect(await read(gamePath, GAME_ID)).toEqual({ kind: "handoff", gameId: GAME_ID });
     expect(http.fetch).not.toHaveBeenCalled();

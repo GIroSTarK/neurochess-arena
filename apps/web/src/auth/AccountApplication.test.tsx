@@ -21,6 +21,62 @@ afterEach(() => {
 });
 
 describe("account presentation", () => {
+  it("does not move focus on an initially denied account route", async () => {
+    const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
+    vi.stubGlobal("fetch", http.fetch);
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/account"] },
+    );
+    await screen.findByRole("heading", { name: "Sign in to continue" });
+    expect(document.body).toHaveFocus();
+    http.assertNoUnexpectedRequests();
+  });
+
+  it.each(["sign-out", "expired", "unavailable", "other-tab"])(
+    "focuses the access notice after %s removes the current account screen",
+    async (reason) => {
+      let lost = false;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => {
+          if (lost && reason === "unavailable") throw new Error("Connection unavailable");
+          return jsonResponse(lost ? null : session);
+        },
+        "GET /profile": () => jsonResponse(profile),
+        "POST /api/auth/sign-out": () => {
+          lost = true;
+          return jsonResponse({ success: true });
+        },
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      renderApp(
+        { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+        { initialEntries: ["/account"] },
+      );
+      await screen.findByLabelText("Username");
+      const channel = new BroadcastChannel("neurochess.identity");
+      try {
+        if (reason === "sign-out") {
+          await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+        } else {
+          await userEvent.click(screen.getByLabelText("Username"));
+          lost = true;
+          await act(async () => {
+            if (reason === "other-tab") channel.postMessage("changed");
+            else fireEvent(window, new Event("focus"));
+          });
+        }
+        const heading = await screen.findByRole("heading", {
+          name: reason === "unavailable" ? "Account service unavailable" : "Sign in to continue",
+        });
+        expect(heading).toHaveFocus();
+        http.assertNoUnexpectedRequests();
+      } finally {
+        channel.close();
+      }
+    },
+  );
+
   it("selects the auth form from the matched route rather than the document pathname", async () => {
     window.history.replaceState(null, "", "/account");
     const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });

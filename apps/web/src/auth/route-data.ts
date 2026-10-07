@@ -1,8 +1,5 @@
 import {
-  authEmailRequestSchema,
   authOAuthProviderSchema,
-  authPasswordSchema,
-  authSignInRequestSchema,
   gameParamsSchema,
   type ProfileResponse,
   profileUsernameSchema,
@@ -14,6 +11,8 @@ import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth
 import { gameRouteTarget } from "../app/route-navigation";
 import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-runtime";
 import type { AuthForm } from "../app/route-urls";
+
+import { authFormInvalid } from "./form-validation";
 
 export type PublicRouteData = ScopedRouteData<{ access: PublicAccess }>;
 export type ProfileRouteData = ScopedRouteData<{
@@ -168,16 +167,9 @@ export function authAction(runtime: RouteRuntime, kind?: AuthForm) {
       const email = typeof emailValue === "string" ? emailValue.trim() : "";
       const passwordValue = data.get("password");
       const password = typeof passwordValue === "string" ? passwordValue : "";
-      if (kind !== "reset-password" && !authEmailRequestSchema.safeParse({ email }).success) {
-        return result({ invalid: "email" });
-      }
-      if (
-        ((kind === "sign-up" || kind === "reset-password") &&
-          !authPasswordSchema.safeParse(password).success) ||
-        (kind === "sign-in" && !authSignInRequestSchema.safeParse({ email, password }).success)
-      ) {
-        return result({ invalid: "password" });
-      }
+      if (!kind) return result({ error: "AUTH_INVALID_REQUEST" });
+      const invalid = authFormInvalid(kind, email, password);
+      if (invalid) return result({ invalid });
       if (kind === "sign-in") {
         transitionAttempted = true;
         await account.transition(
@@ -199,8 +191,7 @@ export function authAction(runtime: RouteRuntime, kind?: AuthForm) {
       const readSignal = AbortSignal.any([signal, account.identity(false).signal]);
       if (kind === "sign-up") await api.register({ email, password }, readSignal);
       else if (kind === "verify") await api.resend(email, readSignal);
-      else if (kind === "forgot-password") await api.forgot(email, readSignal);
-      else return result({ error: "AUTH_INVALID_REQUEST" });
+      else await api.forgot(email, readSignal);
       return readSignal.aborted ? null : result({ notice: "accepted" });
     } catch (error) {
       const code = accountError(error);

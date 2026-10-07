@@ -14,7 +14,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
   private routeRevision = 0;
   private connectedRevision = 0;
   private handoff: string | null = null;
-  private stopped = false;
+  private status: "running" | "departing" | "stopped" = "running";
   private target: GameTarget = { kind: "none" };
   private signal: AbortSignal | undefined;
   private pendingEntry = false;
@@ -41,14 +41,18 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
         this.navigate(href, this.mode === "arena" || reason === "recovered");
       },
       setup: () => {
-        if (this.mode === "arena") this.end();
+        if (this.mode === "arena") this.depart();
         else this.handoff = "setup";
         this.navigate(this.mode === "arena" ? "/" : "/sandbox", true);
       },
     });
   }
 
-  readonly getSnapshot = () => this.stopped;
+  private get stopped() {
+    return this.status !== "running";
+  }
+
+  readonly getSnapshot = () => this.status;
   readonly getRouteRevision = (target: GameTarget) => {
     const key = target.kind === "game" ? target.gameId : target.kind === "none" ? "setup" : null;
     return key === this.committedKey ? this.routeRevision : this.connectedRevision;
@@ -59,8 +63,9 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
       this.listeners.delete(listener);
     };
   };
-  private publish(stopped: boolean) {
-    this.stopped = stopped;
+  private publish(status: typeof this.status) {
+    if (this.status === status) return;
+    this.status = status;
     this.listeners.forEach((listener) => listener());
   }
 
@@ -76,6 +81,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     this.accepts(destination);
 
   readonly arrived = (destination: RouteAddress) => {
+    if (this.status === "departing" && this.accepts(destination)) this.publish("stopped");
     const key = gameRouteKey(this.mode, destination);
     if (key === this.committedKey) return;
     this.committedKey = key;
@@ -96,13 +102,16 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
     this.entryData = data;
   }
 
-  readonly end = () => {
+  private stop(status: "departing" | "stopped") {
     this.pendingEntry = false;
     this.refreshPending = false;
     this.handoff = null;
-    this.publish(true);
+    this.publish(status);
     this.controller.endLifetime();
-  };
+  }
+
+  readonly depart = () => this.stop("departing");
+  readonly end = () => this.stop(this.status === "departing" ? "departing" : "stopped");
 
   readonly retry = () => {
     if (this.signal?.aborted) return;
@@ -117,7 +126,7 @@ export class GameRouteLifetime<T extends { endLifetime(): void }> {
 
   private startEntry() {
     if (this.signal?.aborted) return;
-    this.publish(false);
+    this.publish("running");
     this.enter(this.controller, this.target);
   }
 

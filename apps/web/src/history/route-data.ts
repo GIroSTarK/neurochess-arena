@@ -72,8 +72,8 @@ export function historyRouteData({
       };
       if (access !== "account" || !identity) return result(null);
       const query = new URL(request.url).searchParams;
-      const parsed = querySchema.safeParse(Object.fromEntries(query));
-      if (!parsed.success || new Set(query.keys()).size !== [...query].length) {
+      const parsed = querySchema.safeParse({ cursor: query.get("cursor") ?? undefined });
+      if (!parsed.success || query.getAll("cursor").length > 1) {
         return result(null, true);
       }
       const signal = AbortSignal.any([request.signal, identity.signal]);

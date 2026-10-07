@@ -81,6 +81,10 @@ export class RouteRuntime {
     return this.bootstrap?.active ? this.bootstrap : readAuthEntry(url);
   }
 
+  get stopped() {
+    return this.disconnect === null;
+  }
+
   navigating(location: { key: string; pathname: string; search: string; hash: string }) {
     const previous = this.location;
     this.location = location;

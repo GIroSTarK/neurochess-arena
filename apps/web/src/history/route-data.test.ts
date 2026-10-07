@@ -139,7 +139,15 @@ describe("History route data", () => {
     });
   });
 
-  it.each(["?cursor=", "?cursor=invalid", "?cursor=a&cursor=b", "?limit=100", "?owner=" + GAME_ID])(
+  it.each(["?utm_source=x", "?utm_source=x&utm_source=y", "?limit=100", "?owner=" + GAME_ID])(
+    "ignores unrelated browser query fields without forwarding them to the API: %s",
+    async (query) => {
+      const { read } = harness();
+      expect(await read(query)).toMatchObject({ data: { page, error: false } });
+    },
+  );
+
+  it.each(["?cursor=", "?cursor=invalid", "?cursor=a&cursor=b"])(
     "rejects invalid pagination %s before any game read",
     async (query) => {
       const { read, http } = harness();
