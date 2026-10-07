@@ -159,7 +159,8 @@ export function accountHarness(database: DatabaseConnection) {
         if (social && response.ok) {
           const { url } = z.object({ url: z.url() }).parse(await response.clone().json());
           const state = new URL(url).searchParams.get("state");
-          if (state) states.add(state);
+          // Better Auth's key for database-backed OAuth state; its helper is not exported.
+          if (state) states.add(`auth-state:${state}`);
         }
         const location = response.headers.get("location");
         const callbackSession =

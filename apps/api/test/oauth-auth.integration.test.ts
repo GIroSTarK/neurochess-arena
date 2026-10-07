@@ -105,6 +105,11 @@ function post(path: string, payload: object, cookie?: string) {
   });
 }
 
+// Better Auth's key for database-backed OAuth state; the library does not export its helper.
+function oauthStateIdentifier(state: string) {
+  return `auth-state:${state}`;
+}
+
 async function start(provider: OAuthProvider, cookie?: string) {
   const response = await post("sign-in/social", { provider }, cookie);
   expect(response.statusCode).toBe(200);
@@ -125,7 +130,12 @@ async function start(provider: OAuthProvider, cookie?: string) {
   expect(url.searchParams.get("include_granted_scopes")).not.toBe("true");
   const state = url.searchParams.get("state")!;
   expect(state).toBeTruthy();
-  states.push(state);
+  const stateIdentifier = oauthStateIdentifier(state);
+  states.push(stateIdentifier);
+  // Proves the key format so the consumed-state check after a callback cannot pass vacuously.
+  expect(
+    await database.db.$count(authVerifications, eq(authVerifications.identifier, stateIdentifier)),
+  ).toBe(1);
   const stateCookie = response.cookies.find(({ name }) => name.endsWith(".state"));
   expect(stateCookie).toMatchObject({ httpOnly: true, secure: true, sameSite: "Lax", path: "/" });
   const code = `code-canary-${randomUUID()}`;
@@ -355,7 +365,10 @@ describe.each(["google", "github"] as const)(
       expect(mailbox.messages).toHaveLength(0);
       expect(response.cookies.some(({ name }) => name.includes("account_data"))).toBe(false);
       expect(
-        await database.db.$count(authVerifications, eq(authVerifications.identifier, flow.state)),
+        await database.db.$count(
+          authVerifications,
+          eq(authVerifications.identifier, oauthStateIdentifier(flow.state)),
+        ),
       ).toBe(0);
       expect((await post("sign-out", {}, cookie)).statusCode).toBe(200);
       expect((await session(cookie)).json()).toBeNull();
