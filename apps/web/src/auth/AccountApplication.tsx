@@ -19,7 +19,7 @@ export function AccountApplication() {
   const location = useLocation();
   useEffect(() => {
     resetProfile();
-  }, [resetProfile, state.revision, location.key]);
+  }, [resetProfile, state.revision, location.pathname, location.search]);
   // Stopping observation invalidates account state synchronously, before the
   // pending destination reaches React. That is navigation, not a session check.
   if (runtime.stopped) return <RouteNotice kind="loading" sandboxEnabled={sandboxEnabled} />;

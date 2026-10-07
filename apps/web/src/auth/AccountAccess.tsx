@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
 
+import { authHref, safeReturnTo } from "../app/route-urls";
 import { Button } from "../ui/Button";
 
 import { Avatar } from "./Avatar";
 import { useAccount, useRequiredAccount } from "./context";
-import { authHref, safeReturnTo } from "./navigation";
 
 function SignOutButton() {
   const { t } = useTranslation();

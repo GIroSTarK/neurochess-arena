@@ -1,8 +1,6 @@
 import { authErrorCodeSchema } from "@neurochess/contracts";
 
-import { safeReturnTo } from "./urls";
-
-export { authHref, safeReturnTo } from "./urls";
+import { safeReturnTo } from "../app/route-urls";
 
 export function readAuthEntry(url: URL, consumeReset = false) {
   const callback = url.searchParams.get("auth");
@@ -64,6 +62,9 @@ export function consumeAuthEntry() {
   ) {
     const rejectedGame = url.searchParams.getAll("game");
     const search = new URLSearchParams();
+    if (/^\/account\/credentials\/?$/.test(url.pathname) && entry.returnTo !== "/") {
+      search.set("returnTo", entry.returnTo);
+    }
     for (const value of rejectedGame) search.append("game", value);
     window.history.replaceState(
       null,

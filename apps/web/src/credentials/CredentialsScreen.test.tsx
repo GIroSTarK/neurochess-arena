@@ -28,6 +28,68 @@ afterEach(() => {
 });
 
 describe("credential settings", () => {
+  it.each([false, true])(
+    "reconciles a canceled same-page save without changing its UUID (stored: %s)",
+    async (stored) => {
+      const pending = Promise.withResolvers<Response>();
+      const ids: string[] = [];
+      let cancelled = false;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(session),
+        "GET /profile": () => jsonResponse(profile),
+        "GET /credentials": () =>
+          jsonResponse({
+            credentials: stored && cancelled ? [{ ...saved, credentialId: ids[0] }] : [],
+          }),
+        "POST /credentials": (init) => {
+          ids.push((JSON.parse(requestBody(init)) as { credentialId: string }).credentialId);
+          if (ids.length > 1) return errorResponse("CREDENTIAL_CONFLICT", 409);
+          init?.signal?.addEventListener("abort", () => {
+            cancelled = true;
+            pending.resolve(jsonResponse({ ...saved, credentialId: ids[0] }, 201));
+          });
+          return pending.promise;
+        },
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      renderApp(
+        { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+        { initialEntries: ["/account/credentials"] },
+      );
+      const fill = async () => {
+        await userEvent.type(await screen.findByLabelText("Label"), "Arena key");
+        await userEvent.type(
+          screen.getByLabelText("API key", { exact: true }),
+          "save-fixture-1234",
+        );
+        await userEvent.click(screen.getByRole("checkbox"));
+      };
+      await fill();
+      await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+      await waitFor(() => expect(ids).toHaveLength(1));
+      await userEvent.click(screen.getByRole("link", { name: "Provider keys" }));
+      await waitFor(() => expect(cancelled).toBe(true));
+      if (stored) {
+        await screen.findByText(/Key saved/);
+        expect(ids).toHaveLength(1);
+      } else {
+        await screen.findByText(/The operation could not be confirmed/);
+        await fill();
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Save key" })).toHaveAttribute(
+            "aria-disabled",
+            "false",
+          ),
+        );
+        await userEvent.click(screen.getByRole("button", { name: "Save key" }));
+        await screen.findByText(/This save may already exist/);
+        expect(ids).toHaveLength(2);
+        expect(ids[1]).toBe(ids[0]);
+      }
+      http.assertNoUnexpectedRequests();
+    },
+  );
+
   it("keeps the key and consent until the label passes local validation", async () => {
     const http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(session),

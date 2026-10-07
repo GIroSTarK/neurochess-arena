@@ -3,14 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useFetcher } from "react-router";
 
-import type { AuthForm } from "../app/route-urls";
+import { type AuthForm, authHref } from "../app/route-urls";
 import { Button } from "../ui/Button";
 
 import { AccountField } from "./AccountField";
 import { AccountFrame } from "./AccountFrame";
 import { useRequiredAccount } from "./context";
 import { authFormInvalid } from "./form-validation";
-import { type AuthEntry, authHref } from "./navigation";
+import type { AuthEntry } from "./navigation";
 import { PasswordField } from "./PasswordField";
 import type { AuthActionData } from "./route-data";
 
@@ -39,9 +39,12 @@ export function AuthScreen({
   const form = useRef<HTMLFormElement>(null);
   const pending = useRef(false);
   const [localInvalid, setLocalInvalid] = useState<"email" | "password" | null>(null);
+  const [callbackDismissed, setCallbackDismissed] = useState(false);
   const busy = fetcher.state !== "idle";
-  const outcome = fetcher.data?.generation === account.state.revision ? fetcher.data.data : null;
-  const error = outcome && "error" in outcome ? outcome.error : entry.error;
+  const outcome =
+    !busy && fetcher.data?.generation === account.state.revision ? fetcher.data.data : null;
+  const error =
+    outcome && "error" in outcome ? outcome.error : callbackDismissed ? null : entry.error;
   const notice =
     outcome &&
     "notice" in outcome &&
@@ -87,6 +90,8 @@ export function AuthScreen({
 
   function perform(provider?: AuthOAuthProvider) {
     if (pending.current || busy || !form.current) return;
+    resetFetcher();
+    setCallbackDismissed(true);
     const data = provider ? new FormData() : new FormData(form.current);
     if (!provider) {
       const email = data.get("email");

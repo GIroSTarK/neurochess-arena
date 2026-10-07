@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Link, useMatches } from "react-router";
 
 import { useAppRoute } from "../app/route-context";
+import { authHref } from "../app/route-urls";
 import { Button } from "../ui/Button";
 
 import { AccountFrame } from "./AccountFrame";
 import { useRequiredAccount } from "./context";
-import { authHref } from "./navigation";
 import { ProfileScreen } from "./ProfileScreen";
 import type { PublicRouteData } from "./route-data";
 import { useRouteAuthEntry } from "./useRouteAuthEntry";

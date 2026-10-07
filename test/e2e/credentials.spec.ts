@@ -12,6 +12,42 @@ import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, readSnapshot, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
+test("a same-page link reconciles a saved key after its acknowledgement is canceled", async ({
+  page,
+}) => {
+  await createAccount(page.request);
+  const committed = Promise.withResolvers<void>();
+  const acknowledgement = Promise.withResolvers<void>();
+  let writes = 0;
+  await page.route(API_ORIGIN + "/credentials", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    writes++;
+    const response = await route.fetch();
+    committed.resolve();
+    await acknowledgement.promise;
+    await route.fulfill({ response }).catch(() => undefined);
+  });
+  await page.goto("/account/credentials?returnTo=%2Fhistory");
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Return to Arena" })).toHaveAttribute(
+    "href",
+    "/history",
+  );
+  await page.getByLabel("Label", { exact: true }).fill("Canceled acknowledgement");
+  await page.getByLabel("API key", { exact: true }).fill("same-page-fixture-1234");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Save key", exact: true }).click();
+  await committed.promise;
+  try {
+    await page.getByRole("link", { name: "Provider keys", exact: true }).click();
+    await expect(page.getByText(/Key saved/)).toBeVisible();
+    await expect(page.getByText("Canceled acknowledgement", { exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+  } finally {
+    acknowledgement.resolve();
+  }
+});
+
 for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
   test(`account AI seats use ${combination} sources and recover only after explicit selection`, async ({
     page,

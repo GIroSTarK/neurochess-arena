@@ -489,7 +489,6 @@ export const en = {
     documentDescription: "Play both colors in the Neurochess Arena development chess sandbox.",
     skipLink: "Skip to the sandbox",
     title: "Sandbox",
-    loading: "Loading sandbox…",
     controlHint: "You control both colors.",
     moveHint: "Select a piece, then a highlighted square.",
     sessionFooter: "Private game · Available while your guest session lasts.",

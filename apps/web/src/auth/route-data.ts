@@ -8,7 +8,6 @@ import { type ActionFunctionArgs, type LoaderFunctionArgs, replace } from "react
 import { z } from "zod";
 
 import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
-import { gameRouteTarget } from "../app/route-navigation";
 import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-runtime";
 import type { AuthForm } from "../app/route-urls";
 
@@ -52,11 +51,8 @@ export function profileLoader(runtime: RouteRuntime) {
   };
 }
 
-export function publicLoader(runtime: RouteRuntime, requireProfile: boolean, arena = false) {
-  return async ({ request, params }: LoaderFunctionArgs): Promise<PublicRouteData | null> => {
-    if (arena && gameRouteTarget("arena", new URL(request.url), params.gameId).kind === "invalid") {
-      return null;
-    }
+export function publicLoader(runtime: RouteRuntime, requireProfile: boolean) {
+  return async ({ request }: LoaderFunctionArgs): Promise<PublicRouteData | null> => {
     try {
       const resolved = await runtime.resolvePublicIdentity(request.signal, requireProfile);
       return runtime.result(resolved.generation, { access: resolved.access });

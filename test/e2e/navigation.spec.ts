@@ -306,9 +306,11 @@ test("keyboard route changes and native skip links focus a single main with redu
 test("a failed lazy module has safe navigation and an explicit reload recovery", async ({
   page,
   expectedModuleFailures,
+  expectedRouteErrors,
 }) => {
   const moduleUrl = WEB_ORIGIN + "/src/game/SandboxRoute.tsx";
   expectedModuleFailures.set(page, new Set([moduleUrl]));
+  expectedRouteErrors.set(page, new Set(["Route error ROUTE_MODULE_UNAVAILABLE"]));
   await page.route(moduleUrl, (route) => route.abort("failed"), { times: 1 });
   await page.goto("/sandbox");
   await expect(page.getByRole("heading", { name: "This page could not be loaded." })).toBeVisible();
@@ -316,6 +318,40 @@ test("a failed lazy module has safe navigation and an explicit reload recovery",
   await page.getByRole("button", { name: "Reload page" }).click();
   await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
 });
+
+for (const pending of [false, true]) {
+  test(`native skip links retain profile saves (pending: ${String(pending)})`, async ({ page }) => {
+    const { username } = await createAccount(page.request);
+    const saving = Promise.withResolvers<void>();
+    await page.route(API_ORIGIN + "/profile", async (route) => {
+      if (route.request().method() === "POST" && pending) await saving.promise;
+      await route.continue();
+    });
+    await page.goto("/history");
+    await page.getByRole("link", { name: username, exact: true }).click();
+    const request = page.waitForRequest(
+      (request) => request.url() === API_ORIGIN + "/profile" && request.method() === "POST",
+    );
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await request;
+    if (!pending) await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    try {
+      await page.getByRole("link", { name: "Skip to main content" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("main")).toBeFocused();
+      if (pending) {
+        await expect(page.getByRole("button", { name: "Save profile" })).toHaveAttribute(
+          "aria-disabled",
+          "true",
+        );
+      }
+      saving.resolve();
+      await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    } finally {
+      saving.resolve();
+    }
+  });
+}
 
 test("Back restores history scroll after its delayed private read finishes", async ({ page }) => {
   await createAccount(page.request);

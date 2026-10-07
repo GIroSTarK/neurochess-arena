@@ -21,6 +21,37 @@ afterEach(() => {
 });
 
 describe("account presentation", () => {
+  it.each([false, true])(
+    "preserves profile submission state across a skip link (pending: %s)",
+    async (pending) => {
+      const response = Promise.withResolvers<Response>();
+      let requestSignal: AbortSignal | null | undefined;
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(session),
+        "GET /profile": () => jsonResponse(profile),
+        "POST /profile": (init) => {
+          requestSignal = init?.signal;
+          return pending ? response.promise : jsonResponse(profile);
+        },
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      const { router } = renderApp(
+        { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+        { initialEntries: ["/auth/sign-in"] },
+      );
+      await screen.findByLabelText("Email");
+      await act(() => router.navigate("/account"));
+      await userEvent.click(await screen.findByRole("button", { name: "Save profile" }));
+      await waitFor(() => expect(requestSignal).toBeDefined());
+      if (!pending) await screen.findByText("Profile saved.");
+      await act(() => router.navigate("/account#account-main"));
+      expect(requestSignal?.aborted).toBe(false);
+      if (pending) await act(async () => response.resolve(jsonResponse(profile)));
+      expect(await screen.findByText("Profile saved.")).toBeVisible();
+      http.assertNoUnexpectedRequests();
+    },
+  );
+
   it("does not move focus on an initially denied account route", async () => {
     const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
     vi.stubGlobal("fetch", http.fetch);

@@ -12,6 +12,7 @@ import {
   credentialError,
   type CredentialFailure,
 } from "../api/credential-client";
+import { IssuedResults } from "../app/issued-results";
 import type { AppRouteContext } from "../app/route-context";
 import { type PublicAccess, type ScopedRouteData, waitForRouteResult } from "../app/route-runtime";
 
@@ -48,7 +49,7 @@ export function credentialRouteData({
   apiBaseUrl,
   runtime,
 }: Pick<AppRouteContext, "apiBaseUrl" | "runtime">) {
-  const catalogs = new Set<WeakRef<CredentialRouteData>>();
+  const catalogs = new IssuedResults<CredentialRouteData>();
   let revision = 0;
   const loader = async ({ request }: LoaderFunctionArgs): Promise<CredentialRouteData | null> => {
     const readRevision = revision;
@@ -62,8 +63,7 @@ export function credentialRouteData({
           access,
           catalog: readRevision === revision ? catalog : null,
         });
-        for (const reference of catalogs) if (!reference.deref()) catalogs.delete(reference);
-        catalogs.add(new WeakRef(scoped));
+        catalogs.track(scoped);
         return scoped;
       };
       if (access !== "account" || !identity) return result(null);
@@ -132,10 +132,9 @@ export function credentialRouteData({
       // A pre-mutation read cannot restore deleted metadata after an unsuccessful refresh.
       revision++;
       if (input.intent !== "save") {
-        for (const reference of catalogs) {
-          const catalog = reference.deref();
-          if (catalog?.data) catalog.data.catalog = null;
-        }
+        catalogs.forEach((catalog) => {
+          if (catalog.data) catalog.data.catalog = null;
+        });
         catalogs.clear();
       }
       return result({

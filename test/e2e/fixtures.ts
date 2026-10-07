@@ -29,6 +29,7 @@ export const test = base.extend<{
   expectedGame404s: Map<Page, Set<string>>;
   allowedIdentity401s: Map<Page, Set<string>>;
   expectedModuleFailures: Map<Page, Set<string>>;
+  expectedRouteErrors: Map<Page, Set<string>>;
   instrumentContext: (context: BrowserContext) => Promise<void>;
   newContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
 }>({
@@ -44,8 +45,12 @@ export const test = base.extend<{
   expectedModuleFailures: async ({}, use) => {
     await use(new Map<Page, Set<string>>());
   },
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
+  expectedRouteErrors: async ({}, use) => {
+    await use(new Map<Page, Set<string>>());
+  },
   instrumentContext: async (
-    { expectedGame404s, allowedIdentity401s, expectedModuleFailures },
+    { expectedGame404s, allowedIdentity401s, expectedModuleFailures, expectedRouteErrors },
     use,
   ) => {
     const contexts = new Set<BrowserContext>();
@@ -99,6 +104,7 @@ export const test = base.extend<{
           page !== null &&
           message.text().includes("net::ERR_FAILED") &&
           expectedModuleFailures.get(page)?.delete(message.location().url);
+        const routeError = page !== null && expectedRouteErrors.get(page)?.delete(message.text());
         if (
           !message.text().includes("409 (Conflict)") &&
           !anonymousDiscovery &&
@@ -106,7 +112,8 @@ export const test = base.extend<{
           !avatarUnavailable &&
           !deletedPrivateGame &&
           !expiredIdentity &&
-          !failedModule
+          !failedModule &&
+          !routeError
         ) {
           errors.push("Application console " + message.type());
         }
@@ -133,6 +140,7 @@ export const test = base.extend<{
       expect(errors).toEqual([]);
       for (const urls of expectedGame404s.values()) expect(urls.size).toBe(0);
       for (const urls of expectedModuleFailures.values()) expect(urls.size).toBe(0);
+      for (const errors of expectedRouteErrors.values()) expect(errors.size).toBe(0);
     } finally {
       for (const context of contexts) {
         context.off("response", record);

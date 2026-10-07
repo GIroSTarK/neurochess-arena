@@ -3,6 +3,8 @@ import { AccountFailure, type AuthApi } from "../api/auth-client";
 import { AccountController } from "../auth/controller";
 import { type AuthEntry, readAuthEntry } from "../auth/navigation";
 
+import { IssuedResults } from "./issued-results";
+
 export type PublicAccess = "guest" | "account" | "onboarding" | "required" | "unavailable";
 export interface PublicIdentity {
   readonly generation: number;
@@ -33,7 +35,7 @@ export function waitForRouteResult<T>(promise: Promise<T>, signal: AbortSignal):
 export class RouteRuntime {
   readonly account: AccountController;
   private disconnect: (() => void) | null = null;
-  private readonly results = new Set<WeakRef<ScopedRouteData<unknown>>>();
+  private readonly results = new IssuedResults<ScopedRouteData<unknown>>();
   private generation = 0;
   private readonly unsubscribe: () => void;
   private readonly actions = new Set<AbortController>();
@@ -48,31 +50,28 @@ export class RouteRuntime {
       const state = this.account.getSnapshot();
       const generation = state.revision;
       if (generation === this.generation) {
-        for (const reference of this.results) {
-          const result = reference.deref();
-          if (result?.data && typeof result.data === "object" && "profile" in result.data) {
+        this.results.forEach((result) => {
+          if (result.data && typeof result.data === "object" && "profile" in result.data) {
             result.data.profile = state.profile;
           }
-        }
+        });
         if (state.phase === "account" && state.profile?.completed) {
           // Completing onboarding unlocks previously gated leaf reads without
           // changing identity or ending an already-authorized game owner.
-          for (const reference of this.results) {
-            const result = reference.deref();
-            if (result && onboardingResult(result.data)) {
+          this.results.forEach((result) => {
+            if (onboardingResult(result.data)) {
               result.data = null;
             }
-          }
+          });
         }
         return;
       }
       this.generation = generation;
       // Clear the actual values shared with loader/action/fetcher caches immediately.
       // Revalidation alone keeps old data alive until every new loader completes.
-      for (const reference of this.results) {
-        const result = reference.deref();
-        if (result) result.data = null;
-      }
+      this.results.forEach((result) => {
+        result.data = null;
+      });
       this.results.clear();
     });
   }
@@ -156,8 +155,7 @@ export class RouteRuntime {
       generation,
       data: generation === state.revision && !onboardingCompleted ? data : null,
     };
-    for (const reference of this.results) if (!reference.deref()) this.results.delete(reference);
-    this.results.add(new WeakRef(result));
+    this.results.track(result);
     return result;
   }
 

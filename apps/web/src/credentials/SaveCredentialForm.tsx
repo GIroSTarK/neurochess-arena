@@ -35,7 +35,7 @@ export function SaveCredentialForm({
   const [error, setError] = useState<CredentialFailure["code"] | null>(null);
   const [saved, setSaved] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
-  const [handled, setHandled] = useState<CredentialActionData | null>(null);
+  const [settled, setSettled] = useState(false);
   // An absent record cannot rule out a late commit. Explicit retries keep the ID
   // until a response or a fresh metadata read proves the earlier save was stored.
   const [unconfirmed, setUnconfirmed] = useState<{
@@ -45,22 +45,23 @@ export function SaveCredentialForm({
   } | null>(null);
   const reconciling = unconfirmed !== null && !unconfirmed.reconciled;
   const outcome = mutation.data?.data;
-  if (!busy && submittedId && outcome && mutation.data !== handled) {
-    setHandled(mutation.data ?? null);
+  if (!busy && submittedId && settled) {
     setSubmittedId(null);
-    if ("success" in outcome) {
+    if (outcome && "success" in outcome) {
       setSaved(true);
       setUnconfirmed(null);
     } else {
-      setError(outcome.error);
-      if (outcome.error === "CREDENTIAL_UNAVAILABLE" || outcome.error === "CREDENTIAL_CONFLICT") {
+      // A canceled route action returns no outcome even when the API may have committed.
+      const error = outcome?.error ?? "CREDENTIAL_UNAVAILABLE";
+      setError(error);
+      if (error === "CREDENTIAL_UNAVAILABLE" || error === "CREDENTIAL_CONFLICT") {
         setUnconfirmed({ id: submittedId, after: version, reconciled: false });
       }
     }
   }
   useEffect(() => {
-    if (handled) void refresh();
-  }, [handled, refresh]);
+    if (settled && !submittedId) void refresh();
+  }, [settled, submittedId, refresh]);
   if (
     !busy &&
     !submittedId &&
@@ -89,7 +90,7 @@ export function SaveCredentialForm({
       setSaved(false);
       setSubmittedId(null);
       setUnconfirmed(null);
-      setHandled(null);
+      setSettled(false);
     };
     window.addEventListener("pagehide", clear);
     identity.signal.addEventListener("abort", clear);
@@ -135,10 +136,12 @@ export function SaveCredentialForm({
     setError(null);
     setSaved(false);
     setSubmittedId(id);
+    setSettled(false);
     pending.current = true;
     reset();
     void mutation.submit(data, { method: "post", action: "/account/credentials" }).finally(() => {
       pending.current = false;
+      if (!identity.signal.aborted) setSettled(true);
     });
   }
   return (

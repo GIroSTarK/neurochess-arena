@@ -3,10 +3,9 @@ import { useEffect, useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
-import { gameHref } from "../app/route-urls";
+import { authHref, gameHref } from "../app/route-urls";
 import { resultTitle } from "../arena/result";
 import { AccountFrame } from "../auth/AccountFrame";
-import { authHref } from "../auth/navigation";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 

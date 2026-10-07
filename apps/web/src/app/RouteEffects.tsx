@@ -35,8 +35,10 @@ export function RouteEffects({
     if (action === NavigationType.Pop) {
       const position = positions.current.get(location.key) ?? { left: 0, top: 0 };
       let frame = 0;
+      let deadline = 0;
       const stop = () => {
         cancelAnimationFrame(frame);
+        window.clearTimeout(deadline);
         observer.disconnect();
         for (const event of ["pointerdown", "keydown", "wheel", "touchstart"]) {
           window.removeEventListener(event, stop);
@@ -60,6 +62,9 @@ export function RouteEffects({
       for (const event of ["pointerdown", "keydown", "wheel", "touchstart"]) {
         window.addEventListener(event, stop, { passive: true });
       }
+      // A shorter page may never reach the saved position. Later DOM updates
+      // must not keep pulling the user back indefinitely.
+      deadline = window.setTimeout(stop, 2000);
       frame = requestAnimationFrame(restore);
       return stop;
     }

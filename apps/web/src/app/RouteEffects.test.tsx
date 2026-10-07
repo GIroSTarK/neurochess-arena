@@ -6,6 +6,58 @@ import { expect, it, vi } from "vitest";
 import { RouteNavigation } from "./route-navigation";
 import { RouteEffects } from "./RouteEffects";
 
+it("stops restoring an unreachable Back position after a bounded wait", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("scrollY", 0);
+  let maximum = 1000;
+  const scroll = vi.fn(({ top = 0 }: ScrollToOptions) => {
+    window.scrollY = Math.min(top, maximum);
+  });
+  vi.stubGlobal("scrollTo", scroll);
+  const navigation = new RouteNavigation();
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <>
+            <RouteEffects navigation={navigation} pendingLabel="Opening page" />
+            <Outlet />
+          </>
+        ),
+        children: [
+          { path: "/history", element: <main>History</main> },
+          { path: "/other", element: <main>Other</main> },
+        ],
+      },
+    ],
+    { initialEntries: ["/history"] },
+  );
+  const view = render(<RouterProvider router={router} />);
+  try {
+    window.scrollTo({ top: 600 });
+    fireEvent.scroll(window);
+    await act(() => router.navigate("/other"));
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    maximum = 100;
+    await act(() => router.navigate(-1));
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(window.scrollY).toBe(100);
+    await act(() => vi.advanceTimersByTimeAsync(2500));
+    scroll.mockClear();
+    const update = document.createElement("div");
+    await act(async () => {
+      document.body.append(update);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(20));
+    expect(scroll).not.toHaveBeenCalled();
+    update.remove();
+  } finally {
+    view.unmount();
+    router.dispose();
+    vi.useRealTimers();
+  }
+});
+
 it.each([false, true])("records scroll after cancelled Back (batched: %s)", async (batched) => {
   vi.stubGlobal("scrollY", 0);
   vi.stubGlobal("scrollTo", ({ top = 0 }: ScrollToOptions) => {

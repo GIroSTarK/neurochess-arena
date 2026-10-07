@@ -620,6 +620,7 @@ describe("Data router integration", () => {
   });
 
   it("keeps navigation usable through a lazy failure and offers a fatal reload without exposing errors", async () => {
+    const diagnostic = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const chunk = Promise.withResolvers<never>();
     http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(null),
@@ -657,6 +658,8 @@ describe("Data router integration", () => {
       await screen.findByRole("heading", { name: "This page could not be loaded." }),
     ).toBeVisible();
     expect(document.body.textContent).not.toContain("secret-route-error-canary");
+    expect(diagnostic).toHaveBeenCalledWith("Route error", "ROUTE_FAILURE");
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain("secret-route-error-canary");
     expect(screen.getByRole("button", { name: "Reload page" })).toBeVisible();
     await userEvent.click(screen.getByRole("link", { name: "History" }));
     expect(await screen.findByRole("heading", { name: "Private game history" })).toBeVisible();

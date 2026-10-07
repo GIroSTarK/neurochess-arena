@@ -13,6 +13,7 @@ import { z } from "zod";
 import { createAiApi } from "../api/ai-client";
 import { accountError, AccountFailure } from "../api/auth-client";
 import { ApiFailure } from "../api/failures";
+import { IssuedResults } from "../app/issued-results";
 import type { AppRouteContext } from "../app/route-context";
 import { type PublicAccess, type ScopedRouteData, waitForRouteResult } from "../app/route-runtime";
 
@@ -50,7 +51,7 @@ export function historyRouteData({
   apiBaseUrl,
   runtime,
 }: Pick<AppRouteContext, "apiBaseUrl" | "runtime">) {
-  const pages = new Set<WeakRef<HistoryRouteData>>();
+  const pages = new IssuedResults<HistoryRouteData>();
   let deletionRevision = 0;
 
   const loader = async ({ request }: LoaderFunctionArgs): Promise<HistoryRouteData | null> => {
@@ -66,8 +67,7 @@ export function historyRouteData({
           page: revision === deletionRevision ? page : null,
           error,
         });
-        for (const reference of pages) if (!reference.deref()) pages.delete(reference);
-        pages.add(new WeakRef(scoped));
+        pages.track(scoped);
         return scoped;
       };
       if (access !== "account" || !identity) return result(null);
@@ -120,10 +120,9 @@ export function historyRouteData({
       // Clear the actual router/cache references before refresh and fence reads
       // begun before this acknowledgement, including consistent pre-delete views.
       deletionRevision++;
-      for (const reference of pages) {
-        const page = reference.deref();
-        if (page?.data) page.data.page = null;
-      }
+      pages.forEach((page) => {
+        if (page.data) page.data.page = null;
+      });
       pages.clear();
       return result({ success: parsed.data.intent === "delete-game" ? "game" : "history" });
     } catch (error) {

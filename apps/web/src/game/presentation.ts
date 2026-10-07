@@ -77,6 +77,8 @@ export function sandboxPresentation(state: SandboxState, t: TFunction) {
     selectedPly: state.replay ? state.replayPly : undefined,
     startedGameId:
       state.announcement?.kind === "started" ? state.announcement.snapshot.gameId : null,
-    announcement: announcementMessage(state.announcement, t),
+    announcement:
+      announcementMessage(state.announcement, t) ||
+      (state.readiness === "unavailable" ? t("connection.unavailable") : ""),
   };
 }

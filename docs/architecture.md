@@ -467,6 +467,6 @@ Phase 1 acceptance must additionally verify:
 
 The web app can be hosted as static assets. The API hosting environment must support a long-running Node.js Fastify process and persistent WebSocket connections. PostgreSQL should be managed or backed up appropriately and reached over TLS. Both applications should be containerizable.
 
-The web origin must serve the SPA HTML for document requests to retained routes, including `/games/<uuid>` and `/sandbox/games/<uuid>`. These overlap API prefixes: do not proxy every `/games/*` or `/sandbox/*` web document request to the API. Preserve static-asset handling and the separately configured JSON API origin. Vite supplies this fallback locally; actual-host fallback verification remains a deployment requirement.
+Static hosting must support the [browser route and SPA-fallback contract](development.md#browser-routes), including verification on the selected deployment host.
 
 The exact hosting providers, production region, email delivery service, observability service, and backup policy remain open decisions. Custom avatar uploads and their storage are deferred by the [profile policy](product.md#usernames-and-avatars).
