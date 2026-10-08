@@ -1,7 +1,7 @@
 import { replace } from "react-router";
 
-import type { RouteActionScope } from "../app/route-data";
-import type { RouteRuntime } from "../app/route-runtime";
+import type { RouteActionScope } from "../routing/route-data";
+import type { RouteRuntime } from "../routing/route-runtime";
 
 import type { AccountActionData } from "./action-data";
 

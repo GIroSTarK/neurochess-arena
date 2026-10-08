@@ -1,11 +1,11 @@
 import { createBrowserRouter, matchRoutes, type RouteObject } from "react-router";
 
 import { createAuthApi } from "../api/auth-client";
-import type { AuthEntry } from "../auth/navigation";
+import type { AuthEntry } from "../auth/auth-entry";
+import { RouteNavigation } from "../routing/route-navigation";
+import { gameRouteKey } from "../routing/route-navigation";
+import { RouteRuntime } from "../routing/route-runtime";
 
-import { RouteNavigation } from "./route-navigation";
-import { gameRouteKey } from "./route-navigation";
-import { RouteRuntime } from "./route-runtime";
 import { createAppRoutes } from "./routes";
 
 export interface AppRouterOptions {

@@ -2,7 +2,7 @@ import type { ChessColor } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
-import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
+import type { PlayerSummaryData } from "../arena/panels/player-summary";
 import { resultReason, resultScore } from "../arena/result";
 import { isTerminal, plyColor } from "../gameplay/snapshot";
 import { replayView } from "../position/replay";

@@ -1,11 +1,10 @@
 import { screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AppNavigation } from "../shell/app-navigation";
 import { GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 import { renderApp } from "../test/render";
-
-import { AppNavigation } from "./AppNavigation";
 
 function visit(path: string, sandboxEnabled: boolean) {
   return renderApp(

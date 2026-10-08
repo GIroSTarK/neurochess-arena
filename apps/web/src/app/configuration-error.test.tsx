@@ -1,0 +1,27 @@
+import { screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { renderLocalized } from "../test/render";
+
+import { ConfigurationError } from "./configuration-error";
+import { WebEnvironmentValidationError } from "./env";
+
+describe("localized configuration errors", () => {
+  it("renders catalog copy and variable names without exception text", () => {
+    renderLocalized(
+      <ConfigurationError error={new WebEnvironmentValidationError(["VITE_API_BASE_URL"])} />,
+    );
+    expect(screen.getByRole("heading", { name: "Configuration unavailable" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Check the following configuration variables: VITE_API_BASE_URL/),
+    ).toBeInTheDocument();
+    expect(document.title).toBe("Neurochess Arena");
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("never renders an unknown exception message", () => {
+    renderLocalized(<ConfigurationError error={new Error("configuration-secret-canary")} />);
+    expect(document.body.textContent).not.toContain("configuration-secret-canary");
+    expect(screen.getByText(/The application could not start/)).toBeInTheDocument();
+  });
+});

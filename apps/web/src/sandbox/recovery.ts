@@ -1,11 +1,11 @@
 import type { GameSnapshot, LifecycleCommand } from "@neurochess/contracts";
 
 import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
-import type { GameTarget } from "../app/navigation";
-import { parseGameId } from "../app/route-urls";
 import { failureNotice, rejectionOf, safeFailure } from "../gameplay/failures";
 import type { Operation, OperationGate } from "../gameplay/operations";
 import { isTerminal } from "../gameplay/snapshot";
+import type { GameTarget } from "../routing/route-navigation";
+import { parseGameId } from "../routing/route-urls";
 
 import type { GameSession } from "./session";
 import type { SandboxStore } from "./store";

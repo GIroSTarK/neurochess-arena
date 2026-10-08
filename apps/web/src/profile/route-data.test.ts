@@ -2,7 +2,7 @@ import { createMemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppRouter } from "../app/router";
-import { readAuthEntry } from "../auth/navigation";
+import { readAuthEntry } from "../auth/auth-entry";
 import {
   GAME_ID,
   jsonResponse,

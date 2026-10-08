@@ -1,12 +1,12 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 
 import type { SandboxApi } from "../api/sandbox-client";
-import type { GameTarget } from "../app/navigation";
 import { ArchiveController } from "../gameplay/archive";
 import { failureNotice, isAccessCode, safeFailure } from "../gameplay/failures";
 import { OperationGate } from "../gameplay/operations";
 import { browserPgnDelivery, type PgnDelivery } from "../gameplay/pgn";
 import { isTerminal, isUnfinished } from "../gameplay/snapshot";
+import type { GameTarget } from "../routing/route-navigation";
 
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";

@@ -3,9 +3,9 @@ import { type LoaderFunction, type RouteObject, RouterContextProvider } from "re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAuthApi } from "../api/auth-client";
-import { RouteNavigation } from "../app/route-navigation";
-import { RouteRuntime } from "../app/route-runtime";
 import { createAppRoutes } from "../app/routes";
+import { RouteNavigation } from "../routing/route-navigation";
+import { RouteRuntime } from "../routing/route-runtime";
 import {
   errorResponse,
   FOOLS_MATE,

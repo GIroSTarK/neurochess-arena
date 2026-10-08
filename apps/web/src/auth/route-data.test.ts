@@ -10,7 +10,7 @@ import { createAppRouter } from "../app/router";
 import { GAME_ID, jsonResponse, requestBody, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 
-import { readAuthEntry } from "./navigation";
+import { readAuthEntry } from "./auth-entry";
 
 const session = {
   user: { id: GAME_ID, email: "private@example.com", emailVerified: true },

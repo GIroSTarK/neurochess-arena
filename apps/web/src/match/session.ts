@@ -2,10 +2,10 @@ import type { GameDetails, GameSnapshot } from "@neurochess/contracts";
 
 import { AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
-import { parseGameId } from "../app/route-urls";
 import type { ArchiveController } from "../gameplay/archive";
 import { isAccessFailure } from "../gameplay/failures";
 import { isTerminal } from "../gameplay/snapshot";
+import { parseGameId } from "../routing/route-urls";
 
 import type { AiTurnRunner } from "./ai-turn-runner";
 import type { MatchCommands } from "./commands";

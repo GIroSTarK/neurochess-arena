@@ -4,15 +4,15 @@ import { z } from "zod";
 
 import { accountError } from "../api/auth-client";
 import { accountIdSchema } from "../api/identifier-schemas";
+import type { AccountActionData, AccountOutcome } from "../auth/action-data";
+import { type AccountIntentHandler, sessionActions } from "../auth/session-actions";
 import {
   protectedLoader,
   routeAction,
   type RouteActionScope,
   strictFormIntent,
-} from "../app/route-data";
-import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-runtime";
-import type { AccountActionData, AccountOutcome } from "../auth/action-data";
-import { type AccountIntentHandler, sessionActions } from "../auth/session-actions";
+} from "../routing/route-data";
+import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../routing/route-runtime";
 
 export type ProfileRouteData = ScopedRouteData<{
   access: PublicAccess;

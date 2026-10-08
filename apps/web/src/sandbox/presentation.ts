@@ -1,7 +1,7 @@
 import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
-import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
+import type { PlayerSummaryData } from "../arena/panels/player-summary";
 import { resultReason, resultScore } from "../arena/result";
 import { plyColor } from "../gameplay/snapshot";
 import { interactionEpoch, isTerminal, isUnfinished } from "../gameplay/snapshot";

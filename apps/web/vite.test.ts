@@ -58,7 +58,7 @@ describe.each(["production", "development"] as const)(
           .filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
       ).not.toEqual([]);
       const sandbox = chunks.find((chunk) =>
-        chunk.facadeModuleId?.endsWith("/sandbox/SandboxRoute.tsx"),
+        chunk.facadeModuleId?.endsWith("/sandbox/sandbox-route.tsx"),
       )!;
       expect(sandbox).toBeDefined();
       expect(sandbox.isDynamicEntry).toBe(true);
@@ -79,7 +79,7 @@ describe.each(["production", "development"] as const)(
         "/sandbox/controller.ts",
         "/sandbox/recovery.ts",
         "/api/sandbox-client.ts",
-        "/board/Chessboard.tsx",
+        "/board/chessboard.tsx",
       ]) {
         expect(chunks.some((chunk) => chunk.moduleIds.some((id) => id.endsWith(path)))).toBe(true);
       }

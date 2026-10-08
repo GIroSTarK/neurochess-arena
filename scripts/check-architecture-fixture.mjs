@@ -8,6 +8,22 @@ const { bin } = JSON.parse(
 );
 const executable = resolve(dependencyCruiserDirectory, bin.depcruise);
 const fixtures = [
+  {
+    path: "apps/web/src/routing/forbidden-app-import.ts",
+    rule: "web-routing-no-composition",
+  },
+  {
+    path: "apps/web/src/shell/forbidden-auth-import.ts",
+    rule: "web-shell-no-features",
+  },
+  {
+    path: "apps/web/src/match/forbidden-app-import.ts",
+    rule: "web-features-no-app-wiring",
+  },
+  {
+    path: "apps/web/src/gameplay/forbidden-routing-import.ts",
+    rule: "gameplay-no-features",
+  },
   { path: "apps/web/src/auth/forbidden-history-import.ts", rule: "web-auth-feature-imports" },
   {
     path: "apps/web/src/match/forbidden-credential-screen-import.ts",

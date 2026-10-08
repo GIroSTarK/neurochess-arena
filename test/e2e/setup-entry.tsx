@@ -12,11 +12,11 @@ import { createAiApi } from "../../apps/web/src/api/ai-client";
 import { createAuthApi } from "../../apps/web/src/api/auth-client";
 import { ApiFailure } from "../../apps/web/src/api/failures";
 import { createSessionCredentials } from "../../apps/web/src/api/session-credentials";
-import { RouteContext } from "../../apps/web/src/app/route-context";
-import { RouteNavigation } from "../../apps/web/src/app/route-navigation";
-import { RouteRuntime } from "../../apps/web/src/app/route-runtime";
 import { i18n } from "../../apps/web/src/i18n";
-import { ArenaSetupScreen } from "../../apps/web/src/setup/ArenaSetupScreen";
+import { RouteContext } from "../../apps/web/src/routing/route-context";
+import { RouteNavigation } from "../../apps/web/src/routing/route-navigation";
+import { RouteRuntime } from "../../apps/web/src/routing/route-runtime";
+import { ArenaSetupScreen } from "../../apps/web/src/setup/arena-setup-screen";
 import type { SetupEntry } from "../../apps/web/src/setup/controller";
 
 import { API_ORIGIN } from "./environment";

@@ -1,7 +1,7 @@
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { RouteNavigation } from "../app/route-navigation";
+import { RouteNavigation } from "../routing/route-navigation";
 import { errorResponse, GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock, type HttpRoutes } from "../test/http";
 

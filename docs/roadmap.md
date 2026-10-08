@@ -116,7 +116,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 ## Web refactoring — before Phase 4
 
-**Status:** In progress
+**Status:** Complete
 
 - [x] Step 0: align Arena profile-access cleanup and Sandbox request privacy, and validate the secure API origin at startup. See the [controller access policy](architecture.md#ai-controller-presence-and-recovery), [Sandbox transport](architecture.md#sandbox-web-client), and [environment contract](development.md#environment-contract).
 - [x] Step 1: share HTTP transport, request identity, and game-response validation across clients; separate the Sandbox client behind the shared game-command interface and preserve its build boundary. See the [client transport architecture](architecture.md#sandbox-web-client).
@@ -125,6 +125,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] Step 4: thin `MatchScreen` with a pure, Node-tested presentation projection and feature-owned header, board, and details adapters; move `AiControls` into the match feature and give shared labels neutral localization keys. See the [Arena presentation architecture](architecture.md#ai-controller-presence-and-recovery).
 - [x] Step 5: share route-data validation, action scopes, result fences, and revalidation helpers; split Auth and Account actions, move routes and profile UI to their owning features, and enforce declared cross-feature imports. See the [routing architecture](architecture.md#browser-routing).
 - [x] Step 6: read Sandbox navigation availability from route context; share text links, secret-input visibility/reset handling, Cancel-first confirmations, allowlisted return URLs, and resignation copy while preserving feature-owned lifetimes and command guards.
+- [x] Step 7: separate application composition, routing services, and shell presentation; normalize web filenames to kebab-case, give auth entry parsing and navigation types explicit owners, and update source paths and architecture guards. See the [routing architecture](architecture.md#browser-routing) and [filename convention](development.md#dependency-direction).
 
 ## Phase 4 — Private online human games
 

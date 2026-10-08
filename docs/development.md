@@ -102,6 +102,9 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 - `packages/database` is server-only and does not depend on application code.
 - Product packages expose explicit entrypoints; consumers must not deep-import their source files.
 - Web features may import other features only through the paths declared in `dependency-cruiser.config.mjs`; route-tree and shared onboarding composition belong in `app/`.
+- Keep routing services in `routing/` and page-shell presentation in `shell/`, following the enforced [routing boundaries](architecture.md#browser-routing).
+
+Use kebab-case filenames throughout `apps/web`, including React components and hooks (`match-screen.tsx`, `use-sandbox.ts`). Keep exported React component names in PascalCase and hooks in camelCase. Colocate tests with the matching filename and `.test.ts` or `.test.tsx` suffix; dotted suite qualifiers such as `controller.commands.test.ts` remain supported.
 
 `npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, the shared-package infrastructure restrictions, and exclusion of chess test helpers from production imports.
 
@@ -120,7 +123,7 @@ Special-position fixtures live in `packages/chess/test`, outside the production 
 
 ## Browser routes
 
-`main.tsx` validates the environment, consumes auth callback/reset input, constructs one `createBrowserRouter`, and mounts `RouterProvider` from `react-router/dom` inside the startup error boundary. Add application routes in `app/routes.tsx`; use `Link` or router navigation for local destinations and the pure `app/route-urls.ts` builders for game/auth links. Test the same tree with `createMemoryRouter` rather than maintaining a parallel route table.
+`main.tsx` validates the environment, consumes auth callback/reset input, constructs one `createBrowserRouter`, and mounts `RouterProvider` from `react-router/dom` inside the startup error boundary. Add application routes in `app/routes.tsx`; use `Link` or router navigation for local destinations and the pure `routing/route-urls.ts` builders for game/auth links. Test the same tree with `createMemoryRouter` rather than maintaining a parallel route table.
 
 Arena setup is `/`; its live/recovery/replay route is `/games/<uuid>`. Sandbox uses `/sandbox` and `/sandbox/games/<uuid>`. Route segments are case-sensitive. UUIDs accept either case and are validated to lowercase for requests; generated paths use lowercase UUIDs without trailing slashes. A single trailing slash is accepted without a normalization redirect. Missing/malformed IDs, encoded separators, extra segments, legacy `game` queries on entry routes, and mixed path/query game targets show unavailable without application requests. Old query links are deliberately unsupported and never translated or redirected.
 
@@ -140,11 +143,12 @@ Vite preview's generic fallback also returns HTML for missing asset URLs when Ac
 2. Validate URL parameters and action intents before requests. Resolve identity inside each protected leaf, pass cancellation through the validated clients, and return generation-scoped, bounded values. Keep secrets and return destinations out of router results/history state.
 3. Pass committed loader data to screen adapters. Require loader revalidation for entry retries; retain controller reads only for explicit command reconciliation, provider discovery, telemetry, replay and PGN. A canceled request never proves a write failed.
 4. Preserve shared game owners, creation handoffs and pending-departure cleanup. Define revalidation by cause so metadata/action refreshes cannot repeat recovery or reset live keys.
+   Use `routing/use-game-route-controller.ts` and the shared lifetime/navigation services. Keep bootstrap auth callback handling in `auth/auth-entry.ts` and page-shell components in `shell/`.
 5. Exercise the actual tree with `renderApp` and `createMemoryRouter`, then cover native link/history/focus behavior in Playwright. `renderLocalized` supplies an isolated router for presentation tests; the isolated setup harness owns its own entry loader and never mounts public identity loaders. Test-only routes remain outside the production tree and module graph.
 
 ### Public identity and authentication data
 
-Public leaf loaders and actions use `app/route-runtime.ts` through the shared helpers in `app/route-data.ts`. Resolve identity in every protected leaf before private work; parent loaders run independently. `auth/route-data.ts` owns `/auth/*` actions, and `profile/route-data.ts` owns the `/account` loader/action. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.
+Public leaf loaders and actions use `routing/route-runtime.ts` through the shared helpers in `routing/route-data.ts`. Resolve identity in every protected leaf before private work; parent loaders run independently. `auth/route-data.ts` owns `/auth/*` actions, and `profile/route-data.ts` owns the `/account` loader/action. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.
 
 Use `strictFormIntent` with strict schemas for account mutations, `routeAction` for action lifetimes and expected-account resolution, and `FencedResults` when acknowledged writes must clear issued data or invalidate older reads. Keep endpoint error classification in the feature and adopt the settled generation only for an intentional identity transition. History and Credentials use `selfPostRevalidation` because their screens explicitly reconcile writes. See the [routing architecture](architecture.md#browser-routing) for ownership and cache guarantees.
 
@@ -162,7 +166,7 @@ Auth forms submit to route actions and use fetchers for same-page acknowledgemen
 
 ## Sandbox UI
 
-`sandbox/SandboxRoute.tsx` and `sandbox/route-data.ts` load lazily behind the Sandbox flag. Entry loaders own readiness and guest-authorized discovery/snapshot reads; `useSandbox` consumes committed results. Keep Start, versioned recovery, command reconciliation, replay and PGN in the controller. Revalidation may update readiness or clear denied access, but must not repeat recovery, replace a live snapshot, or reset an uncertain command. Retry connection and failed entry reads use loader revalidation; command retries retain their original payloads. Reference fixtures use their own API-independent branch.
+`sandbox/sandbox-route.tsx` and `sandbox/route-data.ts` load lazily behind the Sandbox flag. Entry loaders own readiness and guest-authorized discovery/snapshot reads; `useSandbox` consumes committed results. Keep Start, versioned recovery, command reconciliation, replay and PGN in the controller. Revalidation may update readiness or clear denied access, but must not repeat recovery, replace a live snapshot, or reset an uncertain command. Retry connection and failed entry reads use loader revalidation; command retries retain their original payloads. Reference fixtures use their own API-independent branch.
 
 Set `SANDBOX_ENABLED=true` in the local `.env`, apply migrations, and run `npm run dev`. Open `http://localhost:5173`, choose **Sandbox** in the header, then **Start sandbox**, or open `http://localhost:5173/sandbox` directly. Arena at `/` provides the separate [AI-versus-AI flow](#arena-controller-api); loading setup reads unfinished-game discovery without creating a guest. When disabled, Sandbox is absent from navigation and direct links show an unavailable page without mounting the game client. The Sandbox service indicator checks the database through `/ready`; API creation and access checks remain authoritative if web and API settings differ.
 
@@ -190,7 +194,7 @@ Choose Human vs human, AI vs human with either human color, AI vs AI, or identic
 
 All sample identities, commentary, and measurements are explicitly labeled **Test data**. Human seats omit AI details; only the supplied human seat receives a resignation action. AI scenarios exercise commentary/telemetry slots and opt-in Moves/Analysis/Events tabs. Replay synchronizes sample details with the selected position. Missing commentary, missing usage/pricing, and the initial position have explicit empty/unavailable states. Analysis is a labeled extension slot; no Stockfish or provider is invoked.
 
-The reference adapter and data live in `apps/web/src/reference`; reusable composition lives in `arena/ArenaDetails.tsx` and `ui/DetailTabs.tsx`. Keep fixture data and adapters out of shared presentation components. Cover every scenario's seat/capability mapping in `apps/web/src/reference/ArenaReferenceScreen.test.tsx`; extend `test/e2e/arena-reference.spec.ts` when a new capability needs browser-specific geometry, scrolling, or native interaction coverage. This is a UI reuse check, not acceptance of real AI orchestration or room permissions.
+The reference adapter and data live in `apps/web/src/reference`; reusable composition lives in `arena/arena-details.tsx` and `ui/detail-tabs.tsx`. Keep fixture data and adapters out of shared presentation components. Cover every scenario's seat/capability mapping in `apps/web/src/reference/arena-reference-screen.test.tsx`; extend `test/e2e/arena-reference.spec.ts` when a new capability needs browser-specific geometry, scrolling, or native interaction coverage. This is a UI reuse check, not acceptance of real AI orchestration or room permissions.
 
 ## Account session foundation
 

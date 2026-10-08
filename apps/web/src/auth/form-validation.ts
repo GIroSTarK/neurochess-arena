@@ -4,7 +4,7 @@ import {
   authSignInRequestSchema,
 } from "@neurochess/contracts";
 
-import type { AuthForm } from "../app/route-urls";
+import type { AuthForm } from "../routing/route-urls";
 
 export function authFormInvalid(kind: AuthForm, email: string, password: string) {
   if (kind !== "reset-password" && !authEmailRequestSchema.safeParse({ email }).success) {

@@ -3,12 +3,12 @@ import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-rou
 import { createAiApi } from "../api/ai-client";
 import { createCredentialApi } from "../api/credential-client";
 import { ApiFailure } from "../api/failures";
-import type { AppRouteContext } from "../app/route-context";
-import { protectedLoader } from "../app/route-data";
-import { gameRouteKey, gameRouteTarget } from "../app/route-navigation";
-import type { PublicAccess, ScopedRouteData } from "../app/route-runtime";
 import type { CredentialCatalogState } from "../credentials/catalog";
 import { isAccessFailure } from "../gameplay/failures";
+import type { AppRouteContext } from "../routing/route-context";
+import { protectedLoader } from "../routing/route-data";
+import { gameRouteKey, gameRouteTarget } from "../routing/route-navigation";
+import type { PublicAccess, ScopedRouteData } from "../routing/route-runtime";
 import type { SetupEntry } from "../setup/controller";
 
 import type { MatchEntry } from "./controller";

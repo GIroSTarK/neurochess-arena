@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { RouteObject } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { consumeAuthEntry } from "../auth/navigation";
+import { consumeAuthEntry } from "../auth/auth-entry";
 import { createWebI18n } from "../i18n";
 import { setupModels } from "../test/ai-setup";
 import {

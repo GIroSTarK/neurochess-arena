@@ -3,33 +3,33 @@
 const webFeatureImports = {
   auth: [],
   profile: [
-    "auth/AccountField",
-    "auth/AccountFrame",
+    "auth/account-field",
+    "auth/account-frame",
     "auth/action-data",
-    "auth/Avatar",
+    "auth/avatar",
     "auth/context",
     "auth/session-actions",
-    "auth/useRouteAuthEntry",
+    "auth/use-route-auth-entry",
   ],
   credentials: [
-    "auth/AccountField",
-    "auth/AccountFrame",
-    "auth/PasswordField",
+    "auth/account-field",
+    "auth/account-frame",
+    "auth/password-field",
     "auth/context",
-    "auth/useRouteAuthEntry",
+    "auth/use-route-auth-entry",
   ],
-  history: ["auth/AccountFrame", "auth/context"],
+  history: ["auth/account-frame", "auth/context"],
   match: [
-    "auth/AccountAccess",
-    "auth/AuthRoute",
+    "auth/account-access",
+    "auth/auth-route",
     "auth/context",
-    "auth/useRouteAuthEntry",
+    "auth/use-route-auth-entry",
     "credentials/catalog",
     "credentials/use-credentials",
-    "setup/ArenaSetupScreen",
+    "setup/arena-setup-screen",
     "setup/controller",
   ],
-  setup: ["auth/AccountAccess"],
+  setup: ["auth/account-access"],
   sandbox: [],
   reference: [],
 };
@@ -38,6 +38,30 @@ const webFeatures = Object.keys(webFeatureImports).join("|");
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
   forbidden: [
+    {
+      name: "web-routing-no-composition",
+      comment: "Routing services cannot depend on application wiring or shell presentation.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/routing/", pathNot: "\\.test\\.tsx?$" },
+      to: { path: "(^|/)apps/web/src/(app|shell)/" },
+    },
+    {
+      name: "web-shell-no-features",
+      comment: "The shell uses route context and shared UI, never startup wiring or features.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/shell/", pathNot: "\\.test\\.tsx?$" },
+      to: { path: `(^|/)apps/web/src/(app|api|${webFeatures})/` },
+    },
+    {
+      name: "web-features-no-app-wiring",
+      comment: "Feature routes may use the shared public-page guard, but not application wiring.",
+      severity: "error",
+      from: { path: `(^|/)apps/web/src/(${webFeatures})/`, pathNot: "\\.test\\.tsx?$" },
+      to: {
+        path: "(^|/)apps/web/src/app/",
+        pathNot: "(^|/)apps/web/src/app/public-page\\.tsx$",
+      },
+    },
     ...Object.entries(webFeatureImports).map(([feature, allowed]) => ({
       name: `web-${feature}-feature-imports`,
       comment:
@@ -89,7 +113,7 @@ export default {
       severity: "error",
       from: { path: "(^|/)apps/web/src/gameplay/", pathNot: "\\.test\\.tsx?$" },
       to: {
-        path: `(^|/)apps/web/src/((app|${webFeatures})/|api/sandbox-client\\.ts$)`,
+        path: `(^|/)apps/web/src/((app|routing|shell|${webFeatures})/|api/sandbox-client\\.ts$)`,
       },
     },
     {

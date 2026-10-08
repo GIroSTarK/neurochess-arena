@@ -1,22 +1,22 @@
 import type { RouteObject } from "react-router";
 
-import { AccountApplication } from "../auth/AccountApplication";
-import { AuthRoute } from "../auth/AuthRoute";
+import { AccountApplication } from "../auth/account-application";
+import { AuthRoute } from "../auth/auth-route";
 import { authAction, publicLoader } from "../auth/route-data";
-import { CredentialsRoute } from "../credentials/CredentialsRoute";
+import { CredentialsRoute } from "../credentials/credentials-route";
 import { credentialRouteData } from "../credentials/route-data";
-import { HistoryRoute } from "../history/HistoryRoute";
+import { HistoryRoute } from "../history/history-route";
 import { historyRouteData } from "../history/route-data";
-import { ArenaRoute } from "../match/ArenaRoute";
+import { ArenaRoute } from "../match/arena-route";
 import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
-import { ProfileRoute } from "../profile/ProfileRoute";
+import { ProfileRoute } from "../profile/profile-route";
 import { accountAction, profileLoader } from "../profile/route-data";
+import { type AppRouteContext, RouteContext } from "../routing/route-context";
+import { RouteNotice } from "../shell/route-notice";
+import { StaticScreen } from "../shell/static-screen";
 
-import { type AppRouteContext, RouteContext } from "./route-context";
-import { RouteErrorBoundary } from "./RouteErrorBoundary";
-import { RouteNotice } from "./RouteNotice";
-import { RouteRoot } from "./RouteRoot";
-import { StaticScreen } from "./StaticScreen";
+import { RouteErrorBoundary } from "./route-error-boundary";
+import { RouteRoot } from "./route-root";
 
 declare const __ARENA_REFERENCE_ENABLED__: boolean;
 
@@ -147,7 +147,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
                 lazy: async () => {
                   try {
                     const { ArenaReferenceScreen } =
-                      await import("../reference/ArenaReferenceScreen");
+                      await import("../reference/arena-reference-screen");
                     return { Component: ArenaReferenceScreen };
                   } catch {
                     throw new Error("ROUTE_MODULE_UNAVAILABLE");
@@ -169,7 +169,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
 async function loadSandboxRoute(context: AppRouteContext) {
   try {
     const [{ SandboxRoute }, { sandboxEntryLoader, sandboxGameLoader }] = await Promise.all([
-      import("../sandbox/SandboxRoute"),
+      import("../sandbox/sandbox-route"),
       import("../sandbox/route-data"),
     ]);
     return {

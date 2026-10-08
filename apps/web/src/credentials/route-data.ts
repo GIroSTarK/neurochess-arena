@@ -7,15 +7,19 @@ import {
   type CredentialFailure,
 } from "../api/credential-client";
 import { accountIdSchema, credentialIdSchema } from "../api/identifier-schemas";
-import { FencedResults } from "../app/fenced-results";
-import type { AppRouteContext } from "../app/route-context";
+import { FencedResults } from "../routing/fenced-results";
+import type { AppRouteContext } from "../routing/route-context";
 import {
   protectedLoader,
   routeAction,
   selfPostRevalidation,
   strictFormIntent,
-} from "../app/route-data";
-import { type PublicAccess, type ScopedRouteData, waitForRouteResult } from "../app/route-runtime";
+} from "../routing/route-data";
+import {
+  type PublicAccess,
+  type ScopedRouteData,
+  waitForRouteResult,
+} from "../routing/route-runtime";
 
 import { type CredentialCatalogState, notifyCredentialChange } from "./catalog";
 

@@ -6,12 +6,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 
-import { App } from "./app/App";
-import { ConfigurationError } from "./app/ConfigurationError";
+import { App } from "./app/app";
+import { ConfigurationError } from "./app/configuration-error";
 import { parseWebEnvironment } from "./app/env";
-import { ErrorBoundary } from "./app/ErrorBoundary";
+import { ErrorBoundary } from "./app/error-boundary";
 import { createAppRouter } from "./app/router";
-import { consumeAuthEntry } from "./auth/navigation";
+import { consumeAuthEntry } from "./auth/auth-entry";
 import { i18n } from "./i18n";
 
 const rootElement = document.querySelector<HTMLDivElement>("#root");

@@ -2,7 +2,7 @@ import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ScopedRouteData } from "../app/route-runtime";
+import type { ScopedRouteData } from "../routing/route-runtime";
 import {
   GAME_ID,
   jsonResponse,
@@ -14,7 +14,7 @@ import {
 import { createHttpMock } from "../test/http";
 import { renderApp } from "../test/render";
 
-import { consumeAuthEntry } from "./navigation";
+import { consumeAuthEntry } from "./auth-entry";
 
 const options = { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false };
 const session = {

@@ -2,13 +2,13 @@ import { authOAuthProviderSchema } from "@neurochess/contracts";
 import { replace } from "react-router";
 
 import { accountError, AccountFailure } from "../api/auth-client";
-import { protectedLoader, routeAction, type RouteActionScope } from "../app/route-data";
-import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-runtime";
-import type { AuthForm } from "../app/route-urls";
+import { protectedLoader, routeAction, type RouteActionScope } from "../routing/route-data";
+import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../routing/route-runtime";
+import type { AuthForm } from "../routing/route-urls";
 
 import type { AccountActionData } from "./action-data";
+import type { AuthEntry } from "./auth-entry";
 import { authFormInvalid } from "./form-validation";
-import type { AuthEntry } from "./navigation";
 import { type AccountIntentHandler, sessionActions } from "./session-actions";
 
 export type PublicRouteData = ScopedRouteData<{ access: PublicAccess }>;

@@ -101,7 +101,7 @@ test("reference geometry keeps human controls aligned and identical long names r
     expect(board).not.toBeNull();
     expect(Math.abs(flip!.x - board!.x)).toBeLessThan(2);
   }
-  // Capabilities and all five seat mappings belong to ArenaReferenceScreen.test.tsx.
+  // Capabilities and all five seat mappings belong to arena-reference-screen.test.tsx.
   for (const scenario of ["humanHuman", "identical"]) {
     await page.getByLabel("Test scenario").selectOption(scenario);
     const white = await page.getByLabel("White player").boundingBox();

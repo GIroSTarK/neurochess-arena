@@ -2,7 +2,7 @@ import { createGame } from "@neurochess/chess";
 import type { ChessColor } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
-import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
+import type { PlayerSummaryData } from "../arena/panels/player-summary";
 
 export interface ReferenceScenario {
   readonly id: "humanHuman" | "aiHuman" | "humanAi" | "aiAi" | "identical";

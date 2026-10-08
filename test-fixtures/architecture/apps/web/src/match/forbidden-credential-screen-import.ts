@@ -1,3 +1,3 @@
-import { CredentialsScreen } from "../../../../../../apps/web/src/credentials/CredentialsScreen";
+import { CredentialsScreen } from "../../../../../../apps/web/src/credentials/credentials-screen";
 
 void CredentialsScreen;

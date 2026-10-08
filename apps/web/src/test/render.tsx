@@ -6,13 +6,13 @@ import { createMemoryRouter, MemoryRouter, type RouteObject } from "react-router
 import { afterEach } from "vitest";
 
 import { createAuthApi } from "../api/auth-client";
-import { App } from "../app/App";
-import { type AppRouteContext, RouteContext } from "../app/route-context";
-import { RouteNavigation } from "../app/route-navigation";
-import { RouteRuntime } from "../app/route-runtime";
+import { App } from "../app/app";
 import { type AppRouterOptions, createAppRouter } from "../app/router";
-import { consumeAuthEntry, readAuthEntry } from "../auth/navigation";
+import { consumeAuthEntry, readAuthEntry } from "../auth/auth-entry";
 import { createWebI18n } from "../i18n";
+import { type AppRouteContext, RouteContext } from "../routing/route-context";
+import { RouteNavigation } from "../routing/route-navigation";
+import { RouteRuntime } from "../routing/route-runtime";
 
 export interface LocalizedRenderOptions extends Omit<RenderOptions, "wrapper"> {
   /** Defaults to a fresh English instance; pass one to exercise other resources. */

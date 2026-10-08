@@ -1,5 +1,5 @@
 import type { AccountErrorCode } from "../api/auth-client";
-import type { ScopedRouteData } from "../app/route-runtime";
+import type { ScopedRouteData } from "../routing/route-runtime";
 
 export type AccountOutcome =
   | { notice: "accepted" | "resetDone" | "saved" | "deleted" }
