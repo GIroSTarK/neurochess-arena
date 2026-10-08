@@ -88,7 +88,7 @@ function harness(overrides: HttpRoutes = {}) {
       args(new Request("http://localhost/history" + search, { signal })),
     );
   const submit = (
-    input: Record<string, string>,
+    input: Record<string, string> | URLSearchParams,
     signal = new AbortController().signal,
     method = "POST",
   ) => {
@@ -113,6 +113,17 @@ const deletion = {
 };
 
 describe("History route data", () => {
+  it.each(["intent", "expectedAccount", "gameId", "confirm"])(
+    "rejects repeated %s fields before resolving identity or deleting history",
+    async (field) => {
+      const { submit, http } = harness();
+      const input = new URLSearchParams(deletion);
+      input.append(field, input.get(field)!);
+      expect(await submit(input)).toMatchObject({ data: { error: "rejected" } });
+      expect(http.fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it("loads the newest 20 terminal summaries before render through account/profile authority", async () => {
     const { read, http, runtime } = harness();
     expect(await read()).toEqual({

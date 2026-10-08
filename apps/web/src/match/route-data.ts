@@ -1,10 +1,10 @@
 import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
 import { createAiApi } from "../api/ai-client";
-import { accountError, AccountFailure } from "../api/auth-client";
 import { createCredentialApi } from "../api/credential-client";
 import { ApiFailure } from "../api/failures";
 import type { AppRouteContext } from "../app/route-context";
+import { protectedLoader } from "../app/route-data";
 import { gameRouteKey, gameRouteTarget } from "../app/route-navigation";
 import type { PublicAccess, ScopedRouteData } from "../app/route-runtime";
 import type { CredentialCatalogState } from "../credentials/catalog";
@@ -27,14 +27,11 @@ type ArenaContext = Pick<AppRouteContext, "apiBaseUrl" | "runtime" | "navigation
 function entryLoader(context: ArenaContext, kind: "setup" | "game") {
   const { runtime, apiBaseUrl, navigation } = context;
   let latest: ArenaRouteData | null = null;
-  const loader = async ({
-    request,
-    params,
-  }: LoaderFunctionArgs): Promise<ArenaRouteData | null> => {
-    const url = new URL(request.url);
-    const target = gameRouteTarget("arena", url, params.gameId);
-    if (target.kind === "invalid" || (kind === "game" && target.kind !== "game")) return null;
-    try {
+  const loader = protectedLoader(
+    async ({ request, params }: LoaderFunctionArgs): Promise<ArenaRouteData | null> => {
+      const url = new URL(request.url);
+      const target = gameRouteTarget("arena", url, params.gameId);
+      if (target.kind === "invalid" || (kind === "game" && target.kind !== "game")) return null;
       const resolved = await runtime.resolvePublicIdentity(request.signal, true);
       const { identity, generation, access } = resolved;
       const result = (
@@ -97,11 +94,8 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
         }
       }
       return cancelled() ? cancelledResult() : result(entry, credentials);
-    } catch (error) {
-      if (request.signal.aborted || accountError(error) === "cancelled") return null;
-      throw new AccountFailure("AUTH_UNAVAILABLE");
-    }
-  };
+    },
+  );
   const shouldRevalidate = (args: ShouldRevalidateFunctionArgs) => {
     if (!latest?.data || latest.generation !== runtime.account.getSnapshot().revision) return true;
     if (gameRouteKey("arena", args.currentUrl) !== gameRouteKey("arena", args.nextUrl)) return true;

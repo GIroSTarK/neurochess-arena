@@ -87,7 +87,10 @@ function harness(overrides: HttpRoutes = {}) {
     (route.loader as LoaderFunction)(
       args(new Request("http://localhost/account/credentials", { signal })),
     );
-  const submit = (input: Record<string, string>, signal = new AbortController().signal) => {
+  const submit = (
+    input: Record<string, string> | URLSearchParams,
+    signal = new AbortController().signal,
+  ) => {
     expect(route.action, "Credential management owns its action").toBeTypeOf("function");
     return (route.action as ActionFunction)(
       args(
@@ -103,6 +106,34 @@ function harness(overrides: HttpRoutes = {}) {
 }
 
 describe("credential route data", () => {
+  it.each(["intent", "expectedAccount", "credentialId", "apiKey"])(
+    "rejects repeated %s fields before resolving identity or dispatching a save",
+    async (field) => {
+      const { submit, http } = harness();
+      const input = new URLSearchParams(save);
+      input.append(field, input.get(field)!);
+      expect(await submit(input)).toMatchObject({ data: { error: "CREDENTIAL_INVALID_REQUEST" } });
+      expect(http.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fences reads started before a confirmed save while retaining issued metadata", async () => {
+    const old = Promise.withResolvers<Response>();
+    let reads = 0;
+    const { read, submit } = harness({
+      "GET /credentials": () =>
+        ++reads === 1 ? jsonResponse({ credentials: [metadata] }) : old.promise,
+      "POST /credentials": () => jsonResponse(metadata, 201),
+    });
+    const issued = await read();
+    const pending = read();
+    await vi.waitFor(() => expect(reads).toBe(2));
+    expect(await submit(save)).toMatchObject({ data: { success: "saved" } });
+    expect(issued).toMatchObject({ data: { catalog: { credentials: [metadata] } } });
+    old.resolve(jsonResponse({ credentials: [metadata] }));
+    expect(await pending).toMatchObject({ data: { catalog: null } });
+  });
+
   it("loads masked metadata through account authority before onboarding without mutations", async () => {
     const { read, http } = harness();
     const result = await read();

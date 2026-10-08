@@ -2,15 +2,15 @@ import { Fragment, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useMatches } from "react-router";
 
-import { useAppRoute } from "../app/route-context";
-import { authHref } from "../app/route-urls";
+import { AccountFrame } from "../auth/AccountFrame";
+import { useRequiredAccount } from "../auth/context";
+import type { PublicRouteData } from "../auth/route-data";
+import { useRouteAuthEntry } from "../auth/useRouteAuthEntry";
+import { ProfileScreen } from "../profile/ProfileScreen";
 import { Button } from "../ui/Button";
 
-import { AccountFrame } from "./AccountFrame";
-import { useRequiredAccount } from "./context";
-import { ProfileScreen } from "./ProfileScreen";
-import type { PublicRouteData } from "./route-data";
-import { useRouteAuthEntry } from "./useRouteAuthEntry";
+import { useAppRoute } from "./route-context";
+import { authHref } from "./route-urls";
 
 export function GuestContinuation() {
   const { t } = useTranslation();

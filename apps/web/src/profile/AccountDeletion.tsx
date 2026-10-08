@@ -3,10 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import { authHref } from "../app/route-urls";
+import { useRequiredAccount } from "../auth/context";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
-
-import { useRequiredAccount } from "./context";
 
 export function AccountDeletion() {
   const { t } = useTranslation();

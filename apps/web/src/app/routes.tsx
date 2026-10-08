@@ -1,17 +1,16 @@
 import type { RouteObject } from "react-router";
 
 import { AccountApplication } from "../auth/AccountApplication";
-import {
-  ArenaRoute,
-  AuthRoute,
-  CredentialsRoute,
-  HistoryRoute,
-  ProfileRoute,
-} from "../auth/AccountRoutes";
-import { authAction, profileLoader, publicLoader } from "../auth/route-data";
+import { AuthRoute } from "../auth/AuthRoute";
+import { authAction, publicLoader } from "../auth/route-data";
+import { CredentialsRoute } from "../credentials/CredentialsRoute";
 import { credentialRouteData } from "../credentials/route-data";
+import { HistoryRoute } from "../history/HistoryRoute";
 import { historyRouteData } from "../history/route-data";
+import { ArenaRoute } from "../match/ArenaRoute";
 import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
+import { ProfileRoute } from "../profile/ProfileRoute";
+import { accountAction, profileLoader } from "../profile/route-data";
 
 import { type AppRouteContext, RouteContext } from "./route-context";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
@@ -37,7 +36,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
       path: "account",
       handle: { page: "account" },
       loader: profileLoader(context.runtime),
-      action: authAction(context.runtime),
+      action: accountAction(context.runtime),
       element: <ProfileRoute />,
     },
     {

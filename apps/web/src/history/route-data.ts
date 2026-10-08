@@ -3,18 +3,19 @@ import {
   type GameHistoryResponse,
   gameParamsSchema,
 } from "@neurochess/contracts";
-import type {
-  ActionFunctionArgs,
-  LoaderFunctionArgs,
-  ShouldRevalidateFunctionArgs,
-} from "react-router";
 import { z } from "zod";
 
 import { createAiApi } from "../api/ai-client";
-import { accountError, AccountFailure } from "../api/auth-client";
 import { ApiFailure } from "../api/failures";
-import { IssuedResults } from "../app/issued-results";
+import { accountIdSchema } from "../api/identifier-schemas";
+import { FencedResults } from "../app/fenced-results";
 import type { AppRouteContext } from "../app/route-context";
+import {
+  protectedLoader,
+  routeAction,
+  selfPostRevalidation,
+  strictFormIntent,
+} from "../app/route-data";
 import { type PublicAccess, type ScopedRouteData, waitForRouteResult } from "../app/route-runtime";
 
 export type HistoryRouteData = ScopedRouteData<{
@@ -28,7 +29,7 @@ export type HistoryOutcome =
 export type HistoryActionData = ScopedRouteData<HistoryOutcome>;
 
 const querySchema = z.strictObject({ cursor: gameHistoryCursorSchema.optional() });
-const confirmation = { confirm: z.literal("true"), expectedAccount: gameParamsSchema.shape.gameId };
+const confirmation = { confirm: z.literal("true"), expectedAccount: accountIdSchema };
 const intentSchema = z.discriminatedUnion("intent", [
   z.strictObject({
     intent: z.literal("delete-game"),
@@ -51,98 +52,65 @@ export function historyRouteData({
   apiBaseUrl,
   runtime,
 }: Pick<AppRouteContext, "apiBaseUrl" | "runtime">) {
-  const pages = new IssuedResults<HistoryRouteData>();
-  let deletionRevision = 0;
+  const pages = new FencedResults<NonNullable<HistoryRouteData["data"]>>((data) => {
+    data.page = null;
+  });
 
-  const loader = async ({ request }: LoaderFunctionArgs): Promise<HistoryRouteData | null> => {
-    const revision = deletionRevision;
+  const loader = protectedLoader(async ({ request }): Promise<HistoryRouteData | null> => {
+    const read = pages.beginRead();
+    const { identity, generation, access } = await runtime.resolvePublicIdentity(
+      request.signal,
+      true,
+    );
+    const result = (page: GameHistoryResponse | null, error = false) => {
+      return read(runtime.result(generation, { access, page, error }));
+    };
+    if (access !== "account" || !identity) return result(null);
+    const query = new URL(request.url).searchParams;
+    const parsed = querySchema.safeParse({ cursor: query.get("cursor") ?? undefined });
+    if (!parsed.success || query.getAll("cursor").length > 1) {
+      return result(null, true);
+    }
+    const signal = AbortSignal.any([request.signal, identity.signal]);
     try {
-      const { identity, generation, access } = await runtime.resolvePublicIdentity(
-        request.signal,
-        true,
+      const page = await waitForRouteResult(
+        createAiApi(apiBaseUrl, { identity }).history({ limit: 20, ...parsed.data }, signal),
+        signal,
       );
-      const result = (page: GameHistoryResponse | null, error = false) => {
-        const scoped = runtime.result(generation, {
-          access,
-          page: revision === deletionRevision ? page : null,
-          error,
-        });
-        pages.track(scoped);
-        return scoped;
-      };
-      if (access !== "account" || !identity) return result(null);
-      const query = new URL(request.url).searchParams;
-      const parsed = querySchema.safeParse({ cursor: query.get("cursor") ?? undefined });
-      if (!parsed.success || query.getAll("cursor").length > 1) {
-        return result(null, true);
-      }
-      const signal = AbortSignal.any([request.signal, identity.signal]);
+      return request.signal.aborted ? null : result(signal.aborted ? null : page);
+    } catch {
+      return request.signal.aborted ? null : result(null, !signal.aborted);
+    }
+  });
+
+  const action = routeAction(
+    runtime,
+    async ({ request }, scope): Promise<HistoryActionData | null> => {
+      const result = (outcome: HistoryOutcome) => scope.result(outcome);
       try {
-        const page = await waitForRouteResult(
-          createAiApi(apiBaseUrl, { identity }).history({ limit: 20, ...parsed.data }, signal),
-          signal,
-        );
-        return request.signal.aborted ? null : result(signal.aborted ? null : page);
-      } catch {
-        return request.signal.aborted ? null : result(null, !signal.aborted);
+        if (request.method !== "POST") return result({ error: "rejected" });
+        const form = await request.formData();
+        const input = strictFormIntent(form, intentSchema);
+        if (!input) {
+          return result({ error: "rejected" });
+        }
+        const identity = await scope.resolveAccount(input.expectedAccount, true);
+        if (!identity) {
+          return result({ error: "rejected" });
+        }
+        const signal = AbortSignal.any([scope.signal, identity.signal]);
+        const api = createAiApi(apiBaseUrl, { identity });
+        if (input.intent === "delete-game") await api.deleteGame(input.gameId, signal);
+        else await api.clearHistory(signal);
+        if (signal.aborted) return null;
+        pages.invalidate();
+        return result({ success: input.intent === "delete-game" ? "game" : "history" });
+      } catch (error) {
+        return scope.signal.aborted ? null : result(deletionError(error));
       }
-    } catch (error) {
-      if (request.signal.aborted || accountError(error) === "cancelled") return null;
-      throw new AccountFailure("AUTH_UNAVAILABLE");
-    }
-  };
+    },
+  );
 
-  const action = async ({ request }: ActionFunctionArgs): Promise<HistoryActionData | null> => {
-    const operation = runtime.beginAction(request.signal);
-    let generation = runtime.account.getSnapshot().revision;
-    const result = (outcome: HistoryOutcome) => runtime.result(generation, outcome);
-    try {
-      if (request.method !== "POST") return result({ error: "rejected" });
-      const form = await request.formData();
-      const parsed = intentSchema.safeParse(Object.fromEntries(form));
-      if (!parsed.success || new Set(form.keys()).size !== [...form].length) {
-        return result({ error: "rejected" });
-      }
-      const resolved = await runtime.resolvePublicIdentity(operation.signal, true);
-      generation = resolved.generation;
-      const { identity } = resolved;
-      if (
-        resolved.access !== "account" ||
-        parsed.data.expectedAccount !== identity?.expectedAccount
-      ) {
-        return result({ error: "rejected" });
-      }
-      const signal = AbortSignal.any([operation.signal, identity.signal]);
-      const api = createAiApi(apiBaseUrl, { identity });
-      if (parsed.data.intent === "delete-game") await api.deleteGame(parsed.data.gameId, signal);
-      else await api.clearHistory(signal);
-      if (signal.aborted) return null;
-      // Clear the actual router/cache references before refresh and fence reads
-      // begun before this acknowledgement, including consistent pre-delete views.
-      deletionRevision++;
-      pages.forEach((page) => {
-        if (page.data) page.data.page = null;
-      });
-      pages.clear();
-      return result({ success: parsed.data.intent === "delete-game" ? "game" : "history" });
-    } catch (error) {
-      return operation.signal.aborted ? null : result(deletionError(error));
-    } finally {
-      operation.release();
-    }
-  };
-
-  const shouldRevalidate = (args: ShouldRevalidateFunctionArgs) => {
-    // The screen resets its cursor fetcher before explicitly refreshing after a
-    // confirmed write. Failed writes require an explicit retry or refresh too.
-    if (
-      args.formMethod === "POST" &&
-      args.formAction &&
-      new URL(args.formAction, args.currentUrl).pathname === "/history"
-    ) {
-      return false;
-    }
-    return args.defaultShouldRevalidate;
-  };
+  const shouldRevalidate = selfPostRevalidation("/history");
   return { loader, action, shouldRevalidate };
 }

@@ -3,14 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
+import { AccountField } from "../auth/AccountField";
+import { AccountFrame } from "../auth/AccountFrame";
+import type { AccountActionData } from "../auth/action-data";
+import { Avatar } from "../auth/Avatar";
+import { useRequiredAccount } from "../auth/context";
 import { Button } from "../ui/Button";
 
 import { AccountDeletion } from "./AccountDeletion";
-import { AccountField } from "./AccountField";
-import { AccountFrame } from "./AccountFrame";
-import { Avatar } from "./Avatar";
-import { useRequiredAccount } from "./context";
-import type { AuthActionData } from "./route-data";
 
 export function ProfileScreen({
   returnTo,
@@ -58,7 +58,7 @@ export function ProfileScreen({
       pending.current = false;
     });
   }
-  const [acknowledged, setAcknowledged] = useState<AuthActionData | undefined>(undefined);
+  const [acknowledged, setAcknowledged] = useState<AccountActionData | undefined>(undefined);
   if (saved && fetcher.data !== acknowledged) {
     setAcknowledged(fetcher.data);
     if (!removingAvatar) setUsernameDraft(null);

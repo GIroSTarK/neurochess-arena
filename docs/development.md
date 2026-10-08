@@ -101,6 +101,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 - `packages/contracts` and `packages/chess` are infrastructure-independent leaves.
 - `packages/database` is server-only and does not depend on application code.
 - Product packages expose explicit entrypoints; consumers must not deep-import their source files.
+- Web features may import other features only through the paths declared in `dependency-cruiser.config.mjs`; route-tree and shared onboarding composition belong in `app/`.
 
 `npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, the shared-package infrastructure restrictions, and exclusion of chess test helpers from production imports.
 
@@ -135,7 +136,7 @@ Vite preview's generic fallback also returns HTML for missing asset URLs when Ac
 
 ### Extending routes
 
-1. Register a case-sensitive leaf in `app/routes.tsx` with page metadata and a feature-owned `route-data.ts` loader/action. Preserve literal build gates and lazy module boundaries for development features.
+1. Register a case-sensitive leaf in `app/routes.tsx` with page metadata, a feature-owned route component, and a `route-data.ts` loader/action. Preserve literal build gates and lazy module boundaries for development features.
 2. Validate URL parameters and action intents before requests. Resolve identity inside each protected leaf, pass cancellation through the validated clients, and return generation-scoped, bounded values. Keep secrets and return destinations out of router results/history state.
 3. Pass committed loader data to screen adapters. Require loader revalidation for entry retries; retain controller reads only for explicit command reconciliation, provider discovery, telemetry, replay and PGN. A canceled request never proves a write failed.
 4. Preserve shared game owners, creation handoffs and pending-departure cleanup. Define revalidation by cause so metadata/action refreshes cannot repeat recovery or reset live keys.
@@ -143,7 +144,9 @@ Vite preview's generic fallback also returns HTML for missing asset URLs when Ac
 
 ### Public identity and authentication data
 
-Public leaf loaders and auth actions use `app/route-runtime.ts` and `auth/route-data.ts`. Call `resolvePublicIdentity(request.signal, requireProfile)` in every protected leaf before private work; parent loaders run independently. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.
+Public leaf loaders and actions use `app/route-runtime.ts` through the shared helpers in `app/route-data.ts`. Resolve identity in every protected leaf before private work; parent loaders run independently. `auth/route-data.ts` owns `/auth/*` actions, and `profile/route-data.ts` owns the `/account` loader/action. Account and credential management allow incomplete profiles, while gameplay and History retain shared onboarding. Unknown, invalid, disabled, Sandbox, and reference routes must not start public identity observation.
+
+Use `strictFormIntent` with strict schemas for account mutations, `routeAction` for action lifetimes and expected-account resolution, and `FencedResults` when acknowledged writes must clear issued data or invalidate older reads. Keep endpoint error classification in the feature and adopt the settled generation only for an intentional identity transition. History and Credentials use `selfPostRevalidation` because their screens explicitly reconcile writes. See the [routing architecture](architecture.md#browser-routing) for ownership and cache guarantees.
 
 The runtime lives with the router, independently of React effect replay. Dispose the router when removing its provider; the application test renderer does both on unmount. Mode layouts adopt handoffs during layout and start entry work after commit, so StrictMode replay can cancel before a recovery command is dispatched. Owners registering during a pending departure must observe that destination immediately.
 

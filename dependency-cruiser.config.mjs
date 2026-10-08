@@ -1,6 +1,54 @@
+// Only declared feature entrypoints may cross these boundaries. App owns
+// route-tree composition.
+const webFeatureImports = {
+  auth: [],
+  profile: [
+    "auth/AccountField",
+    "auth/AccountFrame",
+    "auth/action-data",
+    "auth/Avatar",
+    "auth/context",
+    "auth/session-actions",
+    "auth/useRouteAuthEntry",
+  ],
+  credentials: [
+    "auth/AccountField",
+    "auth/AccountFrame",
+    "auth/PasswordField",
+    "auth/context",
+    "auth/useRouteAuthEntry",
+  ],
+  history: ["auth/AccountFrame", "auth/context"],
+  match: [
+    "auth/AccountAccess",
+    "auth/AuthRoute",
+    "auth/context",
+    "auth/useRouteAuthEntry",
+    "credentials/catalog",
+    "credentials/use-credentials",
+    "setup/ArenaSetupScreen",
+    "setup/controller",
+  ],
+  setup: ["auth/AccountAccess"],
+  sandbox: [],
+  reference: [],
+};
+const webFeatures = Object.keys(webFeatureImports).join("|");
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
   forbidden: [
+    ...Object.entries(webFeatureImports).map(([feature, allowed]) => ({
+      name: `web-${feature}-feature-imports`,
+      comment:
+        "Feature imports must follow the declared entrypoints; route composition belongs in app.",
+      severity: /** @type {const} */ ("error"),
+      from: { path: `(^|/)apps/web/src/${feature}/`, pathNot: "\\.test\\.tsx?$" },
+      to: {
+        path: `(^|/)apps/web/src/(${webFeatures})/`,
+        pathNot: `(^|/)apps/web/src/(${feature}/${allowed.length ? `|(${allowed.join("|")})\\.tsx?$` : ""})`,
+      },
+    })),
     {
       name: "api-production-no-test-adapters",
       comment:
@@ -33,7 +81,7 @@ export default {
         path: "(^|/)apps/web/src/(arena|board|ui)/",
         pathNot: "\\.test\\.tsx?$",
       },
-      to: { path: "(^|/)apps/web/src/(api|sandbox|reference|setup|match)/" },
+      to: { path: `(^|/)apps/web/src/(api|${webFeatures})/` },
     },
     {
       name: "gameplay-no-features",
@@ -41,7 +89,7 @@ export default {
       severity: "error",
       from: { path: "(^|/)apps/web/src/gameplay/", pathNot: "\\.test\\.tsx?$" },
       to: {
-        path: "(^|/)apps/web/src/((app|auth|credentials|history|match|reference|sandbox|setup)/|api/sandbox-client\\.ts$)",
+        path: `(^|/)apps/web/src/((app|${webFeatures})/|api/sandbox-client\\.ts$)`,
       },
     },
     {

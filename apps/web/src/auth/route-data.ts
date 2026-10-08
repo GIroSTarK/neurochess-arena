@@ -1,201 +1,119 @@
-import {
-  authOAuthProviderSchema,
-  gameParamsSchema,
-  type ProfileResponse,
-  profileUsernameSchema,
-} from "@neurochess/contracts";
-import { type ActionFunctionArgs, type LoaderFunctionArgs, replace } from "react-router";
-import { z } from "zod";
+import { authOAuthProviderSchema } from "@neurochess/contracts";
+import { replace } from "react-router";
 
-import { accountError, type AccountErrorCode, AccountFailure } from "../api/auth-client";
+import { accountError, AccountFailure } from "../api/auth-client";
+import { protectedLoader, routeAction, type RouteActionScope } from "../app/route-data";
 import type { PublicAccess, RouteRuntime, ScopedRouteData } from "../app/route-runtime";
 import type { AuthForm } from "../app/route-urls";
 
+import type { AccountActionData } from "./action-data";
 import { authFormInvalid } from "./form-validation";
+import type { AuthEntry } from "./navigation";
+import { type AccountIntentHandler, sessionActions } from "./session-actions";
 
 export type PublicRouteData = ScopedRouteData<{ access: PublicAccess }>;
-export type ProfileRouteData = ScopedRouteData<{
-  access: PublicAccess;
-  profile: ProfileResponse | null;
-}>;
-export type AuthOutcome =
-  | { notice: "accepted" | "resetDone" | "saved" | "deleted" }
-  | { error: AccountErrorCode }
-  | { invalid: "email" | "password" | "username" };
-export type AuthActionData = ScopedRouteData<AuthOutcome>;
-
-const expectedAccount = gameParamsSchema.shape.gameId;
-const accountIntent = z.discriminatedUnion("intent", [
-  z.strictObject({
-    intent: z.literal("save-profile"),
-    username: profileUsernameSchema,
-    expectedAccount,
-  }),
-  z.strictObject({ intent: z.literal("remove-avatar"), expectedAccount }),
-  z.strictObject({
-    intent: z.literal("delete-account"),
-    confirm: z.literal("true"),
-    expectedAccount,
-  }),
-]);
-
-export function profileLoader(runtime: RouteRuntime) {
-  return async ({ request }: LoaderFunctionArgs): Promise<ProfileRouteData | null> => {
-    try {
-      const { generation, access } = await runtime.resolvePublicIdentity(request.signal, false);
-      return runtime.result(generation, { access, profile: runtime.account.getSnapshot().profile });
-    } catch (error) {
-      if (accountError(error) === "cancelled") return null;
-      throw new AccountFailure("AUTH_UNAVAILABLE");
-    }
-  };
-}
+export type AuthActionData = AccountActionData;
 
 export function publicLoader(runtime: RouteRuntime, requireProfile: boolean) {
-  return async ({ request }: LoaderFunctionArgs): Promise<PublicRouteData | null> => {
-    try {
-      const resolved = await runtime.resolvePublicIdentity(request.signal, requireProfile);
-      return runtime.result(resolved.generation, { access: resolved.access });
-    } catch (error) {
-      if (accountError(error) === "cancelled") return null;
-      throw new AccountFailure("AUTH_UNAVAILABLE");
-    }
-  };
+  return protectedLoader(async ({ request }): Promise<PublicRouteData> => {
+    const resolved = await runtime.resolvePublicIdentity(request.signal, requireProfile);
+    return runtime.result(resolved.generation, { access: resolved.access });
+  });
 }
 
-export function authAction(runtime: RouteRuntime, kind?: AuthForm) {
-  return async ({ request }: ActionFunctionArgs): Promise<AuthActionData | Response | null> => {
-    const operation = runtime.beginAction(request.signal);
-    const signal = operation.signal;
-    const cancelled = () => signal.aborted;
-    const entry = runtime.entry(new URL(request.url));
-    const account = runtime.account;
-    let generation = account.getSnapshot().revision;
-    let transitionAttempted = false;
-    const result = (data: AuthOutcome) => runtime.result(generation, data);
+interface AuthFields {
+  readonly email: string;
+  readonly password: string;
+}
+type FormHandler = (
+  fields: AuthFields,
+  scope: RouteActionScope,
+  entry: AuthEntry,
+) => Promise<AuthActionData | Response | null>;
+
+export function authAction(runtime: RouteRuntime, kind: AuthForm) {
+  const account = runtime.account;
+  const api = account.api;
+  const sessions = sessionActions(runtime);
+  async function transition<T>(
+    scope: RouteActionScope,
+    perform: (signal: AbortSignal) => Promise<T>,
+  ) {
     try {
-      if (request.method !== "POST") return result({ error: "AUTH_INVALID_REQUEST" });
-      const data = await request.formData();
-      const intent = data.get("intent");
-      if (
-        !kind &&
-        (intent === "save-profile" || intent === "remove-avatar" || intent === "delete-account")
-      ) {
-        const parsed = accountIntent.safeParse(Object.fromEntries(data));
-        if (!parsed.success || new Set(data.keys()).size !== [...data].length) {
-          return result(
-            intent === "save-profile" &&
-              !profileUsernameSchema.safeParse(data.get("username")).success
-              ? { invalid: "username" }
-              : { error: "AUTH_INVALID_REQUEST" },
-          );
-        }
-        const resolved = await runtime.resolvePublicIdentity(signal, false);
-        generation = resolved.generation;
-        if (
-          resolved.access !== "account" ||
-          parsed.data.expectedAccount !== resolved.identity?.expectedAccount
-        ) {
-          return result({ error: "AUTH_UNAUTHORIZED" });
-        }
-        if (cancelled()) return null;
-        if (parsed.data.intent === "delete-account") {
-          await account.deleteAccount(signal);
-          generation = account.getSnapshot().revision;
-          const state = account.getSnapshot();
-          return cancelled()
-            ? null
-            : result(
-                state.deletion === "deleted"
-                  ? { notice: "deleted" }
-                  : { error: state.issue ?? "AUTH_UNAVAILABLE" },
-              );
-        }
-        const onboarding = !account.getSnapshot().profile?.completed;
-        await account.saveProfile(
-          parsed.data.intent === "remove-avatar"
-            ? { avatar: "remove" }
-            : { username: parsed.data.username },
-          signal,
-        );
-        if (cancelled()) return null;
-        if (onboarding && parsed.data.intent === "save-profile") return replace(entry.returnTo);
-        return result({ notice: "saved" });
-      }
-      if (intent !== kind && intent !== "oauth" && intent !== "sign-out" && intent !== "guest") {
-        return result({ error: "AUTH_INVALID_REQUEST" });
-      }
-      if (intent === "guest") {
-        if (cancelled()) return null;
-        await account.chooseGuest();
-        return cancelled() ? null : replace("/");
-      }
-      const resolved = await runtime.resolvePublicIdentity(signal, false);
-      generation = resolved.generation;
-      if (intent === "sign-out") {
-        if (
-          resolved.access !== "account" ||
-          data.get("expectedAccount") !== resolved.identity?.expectedAccount
-        ) {
-          return result({ error: "AUTH_UNAUTHORIZED" });
-        }
-        await account.signOut(signal);
-        generation = account.getSnapshot().revision;
-        const issue = account.getSnapshot().issue;
-        return cancelled() || !issue ? null : result({ error: issue });
-      }
-      const api = account.api;
-      if (intent === "oauth") {
-        const provider = authOAuthProviderSchema.safeParse(data.get("provider"));
-        if (!provider.success || (kind !== "sign-in" && kind !== "sign-up")) {
-          return result({ error: "AUTH_INVALID_REQUEST" });
-        }
-        transitionAttempted = true;
-        const url = await account.transition(
-          (signal) => api.social(provider.data, signal),
-          false,
-          signal,
-        );
-        if (!cancelled()) window.location.assign(url);
-        return null;
-      }
-      const emailValue = data.get("email");
-      const email = typeof emailValue === "string" ? emailValue.trim() : "";
-      const passwordValue = data.get("password");
-      const password = typeof passwordValue === "string" ? passwordValue : "";
-      if (!kind) return result({ error: "AUTH_INVALID_REQUEST" });
-      const invalid = authFormInvalid(kind, email, password);
-      if (invalid) return result({ invalid });
-      if (kind === "sign-in") {
-        transitionAttempted = true;
-        await account.transition(
-          (signal) => api.signIn({ email, password }, signal),
-          false,
-          signal,
-        );
-        return cancelled() ? null : replace(entry.returnTo);
-      }
-      if (kind === "reset-password") {
-        const token = entry.readResetToken();
-        if (!token) throw new AccountFailure("AUTH_INVALID_TOKEN");
-        transitionAttempted = true;
-        await account.transition((signal) => api.reset(token, password, signal), false, signal);
-        entry.clearResetToken();
-        generation = account.getSnapshot().revision;
-        return cancelled() ? null : result({ notice: "resetDone" });
-      }
-      const readSignal = AbortSignal.any([signal, account.identity(false).signal]);
-      if (kind === "sign-up") await api.register({ email, password }, readSignal);
-      else if (kind === "verify") await api.resend(email, readSignal);
-      else await api.forgot(email, readSignal);
-      return readSignal.aborted ? null : result({ notice: "accepted" });
-    } catch (error) {
-      const code = accountError(error);
-      if (cancelled() || code === "cancelled") return null;
-      if (transitionAttempted) generation = account.getSnapshot().revision;
-      return result({ error: code });
+      return await account.transition(perform, false, scope.signal);
     } finally {
-      operation.release();
+      // Transitions intentionally invalidate the submitting generation, including
+      // on failure. Their bounded acknowledgement belongs to the settled one.
+      scope.useCurrentGeneration();
     }
+  }
+  const accepted =
+    (perform: (fields: AuthFields, signal: AbortSignal) => Promise<unknown>): FormHandler =>
+    async (fields, scope) => {
+      const signal = AbortSignal.any([scope.signal, account.identity(false).signal]);
+      await perform(fields, signal);
+      return signal.aborted ? null : scope.result({ notice: "accepted" });
+    };
+  const forms: Record<AuthForm, FormHandler> = {
+    "sign-in": async ({ email, password }, scope, entry) => {
+      await transition(scope, (signal) => api.signIn({ email, password }, signal));
+      return scope.signal.aborted ? null : replace(entry.returnTo);
+    },
+    "sign-up": accepted(({ email, password }, signal) => api.register({ email, password }, signal)),
+    verify: accepted(({ email }, signal) => api.resend(email, signal)),
+    "forgot-password": accepted(({ email }, signal) => api.forgot(email, signal)),
+    "reset-password": async ({ password }, scope, entry) => {
+      const token = entry.readResetToken();
+      if (!token) throw new AccountFailure("AUTH_INVALID_TOKEN");
+      await transition(scope, (signal) => api.reset(token, password, signal));
+      entry.clearResetToken();
+      return scope.signal.aborted ? null : scope.result({ notice: "resetDone" });
+    },
   };
+  const oauth: AccountIntentHandler = async (form, scope) => {
+    const provider = authOAuthProviderSchema.safeParse(form.get("provider"));
+    if (!provider.success || (kind !== "sign-in" && kind !== "sign-up")) {
+      return scope.result({ error: "AUTH_INVALID_REQUEST" });
+    }
+    const url = await transition(scope, (signal) => api.social(provider.data, signal));
+    if (!scope.signal.aborted) window.location.assign(url);
+    return null;
+  };
+  return routeAction(
+    runtime,
+    async ({ request }, scope): Promise<AuthActionData | Response | null> => {
+      const entry = runtime.entry(new URL(request.url));
+      const handlers: Record<string, AccountIntentHandler> = {
+        ...sessions,
+        oauth,
+        [kind]: async (form, scope) => {
+          const email = form.get("email");
+          const password = form.get("password");
+          const fields = {
+            email: typeof email === "string" ? email.trim() : "",
+            password: typeof password === "string" ? password : "",
+          };
+          const invalid = authFormInvalid(kind, fields.email, fields.password);
+          return invalid ? scope.result({ invalid }) : forms[kind](fields, scope, entry);
+        },
+      };
+      try {
+        if (request.method !== "POST") return scope.result({ error: "AUTH_INVALID_REQUEST" });
+        const form = await request.formData();
+        const intent = form.get("intent");
+        const handler =
+          typeof intent === "string" && Object.hasOwn(handlers, intent)
+            ? handlers[intent]
+            : undefined;
+        if (!handler) {
+          return scope.result({ error: "AUTH_INVALID_REQUEST" });
+        }
+        if (intent !== "guest" && intent !== "sign-out") await scope.resolveIdentity(false);
+        return await handler(form, scope);
+      } catch (error) {
+        const code = accountError(error);
+        return scope.signal.aborted || code === "cancelled" ? null : scope.result({ error: code });
+      }
+    },
+  );
 }

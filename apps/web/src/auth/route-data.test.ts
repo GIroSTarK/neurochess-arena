@@ -7,14 +7,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppRouter } from "../app/router";
-import {
-  GAME_ID,
-  jsonResponse,
-  OTHER_GAME_ID,
-  requestBody,
-  requestPath,
-  snapshot,
-} from "../test/fixtures";
+import { GAME_ID, jsonResponse, requestBody, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 
 import { readAuthEntry } from "./navigation";
@@ -75,130 +68,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("public route data", () => {
-  it("loads the private profile and updates it through a guarded action without changing identity", async () => {
-    let current = profile;
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(session),
-      "GET /profile": () => jsonResponse(current),
-      "POST /profile": (init) => {
-        expect(new Headers(init?.headers).get("x-neurochess-expected-account")).toBe(GAME_ID);
-        expect(JSON.parse(requestBody(init))).toEqual({ username: "Renamed" });
-        current = { ...profile, username: "Renamed" };
-        return jsonResponse(current);
-      },
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const router = setup("/account");
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    const before: unknown = router.state.loaderData.account;
-    expect(before).toMatchObject({ data: { profile } });
-    await router.navigate("/account", {
-      formMethod: "post",
-      formData: form({ intent: "save-profile", username: " Renamed ", expectedAccount: GAME_ID }),
-    });
-    expect(router.state.actionData?.account).toMatchObject({ data: { notice: "saved" } });
-    expect(router.state.loaderData.account).toMatchObject({
-      generation: (before as { generation: number }).generation,
-      data: { profile: { username: "Renamed" } },
-    });
-    expect(cached(router)).not.toMatch(/private@example|expiresAt/);
-    http.assertNoUnexpectedRequests();
-  });
-
-  it("completes onboarding through its action and replaces with the allowlisted game path", async () => {
-    let completed = false;
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(session),
-      "GET /profile": () =>
-        jsonResponse(completed ? profile : { ...profile, username: null, completed: false }),
-      "POST /profile/onboarding": () => {
-        completed = true;
-        return jsonResponse(profile);
-      },
-      [`GET /games/${GAME_ID}/details`]: () =>
-        jsonResponse({ snapshot: snapshot(), configuration: null }),
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const path = `/account?returnTo=${encodeURIComponent(`/games/${GAME_ID}`)}`;
-    const router = setup(path);
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    await router.navigate(path, {
-      formMethod: "post",
-      formData: form({ intent: "save-profile", username: "Player", expectedAccount: GAME_ID }),
-    });
-    await vi.waitFor(() => expect(router.state.location.pathname).toBe(`/games/${GAME_ID}`));
-    expect(router.state.historyAction).toBe("REPLACE");
-    http.assertNoUnexpectedRequests();
-  });
-
-  it("removes only the imported avatar through its distinct action", async () => {
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(session),
-      "GET /profile": () => jsonResponse(profile),
-      "POST /profile": (init) => {
-        expect(JSON.parse(requestBody(init))).toEqual({ avatar: "remove" });
-        return jsonResponse(profile);
-      },
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const router = setup("/account");
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    await router.navigate("/account", {
-      formMethod: "post",
-      formData: form({ intent: "remove-avatar", expectedAccount: GAME_ID }),
-    });
-    expect(router.state.actionData?.account).toMatchObject({ data: { notice: "saved" } });
-    http.assertNoUnexpectedRequests();
-  });
-
-  it.each([
-    { intent: "save-profile", username: "Player", expectedAccount: OTHER_GAME_ID },
-    { intent: "save-profile", username: "admin", expectedAccount: GAME_ID },
-    { intent: "remove-avatar", avatar: "https://hostile.invalid", expectedAccount: GAME_ID },
-    { intent: "delete-account", expectedAccount: GAME_ID },
-    { intent: "delete-account", confirm: "true", expectedAccount: OTHER_GAME_ID },
-  ])("rejects invalid or stale account mutation %j", async (input) => {
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(session),
-      "GET /profile": () => jsonResponse(profile),
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const router = setup("/account");
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    await router.fetch("profile", "account", "/account", {
-      formMethod: "post",
-      formData: form(input),
-    });
-    expect(http.fetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
-    http.assertNoUnexpectedRequests();
-  });
-
-  it("clears issued profile data as soon as confirmed deletion begins and never equates session loss with success", async () => {
-    const pending = Promise.withResolvers<Response>();
-    let exists = true;
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(exists ? session : null),
-      "GET /profile": () => jsonResponse({ ...profile, completed: false, username: null }),
-      "POST /api/auth/delete-account": () => pending.promise,
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const router = setup("/account");
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    const issued: unknown = router.state.loaderData.account;
-    const operation = router.navigate("/account", {
-      formMethod: "post",
-      formData: form({ intent: "delete-account", confirm: "true", expectedAccount: GAME_ID }),
-    });
-    await vi.waitFor(() => expect(issued).toMatchObject({ data: null }));
-    exists = false;
-    pending.reject(new Error("secret diagnostic"));
-    await operation;
-    expect(router.state.actionData?.account).toMatchObject({ data: { error: "AUTH_UNAVAILABLE" } });
-    expect(cached(router)).not.toMatch(/secret diagnostic|private@example|Player/);
-    http.assertNoUnexpectedRequests();
-  });
-
+describe("auth route data", () => {
   it("keeps a bounded OAuth failure after its identity transition", async () => {
     const http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(null),
@@ -219,24 +89,6 @@ describe("public route data", () => {
       expect.objectContaining({ data: { error: "AUTH_OAUTH_FAILED" } }),
     );
     expect(cached(router)).not.toContain("oauth-secret-canary");
-    http.assertNoUnexpectedRequests();
-  });
-
-  it("does not sign out a replacement account when the submitted expectation is stale", async () => {
-    const http = createHttpMock({
-      "GET /api/auth/get-session": () => jsonResponse(session),
-      "GET /profile": () => jsonResponse(profile),
-    });
-    vi.stubGlobal("fetch", http.fetch);
-    const router = setup("/account");
-    await vi.waitFor(() => expect(router.state.initialized).toBe(true));
-    await router.navigate("/account", {
-      formMethod: "post",
-      formData: form({ intent: "sign-out", expectedAccount: OTHER_GAME_ID }),
-    });
-    expect(http.fetch.mock.calls.some(([url]) => requestPath(url) === "/api/auth/sign-out")).toBe(
-      false,
-    );
     http.assertNoUnexpectedRequests();
   });
 

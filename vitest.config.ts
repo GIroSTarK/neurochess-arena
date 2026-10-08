@@ -11,6 +11,8 @@ function workspacePath(relativePath: string): string {
 // Keep this allowlist shared by Node inclusion and DOM exclusion. Audit each new
 // file (including controller splits) before opting it out of the DOM environment.
 const webNodeTestFiles = [
+  "apps/web/src/app/route-data.test.ts",
+  "apps/web/src/app/fenced-results.test.ts",
   "apps/web/src/position/position.test.ts",
   "apps/web/src/position/squares.test.ts",
   "apps/web/src/position/replay.test.ts",
