@@ -1,807 +1,156 @@
-import {
-  type AiControlledTurnCommand,
-  type ChessColor,
-  type CredentialMetadata,
-  type GameDetails,
-  type GameInvocations,
-  type GameReplayResponse,
-  type GameSnapshot,
-  type LifecycleCommand,
-  type MoveCommand,
-  type ProviderFailure,
-  sessionApiKeySchema,
+import type {
+  ChessColor,
+  CredentialMetadata,
+  GameDetails,
+  GameSnapshot,
 } from "@neurochess/contracts";
 
-import { type AiApi, AiRequestFailure } from "../api/ai-client";
-import { ApiFailure } from "../api/failures";
+import type { AiApi } from "../api/ai-client";
 import { createSessionCredentials } from "../api/session-credentials";
-import { parseGameId } from "../app/route-urls";
 import { ArchiveController } from "../gameplay/archive";
-import { type ArchiveState, emptyExport, emptyReplay } from "../gameplay/archive-state";
-import { isAccessFailure } from "../gameplay/failures";
 import { browserPgnDelivery, type PgnDelivery } from "../gameplay/pgn";
-import { isTerminal } from "../gameplay/snapshot";
 
-export type MatchIssue =
-  | { kind: "notice"; code: "recovered" | "uncertain" | "unavailable" | "access" }
-  | { kind: "request"; code: AiRequestFailure["code"] }
-  | { kind: "provider"; color: ChessColor; error: ProviderFailure };
+import { AiTurnRunner } from "./ai-turn-runner";
+import { MatchCommands } from "./commands";
+import type { MatchContext } from "./context";
+import { ControllerLease } from "./controller-lease";
+import { InvocationFeed } from "./invocation-feed";
+import { SeatCredentials } from "./seat-credentials";
+import { type MatchEntry, type MatchNavigation, MatchSession } from "./session";
+import { MatchStore } from "./store";
 
-export interface MatchState {
-  phase: "loading" | "setup" | "ready" | "recovering" | "uncertain" | "unavailable";
-  details: GameDetails | null;
-  thinking: boolean;
-  busy: boolean;
-  keys: Record<ChessColor, boolean>;
-  selections: Record<ChessColor, string>;
-  keyEpoch: number;
-  speed: number;
-  issue: MatchIssue | null;
-  startedGameId: string | null;
-  replay: GameReplayResponse | null;
-  replayPly: number;
-  replayLoading: boolean;
-  replayError: boolean;
-  exportBusy: boolean;
-  exportResult: "copied" | "downloaded" | "manual" | "error" | null;
-  exportText: string | null;
-  invocations: GameInvocations | null;
-  invocationsMoveCount: number;
-  invocationsLoading: boolean;
-  invocationsError: boolean;
-}
-
-const colors = ["white", "black"] as const;
-
-export type MatchEntry =
-  | { readonly kind: "setup" }
-  | { readonly kind: "invalid" }
-  | { readonly kind: "unavailable"; readonly code: "access" | "unavailable" }
-  | { readonly kind: "game"; readonly gameId: string; readonly details: GameDetails };
-
-export interface MatchNavigation {
-  game(gameId: string, reason: "created" | "recovered"): void;
-  setup(): void;
-}
-
-export function humanColor(details: GameDetails | null): ChessColor | null {
-  const configuration = details?.configuration;
-  return configuration?.mode === "ai_vs_human"
-    ? configuration.seats.white.type === "human"
-      ? "white"
-      : "black"
-    : null;
-}
-
-export function matchKeysReady(state: MatchState): boolean {
-  const configuration = state.details?.configuration;
-  return (
-    configuration !== null &&
-    configuration !== undefined &&
-    colors.every((color) => configuration.seats[color].type === "human" || state.keys[color])
-  );
-}
-
-const initialArchive: ArchiveState = { ...emptyReplay, ...emptyExport };
-
-function archiveView(state: ArchiveState) {
-  return {
-    replay: state.replay,
-    replayPly: state.replayPly,
-    replayLoading: state.replayPhase === "loading",
-    replayError: state.replayPhase === "error",
-    exportBusy: state.exportPhase === "loading",
-    exportResult:
-      state.exportPhase === "idle" || state.exportPhase === "loading" ? null : state.exportPhase,
-    exportText: state.exportText,
-  };
-}
+export type { MatchEntry, MatchNavigation } from "./session";
+export { humanColor, type MatchIssue, matchKeysReady, type MatchState } from "./state";
 
 export class MatchController {
-  private archiveState = initialArchive;
+  private readonly store = new MatchStore();
+  private readonly seats = new SeatCredentials(this.store);
+  private readonly session: MatchSession;
+  private readonly runner: AiTurnRunner;
+  private readonly commands: MatchCommands;
+  private readonly invocations: InvocationFeed;
   private readonly archive: ArchiveController;
-  credentials: ReturnType<typeof createSessionCredentials> | null = null;
-  private lifetime: AbortController | null = null;
-  private controllerId = "";
-  private lease = false;
-  private running = false;
-  private nextTimer: ReturnType<typeof setTimeout> | undefined;
-  private heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
-  private invocationTimer: ReturnType<typeof setTimeout> | undefined;
-  private invocationRequest: AbortController | null = null;
-  private turn: { command: AiControlledTurnCommand; abort: AbortController } | null = null;
-  private control: LifecycleCommand | null = null;
-  private humanCommand: MoveCommand | null = null;
-  private readonly listeners = new Set<() => void>();
-  private state: MatchState = {
-    phase: "loading",
-    details: null,
-    thinking: false,
-    busy: false,
-    keys: { white: false, black: false },
-    selections: { white: "session", black: "session" },
-    keyEpoch: 0,
-    speed: 1500,
-    issue: null,
-    startedGameId: null,
-    ...archiveView(initialArchive),
-    invocations: null,
-    invocationsMoveCount: 0,
-    invocationsLoading: false,
-    invocationsError: false,
-  };
 
   constructor(
     readonly api: AiApi,
     delivery: PgnDelivery = browserPgnDelivery,
-    private readonly navigation?: MatchNavigation,
+    navigation?: MatchNavigation,
   ) {
+    const context: MatchContext = {
+      api,
+      store: this.store,
+      signal: () => this.session.signal(),
+      live: (signal) => this.session.live(signal),
+      adopt: (snapshot) => this.session.adopt(snapshot),
+      fail: (error) => this.session.fail(error),
+      accessLost: (error) => this.session.accessLost(error),
+    };
+    const lease = new ControllerLease(context);
+    this.invocations = new InvocationFeed(context);
+    const loadInvocations = () => this.invocations.load();
+    this.runner = new AiTurnRunner(context, {
+      lease,
+      seats: this.seats,
+      resume: (signal) => this.commands.resume(signal),
+      loadInvocations,
+    });
+    this.commands = new MatchCommands(context, { lease, runner: this.runner, loadInvocations });
     this.archive = new ArchiveController({
       api,
       delivery,
       store: {
-        get: () => ({ ...this.archiveState, snapshot: this.state.details?.snapshot ?? null }),
-        setReplay: (replay) => this.setArchive({ ...this.archiveState, ...replay }),
-        setExport: (exportState) => this.setArchive({ ...this.archiveState, ...exportState }),
+        get: () => this.store.getArchive(),
+        setReplay: (state) => this.store.setReplay(state),
+        setExport: (state) => this.store.setExport(state),
       },
-      isConnected: () => this.lifetime !== null && !this.lifetime.signal.aborted,
-      loseAccess: (failure) => this.accessLost(failure),
+      isConnected: () => this.session.signal() !== null,
+      loseAccess: context.accessLost,
     });
-  }
-  private setArchive(state: ArchiveState) {
-    this.archiveState = state;
-    this.publish(archiveView(state));
-  }
-  readonly getSnapshot = () => this.state;
-  readonly subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  };
-  private publish(update: Partial<MatchState>) {
-    this.state = { ...this.state, ...update };
-    this.listeners.forEach((listener) => listener());
+    this.session = new MatchSession(
+      this.store,
+      {
+        archive: this.archive,
+        lease,
+        runner: this.runner,
+        commands: this.commands,
+        invocations: this.invocations,
+        seats: this.seats,
+        createCredentials: createSessionCredentials,
+      },
+      navigation,
+    );
   }
 
-  private openLifetime() {
-    this.lifetime = new AbortController();
-    this.credentials = createSessionCredentials(this.lifetime.signal);
-    this.controllerId = crypto.randomUUID();
-    return this.lifetime.signal;
+  readonly getSnapshot = () => this.store.get();
+  readonly subscribe = (listener: () => void) => this.store.subscribe(listener);
+  get credentials() {
+    return this.seats.current;
   }
-  private stopRunning() {
-    this.running = false;
-    clearTimeout(this.nextTimer);
+
+  enter(entry: MatchEntry) {
+    return this.session.enter(entry);
+  }
+  created(details: GameDetails) {
+    return this.session.created(details);
   }
   endLifetime() {
-    if (!this.lifetime) return;
-    this.stopRunning();
-    this.clearInvocations();
-    clearTimeout(this.heartbeatTimer);
-    this.lease = false;
-    this.turn?.abort.abort();
-    this.turn = null;
-    this.control = null;
-    this.humanCommand = null;
-    this.lifetime.abort();
-    this.lifetime = null;
-    this.archive.cancel();
-    this.archiveState = initialArchive;
-    this.credentials = null;
-    this.publish({
-      phase: "loading",
-      details: null,
-      keys: { white: false, black: false },
-      selections: { white: "session", black: "session" },
-      keyEpoch: this.state.keyEpoch + 1,
-      thinking: false,
-      busy: false,
-      ...archiveView(initialArchive),
-      startedGameId: null,
-      issue: null,
-    });
+    this.session.endLifetime();
   }
-  private live(signal: AbortSignal) {
-    return !signal.aborted && this.lifetime !== null;
-  }
-  async enter(entry: MatchEntry): Promise<void> {
-    this.endLifetime();
-    const signal = this.openLifetime();
-    const id = entry.kind === "game" ? parseGameId(entry.gameId) : null;
-    if (entry.kind === "setup") {
-      this.publish({ phase: "setup", details: null, issue: null });
-      return;
-    }
-    if (!id || entry.kind !== "game") {
-      this.publish({
-        phase: "unavailable",
-        details: null,
-        issue: { kind: "notice", code: entry.kind === "unavailable" ? entry.code : "access" },
-      });
-      return;
-    }
-    this.publish({ phase: "loading", details: null, issue: null, replay: null });
-    try {
-      // Seeded entries also yield so a discarded mount cannot begin recovery writes.
-      const details = await Promise.resolve(entry.details);
-      if (!this.live(signal)) return;
-      if (parseGameId(details.snapshot.gameId) !== id) throw new ApiFailure("malformed");
-      this.publish({ details, phase: "ready" });
-      this.navigation?.game(id, "recovered");
-      if (!this.live(signal)) return;
-      void this.loadInvocations();
-      if (isTerminal(details.snapshot)) await this.loadReplay();
-      else if (details.configuration) await this.recover(details.snapshot);
-    } catch (error) {
-      if (this.live(signal)) this.fail(error, "unavailable");
-    }
+  newGame() {
+    this.session.newGame();
   }
 
-  async created(details: GameDetails) {
-    if (!this.lifetime || this.state.busy || this.state.phase !== "setup") return;
-    this.clearInvocations();
-    this.publish({ details, phase: "ready", startedGameId: details.snapshot.gameId, issue: null });
-    this.refreshKeys();
-    const signal = this.lifetime.signal;
-    this.navigation?.game(details.snapshot.gameId, "created");
-    if (!this.live(signal)) return;
-    void this.loadInvocations();
-    await this.continue(false, true);
-  }
-  private refreshKeys() {
-    const keys = { white: false, black: false };
-    const selections = { white: "session", black: "session" };
-    for (const color of colors) {
-      const seat = this.state.details?.configuration?.seats[color];
-      if (seat?.type !== "ai") continue;
-      try {
-        const source = this.credentials?.require(color, seat.provider);
-        keys[color] = Boolean(source);
-        if (source && "credentialId" in source) selections[color] = source.credentialId;
-      } catch {
-        /* Missing keys are expected after recovery. */
-      }
-    }
-    this.publish({ keys, selections });
+  setKey(color: ChessColor, value: string) {
+    this.seats.setKey(color, value);
   }
   setCredential(color: ChessColor, credential: string, saved: readonly CredentialMetadata[]) {
-    const seat = this.state.details?.configuration?.seats[color];
-    if (
-      seat?.type !== "ai" ||
-      !this.credentials ||
-      this.state.thinking ||
-      this.state.busy ||
-      this.state.details?.snapshot.state !== "paused"
-    ) {
-      return;
-    }
-    if (
-      credential !== "session" &&
-      !saved.some((item) => item.credentialId === credential && item.provider === seat.provider)
-    ) {
-      return;
-    }
-    this.credentials.remove(color);
-    if (credential !== "session") this.credentials.setSaved(color, seat.provider, credential);
-    this.refreshKeys();
+    this.seats.setCredential(color, credential, saved);
   }
   reconcileSavedCredentials(saved: readonly CredentialMetadata[]) {
-    if (this.state.details?.snapshot.state !== "paused" || this.state.thinking || this.state.busy) {
-      return;
-    }
-    let changed = false;
-    for (const color of colors) {
-      const selected = this.state.selections[color];
-      const seat = this.state.details.configuration?.seats[color];
-      if (
-        selected !== "session" &&
-        seat?.type === "ai" &&
-        !saved.some((item) => item.credentialId === selected && item.provider === seat.provider)
-      ) {
-        this.credentials?.remove(color);
-        changed = true;
-      }
-    }
-    if (changed) {
-      this.refreshKeys();
-      this.publish({ keyEpoch: this.state.keyEpoch + 1 });
-    }
+    this.seats.reconcile(saved);
   }
-  setKey(color: ChessColor, value: string) {
-    const seat = this.state.details?.configuration?.seats[color];
-    if (seat?.type !== "ai" || !this.credentials || this.state.thinking || this.state.busy) return;
-    this.credentials.remove(color);
-    if (sessionApiKeySchema.safeParse(value).success) {
-      this.credentials.set(color, seat.provider, value);
-    }
-    this.refreshKeys();
-  }
+
   setSpeed(speed: number) {
-    if (![500, 1500, 5000].includes(speed)) return;
-    this.publish({ speed });
-    if (this.running && !this.turn) this.schedule();
+    this.runner.setSpeed(speed);
   }
-
-  private adopt(snapshot: GameSnapshot) {
-    const previous = this.state.details;
-    if (
-      snapshot.gameId !== previous?.snapshot.gameId ||
-      snapshot.version < previous.snapshot.version
-    ) {
-      return;
-    }
-    const changed = snapshot.version !== previous.snapshot.version;
-    if (changed) {
-      this.cancelInvocationRead();
-      this.archive.cancel();
-      this.archiveState = initialArchive;
-    }
-    this.publish({
-      details: { ...previous, snapshot },
-      ...(changed ? archiveView(initialArchive) : {}),
-    });
-    if (changed) void this.loadInvocations();
-    if (snapshot.state !== "active") this.stopRunning();
-    if (isTerminal(snapshot)) {
-      clearTimeout(this.heartbeatTimer);
-      this.lease = false;
-      this.publish({ phase: "ready", issue: null });
-      void this.loadReplay();
-    }
+  continue(step: boolean, created = false) {
+    return this.runner.continue(step, created);
   }
-  private async acquire(signal: AbortSignal) {
-    const snapshot = this.snapshot();
-    const accepted = await this.api.controller(
-      {
-        gameId: snapshot.gameId,
-        controllerId: this.controllerId,
-        expectedVersion: snapshot.version,
-        action: "acquire",
-      },
-      signal,
-    );
-    if (!this.live(signal)) return false;
-    this.adopt(accepted);
-    this.lease = true;
-    this.heartbeat();
-    return true;
+  move(move: string) {
+    return this.commands.move(move);
   }
-  private heartbeat() {
-    clearTimeout(this.heartbeatTimer);
-    this.heartbeatTimer = setTimeout(() => {
-      void this.beat();
-    }, 3000);
+  retryMove() {
+    return this.commands.retryMove();
   }
-  private async beat() {
-    const signal = this.lifetime?.signal;
-    const snapshot = this.state.details?.snapshot;
-    if (!signal || !snapshot || !this.lease || isTerminal(snapshot)) return;
-    try {
-      const accepted = await this.api.controller(
-        { gameId: snapshot.gameId, controllerId: this.controllerId, action: "heartbeat" },
-        signal,
-      );
-      if (!this.live(signal) || !this.hasLease()) return;
-      this.adopt(accepted);
-      if (this.hasLease()) this.heartbeat();
-    } catch (error) {
-      if (!this.live(signal)) return;
-      this.lease = false;
-      this.stopRunning();
-      this.fail(error);
-    }
+  lifecycle(action: "pause" | "abort" | "resign") {
+    return this.commands.lifecycle(action);
   }
-  async continue(step: boolean, created = false) {
-    const signal = this.lifetime?.signal;
-    const snapshot = this.state.details?.snapshot;
-    if (
-      !signal ||
-      !snapshot ||
-      this.state.busy ||
-      this.turn ||
-      this.humanCommand ||
-      this.state.phase !== "ready" ||
-      !matchKeysReady(this.state) ||
-      (step && this.state.details?.configuration?.seats[snapshot.turn].type !== "ai") ||
-      (created ? snapshot.state !== "active" : snapshot.state !== "paused")
-    ) {
-      return;
-    }
-    this.publish({ busy: true, issue: null });
-    let dispatch = false;
-    try {
-      if (!(await this.acquire(signal))) return;
-      if (!created && !step) {
-        const command: LifecycleCommand = {
-          ...this.command(),
-          action: "resume",
-          controllerId: this.controllerId,
-        };
-        this.control = command;
-        const snapshot = await this.api.lifecycle(command, signal);
-        if (!this.live(signal)) return;
-        this.adopt(snapshot);
-        this.control = null;
-      }
-      if (!this.live(signal)) return;
-      this.running = !step;
-      dispatch = true;
-    } catch (error) {
-      if (this.live(signal)) this.fail(error);
-    } finally {
-      if (this.live(signal)) this.publish({ busy: false });
-    }
-    if (dispatch && this.live(signal)) await this.executeTurn(step);
+  recover(entrySnapshot?: GameSnapshot) {
+    return this.commands.recover(entrySnapshot);
   }
-  private command() {
-    const snapshot = this.snapshot();
-    return {
-      gameId: snapshot.gameId,
-      expectedVersion: snapshot.version,
-      commandId: crypto.randomUUID(),
-    };
+  retryControl() {
+    return this.commands.retryControl();
   }
-  private snapshot() {
-    const snapshot = this.state.details?.snapshot;
-    if (!snapshot) throw new ApiFailure("malformed");
-    return snapshot;
-  }
-  private hasLease() {
-    return this.lease;
-  }
-  private schedule() {
-    clearTimeout(this.nextTimer);
-    const details = this.state.details;
-    if (
-      this.running &&
-      !this.turn &&
-      !this.humanCommand &&
-      !this.state.busy &&
-      this.state.phase === "ready" &&
-      details?.configuration?.seats[details.snapshot.turn].type === "ai"
-    ) {
-      this.nextTimer = setTimeout(() => {
-        void this.executeTurn(false);
-      }, this.state.speed);
-    }
-  }
-  private async executeTurn(step: boolean) {
-    const signal = this.lifetime?.signal;
-    const details = this.state.details;
-    if (
-      !signal ||
-      !details ||
-      !this.lease ||
-      this.turn ||
-      this.humanCommand ||
-      this.state.busy ||
-      this.state.phase !== "ready"
-    ) {
-      return;
-    }
-    if (details.snapshot.state !== (step ? "paused" : "active")) return;
-    const seat = details.configuration?.seats[details.snapshot.turn];
-    if (seat?.type !== "ai" || !this.credentials) return;
-    const request = {
-      command: { ...this.command(), controllerId: this.controllerId, step },
-      abort: new AbortController(),
-    };
-    this.turn = request;
-    this.publish({ thinking: true, issue: null });
-    try {
-      const accepted = await this.api.turn(
-        request.command,
-        this.credentials.require(details.snapshot.turn, seat.provider),
-        AbortSignal.any([signal, request.abort.signal]),
-      );
-      if (!this.live(signal) || this.turn !== request) return;
-      this.adopt(accepted);
-      this.turn = null;
-      this.publish({ thinking: false });
-      void this.loadInvocations();
-      this.schedule();
-    } catch (error) {
-      if (!this.live(signal) || this.turn !== request) return;
-      this.stopRunning();
-      this.publish({ thinking: false });
-      // Keep the original identity until a newer revision or a versioned pause fences it.
-      this.fail(error);
-    }
-  }
-  private cancelInvocationRead() {
-    clearTimeout(this.invocationTimer);
-    this.invocationRequest?.abort();
-    this.invocationRequest = null;
-  }
-  private clearInvocations() {
-    this.cancelInvocationRead();
-    this.publish({
-      invocations: null,
-      invocationsMoveCount: 0,
-      invocationsLoading: false,
-      invocationsError: false,
-    });
-  }
-  async loadInvocations() {
-    const lifetime = this.lifetime?.signal;
-    const details = this.state.details;
-    if (!lifetime || !details?.configuration || this.invocationRequest) return;
-    const snapshot = details.snapshot;
-    clearTimeout(this.invocationTimer);
-    const request = new AbortController();
-    this.invocationRequest = request;
-    const signal = AbortSignal.any([lifetime, request.signal]);
-    const current = () =>
-      this.live(signal) &&
-      this.invocationRequest === request &&
-      this.state.details?.snapshot.gameId === snapshot.gameId &&
-      this.state.details.snapshot.version === snapshot.version;
-    this.publish({ invocationsLoading: true, invocationsError: false });
-    try {
-      const records = await this.api.invocations(snapshot.gameId, signal);
-      if (!current()) return;
-      if (records.gameId !== snapshot.gameId || records.version < snapshot.version) {
-        throw new ApiFailure("malformed");
-      }
-      if (records.version > snapshot.version) {
-        const latest = await this.api.snapshot(snapshot.gameId, signal);
-        if (!current()) return;
-        this.adopt(latest);
-        return;
-      }
-      // Totals describe the history at this read, even while the next revision is loading.
-      this.publish({ invocations: records, invocationsMoveCount: snapshot.moves.length });
-      const turn = records.turns.at(-1);
-      const attempt = turn?.attempts.at(-1);
-      const error = attempt?.error;
-      if (
-        snapshot.state === "paused" &&
-        this.state.phase === "ready" &&
-        !this.state.busy &&
-        !this.state.thinking &&
-        turn?.ply === snapshot.moves.length + 1 &&
-        attempt?.outcome === "provider_error" &&
-        error &&
-        error.code !== "model_invalid"
-      ) {
-        this.publish({ issue: { kind: "provider", color: turn.color, error } });
-      }
-    } catch (error) {
-      if (current() && !this.accessLost(error)) {
-        this.publish({ invocationsError: true });
-      }
-    } finally {
-      if (current()) {
-        this.invocationRequest = null;
-        this.publish({ invocationsLoading: false });
-        // Attempts can finish without a chess revision; reads never authorize another turn.
-        if (!isTerminal(snapshot)) {
-          this.invocationTimer = setTimeout(() => {
-            void this.loadInvocations();
-          }, 3000);
-        }
-      }
-    }
-  }
-
   canMove() {
-    const snapshot = this.state.details?.snapshot;
-    return (
-      this.state.phase === "ready" &&
-      this.lease &&
-      this.running &&
-      !this.state.busy &&
-      !this.turn &&
-      !this.control &&
-      !this.humanCommand &&
-      snapshot?.state === "active" &&
-      snapshot.turn === humanColor(this.state.details)
-    );
-  }
-  async move(move: string) {
-    if (!this.canMove() || !this.snapshot().legalMoves.includes(move)) return;
-    this.humanCommand = { ...this.command(), move };
-    await this.sendHumanMove(false);
+    return this.store.get().canMove;
   }
   hasPendingMove() {
-    return this.humanCommand !== null;
-  }
-  async retryMove() {
-    if (!this.humanCommand || this.state.busy || this.state.phase !== "uncertain") return;
-    await this.sendHumanMove(true);
-  }
-  private async sendHumanMove(retry: boolean) {
-    const signal = this.lifetime?.signal;
-    const command = this.humanCommand;
-    if (!signal || !command) return;
-    this.publish({ busy: true, issue: null });
-    try {
-      const accepted = await this.api.move(command, signal);
-      if (!this.live(signal) || this.humanCommand !== command) return;
-      this.adopt(accepted);
-      this.humanCommand = null;
-    } catch (error) {
-      if (!this.live(signal) || this.humanCommand !== command) return;
-      this.fail(error);
-      if (!this.live(signal)) return;
-      try {
-        const current = await this.api.snapshot(command.gameId, signal);
-        if (!this.live(signal)) return;
-        this.adopt(current);
-        // Only a newer revision fences an unacknowledged human command.
-        if (current.version > command.expectedVersion) this.humanCommand = null;
-      } catch (readError) {
-        if (this.live(signal)) this.accessLost(readError);
-      }
-    } finally {
-      if (this.live(signal)) this.publish({ busy: false });
-    }
-    if (!this.live(signal)) return;
-    if (retry && !this.humanCommand && !isTerminal(this.snapshot())) await this.recover();
-    else this.schedule();
-  }
-
-  async lifecycle(action: "pause" | "abort" | "resign") {
-    const snapshot = this.state.details?.snapshot;
-    if (!this.lifetime || !snapshot || isTerminal(snapshot) || this.state.busy) return;
-    const losingColor = humanColor(this.state.details);
-    if (action === "resign" && (!losingColor || this.state.phase !== "ready")) return;
-    this.stopRunning();
-    this.control =
-      action === "resign" && losingColor
-        ? {
-            ...this.command(),
-            action: "resign",
-            losingColor,
-          }
-        : {
-            ...this.command(),
-            action: action === "abort" ? "abort" : "pause",
-            ...(this.lease ? { controllerId: this.controllerId } : {}),
-          };
-    await this.sendControl(false);
-  }
-  async recover(entrySnapshot?: GameSnapshot) {
-    const signal = this.lifetime?.signal;
-    if (!signal || this.state.busy || !this.state.details) return;
-    this.stopRunning();
-    this.lease = false;
-    clearTimeout(this.heartbeatTimer);
-    this.publish({ phase: "recovering", busy: true });
-    try {
-      const snapshot =
-        entrySnapshot ?? (await this.api.snapshot(this.state.details.snapshot.gameId, signal));
-      if (!this.live(signal)) return;
-      this.adopt(snapshot);
-      if (isTerminal(snapshot)) {
-        this.control = null;
-        this.humanCommand = null;
-        this.turn?.abort.abort();
-        this.turn = null;
-        return;
-      }
-      // An uncertain pause is retried verbatim. A conflict proves its old revision cannot commit.
-      if (this.control?.action !== "pause") this.control = { ...this.command(), action: "pause" };
-      this.publish({ busy: false });
-      await this.sendControl(true);
-    } catch (error) {
-      if (this.live(signal)) this.fail(error);
-    } finally {
-      if (this.live(signal)) this.publish({ busy: false });
-    }
-  }
-  async retryControl() {
-    if (!this.control || this.state.busy || !this.lifetime) return;
-    await this.sendControl(this.control.action === "pause" && !("controllerId" in this.control));
+    return this.store.get().pendingMove;
   }
   hasPendingControl() {
-    return this.control !== null;
-  }
-  private async sendControl(recovery: boolean) {
-    const signal = this.lifetime?.signal;
-    if (!signal) return;
-    this.publish({ busy: true });
-    try {
-      for (let tries = 0; tries < 3 && this.control; tries++) {
-        const command = this.control;
-        try {
-          const snapshot = await this.api.lifecycle(command, signal);
-          if (!this.live(signal)) return;
-          this.adopt(snapshot);
-          this.control =
-            recovery && "controllerId" in command && !isTerminal(snapshot)
-              ? { ...this.command(), action: "pause" }
-              : null;
-        } catch (error) {
-          if (!this.live(signal)) return;
-          if (!(error instanceof ApiFailure) || !error.currentSnapshot) throw error;
-          this.adopt(error.currentSnapshot);
-          if (command.action === "resign") {
-            this.control = null;
-            this.fail(error);
-            return;
-          }
-          if (
-            isTerminal(error.currentSnapshot) ||
-            (error.currentSnapshot.state === "paused" && !recovery && command.action === "pause")
-          ) {
-            this.control = null;
-          } else {
-            this.control = recovery
-              ? { ...this.command(), action: "pause" }
-              : { ...command, ...this.command() };
-          }
-        }
-      }
-      if (this.control) throw new ApiFailure("network");
-      this.turn?.abort.abort();
-      this.turn = null;
-      this.humanCommand = null;
-      if (recovery) this.controllerId = crypto.randomUUID();
-      this.publish({
-        phase: "ready",
-        thinking: false,
-        issue:
-          recovery && !isTerminal(this.snapshot()) ? { kind: "notice", code: "recovered" } : null,
-      });
-      void this.loadInvocations();
-    } catch (error) {
-      if (this.live(signal)) this.fail(error);
-    } finally {
-      if (this.live(signal)) this.publish({ busy: false });
-    }
-  }
-  private accessLost(error: unknown) {
-    if (isAccessFailure(error)) {
-      this.endLifetime();
-      this.publish({
-        phase: "unavailable",
-        details: null,
-        issue: { kind: "notice", code: "access" },
-      });
-      return true;
-    }
-    return false;
-  }
-  private fail(error: unknown, phase: "uncertain" | "unavailable" = "uncertain") {
-    this.stopRunning();
-    this.lease = false;
-    clearTimeout(this.heartbeatTimer);
-    if (this.accessLost(error)) return;
-    if (error instanceof ApiFailure && error.currentSnapshot) {
-      this.adopt(error.currentSnapshot);
-      if (isTerminal(error.currentSnapshot)) {
-        this.turn?.abort.abort();
-        this.turn = null;
-        this.control = null;
-        this.humanCommand = null;
-        this.publish({ phase: "ready", thinking: false, issue: null });
-        return;
-      }
-    }
-    this.publish({
-      phase,
-      issue:
-        error instanceof AiRequestFailure
-          ? { kind: "request", code: error.code }
-          : { kind: "notice", code: phase },
-    });
+    return this.store.get().pendingControl;
   }
 
-  async loadReplay() {
-    if (this.state.replay) return;
-    await this.archive.loadReplay();
+  loadInvocations() {
+    return this.invocations.load();
+  }
+  loadReplay() {
+    return this.session.loadReplay();
   }
   selectPly(ply: number) {
     this.archive.selectPly(ply);
   }
   exportPgn(kind: "copy" | "download") {
     return this.archive.exportPgn(kind);
-  }
-  newGame() {
-    if (this.state.details && !isTerminal(this.state.details.snapshot)) return;
-    this.endLifetime();
-    this.navigation?.setup();
   }
 }

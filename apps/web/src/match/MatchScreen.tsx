@@ -148,7 +148,7 @@ export function MatchScreen({
     state.phase === "recovering"
       ? t("match.recovering")
       : state.busy
-        ? t(controller.hasPendingMove() ? "match.moving" : "match.applying")
+        ? t(state.pendingMove ? "match.moving" : "match.applying")
         : state.thinking && snapshot
           ? t("match.thinking", { color: t(`players.${snapshot.turn}`) })
           : snapshot?.state === "paused"
@@ -291,7 +291,7 @@ export function MatchScreen({
               <Chessboard
                 ref={board}
                 snapshot={snapshot}
-                canMove={controller.canMove()}
+                canMove={state.canMove}
                 orientation={orientation}
                 interactionEpoch={`${snapshot.gameId}:${snapshot.version}:${state.replayPly}`}
                 describedBy={helpId}
@@ -459,7 +459,7 @@ export function MatchScreen({
                       >
                         {t("match.recover")}
                       </Button>
-                      {controller.hasPendingControl() ? (
+                      {state.pendingControl ? (
                         <Button
                           variant="secondary"
                           aria-disabled={state.busy}
@@ -470,7 +470,7 @@ export function MatchScreen({
                           {t("match.retryControl")}
                         </Button>
                       ) : null}
-                      {controller.hasPendingMove() ? (
+                      {state.pendingMove ? (
                         <Button
                           variant="secondary"
                           aria-disabled={state.busy}

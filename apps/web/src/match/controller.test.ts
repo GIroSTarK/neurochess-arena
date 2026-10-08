@@ -100,6 +100,56 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("publishes move and control availability with the state observed by subscribers", async () => {
+    const game = humanGame("white");
+    const h = harness(game);
+    h.keys();
+    const observed: ReturnType<MatchController["getSnapshot"]>[] = [];
+    h.controller.subscribe(() => observed.push(h.controller.getSnapshot()));
+    await h.controller.created(game);
+    expect(observed.at(-1)).toMatchObject({
+      canMove: true,
+      pendingMove: false,
+      pendingControl: false,
+    });
+
+    const move = Promise.withResolvers<GameSnapshot>();
+    h.api.move.mockReturnValueOnce(move.promise);
+    const moving = h.controller.move("e2e4");
+    expect(observed.at(-1)).toMatchObject({ busy: true, canMove: false, pendingMove: true });
+    h.store(snapshot(["e2e4"]));
+    move.resolve(snapshot(["e2e4"]));
+    await moving;
+    expect(observed.at(-1)).toMatchObject({ busy: false, canMove: false, pendingMove: false });
+
+    const pause = Promise.withResolvers<GameSnapshot>();
+    h.api.lifecycle.mockReturnValueOnce(pause.promise);
+    const pausing = h.controller.lifecycle("pause");
+    expect(observed.at(-1)).toMatchObject({ busy: true, pendingControl: true, canMove: false });
+    pause.reject(new ApiFailure("timeout"));
+    await pausing;
+    expect(observed.at(-1)).toMatchObject({
+      phase: "uncertain",
+      busy: false,
+      pendingControl: true,
+      canMove: false,
+    });
+    await h.controller.retryControl();
+    expect(observed.at(-1)).toMatchObject({
+      phase: "ready",
+      pendingControl: false,
+      canMove: false,
+    });
+
+    h.disconnect();
+    expect(observed.at(-1)).toMatchObject({
+      details: null,
+      pendingMove: false,
+      pendingControl: false,
+      canMove: false,
+    });
+  });
+
   it("rejects a replay whose position differs despite matching version and PGN", async () => {
     const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
     const h = harness(initial);
