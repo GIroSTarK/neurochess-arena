@@ -72,6 +72,7 @@
 
 @layer base {
   html {
+    scrollbar-gutter: stable;
     color-scheme: dark;
     background-color: var(--color-canvas);
     color: var(--color-text);
