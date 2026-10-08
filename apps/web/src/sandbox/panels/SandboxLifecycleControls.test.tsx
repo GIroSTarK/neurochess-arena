@@ -10,7 +10,7 @@ import {
 } from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 
-import { LifecycleControls } from "./LifecycleControls";
+import { SandboxLifecycleControls } from "./SandboxLifecycleControls";
 
 vi.mock("../../arena/panels/LifecycleControls", () => ({ LifecycleControls: vi.fn(() => null) }));
 
@@ -31,7 +31,7 @@ function panelProps() {
 describe("Sandbox lifecycle mapping", () => {
   it("maps state, action colors and the localized guest-session explanation to shared controls", () => {
     const initial = props();
-    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
+    const { rerender } = renderLocalized(<SandboxLifecycleControls {...initial} />);
     const panel = panelProps();
     expect(panel).toMatchObject({ paused: false, disabled: false });
     expect(panel.boardTools).toBe(initial.boardTools);
@@ -45,7 +45,7 @@ describe("Sandbox lifecycle mapping", () => {
     for (const seat of panel.resignations) seat.onResign();
 
     rerender(
-      <LifecycleControls
+      <SandboxLifecycleControls
         {...initial}
         state={readyState({ snapshot: snapshot([], { state: "paused", legalMoves: [] }) })}
       />,
@@ -61,7 +61,7 @@ describe("Sandbox lifecycle mapping", () => {
     ]);
 
     rerender(
-      <LifecycleControls
+      <SandboxLifecycleControls
         {...initial}
         state={sandboxState({ phase: "synchronizing", snapshot: snapshot(), pendingCommand: null })}
       />,
@@ -81,12 +81,12 @@ describe("Sandbox lifecycle mapping", () => {
     },
   ])("changes the shared confirmation epoch for $reason", ({ state }) => {
     const initial = props();
-    const { rerender } = renderLocalized(<LifecycleControls {...initial} />);
+    const { rerender } = renderLocalized(<SandboxLifecycleControls {...initial} />);
     const epoch = panelProps().epoch;
 
-    rerender(<LifecycleControls {...initial} state={{ ...initial.state }} />);
+    rerender(<SandboxLifecycleControls {...initial} state={{ ...initial.state }} />);
     expect(panelProps().epoch).toBe(epoch);
-    rerender(<LifecycleControls {...initial} state={state} />);
+    rerender(<SandboxLifecycleControls {...initial} state={state} />);
     expect(panelProps().epoch).not.toBe(epoch);
     expect(initial.controller.lifecycle).not.toHaveBeenCalled();
   });

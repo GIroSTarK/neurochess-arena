@@ -2,6 +2,8 @@ import type { GameInvocations, GameSnapshot, ProviderFailure } from "@neurochess
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
+import { resultReason } from "../arena/result";
+
 import { TelemetryStatus } from "./TelemetryStatus";
 
 function failureReason(error: ProviderFailure, t: TFunction) {
@@ -25,13 +27,7 @@ export function InvocationEvents({
   const number = new Intl.NumberFormat(i18n.language);
   return (
     <section aria-label={t("telemetry.events")} className="grid min-w-0 gap-4 text-body">
-      {snapshot.terminationReason ? (
-        <p>
-          {t(`results.${snapshot.terminationReason}`, {
-            winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
-          })}
-        </p>
-      ) : null}
+      {snapshot.terminationReason ? <p>{resultReason(snapshot, t)}</p> : null}
       <p className="text-label text-text-secondary">{t("telemetry.retryPolicy")}</p>
       <TelemetryStatus
         hasRecords={Boolean(records)}

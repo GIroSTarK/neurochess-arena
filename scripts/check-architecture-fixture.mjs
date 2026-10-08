@@ -8,6 +8,10 @@ const { bin } = JSON.parse(
 );
 const executable = resolve(dependencyCruiserDirectory, bin.depcruise);
 const fixtures = [
+  {
+    path: "apps/web/src/gameplay/forbidden-feature-import.ts",
+    rule: "gameplay-no-features",
+  },
   { path: "apps/api/src/forbidden-scripted-adapter.ts", rule: "api-production-no-test-adapters" },
   { path: "apps/web/forbidden-database-import.ts", rule: "web-no-server-infrastructure" },
   { path: "apps/web/forbidden-engine-import.ts", rule: "chess-engine-is-encapsulated" },

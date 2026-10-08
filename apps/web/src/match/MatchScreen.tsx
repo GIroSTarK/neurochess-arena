@@ -18,11 +18,13 @@ import { MoveHistory } from "../arena/panels/MoveHistory";
 import { PgnActions } from "../arena/panels/PgnActions";
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
 import { ReplayControls } from "../arena/panels/ReplayControls";
+import { resultReason, resultScore } from "../arena/result";
 import { StatusSummary } from "../arena/StatusSummary";
 import { AccountAccess } from "../auth/AccountAccess";
 import { useAccount } from "../auth/context";
 import { Chessboard, type ChessboardHandle } from "../board/Chessboard";
 import { useCredentials } from "../credentials/use-credentials";
+import { isTerminal, plyColor } from "../gameplay/snapshot";
 import { replayView } from "../position/replay";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
@@ -128,7 +130,7 @@ export function MatchScreen({
 
   const { details, issue } = state;
   const snapshot = details?.snapshot;
-  const terminal = snapshot?.state === "completed" || snapshot?.state === "aborted";
+  const terminal = snapshot !== undefined && isTerminal(snapshot);
   const issueText = !issue
     ? null
     : issue.kind === "request"
@@ -157,15 +159,11 @@ export function MatchScreen({
   const guidance = human
     ? t("match.playing", { color: t(`players.${human}`) })
     : t("match.observing");
-  const resultTitle = snapshot?.terminationReason
-    ? t(`results.${snapshot.terminationReason}`, {
-        winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
-      })
-    : null;
+  const resultTitle = snapshot?.terminationReason ? resultReason(snapshot, t) : null;
   const lastMove = snapshot?.moves.at(-1);
   const moveAnnouncement = lastMove
     ? t("announcements.move", {
-        color: t(lastMove.ply % 2 ? "players.white" : "players.black"),
+        color: t(`players.${plyColor(lastMove.ply)}`),
         move: lastMove.san,
         status: resultTitle ?? status,
       })
@@ -245,9 +243,7 @@ export function MatchScreen({
           terminal ? (
             <span data-testid="game-score" className="font-display text-title">
               <span className="sr-only">{t("game.score", { score: snapshot.result })}</span>
-              <span aria-hidden="true">
-                {snapshot.result === "1/2-1/2" ? "½–½" : snapshot.result.replace("-", "–")}
-              </span>
+              <span aria-hidden="true">{resultScore(snapshot.result)}</span>
             </span>
           ) : undefined
         }

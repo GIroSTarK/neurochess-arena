@@ -5,7 +5,7 @@ import type { SandboxController } from "../controller";
 import { noticeMessage } from "../messages";
 import type { SandboxState } from "../state";
 
-export function ReplayControls({
+export function SandboxReplayControls({
   state,
   controller,
 }: {

@@ -1,16 +1,30 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 
-import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
+import { ApiFailure } from "../api/failures";
+import type { GameCommandApi } from "../api/game-command-api";
 
+import {
+  type ArchiveFeedback,
+  type ArchiveState,
+  emptyExport,
+  emptyReplay,
+  type ExportState,
+  type ReplayState,
+} from "./archive-state";
 import { failureNotice, safeFailure } from "./failures";
 import type { PgnDelivery } from "./pgn";
-import { emptyExport, emptyReplay, isTerminal, sameSnapshot } from "./state";
-import type { SandboxStore } from "./store";
+import { isTerminal, sameSnapshot } from "./snapshot";
+
+export interface ArchiveStore {
+  get(): ArchiveState & { readonly snapshot: GameSnapshot | null };
+  setReplay(state: ReplayState, feedback?: ArchiveFeedback): void;
+  setExport(state: ExportState, feedback?: ArchiveFeedback): void;
+}
 
 export interface ArchiveContext {
-  readonly api: Pick<SandboxApi, "replay" | "pgn">;
+  readonly api: Pick<GameCommandApi, "replay" | "pgn">;
   readonly delivery: PgnDelivery;
-  readonly store: SandboxStore;
+  readonly store: ArchiveStore;
   readonly isConnected: () => boolean;
   /** Clears the loaded game on an access failure and reports whether it was one. */
   readonly loseAccess: (failure: ApiFailure) => boolean;

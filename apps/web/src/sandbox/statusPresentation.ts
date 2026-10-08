@@ -2,10 +2,11 @@ import type { TFunction } from "i18next";
 
 import { resultTitle } from "../arena/result";
 import type { StatusPresentation } from "../arena/status";
+import { isRejectionCode } from "../gameplay/failures";
+import { isUnfinished } from "../gameplay/snapshot";
 
-import { isRejectionCode } from "./failures";
 import { gameStatus, noticeMessage } from "./messages";
-import { isUnfinished, type SandboxState } from "./state";
+import type { SandboxState } from "./state";
 
 const activityKeys = [
   "actions.starting",

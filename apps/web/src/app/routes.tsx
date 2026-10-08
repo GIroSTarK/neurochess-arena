@@ -162,8 +162,8 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
 async function loadSandboxRoute(context: AppRouteContext) {
   try {
     const [{ SandboxRoute }, { sandboxEntryLoader, sandboxGameLoader }] = await Promise.all([
-      import("../game/SandboxRoute"),
-      import("../game/route-data"),
+      import("../sandbox/SandboxRoute"),
+      import("../sandbox/route-data"),
     ]);
     return {
       Component: SandboxRoute,

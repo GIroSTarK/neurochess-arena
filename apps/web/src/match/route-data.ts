@@ -8,6 +8,7 @@ import type { AppRouteContext } from "../app/route-context";
 import { gameRouteKey, gameRouteTarget } from "../app/route-navigation";
 import type { PublicAccess, ScopedRouteData } from "../app/route-runtime";
 import type { CredentialCatalogState } from "../credentials/catalog";
+import { isAccessFailure } from "../gameplay/failures";
 import type { SetupEntry } from "../setup/controller";
 
 import type { MatchEntry } from "./controller";
@@ -22,10 +23,6 @@ export type ArenaRouteData = ScopedRouteData<{
   readonly credentials: CredentialCatalogState | null;
 }>;
 type ArenaContext = Pick<AppRouteContext, "apiBaseUrl" | "runtime" | "navigation">;
-
-const accessFailure = (error: unknown) =>
-  error instanceof ApiFailure &&
-  ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "");
 
 function entryLoader(context: ArenaContext, kind: "setup" | "game") {
   const { runtime, apiBaseUrl, navigation } = context;
@@ -80,9 +77,9 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
                   error instanceof ApiFailure &&
                   error.code === "UNAUTHORIZED"
                     ? null
-                    : { code: accessFailure(error) ? "access" : "unavailable" },
+                    : { code: isAccessFailure(error) ? "access" : "unavailable" },
               }
-            : { kind: "unavailable", code: accessFailure(error) ? "access" : "unavailable" };
+            : { kind: "unavailable", code: isAccessFailure(error) ? "access" : "unavailable" };
       }
       if (cancelled()) return cancelledResult();
       const needsCredentials =

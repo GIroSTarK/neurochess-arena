@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
-import { sameSnapshot } from "./state";
+import { sameSnapshot } from "./snapshot";
 
 /** The same fields in the opposite order, as a differently built object would present them. */
 function reversedKeys(value: GameSnapshot): GameSnapshot {

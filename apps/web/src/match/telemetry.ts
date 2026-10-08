@@ -1,5 +1,7 @@
 import type { GameDetails, GameInvocations, ModelInvocation } from "@neurochess/contracts";
 
+import { plyColor } from "../gameplay/snapshot";
+
 export const metricNames = ["durationMs", "inputTokens", "outputTokens", "totalTokens"] as const;
 export type MetricName = (typeof metricNames)[number];
 
@@ -23,7 +25,7 @@ export function operationalTotals(
   const attempts = records.turns.flatMap((turn) => turn.attempts);
   const recordedMoves = new Set(records.turns.map((turn) => turn.acceptedMovePly));
   const missingMoves = details.snapshot.moves.filter((move) => {
-    const color = move.ply % 2 ? "white" : "black";
+    const color = plyColor(move.ply);
     return (
       move.ply <= moveCount &&
       details.configuration?.seats[color].type === "ai" &&

@@ -2,6 +2,7 @@ import type { GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
 import { resultTitle } from "../arena/result";
+import { plyColor } from "../gameplay/snapshot";
 
 import type { Announcement, SandboxNotice } from "./state";
 
@@ -66,7 +67,7 @@ export function announcementMessage(event: Announcement | null, t: TFunction): s
     const lastMove = event.snapshot.moves.at(-1);
     if (!lastMove) return status;
     return t("announcements.move", {
-      color: t(lastMove.ply % 2 === 1 ? "players.white" : "players.black"),
+      color: t(`players.${plyColor(lastMove.ply)}`),
       move: lastMove.san,
       status,
     });

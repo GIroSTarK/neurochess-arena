@@ -145,7 +145,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
   });
-  await page.route("**/src/game/SandboxRoute.tsx", async (route) => {
+  await page.route("**/src/sandbox/SandboxRoute.tsx", async (route) => {
     sandboxRequested = true;
     await loading.promise;
     await route.continue();
@@ -308,7 +308,7 @@ test("a failed lazy module has safe navigation and an explicit reload recovery",
   expectedModuleFailures,
   expectedRouteErrors,
 }) => {
-  const moduleUrl = WEB_ORIGIN + "/src/game/SandboxRoute.tsx";
+  const moduleUrl = WEB_ORIGIN + "/src/sandbox/SandboxRoute.tsx";
   expectedModuleFailures.set(page, new Set([moduleUrl]));
   expectedRouteErrors.set(page, new Set(["Route error ROUTE_MODULE_UNAVAILABLE"]));
   await page.route(moduleUrl, (route) => route.abort("failed"), { times: 1 });

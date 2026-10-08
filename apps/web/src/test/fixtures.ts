@@ -2,15 +2,14 @@ import { createGame } from "@neurochess/chess";
 import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
 import { vi } from "vitest";
 
-import type { SandboxController } from "../game/controller";
 import {
   emptyExport,
   emptyReplay,
   type ExportState,
   type ReplayState,
-  type SandboxFlow,
-  type SandboxState,
-} from "../game/state";
+} from "../gameplay/archive-state";
+import type { SandboxController } from "../sandbox/controller";
+import type { SandboxFlow, SandboxState } from "../sandbox/state";
 
 export const GAME_ID = "30c898bd-d430-4c9e-bd9e-1f44bd7a8fab";
 export const OTHER_GAME_ID = "b766c6d2-8129-4309-9d8f-fc9607849901";

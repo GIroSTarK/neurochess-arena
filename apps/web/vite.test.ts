@@ -20,7 +20,7 @@ async function productionChunks(sandboxEnabled: boolean, nodeEnv: "production" |
   return result.output.filter((item) => item.type === "chunk");
 }
 
-const sandboxModules = /\/apps\/web\/src\/(game\/|api\/sandbox-client\.ts$)/;
+const sandboxModules = /\/apps\/web\/src\/(sandbox\/|api\/sandbox-client\.ts$)/;
 
 describe.each(["production", "development"] as const)(
   "production bundles with NODE_ENV=%s",
@@ -37,6 +37,7 @@ describe.each(["production", "development"] as const)(
       expect(modules.some((id) => id.endsWith("/app/env.ts"))).toBe(true);
       expect(modules.some((id) => id.endsWith("/api/http.ts"))).toBe(true);
       expect(modules.some((id) => id.endsWith("/api/game-validation.ts"))).toBe(true);
+      expect(modules.some((id) => id.endsWith("/gameplay/archive.ts"))).toBe(true);
       expect(modules.some((id) => id.includes("/node_modules/zod/"))).toBe(true);
     });
 
@@ -57,7 +58,7 @@ describe.each(["production", "development"] as const)(
           .filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
       ).not.toEqual([]);
       const sandbox = chunks.find((chunk) =>
-        chunk.facadeModuleId?.endsWith("/game/SandboxRoute.tsx"),
+        chunk.facadeModuleId?.endsWith("/sandbox/SandboxRoute.tsx"),
       )!;
       expect(sandbox).toBeDefined();
       expect(sandbox.isDynamicEntry).toBe(true);
@@ -72,10 +73,11 @@ describe.each(["production", "development"] as const)(
         .filter((chunk) => eagerChunks.has(chunk.fileName))
         .flatMap((chunk) => chunk.moduleIds);
       expect(eagerModules.filter((id) => sandboxModules.test(id))).toEqual([]);
+      expect(eagerModules.some((id) => id.endsWith("/gameplay/archive.ts"))).toBe(true);
       for (const path of [
-        "/game/route-data.ts",
-        "/game/controller.ts",
-        "/game/recovery.ts",
+        "/sandbox/route-data.ts",
+        "/sandbox/controller.ts",
+        "/sandbox/recovery.ts",
         "/api/sandbox-client.ts",
         "/board/Chessboard.tsx",
       ]) {

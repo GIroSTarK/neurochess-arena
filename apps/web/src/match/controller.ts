@@ -16,7 +16,11 @@ import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
 import { createSessionCredentials } from "../api/session-credentials";
 import { parseGameId } from "../app/route-urls";
-import { browserPgnDelivery, type PgnDelivery } from "../position/pgn";
+import { ArchiveController } from "../gameplay/archive";
+import { type ArchiveState, emptyExport, emptyReplay } from "../gameplay/archive-state";
+import { isAccessFailure } from "../gameplay/failures";
+import { browserPgnDelivery, type PgnDelivery } from "../gameplay/pgn";
+import { isTerminal } from "../gameplay/snapshot";
 
 export type MatchIssue =
   | { kind: "notice"; code: "recovered" | "uncertain" | "unavailable" | "access" }
@@ -47,8 +51,6 @@ export interface MatchState {
   invocationsError: boolean;
 }
 
-const terminal = (snapshot: GameSnapshot) =>
-  snapshot.state === "completed" || snapshot.state === "aborted";
 const colors = ["white", "black"] as const;
 
 export type MatchEntry =
@@ -80,7 +82,24 @@ export function matchKeysReady(state: MatchState): boolean {
   );
 }
 
+const initialArchive: ArchiveState = { ...emptyReplay, ...emptyExport };
+
+function archiveView(state: ArchiveState) {
+  return {
+    replay: state.replay,
+    replayPly: state.replayPly,
+    replayLoading: state.replayPhase === "loading",
+    replayError: state.replayPhase === "error",
+    exportBusy: state.exportPhase === "loading",
+    exportResult:
+      state.exportPhase === "idle" || state.exportPhase === "loading" ? null : state.exportPhase,
+    exportText: state.exportText,
+  };
+}
+
 export class MatchController {
+  private archiveState = initialArchive;
+  private readonly archive: ArchiveController;
   credentials: ReturnType<typeof createSessionCredentials> | null = null;
   private lifetime: AbortController | null = null;
   private controllerId = "";
@@ -105,13 +124,7 @@ export class MatchController {
     speed: 1500,
     issue: null,
     startedGameId: null,
-    replay: null,
-    replayPly: 0,
-    replayLoading: false,
-    replayError: false,
-    exportBusy: false,
-    exportResult: null,
-    exportText: null,
+    ...archiveView(initialArchive),
     invocations: null,
     invocationsMoveCount: 0,
     invocationsLoading: false,
@@ -120,9 +133,25 @@ export class MatchController {
 
   constructor(
     readonly api: AiApi,
-    private readonly delivery: PgnDelivery = browserPgnDelivery,
+    delivery: PgnDelivery = browserPgnDelivery,
     private readonly navigation?: MatchNavigation,
-  ) {}
+  ) {
+    this.archive = new ArchiveController({
+      api,
+      delivery,
+      store: {
+        get: () => ({ ...this.archiveState, snapshot: this.state.details?.snapshot ?? null }),
+        setReplay: (replay) => this.setArchive({ ...this.archiveState, ...replay }),
+        setExport: (exportState) => this.setArchive({ ...this.archiveState, ...exportState }),
+      },
+      isConnected: () => this.lifetime !== null && !this.lifetime.signal.aborted,
+      loseAccess: (failure) => this.accessLost(failure),
+    });
+  }
+  private setArchive(state: ArchiveState) {
+    this.archiveState = state;
+    this.publish(archiveView(state));
+  }
   readonly getSnapshot = () => this.state;
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -157,6 +186,8 @@ export class MatchController {
     this.humanCommand = null;
     this.lifetime.abort();
     this.lifetime = null;
+    this.archive.cancel();
+    this.archiveState = initialArchive;
     this.credentials = null;
     this.publish({
       phase: "loading",
@@ -166,15 +197,9 @@ export class MatchController {
       keyEpoch: this.state.keyEpoch + 1,
       thinking: false,
       busy: false,
-      replay: null,
-      replayLoading: false,
-      replayError: false,
-      exportText: null,
-      exportBusy: false,
-      exportResult: null,
+      ...archiveView(initialArchive),
       startedGameId: null,
       issue: null,
-      replayPly: 0,
     });
   }
   private live(signal: AbortSignal) {
@@ -206,7 +231,7 @@ export class MatchController {
       this.navigation?.game(id, "recovered");
       if (!this.live(signal)) return;
       void this.loadInvocations();
-      if (terminal(details.snapshot)) await this.loadReplay();
+      if (isTerminal(details.snapshot)) await this.loadReplay();
       else if (details.configuration) await this.recover(details.snapshot);
     } catch (error) {
       if (this.live(signal)) this.fail(error, "unavailable");
@@ -307,11 +332,18 @@ export class MatchController {
       return;
     }
     const changed = snapshot.version !== previous.snapshot.version;
-    if (changed) this.cancelInvocationRead();
-    this.publish({ details: { ...previous, snapshot } });
+    if (changed) {
+      this.cancelInvocationRead();
+      this.archive.cancel();
+      this.archiveState = initialArchive;
+    }
+    this.publish({
+      details: { ...previous, snapshot },
+      ...(changed ? archiveView(initialArchive) : {}),
+    });
     if (changed) void this.loadInvocations();
     if (snapshot.state !== "active") this.stopRunning();
-    if (terminal(snapshot)) {
+    if (isTerminal(snapshot)) {
       clearTimeout(this.heartbeatTimer);
       this.lease = false;
       this.publish({ phase: "ready", issue: null });
@@ -344,7 +376,7 @@ export class MatchController {
   private async beat() {
     const signal = this.lifetime?.signal;
     const snapshot = this.state.details?.snapshot;
-    if (!signal || !snapshot || !this.lease || terminal(snapshot)) return;
+    if (!signal || !snapshot || !this.lease || isTerminal(snapshot)) return;
     try {
       const accepted = await this.api.controller(
         { gameId: snapshot.gameId, controllerId: this.controllerId, action: "heartbeat" },
@@ -544,7 +576,7 @@ export class MatchController {
         this.invocationRequest = null;
         this.publish({ invocationsLoading: false });
         // Attempts can finish without a chess revision; reads never authorize another turn.
-        if (!terminal(snapshot)) {
+        if (!isTerminal(snapshot)) {
           this.invocationTimer = setTimeout(() => {
             void this.loadInvocations();
           }, 3000);
@@ -606,13 +638,13 @@ export class MatchController {
       if (this.live(signal)) this.publish({ busy: false });
     }
     if (!this.live(signal)) return;
-    if (retry && !this.humanCommand && !terminal(this.snapshot())) await this.recover();
+    if (retry && !this.humanCommand && !isTerminal(this.snapshot())) await this.recover();
     else this.schedule();
   }
 
   async lifecycle(action: "pause" | "abort" | "resign") {
     const snapshot = this.state.details?.snapshot;
-    if (!this.lifetime || !snapshot || terminal(snapshot) || this.state.busy) return;
+    if (!this.lifetime || !snapshot || isTerminal(snapshot) || this.state.busy) return;
     const losingColor = humanColor(this.state.details);
     if (action === "resign" && (!losingColor || this.state.phase !== "ready")) return;
     this.stopRunning();
@@ -642,7 +674,7 @@ export class MatchController {
         entrySnapshot ?? (await this.api.snapshot(this.state.details.snapshot.gameId, signal));
       if (!this.live(signal)) return;
       this.adopt(snapshot);
-      if (terminal(snapshot)) {
+      if (isTerminal(snapshot)) {
         this.control = null;
         this.humanCommand = null;
         this.turn?.abort.abort();
@@ -678,7 +710,7 @@ export class MatchController {
           if (!this.live(signal)) return;
           this.adopt(snapshot);
           this.control =
-            recovery && "controllerId" in command && !terminal(snapshot)
+            recovery && "controllerId" in command && !isTerminal(snapshot)
               ? { ...this.command(), action: "pause" }
               : null;
         } catch (error) {
@@ -691,7 +723,7 @@ export class MatchController {
             return;
           }
           if (
-            terminal(error.currentSnapshot) ||
+            isTerminal(error.currentSnapshot) ||
             (error.currentSnapshot.state === "paused" && !recovery && command.action === "pause")
           ) {
             this.control = null;
@@ -711,7 +743,7 @@ export class MatchController {
         phase: "ready",
         thinking: false,
         issue:
-          recovery && !terminal(this.snapshot()) ? { kind: "notice", code: "recovered" } : null,
+          recovery && !isTerminal(this.snapshot()) ? { kind: "notice", code: "recovered" } : null,
       });
       void this.loadInvocations();
     } catch (error) {
@@ -721,10 +753,7 @@ export class MatchController {
     }
   }
   private accessLost(error: unknown) {
-    if (
-      error instanceof ApiFailure &&
-      ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "")
-    ) {
+    if (isAccessFailure(error)) {
       this.endLifetime();
       this.publish({
         phase: "unavailable",
@@ -742,7 +771,7 @@ export class MatchController {
     if (this.accessLost(error)) return;
     if (error instanceof ApiFailure && error.currentSnapshot) {
       this.adopt(error.currentSnapshot);
-      if (terminal(error.currentSnapshot)) {
+      if (isTerminal(error.currentSnapshot)) {
         this.turn?.abort.abort();
         this.turn = null;
         this.control = null;
@@ -761,75 +790,17 @@ export class MatchController {
   }
 
   async loadReplay() {
-    const signal = this.lifetime?.signal;
-    const snapshot = this.state.details?.snapshot;
-    if (
-      !signal ||
-      !snapshot ||
-      !terminal(snapshot) ||
-      this.state.replayLoading ||
-      this.state.replay
-    ) {
-      return;
-    }
-    this.publish({ replayLoading: true, replayError: false });
-    try {
-      const replay = await this.api.replay(snapshot.gameId, signal);
-      if (
-        !this.live(signal) ||
-        this.state.details?.snapshot.gameId !== snapshot.gameId ||
-        this.state.details.snapshot.version !== snapshot.version
-      ) {
-        return;
-      }
-      if (replay.snapshot.version !== snapshot.version || replay.snapshot.pgn !== snapshot.pgn) {
-        throw new ApiFailure("malformed");
-      }
-      this.publish({ replay, replayPly: snapshot.moves.length });
-    } catch (error) {
-      if (this.live(signal) && !this.accessLost(error)) this.publish({ replayError: true });
-    } finally {
-      if (this.live(signal)) this.publish({ replayLoading: false });
-    }
+    if (this.state.replay) return;
+    await this.archive.loadReplay();
   }
   selectPly(ply: number) {
-    if (
-      this.state.replay &&
-      Number.isInteger(ply) &&
-      ply >= 0 &&
-      ply <= this.state.replay.snapshot.moves.length
-    ) {
-      this.publish({ replayPly: ply });
-    }
+    this.archive.selectPly(ply);
   }
-  async exportPgn(kind: "copy" | "download") {
-    const signal = this.lifetime?.signal;
-    const snapshot = this.state.details?.snapshot;
-    if (!signal || !snapshot || !terminal(snapshot) || this.state.exportBusy) return;
-    this.publish({ exportBusy: true, exportResult: null, exportText: null });
-    try {
-      const response = await this.api.pgn(snapshot.gameId, signal);
-      if (!this.live(signal)) return;
-      if (response.version !== snapshot.version || response.pgn !== snapshot.pgn) {
-        throw new ApiFailure("malformed");
-      }
-      const result =
-        kind === "copy"
-          ? (await this.delivery.copy(response.pgn))
-            ? "copied"
-            : "manual"
-          : "downloaded";
-      if (!this.live(signal)) return;
-      if (kind === "download") this.delivery.download(response.pgn, snapshot.gameId);
-      this.publish({ exportResult: result, exportText: result === "manual" ? response.pgn : null });
-    } catch (error) {
-      if (this.live(signal) && !this.accessLost(error)) this.publish({ exportResult: "error" });
-    } finally {
-      if (this.live(signal)) this.publish({ exportBusy: false });
-    }
+  exportPgn(kind: "copy" | "download") {
+    return this.archive.exportPgn(kind);
   }
   newGame() {
-    if (this.state.details && !terminal(this.state.details.snapshot)) return;
+    if (this.state.details && !isTerminal(this.state.details.snapshot)) return;
     this.endLifetime();
     this.navigation?.setup();
   }

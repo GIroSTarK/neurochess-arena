@@ -2,20 +2,15 @@ import type { GameSnapshot } from "@neurochess/contracts";
 
 import type { SandboxApi } from "../api/sandbox-client";
 import type { GameTarget } from "../app/navigation";
+import { ArchiveController } from "../gameplay/archive";
+import { failureNotice, isAccessCode, safeFailure } from "../gameplay/failures";
+import { OperationGate } from "../gameplay/operations";
+import { browserPgnDelivery, type PgnDelivery } from "../gameplay/pgn";
+import { isTerminal, isUnfinished } from "../gameplay/snapshot";
 
-import { ArchiveController } from "./archive";
-import { failureNotice, isAccessCode, safeFailure } from "./failures";
-import { OperationGate } from "./operations";
-import { browserPgnDelivery, type PgnDelivery } from "./pgn";
 import { RecoveryController } from "./recovery";
 import { GameSession } from "./session";
-import {
-  isTerminal,
-  isUnfinished,
-  type LifecycleAction,
-  type SandboxNotice,
-  type SandboxState,
-} from "./state";
+import type { LifecycleAction, SandboxNotice, SandboxState } from "./state";
 import { SandboxStore } from "./store";
 
 export interface SandboxEntry {

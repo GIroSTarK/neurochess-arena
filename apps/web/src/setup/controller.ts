@@ -10,6 +10,7 @@ import {
 import type { AiApi } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
 import type { createSessionCredentials } from "../api/session-credentials";
+import { isAccessFailure } from "../gameplay/failures";
 
 import {
   emptyParameters,
@@ -28,9 +29,6 @@ export interface SetupEntry {
 }
 
 const colors = ["white", "black"] as const;
-const accessLost = (error: unknown) =>
-  error instanceof ApiFailure &&
-  ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN"].includes(error.code ?? "");
 
 export class SetupController {
   private state: SetupState = {
@@ -289,7 +287,7 @@ export class SetupController {
       }
     } catch (error: unknown) {
       if (isCancelled()) return;
-      if (accessLost(error)) this.loseAccess();
+      if (isAccessFailure(error) && error.code !== "NOT_FOUND") this.loseAccess();
       else this.seat(color, { discovery: "error", issue: { code: "unavailable" } });
     }
   }
@@ -329,7 +327,7 @@ export class SetupController {
       if (error instanceof ApiFailure && error.code === "UNAUTHORIZED") {
         this.clearKeys();
         this.publish({ ...this.state, phase: "editing", existingGameId: null });
-      } else if (accessLost(error)) this.loseAccess();
+      } else if (isAccessFailure(error) && error.code !== "NOT_FOUND") this.loseAccess();
       else this.publish({ ...this.state, phase: "unavailable", issue: { code: "unavailable" } });
     }
   }
@@ -355,7 +353,7 @@ export class SetupController {
       return game;
     } catch (error: unknown) {
       if (isCancelled()) return null;
-      if (accessLost(error)) this.loseAccess();
+      if (isAccessFailure(error) && error.code !== "NOT_FOUND") this.loseAccess();
       else if (
         error instanceof ApiFailure &&
         error.code === "GAME_CONFLICT" &&

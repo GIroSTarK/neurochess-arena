@@ -1,12 +1,15 @@
 import {
-  type Announcement,
   emptyExport,
   emptyReplay,
   type ExportState,
-  initialSandboxState,
-  isTerminal,
-  type Readiness,
   type ReplayState,
+} from "../gameplay/archive-state";
+import { isTerminal } from "../gameplay/snapshot";
+
+import {
+  type Announcement,
+  initialSandboxState,
+  type Readiness,
   type SandboxFlow,
   type SandboxNotice,
   type SandboxState,

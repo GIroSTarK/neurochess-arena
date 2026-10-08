@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 
 import { createAppRouter } from "./router";
 
-vi.mock("../game/SandboxRoute", () => {
+vi.mock("../sandbox/SandboxRoute", () => {
   throw new Error("private-import-error-canary");
 });
 

@@ -33,21 +33,30 @@ export default {
         path: "(^|/)apps/web/src/(arena|board|ui)/",
         pathNot: "\\.test\\.tsx?$",
       },
-      to: { path: "(^|/)apps/web/src/(api|game|reference|setup|match)/" },
+      to: { path: "(^|/)apps/web/src/(api|sandbox|reference|setup|match)/" },
+    },
+    {
+      name: "gameplay-no-features",
+      comment: "Shared gameplay depends on neutral contracts and APIs, never feature owners.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/gameplay/", pathNot: "\\.test\\.tsx?$" },
+      to: {
+        path: "(^|/)apps/web/src/((app|auth|credentials|history|match|reference|sandbox|setup)/|api/sandbox-client\\.ts$)",
+      },
     },
     {
       name: "ai-match-no-sandbox",
       comment: "The public AI controller cannot depend on Sandbox implementation.",
       severity: "error",
       from: { path: "(^|/)apps/web/src/match/", pathNot: "\\.test\\.tsx?$" },
-      to: { path: "(^|/)apps/web/src/(game/|api/sandbox-client\\.ts$)" },
+      to: { path: "(^|/)apps/web/src/(sandbox/|api/sandbox-client\\.ts$)" },
     },
     {
       name: "ai-setup-no-sandbox",
       comment: "AI setup uses its own API and credential boundary, never Sandbox controllers.",
       severity: "error",
       from: { path: "(^|/)apps/web/src/setup/", pathNot: "\\.test\\.tsx?$" },
-      to: { path: "(^|/)apps/web/src/game/" },
+      to: { path: "(^|/)apps/web/src/sandbox/" },
     },
     {
       name: "reference-no-sandbox",
@@ -55,7 +64,7 @@ export default {
         "Reference scenarios exercise presentation without Sandbox controllers or HTTP clients.",
       severity: "error",
       from: { path: "(^|/)apps/web/src/reference/", pathNot: "\\.test\\.tsx?$" },
-      to: { path: "(^|/)apps/web/src/(api|game)/" },
+      to: { path: "(^|/)apps/web/src/(api|sandbox)/" },
     },
     {
       name: "api-no-web",

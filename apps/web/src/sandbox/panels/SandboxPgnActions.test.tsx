@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { FOOLS_MATE, mockController, readyState, snapshot } from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 
-import { PgnActions } from "./PgnActions";
-import { ReplayControls } from "./ReplayControls";
+import { SandboxPgnActions } from "./SandboxPgnActions";
+import { SandboxReplayControls } from "./SandboxReplayControls";
 
 function props() {
   const controller = mockController();
@@ -32,8 +32,8 @@ describe("PGN export", () => {
     });
     renderLocalized(
       <>
-        <ReplayControls state={failed} controller={controller} />
-        <PgnActions state={failed} controller={controller} />
+        <SandboxReplayControls state={failed} controller={controller} />
+        <SandboxPgnActions state={failed} controller={controller} />
       </>,
     );
     const replay = within(screen.getByRole("region", { name: "Replay" }));
@@ -57,7 +57,7 @@ describe("PGN export", () => {
     "keeps focus on $name while the export is prepared",
     async ({ name, action, outcome, message }) => {
       const initial = props();
-      const { rerender } = renderLocalized(<PgnActions {...initial} />);
+      const { rerender } = renderLocalized(<SandboxPgnActions {...initial} />);
       const user = userEvent.setup();
       const control = screen.getByRole("button", { name });
       act(() => control.focus());
@@ -65,7 +65,7 @@ describe("PGN export", () => {
       expect(initial.exportPgn).toHaveBeenCalledExactlyOnceWith(action);
 
       rerender(
-        <PgnActions
+        <SandboxPgnActions
           {...initial}
           state={readyState({
             snapshot: snapshot(FOOLS_MATE),
@@ -85,7 +85,7 @@ describe("PGN export", () => {
       expect(initial.exportPgn).toHaveBeenCalledTimes(1);
 
       rerender(
-        <PgnActions
+        <SandboxPgnActions
           {...initial}
           state={readyState({
             snapshot: snapshot(FOOLS_MATE),

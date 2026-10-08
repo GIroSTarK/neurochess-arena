@@ -4,7 +4,7 @@ import { Button } from "../../ui/Button";
 import type { SandboxController } from "../controller";
 import type { SandboxState } from "../state";
 
-export function CommandRecovery({
+export function SandboxCommandRecovery({
   state,
   controller,
   onRetryRecovery,

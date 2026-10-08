@@ -2,10 +2,10 @@ import { gameReplayResponseSchema } from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
+import type { PgnDelivery } from "../gameplay/pgn";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { enterSandbox, harness } from "../test/sandbox-controller";
 
-import type { PgnDelivery } from "./pgn";
 import type { SandboxState } from "./state";
 
 describe("private terminal replay and export", () => {

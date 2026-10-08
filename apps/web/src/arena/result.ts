@@ -10,3 +10,18 @@ export function resultTitle(
   if (snapshot.result === "0-1") return t("game.blackWins");
   return t("game.draw");
 }
+
+export function resultReason(
+  snapshot: Pick<GameSnapshot, "result"> & {
+    readonly terminationReason: NonNullable<GameSnapshot["terminationReason"]>;
+  },
+  t: TFunction,
+): string {
+  return t(`results.${snapshot.terminationReason}`, {
+    winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
+  });
+}
+
+export function resultScore(result: GameSnapshot["result"]): string {
+  return result === "1/2-1/2" ? "½–½" : result.replace("-", "–");
+}

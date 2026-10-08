@@ -20,11 +20,11 @@ import { standardPositionPreview } from "../position/preview";
 import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
 
-import { CommandRecovery } from "./panels/CommandRecovery";
-import { LifecycleControls } from "./panels/LifecycleControls";
-import { PgnActions } from "./panels/PgnActions";
-import { ReplayControls } from "./panels/ReplayControls";
-import { StartButton } from "./panels/StartButton";
+import { SandboxCommandRecovery } from "./panels/SandboxCommandRecovery";
+import { SandboxLifecycleControls } from "./panels/SandboxLifecycleControls";
+import { SandboxPgnActions } from "./panels/SandboxPgnActions";
+import { SandboxReplayControls } from "./panels/SandboxReplayControls";
+import { SandboxStartButton } from "./panels/SandboxStartButton";
 import { sandboxPresentation } from "./presentation";
 import { sandboxStatusPresentation } from "./statusPresentation";
 import { useSandbox } from "./useSandbox";
@@ -143,10 +143,10 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 title={t("sandbox.entryTitle")}
                 description={t("sandbox.entryDescription")}
                 compactDescription={t("sandbox.entryCompactDescription")}
-                action={<StartButton state={state} controller={controller} />}
+                action={<SandboxStartButton state={state} controller={controller} />}
               />
               <StatusFeedback {...status} />
-              <CommandRecovery
+              <SandboxCommandRecovery
                 state={state}
                 controller={controller}
                 onRetryRecovery={recover}
@@ -184,7 +184,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                     <RecoveryNotice {...view.recovery} />
                   </div>
                 ) : null}
-                <LifecycleControls
+                <SandboxLifecycleControls
                   state={state}
                   controller={controller}
                   boardTools={{ orientation, onFlip: flipBoard, helpId }}
@@ -194,8 +194,8 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
               <>
                 {view.terminal ? (
                   <>
-                    <ReplayControls state={state} controller={controller} />
-                    <PgnActions state={state} controller={controller} />
+                    <SandboxReplayControls state={state} controller={controller} />
+                    <SandboxPgnActions state={state} controller={controller} />
                   </>
                 ) : null}
                 <BoardTools orientation={orientation} onFlip={flipBoard} helpId={helpId} />
@@ -217,7 +217,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
               <div className="shrink-0 border-t border-divider pt-4 text-body text-text-secondary">
                 {view.terminal ? (
                   <>
-                    <StartButton state={state} controller={controller} />
+                    <SandboxStartButton state={state} controller={controller} />
                     <p className="mt-6">{t("replay.hint")}</p>
                     <StatusFeedback {...status} />
                   </>
@@ -251,7 +251,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                     </div>
                   </>
                 )}
-                <CommandRecovery
+                <SandboxCommandRecovery
                   state={state}
                   controller={controller}
                   onRetryRecovery={recover}

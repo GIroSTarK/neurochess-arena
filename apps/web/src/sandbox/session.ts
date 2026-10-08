@@ -1,17 +1,17 @@
 import type { GameSnapshot, LifecycleCommand, MoveCommand } from "@neurochess/contracts";
 
 import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
+import type { ArchiveController } from "../gameplay/archive";
+import { isAccessCode, rejectionOf, safeFailure } from "../gameplay/failures";
+import type { Operation, OperationGate } from "../gameplay/operations";
+import { isTerminal } from "../gameplay/snapshot";
 
-import type { ArchiveController } from "./archive";
-import { isAccessCode, rejectionOf, safeFailure } from "./failures";
-import type { Operation, OperationGate } from "./operations";
-import {
-  type AcceptedKind,
-  type Announcement,
-  isTerminal,
-  type LifecycleAction,
-  type PendingCommand,
-  type SandboxNotice,
+import type {
+  AcceptedKind,
+  Announcement,
+  LifecycleAction,
+  PendingCommand,
+  SandboxNotice,
 } from "./state";
 import type { SandboxStore } from "./store";
 

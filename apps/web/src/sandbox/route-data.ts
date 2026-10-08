@@ -3,9 +3,9 @@ import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-rou
 import { createSandboxApi } from "../api/sandbox-client";
 import type { AppRouteContext } from "../app/route-context";
 import { gameRouteKey, gameRouteTarget } from "../app/route-navigation";
+import { failureNotice, isAccessCode, safeFailure } from "../gameplay/failures";
 
 import type { SandboxEntry } from "./controller";
-import { failureNotice, isAccessCode, safeFailure } from "./failures";
 
 export type SandboxRouteData =
   | { readonly kind: "entry"; readonly entry: SandboxEntry }

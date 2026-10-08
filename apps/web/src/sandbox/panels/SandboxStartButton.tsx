@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
 
 import { StartButton as StartControl } from "../../arena/panels/StartButton";
+import { isTerminal } from "../../gameplay/snapshot";
 import type { SandboxController } from "../controller";
-import { isTerminal, type SandboxPhase, type SandboxState } from "../state";
+import type { SandboxPhase, SandboxState } from "../state";
 
 type StartLabel =
   "actions.start" | "actions.starting" | "actions.retryStart" | "actions.restartSession";
@@ -13,7 +14,7 @@ const phaseLabels: Partial<Record<SandboxPhase, StartLabel>> = {
   "access-error": "actions.restartSession",
 };
 
-export function StartButton({
+export function SandboxStartButton({
   state,
   controller,
 }: {

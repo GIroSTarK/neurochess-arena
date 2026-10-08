@@ -1,6 +1,8 @@
 import type { MoveRecord } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
+import { plyColor } from "../gameplay/snapshot";
+
 import { referenceMoveData, type ReferenceScenario } from "./scenarios";
 
 export function ReferencePanels({
@@ -28,7 +30,7 @@ export function ReferencePanels({
       {(["white", "black"] as const).map((color) => {
         const identity = scenario.players[color];
         if (identity.kind !== "ai") return null;
-        const move = moves.findLast((move) => move.ply % 2 === (color === "white" ? 1 : 0));
+        const move = moves.findLast((move) => plyColor(move.ply) === color);
         const data = move ? referenceMoveData[move.ply - 1] : undefined;
         const metrics = [
           {

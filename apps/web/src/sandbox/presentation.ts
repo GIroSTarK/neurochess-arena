@@ -2,10 +2,13 @@ import type { ChessColor, GameSnapshot } from "@neurochess/contracts";
 import type { TFunction } from "i18next";
 
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
+import { resultReason, resultScore } from "../arena/result";
+import { plyColor } from "../gameplay/snapshot";
+import { interactionEpoch, isTerminal, isUnfinished } from "../gameplay/snapshot";
 import { replayView } from "../position/replay";
 
 import { announcementMessage } from "./messages";
-import { interactionEpoch, isTerminal, isUnfinished, type SandboxState } from "./state";
+import type { SandboxState } from "./state";
 
 const activityKeys = ["ready", "inspecting", "paused", "toMove", "waiting"] as const;
 
@@ -40,16 +43,14 @@ export function sandboxPresentation(state: SandboxState, t: TFunction) {
       state.announcement?.kind === "existing");
   const result = snapshot?.terminationReason
     ? {
-        title: t(`results.${snapshot.terminationReason}`, {
-          winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
-        }),
+        title: resultReason(snapshot, t),
         description: t(lastMove ? "sandbox.resultContextWithMove" : "sandbox.resultContext", {
           status: t(snapshot.state === "aborted" ? "reasons.aborted" : "game.complete"),
           move: lastMove
-            ? `${Math.ceil(lastMove.ply / 2)}${lastMove.ply % 2 === 0 ? "..." : "."} ${lastMove.san}`
+            ? `${Math.ceil(lastMove.ply / 2)}${plyColor(lastMove.ply) === "black" ? "..." : "."} ${lastMove.san}`
             : "",
         }),
-        score: snapshot.result === "1/2-1/2" ? "½–½" : snapshot.result.replace("-", "–"),
+        score: resultScore(snapshot.result),
         scoreLabel: t("game.score", { score: snapshot.result }),
       }
     : null;

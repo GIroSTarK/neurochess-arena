@@ -8,8 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
+import type { PgnDelivery } from "../gameplay/pgn";
 import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
-import { GAME_ID, OTHER_GAME_ID, snapshot } from "../test/fixtures";
+import { FOOLS_MATE, GAME_ID, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
 import { MatchController } from "./controller";
 
@@ -19,7 +20,7 @@ const details: GameDetails = {
   configuration: { mode: "ai_vs_ai", seats: { white: seat, black: seat } },
 };
 
-function harness(initial = details) {
+function harness(initial = details, delivery?: PgnDelivery) {
   let stored = initial.snapshot;
   const api = {
     bootstrap: vi.fn<AiApi["bootstrap"]>(),
@@ -61,7 +62,7 @@ function harness(initial = details) {
     pgn: vi.fn<AiApi["pgn"]>(),
   } satisfies AiApi;
   const navigation = { game: vi.fn(), setup: vi.fn() };
-  const controller = new MatchController(api, undefined, navigation);
+  const controller = new MatchController(api, delivery, navigation);
   void controller.enter({ kind: "setup" });
   const disconnect = () => controller.endLifetime();
   cleanups.push(disconnect);
@@ -99,6 +100,181 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("rejects a replay whose position differs despite matching version and PGN", async () => {
+    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+    const h = harness(initial);
+    h.api.replay.mockResolvedValueOnce(
+      gameReplayResponseSchema.parse({
+        snapshot: { ...initial.snapshot, inCheck: false },
+        initialFen: snapshot().fen,
+      }),
+    );
+    await h.enter();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: initial,
+      replay: null,
+      replayLoading: false,
+      replayError: true,
+    });
+    await h.controller.loadReplay();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      replay: { snapshot: initial.snapshot },
+      replayPly: 4,
+      replayError: false,
+    });
+  });
+
+  it("rejects PGN for another game before delivering it", async () => {
+    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+    const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
+    const h = harness(initial, delivery);
+    await h.enter();
+    h.api.pgn.mockResolvedValueOnce({
+      gameId: OTHER_GAME_ID,
+      version: initial.snapshot.version,
+      pgn: initial.snapshot.pgn,
+    });
+    await h.controller.exportPgn("download");
+    expect(delivery.download).not.toHaveBeenCalled();
+    expect(h.controller.getSnapshot()).toMatchObject({
+      details: initial,
+      exportResult: "error",
+      exportText: null,
+      exportBusy: false,
+    });
+  });
+
+  it.each(["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN", "NOT_FOUND"] as const)(
+    "clears both archive slots on %s and prevents late PGN delivery",
+    async (code) => {
+      const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+      const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
+      const h = harness(initial, delivery);
+      const replay = Promise.withResolvers<Awaited<ReturnType<AiApi["replay"]>>>();
+      const pgn = Promise.withResolvers<Awaited<ReturnType<AiApi["pgn"]>>>();
+      h.api.replay.mockReturnValueOnce(replay.promise);
+      h.api.pgn.mockReturnValueOnce(pgn.promise);
+      const entering = h.enter();
+      await vi.advanceTimersByTimeAsync(0);
+      const exporting = h.controller.exportPgn("download");
+      await h.controller.loadReplay();
+      await h.controller.exportPgn("copy");
+      expect(h.api.replay).toHaveBeenCalledTimes(1);
+      expect(h.api.pgn).toHaveBeenCalledTimes(1);
+
+      replay.reject(new ApiFailure("api", code));
+      await entering;
+      expect(h.api.pgn.mock.calls[0]?.[1].aborted).toBe(true);
+      expect(h.controller.getSnapshot()).toMatchObject({
+        phase: "unavailable",
+        details: null,
+        replay: null,
+        exportText: null,
+        exportResult: null,
+        issue: { kind: "notice", code: "access" },
+      });
+      pgn.resolve({
+        gameId: GAME_ID,
+        version: initial.snapshot.version,
+        pgn: initial.snapshot.pgn,
+      });
+      await exporting;
+      expect(delivery.download).not.toHaveBeenCalled();
+      expect(h.controller.getSnapshot().details).toBeNull();
+      expect(h.api.bootstrap).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["replay", "export"] as const)(
+    "fences an obsolete %s access failure when telemetry adopts a newer revision",
+    async (slot) => {
+      const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+      const h = harness(initial);
+      const replay = Promise.withResolvers<Awaited<ReturnType<AiApi["replay"]>>>();
+      const pgn = Promise.withResolvers<Awaited<ReturnType<AiApi["pgn"]>>>();
+      if (slot === "replay") h.api.replay.mockReturnValueOnce(replay.promise);
+      else h.api.pgn.mockReturnValueOnce(pgn.promise);
+      const entering = h.enter();
+      await vi.advanceTimersByTimeAsync(0);
+      const obsolete = slot === "replay" ? entering : h.controller.exportPgn("copy");
+      const signal =
+        slot === "replay" ? h.api.replay.mock.calls[0]?.[1] : h.api.pgn.mock.calls[0]?.[1];
+      const next = { ...initial.snapshot, version: initial.snapshot.version + 1 };
+      h.store(next);
+      await h.controller.loadInvocations();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signal?.aborted).toBe(true);
+      expect(h.controller.getSnapshot()).toMatchObject({
+        details: { snapshot: next },
+        replay: { snapshot: next },
+        replayError: false,
+        exportResult: null,
+      });
+      (slot === "replay" ? replay : pgn).reject(new ApiFailure("api", "FORBIDDEN"));
+      await obsolete;
+      expect(h.controller.getSnapshot()).toMatchObject({
+        phase: "ready",
+        details: { snapshot: next },
+        replay: { snapshot: next },
+        replayError: false,
+        exportResult: null,
+      });
+    },
+  );
+
+  it("keeps a new export pending when an earlier lifetime's request fails", async () => {
+    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+    const delivery = { copy: vi.fn().mockResolvedValue(false), download: vi.fn() };
+    const h = harness(initial, delivery);
+    await h.enter();
+    const old = Promise.withResolvers<Awaited<ReturnType<AiApi["pgn"]>>>();
+    const current = Promise.withResolvers<Awaited<ReturnType<AiApi["pgn"]>>>();
+    h.api.pgn.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const first = h.controller.exportPgn("copy");
+    h.disconnect();
+    expect(h.api.pgn.mock.calls[0]?.[1].aborted).toBe(true);
+    await h.enter();
+    const retry = h.controller.exportPgn("copy");
+    old.reject(new ApiFailure("api", "NOT_FOUND"));
+    await first;
+    expect(h.controller.getSnapshot()).toMatchObject({ exportBusy: true, exportResult: null });
+    await h.controller.exportPgn("copy");
+    expect(h.api.pgn).toHaveBeenCalledTimes(2);
+    current.resolve({
+      gameId: GAME_ID,
+      version: initial.snapshot.version,
+      pgn: initial.snapshot.pgn,
+    });
+    await retry;
+    expect(h.controller.getSnapshot()).toMatchObject({
+      exportBusy: false,
+      exportResult: "manual",
+      exportText: initial.snapshot.pgn,
+    });
+    expect(delivery.copy).toHaveBeenCalledExactlyOnceWith(initial.snapshot.pgn);
+  });
+
+  it("does not restore manual PGN text when clipboard completion arrives after departure", async () => {
+    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
+    const clipboard = Promise.withResolvers<boolean>();
+    const delivery = { copy: vi.fn(() => clipboard.promise), download: vi.fn() };
+    const h = harness(initial, delivery);
+    await h.enter();
+    h.api.pgn.mockResolvedValueOnce({
+      gameId: GAME_ID,
+      version: initial.snapshot.version,
+      pgn: initial.snapshot.pgn,
+    });
+    const exporting = h.controller.exportPgn("copy");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(delivery.copy).toHaveBeenCalledOnce();
+    h.disconnect();
+    await h.enter();
+    clipboard.resolve(false);
+    await exporting;
+    expect(h.controller.getSnapshot()).toMatchObject({ exportResult: null, exportText: null });
+  });
+
   it.each(["turn", "invocations"] as const)(
     "ends private gameplay on PROFILE_REQUIRED from %s and fences late responses",
     async (source) => {

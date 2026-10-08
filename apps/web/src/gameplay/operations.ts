@@ -4,7 +4,7 @@ export interface Operation {
 }
 
 /**
- * Serializes the sandbox's mutating operations: creation, commands, and recovery. At most one
+ * Serializes mutating operations: creation, commands, and recovery. At most one
  * runs at a time, and its response is applied only while it is still current, meaning the gate
  * is connected, nothing has invalidated it since, and its request was not aborted.
  */

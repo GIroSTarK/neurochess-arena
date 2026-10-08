@@ -2,6 +2,7 @@ import type { ChessColor, GameDetails, GameInvocations } from "@neurochess/contr
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { plyColor } from "../gameplay/snapshot";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
@@ -47,15 +48,14 @@ export function CommentaryPanel({
       ? (["white", "black"] as const).filter(
           (color) => details.configuration?.seats[color].type === "ai",
         )
-      : [selected ? (selected.ply % 2 ? "white" : "black") : null];
+      : [selected ? plyColor(selected.ply) : null];
   const pending = !error && (loading || !records || records.version < details.snapshot.version);
   return (
     <section aria-label={t("telemetry.commentary")} className="grid min-w-0 shrink-0 gap-3">
       <h2 className="font-display text-section">{t("telemetry.commentary")}</h2>
       <div className="grid auto-rows-fr gap-3">
         {colors.map((color) => {
-          const move =
-            selected ?? moves.findLast((move) => (move.ply % 2 ? "white" : "black") === color);
+          const move = selected ?? moves.findLast((move) => plyColor(move.ply) === color);
           const attempt = move ? acceptedAttempt(records, move.ply) : undefined;
           const seat = color ? details.configuration?.seats[color] : undefined;
           const ai = seat?.type === "ai";

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FOOLS_MATE, mockController, readyState, snapshot } from "../../test/fixtures";
 import { renderLocalized } from "../../test/render";
 
-import { ReplayControls } from "./ReplayControls";
+import { SandboxReplayControls } from "./SandboxReplayControls";
 
 function props(replayPly: number) {
   const controller = mockController();
@@ -26,7 +26,7 @@ describe("replay navigation focus", () => {
   it.each(["First", "Previous", "Next", "Last"])(
     "names %s without a redundant description before and after Escape",
     async (name) => {
-      renderLocalized(<ReplayControls {...props(2)} />);
+      renderLocalized(<SandboxReplayControls {...props(2)} />);
       const user = userEvent.setup();
       const control = screen.getByRole("button", { name });
       expect(control).toHaveAccessibleName(name);
@@ -48,7 +48,7 @@ describe("replay navigation focus", () => {
   ] as const)("shows the accepted final ply while replay is $replayPhase", (replayState) => {
     const initial = props(0);
     renderLocalized(
-      <ReplayControls
+      <SandboxReplayControls
         {...initial}
         state={readyState({ snapshot: snapshot(FOOLS_MATE), replayState })}
       />,
@@ -65,7 +65,7 @@ describe("replay navigation focus", () => {
     "keeps focus on $name after it becomes unavailable",
     async ({ name, from, target, alsoUnavailable, available }) => {
       const initial = props(from);
-      const { rerender } = renderLocalized(<ReplayControls {...initial} />);
+      const { rerender } = renderLocalized(<SandboxReplayControls {...initial} />);
       expect(screen.getByText(`Ply ${from} of 4`)).toBeInTheDocument();
       const user = userEvent.setup();
       const control = screen.getByRole("button", { name });
@@ -73,7 +73,7 @@ describe("replay navigation focus", () => {
       await user.keyboard("{Enter}");
       expect(initial.selectPly).toHaveBeenCalledExactlyOnceWith(target);
 
-      rerender(<ReplayControls {...initial} state={props(target).state} />);
+      rerender(<SandboxReplayControls {...initial} state={props(target).state} />);
       expect(screen.getByText(`Ply ${target} of 4`)).toBeInTheDocument();
       expect(control).toHaveAttribute("aria-disabled", "true");
       expect(control).not.toBeDisabled();
@@ -96,7 +96,7 @@ describe("replay navigation focus", () => {
   it("keeps every control focusable while the replay is loading", async () => {
     const initial = props(0);
     renderLocalized(
-      <ReplayControls
+      <SandboxReplayControls
         {...initial}
         state={readyState({
           snapshot: snapshot(FOOLS_MATE),

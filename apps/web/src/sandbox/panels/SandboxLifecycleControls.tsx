@@ -4,10 +4,11 @@ import {
   LifecycleControls as LifecyclePanel,
   type LifecycleControlsProps,
 } from "../../arena/panels/LifecycleControls";
+import { interactionEpoch } from "../../gameplay/snapshot";
 import type { SandboxController } from "../controller";
-import { interactionEpoch, type SandboxState } from "../state";
+import type { SandboxState } from "../state";
 
-export function LifecycleControls({
+export function SandboxLifecycleControls({
   state,
   controller,
   boardTools,

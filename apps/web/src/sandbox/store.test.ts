@@ -1,9 +1,10 @@
 import { gameReplayResponseSchema, type GameSnapshot } from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
+import { emptyExport, emptyReplay } from "../gameplay/archive-state";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 
-import { emptyExport, emptyReplay, type PendingCommand, type SandboxState } from "./state";
+import type { PendingCommand, SandboxState } from "./state";
 import { SandboxStore } from "./store";
 
 /** Checked by tsconfig.tests.json; never invoke invalid transitions at runtime. */

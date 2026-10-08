@@ -13,7 +13,9 @@ import { LifecycleControls } from "../arena/panels/LifecycleControls";
 import { MoveHistory } from "../arena/panels/MoveHistory";
 import type { PlayerSummaryData } from "../arena/panels/PlayerSummary";
 import { ReplayControls } from "../arena/panels/ReplayControls";
+import { resultReason, resultScore } from "../arena/result";
 import { Chessboard } from "../board/Chessboard";
+import { isTerminal } from "../gameplay/snapshot";
 import { standardPositionPreview } from "../position/preview";
 import { replayView } from "../position/replay";
 import { Select } from "../ui/Select";
@@ -95,7 +97,7 @@ function ReferenceMatch({
   const [snapshot, setSnapshot] = useState(() => game.snapshot());
   const [ply, setPly] = useState(snapshot.moves.length);
   const [orientation, setOrientation] = useState<ChessColor>(scenario.human ?? "white");
-  const terminal = snapshot.state === "completed" || snapshot.state === "aborted";
+  const terminal = isTerminal(snapshot);
   const paused = snapshot.state === "paused";
   const visibleMoves = terminal ? snapshot.moves.slice(0, ply) : snapshot.moves;
   const view = terminal
@@ -141,13 +143,7 @@ function ReferenceMatch({
   return (
     <>
       <ArenaHeader
-        title={
-          snapshot.terminationReason
-            ? t(`results.${snapshot.terminationReason}`, {
-                winner: t(snapshot.result === "1-0" ? "players.white" : "players.black"),
-              })
-            : scenario.label
-        }
+        title={snapshot.terminationReason ? resultReason(snapshot, t) : scenario.label}
         description={
           terminal
             ? scenario.label
@@ -160,7 +156,7 @@ function ReferenceMatch({
               className="font-display text-title"
               aria-label={t("game.score", { score: snapshot.result })}
             >
-              {snapshot.result.replace("-", "–")}
+              {resultScore(snapshot.result)}
             </span>
           ) : undefined
         }
