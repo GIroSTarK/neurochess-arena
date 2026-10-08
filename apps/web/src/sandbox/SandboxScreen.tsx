@@ -134,8 +134,8 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       />
       <ArenaLayout
         players={view.players}
-        playAreaLabel={t("sandbox.playArea")}
-        detailsLabel={t("sandbox.gameDetails")}
+        playAreaLabel={t("arena.playArea")}
+        detailsLabel={t("arena.gameDetails")}
         introduction={
           !view.board ? (
             <>

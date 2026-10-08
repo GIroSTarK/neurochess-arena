@@ -417,6 +417,8 @@ export const en = {
     navigation: "Main navigation",
   },
   arena: {
+    playArea: "Play area",
+    gameDetails: "Game details",
     status: "In development",
     headline: "Watch models make their moves.",
     description:
@@ -449,7 +451,6 @@ export const en = {
     longModel: "Model-A-Experimental-LongContext-Reasoning-Configuration-2026-09 (fictional)",
     providerA: "Example provider A",
     providerB: "Example provider B",
-    thinking: "Choosing a move…",
     commentary: "Commentary",
     commentarySeat: "{{color}} commentary",
     commentaryMove: "{{color}} · {{model}} · {{move}}",
@@ -506,8 +507,6 @@ export const en = {
     resumeHint: "Resume when ready.",
     resultContext: "Sandbox · {{status}}",
     resultContextWithMove: "Sandbox · {{status}} · {{move}}",
-    playArea: "Play area",
-    gameDetails: "Game details",
     privacy: "Private guest game",
     footer: "Development only",
   },
@@ -540,6 +539,7 @@ export const en = {
     waiting: "Waiting",
     inspecting: "View board",
     paused: "Paused",
+    thinking: "Choosing a move…",
     label: "{{color}} player",
   },
   game: {

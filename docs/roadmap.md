@@ -122,6 +122,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] Step 1: share HTTP transport, request identity, and game-response validation across clients; separate the Sandbox client behind the shared game-command interface and preserve its build boundary. See the [client transport architecture](architecture.md#sandbox-web-client).
 - [x] Step 2: extract the shared gameplay helpers, archive controller, failure classification, and PGN delivery; rename the Sandbox feature and its adapters, share result formatting, and enforce the gameplay/feature boundary. See the [gameplay architecture](architecture.md#sandbox-web-client).
 - [x] Step 3: split the Arena controller into a facade, typed store, session coordinator, and collaborators for leases, AI turns, commands, telemetry, and credentials; publish command availability in subscribed state and cover the collaborators without a DOM. See the [Arena controller architecture](architecture.md#ai-controller-presence-and-recovery).
+- [x] Step 4: thin `MatchScreen` with a pure, Node-tested presentation projection and feature-owned header, board, and details adapters; move `AiControls` into the match feature and give shared labels neutral localization keys. See the [Arena presentation architecture](architecture.md#ai-controller-presence-and-recovery).
 
 ## Phase 4 — Private online human games
 

@@ -120,7 +120,7 @@ function ReferenceMatch({
         ? t("players.paused")
         : isTurn
           ? identity.kind === "ai"
-            ? t("reference.thinking")
+            ? t("players.thinking")
             : t("players.toMove")
           : t("players.waiting");
     return {
@@ -132,7 +132,7 @@ function ReferenceMatch({
           t("players.paused"),
           t("players.toMove"),
           t("players.waiting"),
-          t("reference.thinking"),
+          t("players.thinking"),
         ],
         isTurn,
       },
@@ -163,8 +163,8 @@ function ReferenceMatch({
       />
       <ArenaLayout
         players={{ white: player("white"), black: player("black") }}
-        playAreaLabel={t("sandbox.playArea")}
-        detailsLabel={t("sandbox.gameDetails")}
+        playAreaLabel={t("arena.playArea")}
+        detailsLabel={t("arena.gameDetails")}
         board={
           <>
             <Chessboard

@@ -15,6 +15,7 @@ const webNodeTestFiles = [
   "apps/web/src/position/squares.test.ts",
   "apps/web/src/position/replay.test.ts",
   "apps/web/src/match/telemetry.test.ts",
+  "apps/web/src/match/presentation.test.ts",
   "apps/web/src/match/store.test.ts",
   "apps/web/src/match/controller-lease.test.ts",
   "apps/web/src/match/ai-turn-runner.test.ts",
