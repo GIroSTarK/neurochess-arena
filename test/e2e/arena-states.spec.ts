@@ -272,3 +272,26 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   }
   expect(await readSnapshot(page, current.gameId)).toEqual(current);
 });
+
+test("PGN export labels wrap between words on narrow screens with increased text spacing", async ({
+  page,
+}, testInfo) => {
+  const touch = testInfo.project.name === "mobile-touch";
+  let current = await startSandbox(page, touch);
+  for (const move of ["f2f3", "e7e5", "g2g4", "d8h4"]) {
+    current = await playMove(page, current, move, touch);
+  }
+  const exports = page.getByRole("region", { name: "Private PGN" });
+  await expect(exports.getByRole("button", { name: "Download PGN", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 1080 });
+  await page.evaluate(() => document.fonts.ready);
+  await exports.evaluate((element) => {
+    element.style.letterSpacing = "0.12em";
+  });
+  await expectArenaLayout(page);
+  for (const button of await exports.getByRole("button").all()) {
+    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+  }
+});

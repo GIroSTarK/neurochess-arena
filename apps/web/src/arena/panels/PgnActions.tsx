@@ -27,7 +27,7 @@ export function PgnActions({
       <div className="flex flex-wrap gap-3">
         <Button
           variant="secondary"
-          className="flex-[1_1_8rem]"
+          className="flex-[1_1_8rem] wrap-normal"
           aria-disabled={busy}
           onClick={() => {
             onExport("copy");
@@ -38,7 +38,7 @@ export function PgnActions({
         </Button>
         <Button
           variant="primary"
-          className="flex-[1_1_8rem]"
+          className="flex-[1_1_8rem] wrap-normal"
           aria-disabled={busy}
           onClick={() => {
             onExport("download");
