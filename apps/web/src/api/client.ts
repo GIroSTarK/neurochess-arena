@@ -67,6 +67,7 @@ export function createSandboxApi(
         credentials: "include",
         cache: "no-store",
         redirect: "error",
+        referrerPolicy: "no-referrer",
         headers: {
           accept: "application/json",
           ...(body === undefined ? {} : { "content-type": "application/json" }),

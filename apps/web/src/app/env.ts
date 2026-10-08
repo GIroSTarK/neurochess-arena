@@ -8,7 +8,7 @@ const webEnvironmentSchema = z.object({
     if (!URL.canParse(value)) return false;
     const url = new URL(value);
     return (
-      ["http:", "https:"].includes(url.protocol) &&
+      (url.protocol === "https:" || (url.protocol === "http:" && url.hostname === "localhost")) &&
       url.username === "" &&
       url.password === "" &&
       url.search === "" &&

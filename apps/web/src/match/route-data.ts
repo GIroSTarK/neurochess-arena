@@ -25,7 +25,7 @@ type ArenaContext = Pick<AppRouteContext, "apiBaseUrl" | "runtime" | "navigation
 
 const accessFailure = (error: unknown) =>
   error instanceof ApiFailure &&
-  ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "");
+  ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "");
 
 function entryLoader(context: ArenaContext, kind: "setup" | "game") {
   const { runtime, apiBaseUrl, navigation } = context;

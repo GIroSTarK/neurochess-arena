@@ -723,7 +723,7 @@ export class MatchController {
   private accessLost(error: unknown) {
     if (
       error instanceof ApiFailure &&
-      ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "")
+      ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN", "NOT_FOUND"].includes(error.code ?? "")
     ) {
       this.endLifetime();
       this.publish({

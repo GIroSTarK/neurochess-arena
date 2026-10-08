@@ -29,7 +29,8 @@ export interface SetupEntry {
 
 const colors = ["white", "black"] as const;
 const accessLost = (error: unknown) =>
-  error instanceof ApiFailure && (error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN");
+  error instanceof ApiFailure &&
+  ["UNAUTHORIZED", "PROFILE_REQUIRED", "FORBIDDEN"].includes(error.code ?? "");
 
 export class SetupController {
   private state: SetupState = {

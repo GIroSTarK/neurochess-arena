@@ -18,6 +18,15 @@ describe("sandbox build flag", () => {
 });
 
 describe("parseWebEnvironment", () => {
+  it.each([
+    "https://api.example.test",
+    "https://api.example.test:8443/",
+    "http://localhost:3001",
+    "http://localhost/",
+  ])("accepts HTTPS or the explicit HTTP localhost exception: %s", (value) => {
+    expect(parseWebEnvironment({ VITE_API_BASE_URL: value }).VITE_API_BASE_URL).toBe(value);
+  });
+
   it("accepts only public configuration and disables the sandbox by default", () => {
     expect(
       parseWebEnvironment({
@@ -65,14 +74,28 @@ describe("parseWebEnvironment", () => {
   });
 
   it.each([
+    { name: "remote HTTP", value: "http://api.example.test" },
+    { name: "LAN HTTP", value: "http://192.168.1.10:3001" },
+    { name: "IPv4 loopback HTTP", value: "http://127.0.0.1:3001" },
+    { name: "IPv6 loopback HTTP", value: "http://[::1]:3001" },
+    { name: "localhost subdomain", value: "http://localhost.example.test" },
     { name: "non-HTTP protocol", value: "ftp://localhost" },
     { name: "embedded credentials", value: "https://user:secret@example.test" },
     { name: "non-root path", value: "https://example.test/path" },
     { name: "query string", value: "https://example.test?token=secret" },
     { name: "fragment", value: "https://example.test#secret" },
   ])("rejects invalid public API origin: $name", ({ value }) => {
-    expect(() => parseWebEnvironment({ VITE_API_BASE_URL: value })).toThrow(
-      WebEnvironmentValidationError,
-    );
+    let failure: unknown;
+    try {
+      parseWebEnvironment({ VITE_API_BASE_URL: value });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(WebEnvironmentValidationError);
+    expect(failure).toMatchObject({
+      message: "INVALID_WEB_ENVIRONMENT",
+      variables: ["VITE_API_BASE_URL"],
+    });
+    expect(JSON.stringify(failure)).not.toContain(value);
   });
 });

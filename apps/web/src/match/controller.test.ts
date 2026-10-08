@@ -99,6 +99,54 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it.each(["turn", "invocations"] as const)(
+    "ends private gameplay on PROFILE_REQUIRED from %s and fences late responses",
+    async (source) => {
+      const h = harness();
+      h.keys();
+      const credentials = h.controller.credentials!;
+      const pending = Promise.withResolvers<GameSnapshot>();
+      h.api.turn.mockReturnValueOnce(pending.promise);
+      const starting = h.controller.created(details);
+      await vi.advanceTimersByTimeAsync(0);
+      const signal = h.api.turn.mock.calls[0]![2];
+      const failure = new ApiFailure("api", "PROFILE_REQUIRED");
+      if (source === "turn") {
+        pending.reject(failure);
+        await starting;
+      } else {
+        h.api.invocations.mockRejectedValueOnce(failure);
+        await h.controller.loadInvocations();
+      }
+
+      const stopped = h.controller.getSnapshot();
+      expect(stopped).toMatchObject({
+        phase: "unavailable",
+        issue: { kind: "notice", code: "access" },
+        details: null,
+        invocations: null,
+        replay: null,
+        exportText: null,
+        keys: { white: false, black: false },
+        thinking: false,
+        busy: false,
+      });
+      expect(signal.aborted).toBe(true);
+      expect(h.controller.credentials).toBeNull();
+      expect(() => credentials.require("white", "openai")).toThrow();
+      expect(() => credentials.require("black", "openai")).toThrow();
+      const reads = h.api.invocations.mock.calls.length;
+      const presence = h.api.controller.mock.calls.length;
+      if (source === "invocations") pending.resolve(snapshot(["e2e4"]));
+      await starting;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(h.controller.getSnapshot()).toBe(stopped);
+      expect(h.api.turn).toHaveBeenCalledTimes(1);
+      expect(h.api.invocations).toHaveBeenCalledTimes(reads);
+      expect(h.api.controller).toHaveBeenCalledTimes(presence);
+    },
+  );
+
   it("does not dispatch obsolete seeded recovery during a StrictMode reconnect", async () => {
     const h = harness();
     const entry = { kind: "game" as const, gameId: GAME_ID, details };

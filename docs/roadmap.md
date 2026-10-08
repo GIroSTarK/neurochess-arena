@@ -114,6 +114,12 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 - [x] Account/profile and credential loaders/actions, scoped metadata refresh, and explicit uncertain-save reconciliation.
 - [x] Complete migration acceptance coverage and final routing audit.
 
+## Web refactoring — before Phase 4
+
+**Status:** In progress
+
+- [x] Step 0: align Arena profile-access cleanup and Sandbox request privacy, and validate the secure API origin at startup. See the [controller access policy](architecture.md#ai-controller-presence-and-recovery), [Sandbox transport](architecture.md#sandbox-web-client), and [environment contract](development.md#environment-contract).
+
 ## Phase 4 — Private online human games
 
 Deliverables:

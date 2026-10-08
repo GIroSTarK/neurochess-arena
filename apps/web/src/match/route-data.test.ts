@@ -88,6 +88,26 @@ function harness(routes: HttpRoutes = {}) {
 }
 
 describe("Arena entry loaders", () => {
+  it.each(["setup", "game"])(
+    "classifies PROFILE_REQUIRED as denied access for the %s entry",
+    async (kind) => {
+      const { read } = harness({
+        "GET /games/unfinished": () => errorResponse("PROFILE_REQUIRED", 403),
+        [`GET /games/${GAME_ID}/details`]: () => errorResponse("PROFILE_REQUIRED", 403),
+      });
+      const result =
+        kind === "setup" ? await read("/") : await read("/games/" + GAME_ID, undefined, GAME_ID);
+      expect(result).toMatchObject({
+        data: {
+          entry:
+            kind === "setup"
+              ? { kind: "setup", existingGameId: null, issue: { code: "access" } }
+              : { kind: "unavailable", code: "access" },
+        },
+      });
+    },
+  );
+
   it("discovers setup before rendering, without bootstrapping or recovering an unfinished game", async () => {
     const { read, http } = harness({
       "GET /games/unfinished": () => jsonResponse({ game: details }),

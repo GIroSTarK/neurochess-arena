@@ -53,6 +53,31 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it.each(["discover", "create", "unfinished"] as const)(
+    "clears both seat credentials and blocks setup on PROFILE_REQUIRED from %s",
+    async (source) => {
+      const { controller, api, credentials, ready } = await fixture();
+      await ready();
+      api[source].mockRejectedValueOnce(new ApiFailure("api", "PROFILE_REQUIRED"));
+      if (source === "discover") await controller.discover("white");
+      else if (source === "create") expect(await controller.start()).toBeNull();
+      else await controller.checkExisting();
+
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: "unavailable",
+        issue: { code: "access" },
+        existingGameId: null,
+      });
+      for (const color of ["white", "black"] as const) {
+        expect(() => credentials.require(color, "openai")).toThrow();
+        expect(controller.getSnapshot().seats[color].models).toEqual([]);
+      }
+      const creations = api.create.mock.calls.length;
+      expect(await controller.start()).toBeNull();
+      expect(api.create).toHaveBeenCalledTimes(creations);
+    },
+  );
+
   it("connects from committed discovery without a second mount read", async () => {
     const { controller, api, disconnect } = await fixture();
     expect(api.unfinished).not.toHaveBeenCalled();
