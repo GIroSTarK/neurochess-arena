@@ -10,7 +10,7 @@ import {
   snapshot,
 } from "../test/fixtures";
 
-import { ApiFailure, createSandboxApi, type SandboxApi } from "./client";
+import { ApiFailure, createSandboxApi, type SandboxApi } from "./sandbox-client";
 
 interface RequestContract {
   method: "GET" | "POST";

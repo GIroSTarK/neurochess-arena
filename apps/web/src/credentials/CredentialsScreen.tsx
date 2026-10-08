@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useFetcher, useLoaderData } from "react-router";
 
-import type { AiIdentity } from "../api/ai-client";
+import type { AiIdentity } from "../api/identity";
 import { AccountFrame } from "../auth/AccountFrame";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";

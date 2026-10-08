@@ -11,7 +11,8 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
-import type { AiIdentity } from "./ai-client";
+import { apiOrigin, createHttpRequest, validated } from "./http";
+import type { AiIdentity } from "./identity";
 
 export class CredentialFailure extends Error {
   constructor(readonly code: CredentialErrorCode | "cancelled") {
@@ -27,36 +28,14 @@ export function createCredentialApi(
   identity: AiIdentity,
   fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
 ) {
-  const origin = new URL(apiBaseUrl);
-  if (
-    (origin.protocol !== "https:" &&
-      !(origin.protocol === "http:" && origin.hostname === "localhost")) ||
-    origin.username ||
-    origin.password ||
-    origin.search ||
-    origin.hash ||
-    origin.pathname !== "/"
-  ) {
-    throw new CredentialFailure("CREDENTIAL_INVALID_REQUEST");
-  }
-
-  function input<T>(schema: z.ZodType<T>, value: unknown): T {
-    const parsed = schema.safeParse(value);
-    if (!parsed.success) throw new CredentialFailure("CREDENTIAL_INVALID_REQUEST");
-    return parsed.data;
-  }
-  async function request<T>(
-    path: string,
-    schema: z.ZodType<T>,
-    signal: AbortSignal,
-    body?: unknown,
-  ): Promise<T> {
-    const abort = new AbortController();
-    const combined = AbortSignal.any([signal, identity.signal, abort.signal]);
-    const cancelled = () => signal.aborted || identity.signal.aborted;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      if (cancelled()) throw new CredentialFailure("cancelled");
+  const request = createHttpRequest({
+    baseUrl: apiOrigin(apiBaseUrl, () => new CredentialFailure("CREDENTIAL_INVALID_REQUEST")),
+    fetch: fetcher,
+    signal: identity.signal,
+    headers: identity.expectedAccount
+      ? { "x-neurochess-expected-account": identity.expectedAccount }
+      : {},
+    async beforeRequest() {
       if (
         identity.intent !== "account" ||
         !identity.expectedAccount ||
@@ -65,42 +44,22 @@ export function createCredentialApi(
         throw new CredentialFailure("CREDENTIAL_UNAUTHORIZED");
       }
       await identity.verify();
-      if (cancelled()) throw new CredentialFailure("cancelled");
-      // Verification may refresh the identity under its own deadlines; this one bounds only transport.
-      timer = setTimeout(() => abort.abort(), 10_000);
-      const response = await fetcher(new URL(path, origin), {
-        method: body === undefined ? "GET" : "POST",
-        credentials: "include",
-        cache: "no-store",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-        headers: {
-          accept: "application/json",
-          "x-neurochess-expected-account": identity.expectedAccount,
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: combined,
-      });
-      const payload: unknown = await response.json();
-      if (combined.aborted) throw new CredentialFailure("CREDENTIAL_UNAVAILABLE");
-      if (!response.ok) {
-        const error = credentialErrorResponseSchema.safeParse(payload);
-        if (error.success && error.data.code === "CREDENTIAL_UNAUTHORIZED") identity.lost?.();
-        throw new CredentialFailure(error.success ? error.data.code : "CREDENTIAL_UNAVAILABLE");
-      }
-      await identity.verify();
-      if (cancelled()) throw new CredentialFailure("cancelled");
-      const result = schema.safeParse(payload);
-      if (!result.success) throw new CredentialFailure("CREDENTIAL_UNAVAILABLE");
-      return result.data;
-    } catch (error) {
-      if (cancelled()) throw new CredentialFailure("cancelled");
-      if (error instanceof CredentialFailure) throw error;
-      throw new CredentialFailure("CREDENTIAL_UNAVAILABLE");
-    } finally {
-      clearTimeout(timer);
-    }
+    },
+    afterResponse: () => identity.verify(),
+    timeoutAfterPreparation: true,
+    errors: {
+      schema: credentialErrorResponseSchema,
+      failure: (kind) =>
+        new CredentialFailure(kind === "cancelled" ? "cancelled" : "CREDENTIAL_UNAVAILABLE"),
+      isFailure: (error): error is CredentialFailure => error instanceof CredentialFailure,
+      fromResponse(error) {
+        if (error.code === "CREDENTIAL_UNAUTHORIZED") identity.lost?.();
+        return new CredentialFailure(error.code);
+      },
+    },
+  });
+  function input<T>(schema: z.ZodType<T>, value: unknown): T {
+    return validated(schema, value, () => new CredentialFailure("CREDENTIAL_INVALID_REQUEST"));
   }
   return {
     signal: identity.signal,

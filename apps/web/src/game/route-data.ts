@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
-import { createSandboxApi } from "../api/client";
+import { createSandboxApi } from "../api/sandbox-client";
 import type { AppRouteContext } from "../app/route-context";
 import { gameRouteKey, gameRouteTarget } from "../app/route-navigation";
 

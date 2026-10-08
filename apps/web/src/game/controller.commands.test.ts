@@ -1,7 +1,7 @@
 import type { GameErrorCode } from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiFailure } from "../api/client";
+import { ApiFailure } from "../api/sandbox-client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { enterSandbox, harness, started } from "../test/sandbox-controller";
 

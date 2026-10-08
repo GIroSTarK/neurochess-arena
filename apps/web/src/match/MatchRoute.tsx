@@ -1,7 +1,8 @@
 import { useLayoutEffect } from "react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
-import { type AiIdentity, createAiApi } from "../api/ai-client";
+import { createAiApi } from "../api/ai-client";
+import type { AiIdentity } from "../api/identity";
 import { useGameRouteController } from "../app/useGameRouteController";
 
 import { MatchController } from "./controller";

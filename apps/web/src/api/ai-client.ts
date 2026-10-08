@@ -36,10 +36,11 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
-import { parsePosition } from "../position/position";
-
-import type { SandboxApi } from "./client";
 import { ApiFailure } from "./failures";
+import type { GameCommandApi } from "./game-command-api";
+import { detailsFor, pgnFor, replayFor, snapshotFor } from "./game-validation";
+import { apiOrigin, createHttpRequest, validated as validate } from "./http";
+import type { AiIdentity } from "./identity";
 
 export class AiRequestFailure extends Error {
   constructor(readonly code: AiRequestErrorCode | "AI_KEY_REQUIRED") {
@@ -48,10 +49,7 @@ export class AiRequestFailure extends Error {
   }
 }
 
-export interface AiApi extends Pick<
-  SandboxApi,
-  "bootstrap" | "snapshot" | "move" | "lifecycle" | "replay" | "pgn"
-> {
+export interface AiApi extends GameCommandApi {
   deleteGame(gameId: string, signal: AbortSignal): Promise<GameHistoryDeletedResponse>;
   clearHistory(signal: AbortSignal): Promise<GameHistoryDeletedResponse>;
   history(query: GameHistoryQuery, signal: AbortSignal): Promise<GameHistoryResponse>;
@@ -69,125 +67,51 @@ export interface AiApi extends Pick<
 }
 
 function validated<T>(schema: z.ZodType<T>, input: unknown): T {
-  const result = schema.safeParse(input);
-  if (!result.success) throw new ApiFailure("malformed");
-  return result.data;
-}
-
-function snapshotFor(snapshot: GameSnapshot, gameId?: string): GameSnapshot {
-  if (
-    parsePosition(snapshot.fen)?.turn !== snapshot.turn ||
-    (gameId !== undefined && snapshot.gameId !== gameId.toLowerCase())
-  ) {
-    throw new ApiFailure("malformed");
-  }
-  return snapshot;
-}
-
-export interface AiIdentity {
-  readonly intent: "account" | "guest";
-  readonly expectedAccount?: string;
-  readonly signal: AbortSignal;
-  verify(): Promise<void>;
-  lost?(): void;
+  return validate(schema, input, () => new ApiFailure("malformed"));
 }
 
 export function createAiApi(
   apiBaseUrl: string,
   options: { fetch?: typeof fetch; identity?: AiIdentity } = {},
 ): AiApi {
-  const origin = new URL(apiBaseUrl);
-  if (
-    origin.protocol !== "https:" &&
-    !(origin.protocol === "http:" && origin.hostname === "localhost")
-  ) {
-    throw new ApiFailure("malformed");
-  }
-  if (
-    origin.username ||
-    origin.password ||
-    origin.search ||
-    origin.hash ||
-    origin.pathname !== "/"
-  ) {
-    throw new ApiFailure("malformed");
-  }
-  const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-
-  async function request<T>(
-    path: string,
-    schema: z.ZodType<T>,
-    signal: AbortSignal,
-    body?: unknown,
-    timeoutMs = 10_000,
-    gameId?: string,
-  ): Promise<T> {
-    const isCancelled = () => signal.aborted || Boolean(options.identity?.signal.aborted);
-    if (isCancelled()) throw new ApiFailure("cancelled");
-    const controller = new AbortController();
-    const cancel = () => controller.abort();
-    signal.addEventListener("abort", cancel, { once: true });
-    options.identity?.signal.addEventListener("abort", cancel, { once: true });
-    const timer = setTimeout(cancel, timeoutMs);
-    try {
-      if (options.identity) await options.identity.verify();
-      if (isCancelled()) throw new ApiFailure("cancelled");
-      const response = await fetcher(new URL(path, origin), {
-        method: body === undefined ? "GET" : "POST",
-        credentials: "include",
-        cache: "no-store",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-        headers: {
-          accept: "application/json",
-          "x-neurochess-identity": options.identity?.intent ?? "guest",
-          ...(options.identity?.expectedAccount
-            ? { "x-neurochess-expected-account": options.identity.expectedAccount }
-            : {}),
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: controller.signal,
-      });
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
-        throw new ApiFailure("malformed");
-      }
-      if (!response.ok) {
-        const error = validated(aiErrorResponseSchema, payload);
-        if (error.code === "UNAUTHORIZED" || error.code === "PROFILE_REQUIRED") {
-          options.identity?.lost?.();
+  const identity = options.identity;
+  const request = createHttpRequest({
+    baseUrl: apiOrigin(apiBaseUrl, () => new ApiFailure("malformed")),
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    headers: {
+      "x-neurochess-identity": identity?.intent ?? "guest",
+      ...(identity?.expectedAccount
+        ? { "x-neurochess-expected-account": identity.expectedAccount }
+        : {}),
+    },
+    ...(identity
+      ? {
+          signal: identity.signal,
+          beforeRequest: () => identity.verify(),
+          afterResponse: () => identity.verify(),
         }
-        if (!("message" in error)) throw new AiRequestFailure(error.code);
-        throw new ApiFailure(
+      : {}),
+    errors: {
+      schema: aiErrorResponseSchema,
+      failure: (kind) => new ApiFailure(kind),
+      isFailure: (error): error is ApiFailure | AiRequestFailure =>
+        error instanceof ApiFailure || error instanceof AiRequestFailure,
+      fromResponse(error, gameId: string | undefined) {
+        if (error.code === "UNAUTHORIZED" || error.code === "PROFILE_REQUIRED") identity?.lost?.();
+        if (!("message" in error)) return new AiRequestFailure(error.code);
+        return new ApiFailure(
           "api",
           error.code,
-          error.code === "GAME_CONFLICT" ? snapshotFor(error.currentSnapshot, gameId) : undefined,
+          error.code === "GAME_CONFLICT"
+            ? snapshotFor(error.currentSnapshot, gameId?.toLowerCase())
+            : undefined,
         );
-      }
-      if (options.identity) await options.identity.verify();
-      if (isCancelled()) throw new ApiFailure("cancelled");
-      return validated(schema, payload);
-    } catch (error: unknown) {
-      if (isCancelled()) throw new ApiFailure("cancelled");
-      if (controller.signal.aborted) throw new ApiFailure("timeout");
-      if (error instanceof ApiFailure || error instanceof AiRequestFailure) throw error;
-      throw new ApiFailure("network");
-    } finally {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", cancel);
-      options.identity?.signal.removeEventListener("abort", cancel);
-    }
-  }
+      },
+    },
+  });
 
   function gamePath(gameId: string) {
     return "/games/" + validated(gameParamsSchema, { gameId }).gameId.toLowerCase();
-  }
-  function detailsFor(details: GameDetails, gameId?: string) {
-    snapshotFor(details.snapshot, gameId);
-    return details;
   }
 
   return {
@@ -228,8 +152,10 @@ export function createAiApi(
     },
     async snapshot(gameId, signal) {
       return snapshotFor(
-        await request(gamePath(gameId), gameSnapshotSchema, signal, undefined, 10_000, gameId),
-        gameId,
+        await request(gamePath(gameId), gameSnapshotSchema, signal, undefined, {
+          errorContext: gameId,
+        }),
+        gameId.toLowerCase(),
       );
     },
     async move(command, signal) {
@@ -239,10 +165,9 @@ export function createAiApi(
           gameSnapshotSchema,
           signal,
           validated(moveCommandSchema, command),
-          10_000,
-          command.gameId,
+          { errorContext: command.gameId },
         ),
-        command.gameId,
+        command.gameId.toLowerCase(),
       );
     },
     async lifecycle(command, signal) {
@@ -252,10 +177,9 @@ export function createAiApi(
           gameSnapshotSchema,
           signal,
           validated(lifecycleCommandSchema, command),
-          10_000,
-          command.gameId,
+          { errorContext: command.gameId },
         ),
-        command.gameId,
+        command.gameId.toLowerCase(),
       );
     },
     async controller(command, signal) {
@@ -265,10 +189,9 @@ export function createAiApi(
           gameSnapshotSchema,
           signal,
           validated(aiControllerRequestSchema, command),
-          10_000,
-          command.gameId,
+          { errorContext: command.gameId },
         ),
-        command.gameId,
+        command.gameId.toLowerCase(),
       );
     },
     async replay(gameId, signal) {
@@ -277,17 +200,9 @@ export function createAiApi(
         gameReplayResponseSchema,
         signal,
         undefined,
-        10_000,
-        gameId,
+        { errorContext: gameId },
       );
-      snapshotFor(replay.snapshot, gameId);
-      if (
-        !parsePosition(replay.initialFen) ||
-        replay.snapshot.moves.some((move) => !parsePosition(move.fen))
-      ) {
-        throw new ApiFailure("malformed");
-      }
-      return replay;
+      return replayFor(replay, gameId.toLowerCase());
     },
     async pgn(gameId, signal) {
       const result = await request(
@@ -295,11 +210,9 @@ export function createAiApi(
         gamePgnResponseSchema,
         signal,
         undefined,
-        10_000,
-        gameId,
+        { errorContext: gameId },
       );
-      if (result.gameId !== gameId.toLowerCase()) throw new ApiFailure("malformed");
-      return result;
+      return pgnFor(result, gameId.toLowerCase());
     },
     discover: async (input, signal) =>
       request(
@@ -307,7 +220,7 @@ export function createAiApi(
         modelDiscoveryResultSchema,
         signal,
         validated(modelDiscoveryRequestSchema, input),
-        35_000,
+        { timeoutMs: 35_000 },
       ),
     async create(configuration, signal) {
       return detailsFor(
@@ -321,15 +234,10 @@ export function createAiApi(
     },
     async details(gameId, signal) {
       return detailsFor(
-        await request(
-          gamePath(gameId) + "/details",
-          gameDetailsSchema,
-          signal,
-          undefined,
-          10_000,
-          gameId,
-        ),
-        gameId,
+        await request(gamePath(gameId) + "/details", gameDetailsSchema, signal, undefined, {
+          errorContext: gameId,
+        }),
+        gameId.toLowerCase(),
       );
     },
     async unfinished(signal) {
@@ -342,8 +250,7 @@ export function createAiApi(
         gameInvocationsSchema,
         signal,
         undefined,
-        10_000,
-        gameId,
+        { errorContext: gameId },
       );
       if (result.gameId !== gameId.toLowerCase()) throw new ApiFailure("malformed");
       return result;
@@ -353,15 +260,11 @@ export function createAiApi(
       // Allow the server's operational deadline to pause and persist the turn before
       // the transport deadline. Never automatically retry an uncertain paid operation.
       return snapshotFor(
-        await request(
-          gamePath(command.gameId) + "/ai-turn",
-          gameSnapshotSchema,
-          signal,
-          body,
-          190_000,
-          command.gameId,
-        ),
-        command.gameId,
+        await request(gamePath(command.gameId) + "/ai-turn", gameSnapshotSchema, signal, body, {
+          timeoutMs: 190_000,
+          errorContext: command.gameId,
+        }),
+        command.gameId.toLowerCase(),
       );
     },
   };

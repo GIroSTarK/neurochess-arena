@@ -21,6 +21,8 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
+import { createHttpRequest, validated } from "./http";
+
 export type AccountErrorCode = AuthErrorCode | ProfileErrorCode | "cancelled";
 
 export class AccountFailure extends Error {
@@ -35,62 +37,25 @@ export function accountError(error: unknown): AccountErrorCode {
 }
 
 export function createAuthApi(apiBaseUrl: string, options: { fetch?: typeof fetch } = {}) {
-  const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
-  async function request<T>(
-    path: string,
-    schema: z.ZodType<T>,
-    signal: AbortSignal,
-    body?: unknown,
-    expectedAccount?: string,
-  ): Promise<T> {
-    const abort = new AbortController();
-    const cancel = () => abort.abort();
-    signal.addEventListener("abort", cancel, { once: true });
-    const timeout = setTimeout(cancel, 10_000);
-    try {
-      if (signal.aborted) throw new AccountFailure("cancelled");
-      const response = await fetcher(new URL(path, apiBaseUrl), {
-        method: body === undefined ? "GET" : "POST",
-        credentials: "include",
-        cache: "no-store",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-        headers: {
-          accept: "application/json",
-          ...(expectedAccount ? { "x-neurochess-expected-account": expectedAccount } : {}),
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: abort.signal,
-      });
-      const payload: unknown = await response.json();
-      if (abort.signal.aborted) throw new AccountFailure("AUTH_UNAVAILABLE");
-      if (!response.ok) {
-        const error = authErrorResponseSchema.or(profileErrorResponseSchema).safeParse(payload);
-        throw new AccountFailure(error.success ? error.data.code : "AUTH_UNAVAILABLE");
-      }
-      const result = schema.safeParse(payload);
-      if (!result.success) throw new AccountFailure("AUTH_UNAVAILABLE");
-      return result.data;
-    } catch (error) {
-      if (signal.aborted) throw new AccountFailure("cancelled");
-      if (error instanceof AccountFailure) throw error;
-      throw new AccountFailure("AUTH_UNAVAILABLE");
-    } finally {
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", cancel);
-    }
-  }
+  const request = createHttpRequest({
+    baseUrl: apiBaseUrl,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    errors: {
+      schema: authErrorResponseSchema.or(profileErrorResponseSchema),
+      failure: (kind) =>
+        new AccountFailure(kind === "cancelled" ? "cancelled" : "AUTH_UNAVAILABLE"),
+      isFailure: (error): error is AccountFailure => error instanceof AccountFailure,
+      fromResponse: (error) => new AccountFailure(error.code),
+    },
+  });
   function input<T>(schema: z.ZodType<T>, value: unknown): T {
-    const parsed = schema.safeParse(value);
-    if (!parsed.success) throw new AccountFailure("AUTH_INVALID_REQUEST");
-    return parsed.data;
+    return validated(schema, value, () => new AccountFailure("AUTH_INVALID_REQUEST"));
   }
   return {
     session: (signal: AbortSignal) =>
       request("/api/auth/get-session", authSessionResponseSchema, signal),
     profile: (signal: AbortSignal, expectedAccount?: string) =>
-      request("/profile", profileResponseSchema, signal, undefined, expectedAccount),
+      request("/profile", profileResponseSchema, signal, undefined, { expectedAccount }),
     saveProfile: (
       value: ProfileUpdateRequest,
       onboarding: boolean,
@@ -102,7 +67,7 @@ export function createAuthApi(apiBaseUrl: string, options: { fetch?: typeof fetc
         profileResponseSchema,
         signal,
         input(onboarding ? profileOnboardingRequestSchema : profileUpdateRequestSchema, value),
-        expectedAccount,
+        { expectedAccount },
       ),
     signIn: (value: { email: string; password: string }, signal: AbortSignal) =>
       request(
@@ -140,14 +105,14 @@ export function createAuthApi(apiBaseUrl: string, options: { fetch?: typeof fetc
         input(authResetPasswordRequestSchema, { token, newPassword }),
       ),
     signOut: (signal: AbortSignal, expectedAccount: string) =>
-      request("/api/auth/sign-out", authSuccessResponseSchema, signal, {}, expectedAccount),
+      request("/api/auth/sign-out", authSuccessResponseSchema, signal, {}, { expectedAccount }),
     deleteAccount: (signal: AbortSignal, expectedAccount: string) =>
       request(
         "/api/auth/delete-account",
         authSuccessResponseSchema,
         signal,
         input(authDeleteAccountRequestSchema, { confirm: true }),
-        expectedAccount,
+        { expectedAccount },
       ),
     async social(provider: AuthOAuthProvider, signal: AbortSignal) {
       const result = await request(

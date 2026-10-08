@@ -6,7 +6,7 @@ import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestBody, snapshot } from "../
 
 import { createAiApi } from "./ai-client";
 import { aiRequestMessage, providerFailureMessage } from "./ai-messages";
-import { ApiFailure } from "./client";
+import { ApiFailure } from "./sandbox-client";
 
 const apiKey = "web-key-sentinel";
 const configuration: AiGameConfiguration = {

@@ -1,7 +1,7 @@
 import { gameReplayResponseSchema } from "@neurochess/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiFailure, type SandboxApi } from "../api/client";
+import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
 import { FOOLS_MATE, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { enterSandbox, harness } from "../test/sandbox-controller";
 

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { GAME_ID, jsonResponse, requestBody } from "../test/fixtures";
 
-import type { AiIdentity } from "./ai-client";
 import { createCredentialApi } from "./credential-client";
+import type { AiIdentity } from "./identity";
 
 const signal = () => new AbortController().signal;
 const identity = (): AiIdentity => ({

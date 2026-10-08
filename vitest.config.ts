@@ -21,7 +21,9 @@ const webNodeTestFiles = [
   "apps/web/src/game/controller.commands.test.ts",
   "apps/web/src/game/controller.recovery.test.ts",
   "apps/web/src/game/controller.archive.test.ts",
-  "apps/web/src/api/client.test.ts",
+  "apps/web/src/api/sandbox-client.test.ts",
+  "apps/web/src/api/http.test.ts",
+  "apps/web/src/api/transport-contract.test.ts",
   "apps/web/src/api/ai-client.test.ts",
   "apps/web/src/app/env.test.ts",
 ];

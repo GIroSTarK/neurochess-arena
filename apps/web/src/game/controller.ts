@@ -1,6 +1,6 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 
-import type { SandboxApi } from "../api/client";
+import type { SandboxApi } from "../api/sandbox-client";
 import type { GameTarget } from "../app/navigation";
 
 import { ArchiveController } from "./archive";

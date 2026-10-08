@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createSandboxApi } from "../api/client";
+import { createSandboxApi } from "../api/sandbox-client";
 
 import { GAME_ID, jsonResponse, OTHER_GAME_ID } from "./fixtures";
 import { createHttpMock } from "./http";

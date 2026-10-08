@@ -3,8 +3,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFetcher } from "react-router";
 
-import type { AiIdentity } from "../api/ai-client";
 import type { CredentialFailure } from "../api/credential-client";
+import type { AiIdentity } from "../api/identity";
 import { AccountField } from "../auth/AccountField";
 import { PasswordField } from "../auth/PasswordField";
 import { Button } from "../ui/Button";

@@ -1,6 +1,6 @@
 import type { GameSnapshot, LifecycleCommand } from "@neurochess/contracts";
 
-import { ApiFailure, type SandboxApi } from "../api/client";
+import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
 import type { GameTarget } from "../app/navigation";
 import { parseGameId } from "../app/route-urls";
 

@@ -40,7 +40,7 @@ export default {
       comment: "The public AI controller cannot depend on Sandbox implementation.",
       severity: "error",
       from: { path: "(^|/)apps/web/src/match/", pathNot: "\\.test\\.tsx?$" },
-      to: { path: "(^|/)apps/web/src/(game/|api/client\\.ts$)" },
+      to: { path: "(^|/)apps/web/src/(game/|api/sandbox-client\\.ts$)" },
     },
     {
       name: "ai-setup-no-sandbox",

@@ -1,6 +1,6 @@
 import type { GameErrorCode } from "@neurochess/contracts";
 
-import { ApiFailure } from "../api/client";
+import { ApiFailure } from "../api/sandbox-client";
 
 import type { SandboxNotice } from "./state";
 

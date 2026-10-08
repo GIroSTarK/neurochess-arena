@@ -20,7 +20,7 @@ async function productionChunks(sandboxEnabled: boolean, nodeEnv: "production" |
   return result.output.filter((item) => item.type === "chunk");
 }
 
-const sandboxModules = /\/apps\/web\/src\/(game\/|api\/client\.ts$)/;
+const sandboxModules = /\/apps\/web\/src\/(game\/|api\/sandbox-client\.ts$)/;
 
 describe.each(["production", "development"] as const)(
   "production bundles with NODE_ENV=%s",
@@ -35,6 +35,8 @@ describe.each(["production", "development"] as const)(
         modules.filter((id) => /\/apps\/web\/src\/(setup|arena\/setup)\//.test(id)),
       ).not.toEqual([]);
       expect(modules.some((id) => id.endsWith("/app/env.ts"))).toBe(true);
+      expect(modules.some((id) => id.endsWith("/api/http.ts"))).toBe(true);
+      expect(modules.some((id) => id.endsWith("/api/game-validation.ts"))).toBe(true);
       expect(modules.some((id) => id.includes("/node_modules/zod/"))).toBe(true);
     });
 
@@ -74,7 +76,7 @@ describe.each(["production", "development"] as const)(
         "/game/route-data.ts",
         "/game/controller.ts",
         "/game/recovery.ts",
-        "/api/client.ts",
+        "/api/sandbox-client.ts",
         "/board/Chessboard.tsx",
       ]) {
         expect(chunks.some((chunk) => chunk.moduleIds.some((id) => id.endsWith(path)))).toBe(true);

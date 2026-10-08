@@ -4,7 +4,6 @@ import type {
   ProfileUpdateRequest,
 } from "@neurochess/contracts";
 
-import type { AiIdentity } from "../api/ai-client";
 import {
   accountError,
   type AccountErrorCode,
@@ -12,6 +11,7 @@ import {
   type AuthApi,
 } from "../api/auth-client";
 import { ApiFailure } from "../api/failures";
+import type { AiIdentity } from "../api/identity";
 
 export interface AccountState {
   phase: "checking" | "changing" | "guest" | "account" | "required" | "unavailable";

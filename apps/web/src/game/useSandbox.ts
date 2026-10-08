@@ -1,7 +1,7 @@
 import { useLayoutEffect, useSyncExternalStore } from "react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
-import { createSandboxApi } from "../api/client";
+import { createSandboxApi } from "../api/sandbox-client";
 import { useGameRouteController } from "../app/useGameRouteController";
 
 import { SandboxController } from "./controller";

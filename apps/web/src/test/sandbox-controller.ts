@@ -1,7 +1,7 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 import { vi } from "vitest";
 
-import { ApiFailure, type SandboxApi } from "../api/client";
+import { ApiFailure, type SandboxApi } from "../api/sandbox-client";
 import { SandboxController, type SandboxGameNavigation } from "../game/controller";
 import type { PgnDelivery } from "../game/pgn";
 

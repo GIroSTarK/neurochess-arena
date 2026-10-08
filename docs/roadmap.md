@@ -119,6 +119,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 **Status:** In progress
 
 - [x] Step 0: align Arena profile-access cleanup and Sandbox request privacy, and validate the secure API origin at startup. See the [controller access policy](architecture.md#ai-controller-presence-and-recovery), [Sandbox transport](architecture.md#sandbox-web-client), and [environment contract](development.md#environment-contract).
+- [x] Step 1: share HTTP transport, request identity, and game-response validation across clients; separate the Sandbox client behind the shared game-command interface and preserve its build boundary. See the [client transport architecture](architecture.md#sandbox-web-client).
 
 ## Phase 4 — Private online human games
 

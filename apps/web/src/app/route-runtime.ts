@@ -1,5 +1,5 @@
-import type { AiIdentity } from "../api/ai-client";
 import { AccountFailure, type AuthApi } from "../api/auth-client";
+import type { AiIdentity } from "../api/identity";
 import { AccountController } from "../auth/controller";
 import { type AuthEntry, readAuthEntry } from "../auth/navigation";
 

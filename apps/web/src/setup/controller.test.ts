@@ -1,7 +1,7 @@
 import type { GameDetails, ModelDiscoveryResult } from "@neurochess/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiFailure } from "../api/client";
+import { ApiFailure } from "../api/sandbox-client";
 import { createSessionCredentials } from "../api/session-credentials";
 import { deferred, setupModels } from "../test/ai-setup";
 import { GAME_ID, snapshot } from "../test/fixtures";

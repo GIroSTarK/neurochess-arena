@@ -3,8 +3,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
-import type { AiIdentity } from "../api/ai-client";
 import { aiRequestMessage, providerFailureMessage } from "../api/ai-messages";
+import type { AiIdentity } from "../api/identity";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
 import { gameHref } from "../app/route-urls";
