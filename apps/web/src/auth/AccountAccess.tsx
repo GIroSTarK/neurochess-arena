@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
 
-import { authHref, safeReturnTo } from "../app/route-urls";
+import { authHref, safeReturnTo, withReturnTo } from "../app/route-urls";
 import { Button } from "../ui/Button";
+import { TextLink } from "../ui/TextLink";
 
 import { Avatar } from "./Avatar";
 import { useAccount, useRequiredAccount } from "./context";
@@ -36,7 +37,7 @@ export function AccountAccess() {
     return (
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Link
-          to={"/account" + (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))}
+          to={withReturnTo("/account", returnTo)}
           className="flex min-h-target max-w-full min-w-0 items-center gap-2 text-text hover:text-accent"
         >
           <Avatar avatar={account.state.profile.avatar} />
@@ -44,15 +45,9 @@ export function AccountAccess() {
             {account.state.profile.username ?? t("account.profile")}
           </span>
         </Link>
-        <Link
-          to={
-            "/account/credentials" +
-            (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))
-          }
-          className="inline-flex min-h-target items-center text-accent underline"
-        >
+        <TextLink to={withReturnTo("/account/credentials", returnTo)}>
           {t("credentials.navigation")}
-        </Link>
+        </TextLink>
         <SignOutButton />
         {account.state.issue ? (
           <p role="alert" className="w-full max-w-xl text-label text-danger">
@@ -67,12 +62,7 @@ export function AccountAccess() {
       <span>
         {t(account?.state.phase === "guest" || !account ? "setup.session" : "account.label")}
       </span>
-      <Link
-        className="inline-flex min-h-target items-center text-accent underline"
-        to={authHref("sign-in", returnTo)}
-      >
-        {t("account.signIn")}
-      </Link>
+      <TextLink to={authHref("sign-in", returnTo)}>{t("account.signIn")}</TextLink>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   sandboxState,
   snapshot,
 } from "../test/fixtures";
-import { renderLocalized } from "../test/render";
+import { renderRouteScreen } from "../test/render";
 
 import { SandboxScreen } from "./SandboxScreen";
 import type { SandboxState } from "./state";
@@ -33,7 +33,7 @@ function renderSandbox(state: SandboxState = readyState()) {
   const checkReadiness = vi.fn();
   const actions = { controller, recover: controller.recover, checkReadiness };
   sandbox.useSandbox.mockReturnValue({ state, ...actions });
-  const { rerender, ...rendered } = renderLocalized(
+  const { rerender, ...rendered } = renderRouteScreen(
     <SandboxScreen apiBaseUrl="http://localhost:3001" />,
   );
   return {

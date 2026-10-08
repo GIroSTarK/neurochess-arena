@@ -1,12 +1,13 @@
 import type { CredentialMetadata } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 
 import type { AiIdentity } from "../api/identity";
 import { AccountFrame } from "../auth/AccountFrame";
 import { Button } from "../ui/Button";
-import { Dialog } from "../ui/Dialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { TextLink } from "../ui/TextLink";
 
 import type { CredentialActionData, CredentialRouteData } from "./route-data";
 import { SaveCredentialForm } from "./SaveCredentialForm";
@@ -14,11 +15,9 @@ import { useCredentials } from "./use-credentials";
 
 export function CredentialsScreen({
   identity,
-  sandboxEnabled,
   returnTo,
 }: {
   readonly identity: AiIdentity;
-  readonly sandboxEnabled: boolean;
   readonly returnTo: string;
 }) {
   const { t, i18n } = useTranslation();
@@ -75,7 +74,7 @@ export function CredentialsScreen({
       });
   }
   return (
-    <AccountFrame title={t("credentials.title")} sandboxEnabled={sandboxEnabled}>
+    <AccountFrame title={t("credentials.title")}>
       <p className="text-body text-text-secondary">{t("credentials.description")}</p>
       <SaveCredentialForm identity={identity} catalog={state} version={version} refresh={refresh} />
       <section className="grid min-w-0 gap-4 border-t border-divider pt-6">
@@ -137,13 +136,22 @@ export function CredentialsScreen({
           </Button>
         </div>
       </section>
-      <Link to={returnTo} className="inline-flex min-h-target items-center text-accent underline">
-        {t("account.return")}
-      </Link>
+      <TextLink to={returnTo}>{t("account.return")}</TextLink>
       {confirmation ? (
-        <Dialog
+        <ConfirmDialog
           title={t(confirmation === "all" ? "credentials.clearTitle" : "credentials.revokeTitle")}
           description={t("credentials.revokeHint")}
+          cancelLabel={t("actions.cancel")}
+          confirmLabel={t(
+            busy
+              ? "account.working"
+              : confirmation === "all"
+                ? "credentials.clear"
+                : "credentials.revoke",
+          )}
+          cancelDisabled={busy}
+          confirmDisabled={busy}
+          onConfirm={remove}
           onCancel={() => {
             if (!pending.current) setConfirmation(null);
           }}
@@ -154,21 +162,7 @@ export function CredentialsScreen({
               {t(`credentials.errors.${error}`)}
             </p>
           ) : null}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button variant="secondary" aria-disabled={busy} onClick={() => setConfirmation(null)}>
-              {t("actions.cancel")}
-            </Button>
-            <Button variant="danger" aria-disabled={busy} onClick={remove}>
-              {t(
-                busy
-                  ? "account.working"
-                  : confirmation === "all"
-                    ? "credentials.clear"
-                    : "credentials.revoke",
-              )}
-            </Button>
-          </div>
-        </Dialog>
+        </ConfirmDialog>
       ) : null}
     </AccountFrame>
   );

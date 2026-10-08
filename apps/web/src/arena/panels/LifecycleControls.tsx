@@ -3,10 +3,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { cx } from "../../ui/cx";
-import { Dialog } from "../../ui/Dialog";
 import { Icon } from "../../ui/Icon";
 import { StableText } from "../../ui/StableText";
+import { resignationConfirmation } from "../resignation";
 import { type BoardInspectionProps, useBoardInspection } from "../useBoardInspection";
 
 type Confirmation = { action: "abort" } | { action: "resign"; losingColor: ChessColor };
@@ -146,9 +147,17 @@ export function LifecycleControls({
       </div>
       {descriptions}
       {confirmation ? (
-        <ConfirmationDialog
-          action={confirmation}
-          abortDescription={abortDescription}
+        <ConfirmDialog
+          {...(confirmation.action === "abort"
+            ? {
+                title: t("lifecycle.abortTitle"),
+                description: abortDescription,
+                confirmLabel: t("lifecycle.confirmAbort"),
+              }
+            : resignationConfirmation(confirmation.losingColor, t))}
+          cancelLabel={t("actions.cancel")}
+          actionsClassName="my-4 flex flex-wrap gap-3"
+          buttonClassName="flex-[1_1_8rem]"
           onCancel={() => setConfirmation(null)}
           onConfirm={() => {
             setConfirmation(null);
@@ -157,46 +166,5 @@ export function LifecycleControls({
         />
       ) : null}
     </div>
-  );
-}
-
-/** Destructive confirmation: Cancel comes first so it receives the initial focus. */
-function ConfirmationDialog({
-  action,
-  abortDescription,
-  onCancel,
-  onConfirm,
-}: {
-  readonly action: Confirmation;
-  readonly abortDescription: string;
-  readonly onCancel: () => void;
-  readonly onConfirm: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Dialog
-      title={
-        action.action === "abort"
-          ? t("lifecycle.abortTitle")
-          : t("lifecycle.resignTitle", { color: t(`players.${action.losingColor}`) })
-      }
-      description={
-        action.action === "abort"
-          ? abortDescription
-          : t("lifecycle.resignDescription", {
-              winner: t(action.losingColor === "white" ? "players.black" : "players.white"),
-            })
-      }
-      onCancel={onCancel}
-    >
-      <div className="my-4 flex flex-wrap gap-3">
-        <Button variant="secondary" className="flex-[1_1_8rem]" onClick={onCancel}>
-          {t("actions.cancel")}
-        </Button>
-        <Button variant="danger" className="flex-[1_1_8rem]" onClick={onConfirm}>
-          {t(action.action === "abort" ? "lifecycle.confirmAbort" : "lifecycle.confirmResign")}
-        </Button>
-      </div>
-    </Dialog>
   );
 }

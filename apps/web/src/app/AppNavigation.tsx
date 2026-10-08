@@ -5,16 +5,11 @@ import { Link } from "react-router";
 import { cx } from "../ui/cx";
 
 import type { AppPage } from "./navigation";
-import { PageContext } from "./route-context";
+import { PageContext, useAppRoute } from "./route-context";
 
-export function AppNavigation({
-  page,
-  sandboxEnabled,
-}: {
-  readonly page: AppPage;
-  readonly sandboxEnabled: boolean;
-}) {
+export function AppNavigation({ page }: { readonly page: AppPage }) {
   const { t } = useTranslation();
+  const { sandboxEnabled } = useAppRoute();
   const routePage = useContext(PageContext) ?? page;
   const links = [
     { page: "arena", href: "/", label: t("app.arena") },

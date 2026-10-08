@@ -5,6 +5,8 @@ import { GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
 import { renderApp } from "../test/render";
 
+import { AppNavigation } from "./AppNavigation";
+
 function visit(path: string, sandboxEnabled: boolean) {
   return renderApp(
     { apiBaseUrl: "http://localhost:3001", sandboxEnabled },
@@ -24,6 +26,27 @@ describe("Arena and Sandbox routes", () => {
     vi.stubGlobal("fetch", http.fetch);
   });
   afterEach(() => http.assertNoUnexpectedRequests());
+
+  it.each([true, false])("reads navigation availability from route context (%s)", (enabled) => {
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: enabled },
+      {
+        initialEntries: ["/history"],
+        configureRoutes(routes) {
+          routes[0]!.children = [
+            {
+              path: "history",
+              handle: { page: "history" },
+              element: <AppNavigation page="arena" />,
+            },
+          ];
+        },
+      },
+    );
+    expect(screen.queryByRole("link", { name: "Sandbox" }) !== null).toBe(enabled);
+    expect(screen.getByRole("link", { name: "History" })).toHaveAttribute("aria-current", "page");
+    expect(http.fetch).not.toHaveBeenCalled();
+  });
 
   it.each([true, false])(
     "opens Arena setup without creating a guest (sandbox enabled: %s)",

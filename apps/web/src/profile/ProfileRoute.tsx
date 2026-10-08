@@ -9,18 +9,14 @@ import { ProfileScreen } from "./ProfileScreen";
 import type { ProfileRouteData } from "./route-data";
 
 export function ProfileRoute() {
-  const { sandboxEnabled, authEntry } = useAppRoute();
+  const { authEntry } = useAppRoute();
   useRequiredAccount();
   const entry = useRouteAuthEntry(authEntry);
   const result = useLoaderData<ProfileRouteData | null>();
   return (
     <PublicPage allowGuest={false} requireProfile={false}>
       {result?.data?.profile ? (
-        <ProfileScreen
-          profile={result.data.profile}
-          returnTo={entry.returnTo}
-          sandboxEnabled={sandboxEnabled}
-        />
+        <ProfileScreen profile={result.data.profile} returnTo={entry.returnTo} />
       ) : null}
     </PublicPage>
   );

@@ -11,11 +11,9 @@ import type { ArenaRouteData } from "./route-data";
 
 export function MatchRoute({
   apiBaseUrl,
-  sandboxEnabled,
   identity,
 }: {
   readonly apiBaseUrl: string;
-  readonly sandboxEnabled: boolean;
   readonly identity: AiIdentity;
 }) {
   const gameData = useRouteLoaderData<ArenaRouteData>("arena-game");
@@ -48,7 +46,6 @@ export function MatchRoute({
   return (
     <MatchScreen
       controller={controller}
-      sandboxEnabled={sandboxEnabled}
       identity={identity}
       stopped={stopped}
       departing={departing}

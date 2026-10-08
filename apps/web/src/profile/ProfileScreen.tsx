@@ -1,24 +1,23 @@
 import type { ProfileResponse } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
 
+import { withReturnTo } from "../app/route-urls";
 import { AccountField } from "../auth/AccountField";
 import { AccountFrame } from "../auth/AccountFrame";
 import type { AccountActionData } from "../auth/action-data";
 import { Avatar } from "../auth/Avatar";
 import { useRequiredAccount } from "../auth/context";
 import { Button } from "../ui/Button";
+import { TextLink } from "../ui/TextLink";
 
 import { AccountDeletion } from "./AccountDeletion";
 
 export function ProfileScreen({
   returnTo,
-  sandboxEnabled,
   profile,
 }: {
   readonly returnTo: string;
-  readonly sandboxEnabled: boolean;
   readonly profile: ProfileResponse;
 }) {
   const { t } = useTranslation();
@@ -32,7 +31,7 @@ export function ProfileScreen({
   const error = outcome && "error" in outcome ? outcome.error : null;
   const invalid = outcome && "invalid" in outcome;
   const saved = outcome && "notice" in outcome && outcome.notice === "saved";
-  const action = `/account${returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo)}`;
+  const action = withReturnTo("/account", returnTo);
   const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
   useEffect(() => {
     const element = form.current;
@@ -64,10 +63,7 @@ export function ProfileScreen({
     if (!removingAvatar) setUsernameDraft(null);
   }
   return (
-    <AccountFrame
-      title={t(profile.completed ? "account.profile" : "account.onboarding")}
-      sandboxEnabled={sandboxEnabled}
-    >
+    <AccountFrame title={t(profile.completed ? "account.profile" : "account.onboarding")}>
       <p className="text-body text-text-secondary">{t("account.profileHint")}</p>
       <div className="flex flex-wrap items-center gap-4">
         <Avatar avatar={profile.avatar} />
@@ -114,11 +110,7 @@ export function ProfileScreen({
           {t(profile.completed ? "account.saveProfile" : "account.finishProfile")}
         </Button>
       </fetcher.Form>
-      {profile.completed ? (
-        <Link to={returnTo} className="inline-flex min-h-target items-center text-accent underline">
-          {t("account.return")}
-        </Link>
-      ) : null}
+      {profile.completed ? <TextLink to={returnTo}>{t("account.return")}</TextLink> : null}
       <AccountDeletion />
     </AccountFrame>
   );

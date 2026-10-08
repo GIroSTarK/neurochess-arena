@@ -1,13 +1,13 @@
 import type { GameHistoryEntry } from "@neurochess/contracts";
 import { useEffect, useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
 
 import { authHref, gameHref } from "../app/route-urls";
 import { resultTitle } from "../arena/result";
 import { AccountFrame } from "../auth/AccountFrame";
 import { Button } from "../ui/Button";
-import { Dialog } from "../ui/Dialog";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { TextLink } from "../ui/TextLink";
 
 import { useHistory } from "./use-history";
 
@@ -41,35 +41,23 @@ function GameParticipants({
   );
 }
 
-export function GuestHistory({ sandboxEnabled }: { readonly sandboxEnabled: boolean }) {
+export function GuestHistory() {
   const { t } = useTranslation();
   return (
-    <AccountFrame title={t("history.title")} sandboxEnabled={sandboxEnabled} page="history">
+    <AccountFrame title={t("history.title")} page="history">
       <p>{t("history.guest")}</p>
-      <Link
-        className="inline-flex min-h-target items-center text-accent underline"
-        to={authHref("sign-in", "/history")}
-      >
-        {t("account.signIn")}
-      </Link>
-      <Link className="inline-flex min-h-target items-center text-accent underline" to="/">
-        {t("history.arena")}
-      </Link>
+      <TextLink to={authHref("sign-in", "/history")}>{t("account.signIn")}</TextLink>
+      <TextLink to="/">{t("history.arena")}</TextLink>
     </AccountFrame>
   );
 }
 
-export function HistoryScreen({
-  username,
-  sandboxEnabled,
-}: {
-  readonly username: string;
-  readonly sandboxEnabled: boolean;
-}) {
+export function HistoryScreen({ username }: { readonly username: string }) {
   const { t, i18n } = useTranslation();
   const state = useHistory();
   const listHeading = useRef<HTMLHeadingElement>(null);
   const successId = useId();
+  const confirmationFormId = useId();
   useEffect(() => {
     if (state.success) listHeading.current?.focus();
   }, [state.success]);
@@ -78,11 +66,9 @@ export function HistoryScreen({
     timeStyle: "short",
   });
   return (
-    <AccountFrame title={t("history.title")} sandboxEnabled={sandboxEnabled} page="history">
+    <AccountFrame title={t("history.title")} page="history">
       <p className="text-body text-text-secondary">{t("history.description")}</p>
-      <Link to="/" className="inline-flex min-h-target items-center text-accent underline">
-        {t("history.arena")}
-      </Link>
+      <TextLink to="/">{t("history.arena")}</TextLink>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2
           ref={listHeading}
@@ -154,13 +140,12 @@ export function HistoryScreen({
                 })}
               </p>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <Link
+                <TextLink
                   to={gameHref("arena", game.gameId)}
-                  className="inline-flex min-h-target items-center text-accent underline"
                   aria-label={t("history.replayLabel", { date, result: resultTitle(game, t) })}
                 >
                   {t("history.replay")}
-                </Link>
+                </TextLink>
                 <Button
                   variant="secondary"
                   aria-label={t("history.deleteLabel", {
@@ -209,10 +194,21 @@ export function HistoryScreen({
         </div>
       ) : null}
       {state.confirmation ? (
-        <Dialog
+        <ConfirmDialog
           title={t(state.confirmation === "all" ? "history.clearTitle" : "history.deleteTitle")}
           description={t(state.confirmation === "all" ? "history.clearHint" : "history.deleteHint")}
           onCancel={state.cancelDeletion}
+          cancelLabel={t("actions.cancel")}
+          confirmLabel={t(
+            state.deleting
+              ? "account.working"
+              : state.confirmation === "all"
+                ? "history.clear"
+                : "history.delete",
+          )}
+          cancelDisabled={state.deleting}
+          confirmDisabled={state.deleting}
+          confirmForm={confirmationFormId}
         >
           {state.confirmation !== "all" ? (
             <div className="mt-3 grid gap-3 wrap-anywhere">
@@ -237,32 +233,15 @@ export function HistoryScreen({
             </p>
           ) : null}
           <state.Form
+            id={confirmationFormId}
             method="post"
             action="/history"
-            className="mt-6 flex flex-wrap gap-3"
             onSubmit={(event) => {
               event.preventDefault();
               state.deleteConfirmed();
             }}
-          >
-            <Button
-              variant="secondary"
-              aria-disabled={state.deleting}
-              onClick={state.cancelDeletion}
-            >
-              {t("actions.cancel")}
-            </Button>
-            <Button type="submit" variant="danger" aria-disabled={state.deleting}>
-              {t(
-                state.deleting
-                  ? "account.working"
-                  : state.confirmation === "all"
-                    ? "history.clear"
-                    : "history.delete",
-              )}
-            </Button>
-          </state.Form>
-        </Dialog>
+          />
+        </ConfirmDialog>
       ) : null}
     </AccountFrame>
   );

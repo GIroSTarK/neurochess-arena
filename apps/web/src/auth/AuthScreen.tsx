@@ -1,10 +1,11 @@
 import type { AuthOAuthProvider } from "@neurochess/contracts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useFetcher } from "react-router";
+import { useFetcher } from "react-router";
 
-import { type AuthForm, authHref } from "../app/route-urls";
+import { type AuthForm, authHref, withReturnTo } from "../app/route-urls";
 import { Button } from "../ui/Button";
+import { TextLink } from "../ui/TextLink";
 
 import { AccountField } from "./AccountField";
 import { AccountFrame } from "./AccountFrame";
@@ -24,11 +25,9 @@ const forms: Record<AuthForm, "signIn" | "signUp" | "verify" | "forgot" | "reset
 
 export function AuthScreen({
   entry,
-  sandboxEnabled,
   kind,
 }: {
   readonly entry: AuthEntry;
-  readonly sandboxEnabled: boolean;
   readonly kind: AuthForm;
 }) {
   const { t } = useTranslation();
@@ -52,7 +51,7 @@ export function AuthScreen({
       ? outcome.notice
       : null;
   const invalid = localInvalid ?? (outcome && "invalid" in outcome ? outcome.invalid : null);
-  const action = `/auth/${kind}${entry.returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(entry.returnTo)}`;
+  const action = withReturnTo(`/auth/${kind}`, entry.returnTo);
   useEffect(() => {
     if (!busy) pending.current = false;
   }, [busy]);
@@ -119,7 +118,7 @@ export function AuthScreen({
   const hasPassword = kind === "sign-in" || kind === "sign-up" || kind === "reset-password";
   const invalidReset = kind === "reset-password" && !entry.hasResetToken && notice !== "resetDone";
   return (
-    <AccountFrame title={t(`account.titles.${title}`)} sandboxEnabled={sandboxEnabled}>
+    <AccountFrame title={t(`account.titles.${title}`)}>
       <p className="text-body text-text-secondary">{t("account.separation")}</p>
       {entry.verified ? <p role="status">{t("account.verified")}</p> : null}
       <fetcher.Form
@@ -198,39 +197,16 @@ export function AuthScreen({
       </fetcher.Form>
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-label">
         {kind !== "sign-in" ? (
-          <Link
-            className="inline-flex min-h-target items-center text-accent underline"
-            to={authHref("sign-in", entry.returnTo)}
-          >
-            {t("account.signIn")}
-          </Link>
+          <TextLink to={authHref("sign-in", entry.returnTo)}>{t("account.signIn")}</TextLink>
         ) : null}
         {kind === "sign-in" ? (
-          <Link
-            className="inline-flex min-h-target items-center text-accent underline"
-            to={authHref("sign-up", entry.returnTo)}
-          >
-            {t("account.titles.signUp")}
-          </Link>
+          <TextLink to={authHref("sign-up", entry.returnTo)}>{t("account.titles.signUp")}</TextLink>
         ) : null}
-        <Link
-          className="inline-flex min-h-target items-center text-accent underline"
-          to={authHref("verify", entry.returnTo)}
-        >
-          {t("account.resend")}
-        </Link>
-        <Link
-          className="inline-flex min-h-target items-center text-accent underline"
-          to={authHref("forgot-password", entry.returnTo)}
-        >
+        <TextLink to={authHref("verify", entry.returnTo)}>{t("account.resend")}</TextLink>
+        <TextLink to={authHref("forgot-password", entry.returnTo)}>
           {t("account.titles.forgot")}
-        </Link>
-        <Link
-          className="inline-flex min-h-target items-center text-accent underline"
-          to={entry.returnTo}
-        >
-          {t("account.return")}
-        </Link>
+        </TextLink>
+        <TextLink to={entry.returnTo}>{t("account.return")}</TextLink>
       </div>
     </AccountFrame>
   );

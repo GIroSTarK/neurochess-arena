@@ -9,8 +9,12 @@ import { createMemoryRouter, useLoaderData, useRevalidator } from "react-router"
 import { RouterProvider } from "react-router/dom";
 
 import { createAiApi } from "../../apps/web/src/api/ai-client";
+import { createAuthApi } from "../../apps/web/src/api/auth-client";
 import { ApiFailure } from "../../apps/web/src/api/failures";
 import { createSessionCredentials } from "../../apps/web/src/api/session-credentials";
+import { RouteContext } from "../../apps/web/src/app/route-context";
+import { RouteNavigation } from "../../apps/web/src/app/route-navigation";
+import { RouteRuntime } from "../../apps/web/src/app/route-runtime";
 import { i18n } from "../../apps/web/src/i18n";
 import { ArenaSetupScreen } from "../../apps/web/src/setup/ArenaSetupScreen";
 import type { SetupEntry } from "../../apps/web/src/setup/controller";
@@ -20,6 +24,12 @@ import { API_ORIGIN } from "./environment";
 const lifetime = new AbortController();
 const credentials = createSessionCredentials(lifetime.signal);
 const api = createAiApi(API_ORIGIN);
+const routeContext = {
+  apiBaseUrl: API_ORIGIN,
+  sandboxEnabled: true,
+  navigation: new RouteNavigation(),
+  runtime: new RouteRuntime(createAuthApi(API_ORIGIN)),
+};
 let entrySequence = 0;
 
 function SetupHarness() {
@@ -42,7 +52,7 @@ function SetupHarness() {
           onRetry={() => {
             void revalidator.revalidate();
           }}
-          sandboxEnabled
+
           onCreated={(game) => setHandoff(game.snapshot.gameId)}
           onReturnToGame={setHandoff}
         />
@@ -78,6 +88,8 @@ const router = createMemoryRouter([
 
 createRoot(document.getElementById("root")!).render(
   <I18nextProvider i18n={i18n}>
-    <RouterProvider router={router} />
+    <RouteContext value={routeContext}>
+      <RouterProvider router={router} />
+    </RouteContext>
   </I18nextProvider>,
 );

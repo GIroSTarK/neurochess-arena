@@ -1,15 +1,11 @@
 import { DocumentMetadata } from "./DocumentMetadata";
 import { RouteNotice } from "./RouteNotice";
 
-export function RouteErrorBoundary({ sandboxEnabled }: { readonly sandboxEnabled: boolean }) {
+export function RouteErrorBoundary() {
   return (
     <>
       <DocumentMetadata page="not-found" />
-      <RouteNotice
-        kind="error"
-        sandboxEnabled={sandboxEnabled}
-        onRetry={() => window.location.reload()}
-      />
+      <RouteNotice kind="error" onRetry={() => window.location.reload()} />
     </>
   );
 }

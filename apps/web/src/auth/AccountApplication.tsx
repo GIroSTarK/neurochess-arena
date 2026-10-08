@@ -8,7 +8,7 @@ import type { AccountActionData } from "./action-data";
 import { AccountContext } from "./context";
 
 export function AccountApplication() {
-  const { runtime, sandboxEnabled } = useAppRoute();
+  const { runtime } = useAppRoute();
   const controller = runtime.account;
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const commands = useFetcher<AccountActionData>();
@@ -22,7 +22,7 @@ export function AccountApplication() {
   }, [resetProfile, state.revision, location.pathname, location.search]);
   // Stopping observation invalidates account state synchronously, before the
   // pending destination reaches React. That is navigation, not a session check.
-  if (runtime.stopped) return <RouteNotice kind="loading" sandboxEnabled={sandboxEnabled} />;
+  if (runtime.stopped) return <RouteNotice kind="loading" />;
   return (
     <AccountContext value={{ controller, state, commands, profileCommands }}>
       <Outlet />

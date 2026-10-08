@@ -22,6 +22,10 @@ export function safeReturnTo(value: string | null): string {
 }
 
 export function authHref(page: Exclude<AuthForm, "reset-password">, returnTo = "/"): string {
+  return withReturnTo(`/auth/${page}`, returnTo);
+}
+
+export function withReturnTo(pathname: string, returnTo = "/"): string {
   const destination = safeReturnTo(returnTo);
-  return `/auth/${page}${destination === "/" ? "" : "?returnTo=" + encodeURIComponent(destination)}`;
+  return `${pathname}${destination === "/" ? "" : "?returnTo=" + encodeURIComponent(destination)}`;
 }

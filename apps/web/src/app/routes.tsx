@@ -65,8 +65,16 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
           <RouteRoot />
         </RouteContext>
       ),
-      errorElement: <RouteErrorBoundary sandboxEnabled={sandboxEnabled} />,
-      hydrateFallbackElement: <RouteNotice kind="loading" sandboxEnabled={sandboxEnabled} />,
+      errorElement: (
+        <RouteContext value={enabledContext}>
+          <RouteErrorBoundary />
+        </RouteContext>
+      ),
+      hydrateFallbackElement: (
+        <RouteContext value={enabledContext}>
+          <RouteNotice kind="loading" />
+        </RouteContext>
+      ),
       children: [
         {
           id: "public",
@@ -151,7 +159,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
         {
           path: "*",
           handle: { page: "not-found" },
-          element: <StaticScreen page="not-found" sandboxEnabled={sandboxEnabled} />,
+          element: <StaticScreen page="not-found" />,
         },
       ],
     },

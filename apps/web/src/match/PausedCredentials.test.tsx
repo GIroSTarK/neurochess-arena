@@ -1,6 +1,7 @@
-import { screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { telemetryDetails } from "../test/ai-invocations";
@@ -203,6 +204,29 @@ describe("paused credential recovery", () => {
     await user.click(screen.getByRole("button", { name: "Return to game" }));
     expect(screen.getByRole("tab", { name: "Analysis" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Operational totals")).toBeVisible();
+  });
+
+  it("masks keys even when recovery reopens before hidden background rendering", async () => {
+    renderLocalized(<RecoveryHarness onResume={vi.fn()} />);
+    const user = userEvent.setup();
+    const input = screen.getByLabelText("White · OpenAI · API key");
+    await user.type(input, "replacement-fixture");
+    await user.click(screen.getByRole("button", { name: "Show White API key" }));
+    expect(input).toHaveAttribute("type", "text");
+
+    act(() => {
+      flushSync(() => fireEvent.click(screen.getByRole("button", { name: "Return to game" })));
+      flushSync(() =>
+        fireEvent.click(screen.getByRole("button", { name: "Re-enter your API keys" })),
+      );
+    });
+
+    expect(input).toHaveValue("replacement-fixture");
+    expect(input).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "Show White API key" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("clears recovery values on a new revision or credential lifetime and closes on continuation", async () => {

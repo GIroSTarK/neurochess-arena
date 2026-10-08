@@ -1,11 +1,12 @@
 import type { ChessColor } from "@neurochess/contracts";
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 
 import type { AiIdentity } from "../api/identity";
 import { AppNavigation } from "../app/AppNavigation";
 import { AppShell } from "../app/AppShell";
+import { useAppRoute } from "../app/route-context";
 import { gameHref } from "../app/route-urls";
 import { RouteNotice } from "../app/RouteNotice";
 import { ArenaLayout } from "../arena/ArenaLayout";
@@ -16,6 +17,7 @@ import type { ChessboardHandle } from "../board/Chessboard";
 import { useCredentials } from "../credentials/use-credentials";
 import { ArenaSetupScreen } from "../setup/ArenaSetupScreen";
 import { Button } from "../ui/Button";
+import { TextLink } from "../ui/TextLink";
 
 import type { MatchController } from "./controller";
 import { MatchBoard } from "./panels/MatchBoard";
@@ -25,7 +27,6 @@ import { matchPresentation } from "./presentation";
 import type { ArenaRouteData } from "./route-data";
 
 export function MatchScreen({
-  sandboxEnabled,
   identity,
   controller,
   stopped,
@@ -33,7 +34,6 @@ export function MatchScreen({
   onRetry,
   entry,
 }: {
-  readonly sandboxEnabled: boolean;
   readonly identity?: AiIdentity;
   readonly controller: MatchController;
   readonly stopped: boolean;
@@ -42,6 +42,7 @@ export function MatchScreen({
   readonly entry: ArenaRouteData["data"];
 }) {
   const { t } = useTranslation();
+  const { sandboxEnabled } = useAppRoute();
   const account = useAccount();
   const navigate = useNavigate();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
@@ -86,9 +87,9 @@ export function MatchScreen({
 
   if (stopped) {
     return departing ? (
-      <RouteNotice kind="loading" sandboxEnabled={sandboxEnabled} />
+      <RouteNotice kind="loading" />
     ) : (
-      <RouteNotice kind="stopped" sandboxEnabled={sandboxEnabled} onRetry={onRetry} />
+      <RouteNotice kind="stopped" onRetry={onRetry} />
     );
   }
 
@@ -101,7 +102,6 @@ export function MatchScreen({
         entry={entry.entry}
         onRetry={onRetry}
         {...(savedCredentials ? { savedCredentials } : {})}
-        sandboxEnabled={sandboxEnabled}
         onCreated={(game) => {
           void controller.created(game);
         }}
@@ -117,7 +117,7 @@ export function MatchScreen({
       mainId="arena-match"
       skipLabel={t("app.skipLink")}
       context={<AccountAccess />}
-      navigation={<AppNavigation page="arena" sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page="arena" />}
       footer={t("match.private")}
       announcement={view.announcement}
     >
@@ -135,12 +135,9 @@ export function MatchScreen({
         <div className="grid gap-4">
           <p>{t(state.details?.configuration === null ? "match.sandbox" : "match.unsupported")}</p>
           {state.details?.configuration === null && sandboxEnabled ? (
-            <Link
-              className="text-accent underline"
-              to={gameHref("sandbox", boardView.snapshot.gameId)}
-            >
+            <TextLink inline to={gameHref("sandbox", boardView.snapshot.gameId)}>
               {t("match.openSandbox")}
-            </Link>
+            </TextLink>
           ) : null}
         </div>
       ) : (

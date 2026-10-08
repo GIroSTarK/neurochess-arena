@@ -10,13 +10,11 @@ import { AccountAccess } from "./AccountAccess";
 export function AccountFrame({
   title,
   children,
-  sandboxEnabled,
   page = "account",
   focusHeading = false,
 }: {
   readonly title: string;
   readonly children: ReactNode;
-  readonly sandboxEnabled: boolean;
   readonly page?: AppPage;
   readonly focusHeading?: boolean;
 }) {
@@ -30,7 +28,7 @@ export function AccountFrame({
       mainId="account-main"
       skipLabel={t("app.skipLink")}
       context={<AccountAccess />}
-      navigation={<AppNavigation page={page} sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page={page} />}
       footer={t("account.footer")}
       announcement=""
     >

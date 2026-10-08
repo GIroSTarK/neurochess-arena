@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useMatches } from "react-router";
+import { useMatches } from "react-router";
 
 import { AccountFrame } from "../auth/AccountFrame";
 import { useRequiredAccount } from "../auth/context";
@@ -8,6 +8,7 @@ import type { PublicRouteData } from "../auth/route-data";
 import { useRouteAuthEntry } from "../auth/useRouteAuthEntry";
 import { ProfileScreen } from "../profile/ProfileScreen";
 import { Button } from "../ui/Button";
+import { TextLink } from "../ui/TextLink";
 
 import { useAppRoute } from "./route-context";
 import { authHref } from "./route-urls";
@@ -42,18 +43,14 @@ export function PublicPage({
   const { t } = useTranslation();
   const { controller, state } = useRequiredAccount();
   const [initialRevision] = useState(state.revision);
-  const { sandboxEnabled, authEntry } = useAppRoute();
+  const { authEntry } = useAppRoute();
   const entry = useRouteAuthEntry(authEntry);
   const matches = useMatches();
   const result = matches.findLast((match) => match.loaderData)?.loaderData as
     PublicRouteData | undefined;
   if (state.deletion === "deleted" && state.phase !== "account") {
     return (
-      <AccountFrame
-        title={t("account.deletion.deleted")}
-        sandboxEnabled={sandboxEnabled}
-        focusHeading
-      >
+      <AccountFrame title={t("account.deletion.deleted")} focusHeading>
         <p role="status">{t("account.deletion.done")}</p>
         <GuestContinuation />
       </AccountFrame>
@@ -63,12 +60,7 @@ export function PublicPage({
   if (current && state.phase === "account") {
     if (requireProfile && state.profile && !state.profile.completed) {
       return (
-        <ProfileScreen
-          key={state.revision}
-          profile={state.profile}
-          returnTo={entry.returnTo}
-          sandboxEnabled={sandboxEnabled}
-        />
+        <ProfileScreen key={state.revision} profile={state.profile} returnTo={entry.returnTo} />
       );
     }
     return <Fragment key={state.revision}>{children}</Fragment>;
@@ -86,7 +78,6 @@ export function PublicPage({
             ? "account.unavailable"
             : "account.loading",
       )}
-      sandboxEnabled={sandboxEnabled}
       focusHeading={
         state.revision !== initialRevision && (required || state.phase === "unavailable")
       }
@@ -98,12 +89,7 @@ export function PublicPage({
       {required ? (
         <>
           <p>{t("account.sessionEnded")}</p>
-          <Link
-            to={authHref("sign-in", entry.returnTo)}
-            className="inline-flex min-h-target items-center text-accent underline"
-          >
-            {t("account.signIn")}
-          </Link>
+          <TextLink to={authHref("sign-in", entry.returnTo)}>{t("account.signIn")}</TextLink>
           <GuestContinuation />
         </>
       ) : state.phase === "unavailable" ? (

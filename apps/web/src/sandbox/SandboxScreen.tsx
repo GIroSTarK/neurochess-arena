@@ -74,9 +74,9 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
 
   if (stopped) {
     return departing ? (
-      <RouteNotice kind="loading" sandboxEnabled />
+      <RouteNotice kind="loading" />
     ) : (
-      <RouteNotice kind="stopped" sandboxEnabled onRetry={retry} />
+      <RouteNotice kind="stopped" onRetry={retry} />
     );
   }
   return (
@@ -84,7 +84,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
       mainId="sandbox"
       skipLabel={t("sandbox.skipLink")}
       context={t("app.localDevelopment")}
-      navigation={<AppNavigation page="sandbox" sandboxEnabled />}
+      navigation={<AppNavigation page="sandbox" />}
       footer={
         <div className="flex flex-col items-center justify-center gap-x-6 gap-y-2 md:flex-row">
           <span>{t(view.board ? "sandbox.sessionFooter" : "sandbox.footer")}</span>

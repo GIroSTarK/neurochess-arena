@@ -19,7 +19,7 @@ import {
   requestPath,
   snapshot,
 } from "../test/fixtures";
-import { renderLocalized } from "../test/render";
+import { renderRouteScreen } from "../test/render";
 
 import { ArenaSetupScreen } from "./ArenaSetupScreen";
 
@@ -51,14 +51,14 @@ function fixture(models = setupModels, saved?: readonly CredentialMetadata[]) {
   });
   const onCreated = vi.fn();
   const onReturnToGame = vi.fn();
-  const view = renderLocalized(
+  const view = renderRouteScreen(
     <StrictMode>
       <ArenaSetupScreen
         api={createAiApi("https://api.example.test", { fetch })}
         credentials={credentials}
         entry={{ existingGameId: null, issue: null }}
         onRetry={vi.fn()}
-        sandboxEnabled
+
         onCreated={onCreated}
         onReturnToGame={onReturnToGame}
         {...(saved

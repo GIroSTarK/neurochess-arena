@@ -30,11 +30,7 @@ export function RouteRoot() {
     <PageContext value={page}>
       <DocumentMetadata page={page} />
       <RouteEffects navigation={context.navigation} pendingLabel={t("routing.pending")} />
-      {invalid ? (
-        <StaticScreen page="not-found" sandboxEnabled={context.sandboxEnabled} />
-      ) : (
-        <Outlet />
-      )}
+      {invalid ? <StaticScreen page="not-found" /> : <Outlet />}
     </PageContext>
   );
 }

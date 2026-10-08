@@ -2,8 +2,9 @@ import type { ChessColor } from "@neurochess/contracts";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { resignationConfirmation } from "../../arena/resignation";
 import { Button } from "../../ui/Button";
-import { Dialog } from "../../ui/Dialog";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { Select } from "../../ui/Select";
 import { StableText } from "../../ui/StableText";
 
@@ -88,37 +89,23 @@ export function AiControls({
         </Select>
       </label>
       {confirming ? (
-        <Dialog
-          title={
-            resigning && resignation
-              ? t("lifecycle.resignTitle", { color: t(`players.${resignation.color}`) })
-              : t("match.stopTitle")
-          }
-          description={
-            resigning && resignation
-              ? t("lifecycle.resignDescription", {
-                  winner: t(resignation.color === "white" ? "players.black" : "players.white"),
-                })
-              : t("match.stopDescription")
-          }
+        <ConfirmDialog
+          {...(resigning && resignation
+            ? resignationConfirmation(resignation.color, t)
+            : {
+                title: t("match.stopTitle"),
+                description: t("match.stopDescription"),
+                confirmLabel: t("match.confirmStop"),
+              })}
+          cancelLabel={t("actions.cancel")}
+          actionsClassName="my-4 flex flex-wrap gap-3"
           onCancel={() => setConfirmation(null)}
-        >
-          <div className="my-4 flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => setConfirmation(null)}>
-              {t("actions.cancel")}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirmation(null);
-                if (resigning) resignation?.onResign();
-                else onStop();
-              }}
-            >
-              {t(resigning ? "lifecycle.confirmResign" : "match.confirmStop")}
-            </Button>
-          </div>
-        </Dialog>
+          onConfirm={() => {
+            setConfirmation(null);
+            if (resigning) resignation?.onResign();
+            else onStop();
+          }}
+        />
       ) : null}
     </section>
   );

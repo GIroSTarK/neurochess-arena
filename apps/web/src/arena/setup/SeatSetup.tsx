@@ -10,8 +10,8 @@ import { useTranslation } from "react-i18next";
 
 import { PieceIcon } from "../../board/PieceIcon";
 import { Button } from "../../ui/Button";
+import { SecretInput } from "../../ui/SecretInput";
 import { Select } from "../../ui/Select";
-import { StableText } from "../../ui/StableText";
 
 import { CredentialSource, type SavedCredentialChoices } from "./CredentialSource";
 import { ModelPicker, setupFieldClass } from "./ModelPicker";
@@ -126,48 +126,29 @@ export function SeatSetup(props: SeatSetupProps) {
 function SecretField(props: SeatSetupProps & { readonly descriptionId: string }) {
   const { t } = useTranslation();
   const id = useId();
-  const [revealed, setRevealed] = useState(false);
-  const [hasValue, setHasValue] = useState(false);
   return (
     <div className="grid gap-2">
       <label htmlFor={id} className="text-label">
         {t("setup.apiKey")}
       </label>
-      <div className="flex min-w-0 flex-wrap gap-2">
-        <input
-          id={id}
-          type={revealed ? "text" : "password"}
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          maxLength={4096}
-          className={`${setupFieldClass} flex-[1_1_10rem]`}
-          readOnly={props.disabled}
-          aria-disabled={props.disabled}
-          aria-invalid={props.keyInvalid}
-          aria-describedby={`${id}-hint ${props.descriptionId}`}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setHasValue(value.length > 0);
-            if (value.length === 0) setRevealed(false);
-            props.onKey(value);
-          }}
-          onBlur={props.onKeyBlur}
-        />
-        <Button
-          variant="secondary"
-          aria-controls={id}
-          aria-pressed={revealed}
-          aria-disabled={props.disabled || !hasValue}
-          onClick={() => setRevealed((value) => !value)}
-        >
-          <StableText
-            value={t(revealed ? "setup.hideKey" : "setup.showKey")}
-            variants={[t("setup.showKey"), t("setup.hideKey")]}
-            align="center"
-          />
-        </Button>
-      </div>
+      <SecretInput
+        id={id}
+        showLabel={t("setup.showKey")}
+        hideLabel={t("setup.hideKey")}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        maxLength={4096}
+        className={`${setupFieldClass} flex-[1_1_10rem]`}
+        readOnly={props.disabled}
+        aria-disabled={props.disabled}
+        aria-invalid={props.keyInvalid}
+        aria-describedby={`${id}-hint ${props.descriptionId}`}
+        onChange={(event) => {
+          props.onKey(event.currentTarget.value);
+        }}
+        onBlur={props.onKeyBlur}
+      />
       <div id={`${id}-hint`} className="text-label text-text-secondary">
         <p className="font-semibold">{t("setup.sessionOnly")}</p>
         <p className="mt-1">{t("setup.sessionOnlyHint")}</p>

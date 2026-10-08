@@ -36,7 +36,7 @@ export function ArenaReferenceScreen() {
       mainId="arena-reference"
       skipLabel={t("app.skipLink")}
       context={t("reference.badge")}
-      navigation={<AppNavigation page="reference" sandboxEnabled />}
+      navigation={<AppNavigation page="reference" />}
       footer={t("reference.description")}
       announcement=""
     >

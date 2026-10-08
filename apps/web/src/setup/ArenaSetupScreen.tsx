@@ -25,7 +25,6 @@ import { parameterErrors, setupConfiguration, type SetupIssue } from "./state";
 export function ArenaSetupScreen({
   api,
   credentials,
-  sandboxEnabled,
   onCreated,
   onReturnToGame,
   savedCredentials,
@@ -34,7 +33,6 @@ export function ArenaSetupScreen({
 }: {
   readonly api: SetupApi;
   readonly credentials: SetupCredentials;
-  readonly sandboxEnabled: boolean;
   readonly onCreated: (game: GameDetails) => void;
   readonly onReturnToGame: (gameId: string) => void;
   readonly savedCredentials?: SavedCredentialChoices;
@@ -101,7 +99,7 @@ export function ArenaSetupScreen({
       mainId="arena-setup"
       skipLabel={t("app.skipLink")}
       context={<AccountAccess />}
-      navigation={<AppNavigation page="arena" sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page="arena" />}
       footer={t("setup.footer")}
       announcement={announcement}
     >

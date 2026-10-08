@@ -13,8 +13,8 @@ import { useTranslation } from "react-i18next";
 import { CredentialSource, type SavedCredentialChoices } from "../arena/setup/CredentialSource";
 import { setupFieldClass } from "../arena/setup/ModelPicker";
 import { Button } from "../ui/Button";
-import { cx } from "../ui/cx";
 import { Icon } from "../ui/Icon";
+import { SecretInput } from "../ui/SecretInput";
 
 interface PausedCredentialsProps {
   readonly epoch: string;
@@ -139,9 +139,7 @@ function RecoveryForm({
   const { t } = useTranslation();
   const id = useId();
   const [edited, setEdited] = useState({ white: false, black: false });
-  const [hasValue, setHasValue] = useState({ white: false, black: false });
-  const [revealed, setRevealed] = useState({ white: false, black: false });
-  const [dismissedTooltip, setDismissedTooltip] = useState<ChessColor | null>(null);
+  const [maskEpoch, setMaskEpoch] = useState(0);
   const rejected = rejectedColor !== null && !edited[rejectedColor];
   const usesSessionKey = (color: ChessColor) =>
     !selections?.[color] || selections[color] === "session";
@@ -191,8 +189,6 @@ function RecoveryForm({
                 label={`${t(`players.${color}`)} · ${t(`setup.providers.${seat.provider}`)} · ${t("credentials.source")}`}
                 onChange={(value) => {
                   setEdited((current) => ({ ...current, [color]: true }));
-                  setHasValue((current) => ({ ...current, [color]: false }));
-                  setRevealed((current) => ({ ...current, [color]: false }));
                   onCredentialChange?.(color, value);
                 }}
               />
@@ -203,72 +199,28 @@ function RecoveryForm({
                   {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
                   {t("setup.apiKey")}
                 </label>
-                <div className="relative min-w-0">
-                  <input
-                    id={`${id}-${color}-key`}
-                    aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
-                    aria-invalid={invalid}
-                    type={revealed[color] ? "text" : "password"}
-                    placeholder={t("match.keyPlaceholder")}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    maxLength={4096}
-                    className={`${setupFieldClass} w-full pr-12`}
-                    readOnly={disabled}
-                    aria-disabled={disabled}
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setEdited((current) => ({ ...current, [color]: true }));
-                      setHasValue((current) => ({ ...current, [color]: value.length > 0 }));
-                      if (!value) setRevealed((current) => ({ ...current, [color]: false }));
-                      onKeyChange(color, value);
-                    }}
-                  />
-                  <span
-                    className="group absolute top-0 right-0"
-                    onPointerEnter={() => setDismissedTooltip(null)}
-                  >
-                    <Button
-                      variant="quiet"
-                      padding="compact"
-                      className="size-target focus-visible:-outline-offset-2"
-                      aria-labelledby={`${id}-${color}-reveal`}
-                      aria-controls={`${id}-${color}-key`}
-                      aria-pressed={revealed[color]}
-                      aria-disabled={disabled || !hasValue[color]}
-                      onClick={() =>
-                        setRevealed((current) => ({ ...current, [color]: !current[color] }))
-                      }
-                      onFocus={() => setDismissedTooltip(null)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") setDismissedTooltip(color);
-                      }}
-                    >
-                      <Icon
-                        path={
-                          revealed[color]
-                            ? "M3 3l18 18M10 5a10 10 0 0 1 11 7 14 14 0 0 1-3 4M6 6a14 14 0 0 0-3 6c4 8 12 8 16 3M10 10a3 3 0 0 0 4 4"
-                            : "M2 12c5-9 15-9 20 0-5 9-15 9-20 0M15 12a3 3 0 1 0-6 0 3 3 0 0 0 6 0"
-                        }
-                      />
-                    </Button>
-                    <span
-                      id={`${id}-${color}-reveal`}
-                      role="tooltip"
-                      className={cx(
-                        "absolute right-0 bottom-full z-10 hidden w-max max-w-40 pb-2 text-label text-text",
-                        dismissedTooltip !== color && "group-focus-within:block group-hover:block",
-                      )}
-                    >
-                      <span className="block rounded-control border border-control-border bg-surface-raised px-3 py-2">
-                        {t(revealed[color] ? "match.hideSeatKey" : "match.showSeatKey", {
-                          color: t(`players.${color}`),
-                        })}
-                      </span>
-                    </span>
-                  </span>
-                </div>
+                <SecretInput
+                  id={`${id}-${color}-key`}
+                  aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
+                  aria-invalid={invalid}
+                  layout="icon"
+                  maskEpoch={maskEpoch}
+                  showLabel={t("match.showSeatKey", { color: t(`players.${color}`) })}
+                  hideLabel={t("match.hideSeatKey", { color: t(`players.${color}`) })}
+                  placeholder={t("match.keyPlaceholder")}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={4096}
+                  className={`${setupFieldClass} w-full pr-12`}
+                  readOnly={disabled}
+                  aria-disabled={disabled}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setEdited((current) => ({ ...current, [color]: true }));
+                    onKeyChange(color, value);
+                  }}
+                />
               </>
             ) : null}
             {invalid ? (
@@ -300,7 +252,8 @@ function RecoveryForm({
         <Button
           variant="quiet"
           onClick={() => {
-            setRevealed({ white: false, black: false });
+            // Activity may skip hidden renders; retain dismissal until the fields render again.
+            setMaskEpoch((epoch) => epoch + 1);
             onDismiss();
           }}
         >

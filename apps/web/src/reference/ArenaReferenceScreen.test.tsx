@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { standardPositionPreview } from "../position/preview";
-import { renderLocalized } from "../test/render";
+import { renderRouteScreen } from "../test/render";
 
 import { ArenaReferenceScreen } from "./ArenaReferenceScreen";
 import { createReferenceGame } from "./scenarios";
@@ -19,7 +19,7 @@ describe("shared arena reference scenarios", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const user = userEvent.setup();
-    renderLocalized(<ArenaReferenceScreen />);
+    renderRouteScreen(<ArenaReferenceScreen />);
     await user.selectOptions(screen.getByRole("combobox", { name: "Test scenario" }), scenario.id);
     const board = screen.getByRole("grid", { name: "Chessboard" });
     expect(screen.getByRole("region", { name: "Test data" })).toBeVisible();
@@ -73,7 +73,7 @@ describe("shared arena reference scenarios", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const user = userEvent.setup();
-    renderLocalized(<ArenaReferenceScreen />);
+    renderRouteScreen(<ArenaReferenceScreen />);
     const abort = screen.getByRole("button", { name: "Abort game" });
     await user.click(abort);
     const dialog = screen.getByRole("dialog", { name: "Stop this game?" });
@@ -102,7 +102,7 @@ describe("shared arena reference scenarios", () => {
 
   it("updates local pause, flip and confirmed human resignation through the shared controls", async () => {
     const user = userEvent.setup();
-    renderLocalized(<ArenaReferenceScreen />);
+    renderRouteScreen(<ArenaReferenceScreen />);
     await user.selectOptions(screen.getByLabelText("Test scenario"), "humanAi");
     await user.click(screen.getByRole("button", { name: "Pause" }));
     expect(screen.getByRole("button", { name: "Resume" })).toHaveFocus();

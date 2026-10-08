@@ -7,11 +7,9 @@ import { AppShell } from "./AppShell";
 
 export function RouteNotice({
   kind,
-  sandboxEnabled,
   onRetry,
 }: {
   readonly kind: "loading" | "error" | "stopped";
-  readonly sandboxEnabled: boolean;
   readonly onRetry?: () => void;
 }) {
   const { t } = useTranslation();
@@ -19,7 +17,7 @@ export function RouteNotice({
     <AppShell
       mainId="route-notice"
       skipLabel={t("app.skipLink")}
-      navigation={<AppNavigation page="not-found" sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page="not-found" />}
       context={null}
       footer={null}
       announcement={t(`routing.${kind}`)}

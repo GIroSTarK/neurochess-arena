@@ -2,25 +2,22 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import { Icon } from "../ui/Icon";
+import { TextLink } from "../ui/TextLink";
 
 import { AppNavigation } from "./AppNavigation";
 import { AppShell } from "./AppShell";
+import { useAppRoute } from "./route-context";
 
-export function StaticScreen({
-  page,
-  sandboxEnabled,
-}: {
-  readonly page: "arena" | "not-found";
-  readonly sandboxEnabled: boolean;
-}) {
+export function StaticScreen({ page }: { readonly page: "arena" | "not-found" }) {
   const { t } = useTranslation();
+  const { sandboxEnabled } = useAppRoute();
   const isArena = page === "arena";
   return (
     <AppShell
       mainId="main"
       skipLabel={t("app.skipLink")}
       context={isArena ? t("arena.status") : null}
-      navigation={<AppNavigation page={page} sandboxEnabled={sandboxEnabled} />}
+      navigation={<AppNavigation page={page} />}
       footer={null}
       announcement=""
     >
@@ -43,12 +40,9 @@ export function StaticScreen({
             {t("arena.openSandbox")}
           </Link>
         ) : !isArena ? (
-          <Link
-            to="/"
-            className="inline-flex min-h-11 items-center px-4 py-2 text-label text-accent underline underline-offset-4"
-          >
+          <TextLink to="/" className="px-4 py-2 text-label underline-offset-4">
             {t("notFound.backToArena")}
-          </Link>
+          </TextLink>
         ) : null}
       </section>
     </AppShell>
