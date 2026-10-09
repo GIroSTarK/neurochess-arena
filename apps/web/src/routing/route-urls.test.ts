@@ -5,6 +5,13 @@ import { authHref, gameHref, parseGameId, safeReturnTo, withReturnTo } from "./r
 const id = "abcdef00-1234-4000-8000-000000000001";
 
 describe("canonical route URLs prepared for the Data router", () => {
+  it("allows token-free room auth returns without carrying invitation inputs", () => {
+    expect(safeReturnTo("/rooms")).toBe("/rooms");
+    expect(safeReturnTo("/rooms/join")).toBe("/rooms/join");
+    expect(authHref("sign-in", "/rooms/join")).toBe("/auth/sign-in?returnTo=%2Frooms%2Fjoin");
+    expect(safeReturnTo("/rooms/join#invite=secret")).toBe("/");
+    expect(safeReturnTo("/rooms/join?invite=secret")).toBe("/");
+  });
   it("normalizes UUIDs and emits private game paths without a trailing slash", () => {
     expect(parseGameId(id.toUpperCase())).toBe(id);
     expect(gameHref("arena", id.toUpperCase())).toBe("/games/" + id);

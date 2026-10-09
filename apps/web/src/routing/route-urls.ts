@@ -15,7 +15,9 @@ export function gameHref(mode: GameMode, gameId: string): string {
 }
 
 export function safeReturnTo(value: string | null): string {
-  if (value === "/" || value === "/history") return value;
+  if (value === "/" || value === "/history" || value === "/rooms" || value === "/rooms/join") {
+    return value;
+  }
   const match = value?.match(/^\/games\/([^/?#]+)$/);
   const id = parseGameId(match?.[1]);
   return id ? gameHref("arena", id) : "/";

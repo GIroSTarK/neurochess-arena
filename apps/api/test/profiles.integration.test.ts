@@ -415,6 +415,8 @@ describe("private account profiles", () => {
       pending = repository.update(account.principal, { username: "RevokedUpdate" });
       await expect
         .poll(async () => {
+          // A new waiting backend must not be hidden by this transaction's cached activity snapshot.
+          await tx.execute(sql`select pg_stat_clear_snapshot()`);
           const waiting = await tx.execute<{ count: number }>(
             sql`select count(*)::int as count from pg_stat_activity where ${blocker.rows[0]!.pid} = any(pg_blocking_pids(pid))`,
           );

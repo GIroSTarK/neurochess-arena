@@ -1,4 +1,75 @@
 export const en = {
+  rooms: {
+    title: "Private human game",
+    description:
+      "Create a private room and invite one opponent. Choose your color; White moves first.",
+    joinTitle: "Join a private room",
+    joinDescription:
+      "Enter an invitation from the room owner. Game details stay private until you join.",
+    accountRequired:
+      "Sign in and complete your profile to create a room. Guests can join with an invitation.",
+    completeProfile: "Complete profile",
+    color: "Your color",
+    create: "Create room",
+    slot: "A waiting room occupies your public game slot until the game finishes or you close the room.",
+    joinLink: "Join with an invitation",
+    returnGame: "Return to your unfinished game",
+    input: "Invitation link or code",
+    authDeparture:
+      "Leaving for sign-in or profile setup clears this invitation. Reopen the invitation or paste its code again when you return.",
+    check: "Check invitation",
+    join: "Join room",
+    joinGuest: "Join as guest",
+    joinable: "This invitation is available. Join when you are ready.",
+    unavailable: "This invitation is unavailable. Ask the owner for a new one.",
+    waiting: "Waiting for opponent",
+    waitingColor: "Waiting for {{color}}",
+    yourColor: "You play {{color}}.",
+    invitation: "Invitation link",
+    copy: "Copy invitation",
+    copied: "Invitation copied.",
+    copyFallback: "Clipboard unavailable. Select and copy the invitation above.",
+    replaceHint:
+      "Replace the invitation to share a new link. Previous invitation text cannot be recovered after leaving or reloading this page.",
+    replace: "Replace invitation",
+    revoke: "Revoke invitation",
+    close: "Close room",
+    refresh: "Refresh room",
+    revoked:
+      "Invitation revoked. Your public game slot stays reserved until you close the room or finish a game.",
+    cancel: "Cancel",
+    confirmations: {
+      replace:
+        "The previous invitation will stop working. Only the new link will admit an opponent.",
+      revoke:
+        "Stop admission through the current invitation. Your waiting room and reserved game slot will remain.",
+      close:
+        "Close this room as aborted and free its game slots. Registered participants retain their private history.",
+    },
+    confirmLabels: {
+      replace: "Confirm replacement",
+      revoke: "Confirm revocation",
+      close: "Confirm close",
+    },
+    retry: "Recover previous request",
+    working: "Contacting the room service…",
+    errors: {
+      invalid: "Enter a valid invitation link or code and try again.",
+      unavailable: "This room or invitation is unavailable. Ask the owner for a new invitation.",
+      occupied:
+        "You already have an unfinished public game. Finish or close it before creating or joining a room.",
+      access:
+        "Your session is no longer available. Sign in again. A new guest cannot reclaim an expired guest seat.",
+      unverified: "Verify your email before creating or joining a room.",
+      self: "You cannot join your own room. Share the invitation with another player.",
+      limited: "Too many invitation requests. Wait a moment, then try again.",
+      operation:
+        "The previous creation request can no longer be recovered. Check your unfinished game before creating a new room.",
+      uncertain:
+        "The request may have succeeded, but its acknowledgement was lost. Recover the previous request or refresh the room before making another decision.",
+      synchronize: "The room changed. Refresh it, then confirm your decision again.",
+    },
+  },
   routing: {
     loading: "Loading page…",
     pending: "Opening page…",

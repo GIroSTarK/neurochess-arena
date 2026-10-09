@@ -1,0 +1,335 @@
+import AxeBuilder from "@axe-core/playwright";
+import { roomViewSchema } from "@neurochess/contracts";
+import type { Page } from "@playwright/test";
+
+import { createAccount } from "./account-helpers";
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
+import { expect, test } from "./fixtures";
+import { setPseudoLocalization } from "./text-layout";
+
+const entryPath = "/__test__/rooms";
+const joinPath = entryPath + "/join";
+
+test("same-document invitation fragments are consumed before routing and cannot return through history", async ({
+  page,
+  newContext,
+}) => {
+  const link = await createRoom(page);
+  const token = new URL(link).hash.slice("#invite=".length);
+  const guest = await (await newContext()).newPage();
+  await guest.goto(joinPath);
+  await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
+  await guest.evaluate((value) => {
+    window.location.hash = "invite=" + value;
+  }, token);
+  await expect(guest).toHaveURL(WEB_ORIGIN + joinPath);
+  await expect
+    .poll(
+      async () =>
+        (await guest.getByRole("textbox", { name: "Invitation link or code" }).inputValue()) ===
+        token,
+    )
+    .toBe(true);
+  await assertNoStoredInvitation(guest, token);
+  await guest.getByRole("link", { name: "Leave entry", exact: true }).click();
+  await guest.goBack();
+  await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
+  await guest.goForward();
+  await guest.goBack();
+  await assertNoStoredInvitation(guest, token);
+});
+async function createRoom(page: Page, color: "White" | "Black" = "White") {
+  await createAccount(page.request);
+  await page.goto(entryPath);
+  await page.getByRole("radio", { name: color, exact: true }).check();
+  await page.getByRole("button", { name: "Create room", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
+  return page.getByRole("textbox", { name: "Invitation link", exact: true }).inputValue();
+}
+async function confirm(page: Page, label: string, confirmLabel: string) {
+  await page.getByRole("button", { name: label, exact: true }).click();
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: confirmLabel, exact: true }).click();
+}
+async function assertNoStoredInvitation(page: Page, token: string) {
+  expect(
+    await page.evaluate((token) => {
+      const values = (storage: Storage) =>
+        Array.from({ length: storage.length }, (_, index) =>
+          storage.getItem(storage.key(index) ?? ""),
+        );
+      return JSON.stringify({
+        local: values(localStorage),
+        session: values(sessionStorage),
+        history: history.state as unknown,
+        url: location.href,
+      }).includes(token);
+    }, token),
+  ).toBe(false);
+}
+
+test("Black owner creates and a separate guest explicitly joins by link with no private preview", async ({
+  page,
+  newContext,
+}) => {
+  const link = await createRoom(page, "Black");
+  const gameId = new URL(page.url()).pathname.split("/").at(-1)!;
+  const guest = await (await newContext()).newPage();
+  let bootstraps = 0;
+  guest.on("request", (request) => {
+    if (request.url() === API_ORIGIN + "/guest-session") bootstraps++;
+  });
+  await guest.goto(link);
+  await expect(guest).toHaveURL(WEB_ORIGIN + joinPath);
+  await expect(
+    guest.getByText("This invitation is available. Join when you are ready."),
+  ).toBeVisible();
+  expect(bootstraps).toBe(0);
+  await expect(guest.getByRole("grid")).toHaveCount(0);
+  const token = new URL(link).hash.slice("#invite=".length);
+  await assertNoStoredInvitation(guest, token);
+  await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
+  await expect(guest).toHaveURL(`${WEB_ORIGIN}/__test__/games/${gameId}`);
+  await expect(guest.getByRole("status").filter({ hasText: "Room handoff: active" })).toBeVisible();
+  expect(bootstraps).toBe(1);
+  const room = roomViewSchema.parse(
+    await (await guest.request.get(API_ORIGIN + "/rooms/" + gameId)).json(),
+  );
+  expect(room.viewer).toEqual({ color: "white", isOwner: false });
+  await page.getByRole("button", { name: "Refresh room", exact: true }).click();
+  await expect(page.getByText("Room handoff: active", { exact: true })).toBeVisible();
+});
+
+test("manual code join, invitation replacement/revocation, reload recovery and confirmed owner closure", async ({
+  page,
+  newContext,
+}) => {
+  const first = await createRoom(page);
+  const guest = await (await newContext()).newPage();
+  await confirm(page, "Revoke invitation", "Confirm revocation");
+  await expect(page.getByText(/Your public game slot stays reserved/)).toBeVisible();
+  await guest.goto(first);
+  await expect(
+    guest.getByText("This invitation is unavailable. Ask the owner for a new one."),
+  ).toBeVisible();
+  await confirm(page, "Replace invitation", "Confirm replacement");
+  const replacement = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  expect(replacement === first).toBe(false);
+  await page.reload();
+  await expect(page.getByText(/Replace the invitation to share a new link/)).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Invitation link", exact: true })).toHaveCount(0);
+  await confirm(page, "Replace invitation", "Confirm replacement");
+  const current = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  await guest
+    .getByRole("textbox", { name: "Invitation link or code" })
+    .fill(new URL(current).hash.slice("#invite=".length));
+  await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
+  await expect(guest.getByText("Room handoff: active", { exact: true })).toBeVisible();
+  // A second waiting room proves the closure UI without enabling the later gameplay controller.
+  const otherOwner = await (await newContext()).newPage();
+  await createRoom(otherOwner);
+  await otherOwner.getByRole("button", { name: "Close room", exact: true }).click();
+  await otherOwner.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(otherOwner.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
+  await confirm(otherOwner, "Close room", "Confirm close");
+  await expect(otherOwner.getByText("Room handoff: aborted", { exact: true })).toBeVisible();
+});
+
+test("lost create and join acknowledgements recover the same operation and seat", async ({
+  page,
+  newContext,
+}) => {
+  await createAccount(page.request);
+  let creates = 0;
+  let operations = 0;
+  const createBodies: string[] = [];
+  page.on("request", (request) => {
+    if (request.url() === API_ORIGIN + "/rooms/creation-operation") operations++;
+  });
+  await page.route(API_ORIGIN + "/rooms", async (route) => {
+    createBodies.push(route.request().postData() ?? "");
+    const response = await route.fetch();
+    if (++creates === 1) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    } else await route.fulfill({ response });
+  });
+  await page.goto(entryPath);
+  await page.getByRole("button", { name: "Create room", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("acknowledgement was lost");
+  await page.getByRole("button", { name: "Recover previous request", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
+  expect(operations).toBe(1);
+  expect(createBodies).toHaveLength(2);
+  expect(createBodies[0]).toBe(createBodies[1]);
+  await confirm(page, "Replace invitation", "Confirm replacement");
+  const link = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  const guest = await (await newContext()).newPage();
+  const joinBodies: string[] = [];
+  await guest.route(API_ORIGIN + "/rooms/join", async (route) => {
+    joinBodies.push(route.request().postData() ?? "");
+    const response = await route.fetch();
+    if (joinBodies.length === 1) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+    } else await route.fulfill({ response });
+  });
+  await guest.goto(link);
+  await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
+  await expect(guest.getByRole("alert")).toContainText("acknowledgement was lost");
+  await guest.getByRole("button", { name: "Recover previous request", exact: true }).click();
+  await expect(guest.getByText("Room handoff: active", { exact: true })).toBeVisible();
+  expect(joinBodies).toHaveLength(2);
+  expect(joinBodies[0] === joinBodies[1]).toBe(true);
+});
+
+test("sign-in departure and Back/Forward clear invitations and token-free auth returns work", async ({
+  page,
+  newContext,
+}) => {
+  const link = await createRoom(page);
+  const guest = await (await newContext()).newPage();
+  const account = await createAccount(guest.request);
+  // Sign out through the real account API before entering the guest invitation flow.
+  await guest.request.post(API_ORIGIN + "/api/auth/sign-out", {
+    headers: { origin: WEB_ORIGIN },
+    data: {},
+  });
+  await guest.goto(link);
+  await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).not.toHaveValue("");
+  await guest.getByRole("main").getByRole("link", { name: "Sign in", exact: true }).click();
+  const token = new URL(link).hash.slice("#invite=".length);
+  await assertNoStoredInvitation(guest, token);
+  await guest.goBack();
+  await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
+  await guest.goForward();
+  await guest.getByLabel("Email", { exact: true }).fill(account.email);
+  await guest.getByLabel("Password", { exact: true }).fill(account.password);
+  await guest.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(guest).toHaveURL(WEB_ORIGIN + joinPath);
+  await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
+});
+
+test("entry and waiting remain accessible with keyboard, clipboard fallback and expanded mobile text", async ({
+  page,
+}) => {
+  await page.goto(entryPath);
+  await expect(
+    page.getByRole("main").getByRole("link", { name: "Sign in", exact: true }),
+  ).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await createRoom(page, "Black");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy invitation", exact: true }).click();
+  await expect(page.getByText("Invitation copied.", { exact: true })).toBeVisible();
+  const expectedLink = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  expect(
+    await page.evaluate(
+      async (link) => (await navigator.clipboard.readText()) === link,
+      expectedLink,
+    ),
+  ).toBe(true);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Copy invitation", exact: true }).click();
+  await expect(page.getByText(/Select and copy the invitation above/)).toBeVisible();
+  const invitation = page.getByRole("textbox", { name: "Invitation link", exact: true });
+  await invitation.focus();
+  expect(
+    await invitation.evaluate((element) => {
+      const field = element as HTMLTextAreaElement;
+      return field.selectionEnd === field.value.length;
+    }),
+  ).toBe(true);
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Copy invitation", exact: true })).toBeFocused();
+  expect(
+    await page
+      .getByRole("button", { name: "Copy invitation", exact: true })
+      .evaluate((element) => getComputedStyle(element).outlineStyle),
+  ).not.toBe("none");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await setPseudoLocalization(page, true);
+  await page.addStyleTag({ content: "html { font-size: 200%; }" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole("button", { name: /^Close room/ }).click();
+  await expect(page.getByRole("button", { name: /^Cancel/ })).toBeFocused();
+  expect(
+    await page
+      .getByRole("dialog")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+});
+
+test("onboarding returns without the invitation and an account joins after pasting it again", async ({
+  page,
+  newContext,
+}) => {
+  const link = await createRoom(page);
+  const invitee = await (await newContext()).newPage();
+  const account = await createAccount(invitee.request, { completeProfile: false });
+  await invitee.goto(link);
+  await expect(
+    invitee.getByText(/Leaving for sign-in or profile setup clears this invitation/),
+  ).toBeVisible();
+  await invitee.getByRole("link", { name: "Complete profile", exact: true }).click();
+  await invitee.getByLabel("Username", { exact: true }).fill(account.username);
+  await invitee.getByRole("button", { name: "Finish profile", exact: true }).click();
+  await expect(invitee).toHaveURL(WEB_ORIGIN + joinPath);
+  await expect(invitee.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
+  await invitee.getByRole("textbox", { name: "Invitation link or code" }).fill(link);
+  await invitee.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(invitee.getByText("Room handoff: active", { exact: true })).toBeVisible();
+});
+
+test("identity changes and pagehide remove the issued invitation and open confirmations", async ({
+  page,
+}) => {
+  const link = await createRoom(page);
+  await page.getByRole("button", { name: "Close room", exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Invitation link", exact: true })).toHaveCount(0);
+  await assertNoStoredInvitation(page, new URL(link).hash.slice("#invite=".length));
+  await page.reload();
+  await confirm(page, "Replace invitation", "Confirm replacement");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Invitation link", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("grid")).toHaveCount(0);
+});
+
+test("occupied slots and invalid invitations show bounded feedback", async ({
+  page,
+  newContext,
+}) => {
+  await createRoom(page);
+  await page.getByRole("link", { name: "Private rooms", exact: true }).click();
+  await expect(page.getByText(/You already have an unfinished public game/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create room", exact: true })).toHaveCount(0);
+  const guest = await (await newContext()).newPage();
+  await guest.goto(joinPath);
+  await guest.getByRole("textbox", { name: "Invitation link or code" }).fill("not an invitation");
+  await guest.getByRole("button", { name: "Check invitation", exact: true }).click();
+  await expect(guest.getByRole("alert")).toContainText("Enter a valid invitation");
+  await guest.getByRole("textbox", { name: "Invitation link or code" }).fill("A".repeat(43));
+  await guest.getByRole("button", { name: "Check invitation", exact: true }).click();
+  await expect(
+    guest.getByText("This invitation is unavailable. Ask the owner for a new one."),
+  ).toBeVisible();
+});

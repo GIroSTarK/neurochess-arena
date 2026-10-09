@@ -4,7 +4,10 @@ import { type APIRequestContext, expect } from "@playwright/test";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 
-export async function createAccount(request: APIRequestContext) {
+export async function createAccount(
+  request: APIRequestContext,
+  { completeProfile = true }: { completeProfile?: boolean } = {},
+) {
   const email = `${randomUUID()}@example.com`;
   const password = "browser account fixture 🌙";
   const headers = { origin: WEB_ORIGIN };
@@ -37,8 +40,12 @@ export async function createAccount(request: APIRequestContext) {
     ).ok(),
   ).toBe(true);
   const username = "Player_" + randomUUID().slice(0, 8);
-  expect(
-    (await request.post(API_ORIGIN + "/profile/onboarding", { headers, data: { username } })).ok(),
-  ).toBe(true);
+  if (completeProfile) {
+    expect(
+      (
+        await request.post(API_ORIGIN + "/profile/onboarding", { headers, data: { username } })
+      ).ok(),
+    ).toBe(true);
+  }
   return { email, password, username };
 }
