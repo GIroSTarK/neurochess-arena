@@ -20,6 +20,8 @@ import type { CredentialService } from "./credentials/service.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
+import { registerRoomRoutes } from "./rooms/routes.js";
+import type { RoomService } from "./rooms/service.js";
 
 export interface ReadinessProbe {
   check(): Promise<void>;
@@ -33,6 +35,7 @@ export interface BuildAppOptions {
   readonly auth?: AccountAuth;
   readonly profiles?: ProfileService;
   readonly credentials?: CredentialService;
+  readonly rooms?: RoomService;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -84,6 +87,14 @@ export async function buildApp(options: BuildAppOptions) {
   );
 
   if (options.gameApi) {
+    if (options.rooms) {
+      await app.register(registerRoomRoutes, {
+        rooms: options.rooms,
+        guests: options.gameApi.guests,
+        webOrigin: options.webOrigin,
+        ...(options.auth ? { auth: options.auth } : {}),
+      });
+    }
     await app.register(registerGameRoutes, {
       ...options.gameApi,
       webOrigin: options.webOrigin,

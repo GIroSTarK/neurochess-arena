@@ -8,13 +8,10 @@ import {
   expectedAccountSchema,
   gameDeleteRequestSchema,
   gameDetailsSchema,
-  type GameErrorCode,
-  gameErrorResponseSchema,
   gameHistoryClearRequestSchema,
   gameHistoryDeletedResponseSchema,
   gameHistoryQuerySchema,
   gameHistoryResponseSchema,
-  gameIdentityIntentSchema,
   gameInvocationsSchema,
   gameParamsSchema,
   gamePgnResponseSchema,
@@ -32,20 +29,19 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
-import { AUTH_COOKIE_PREFIX } from "../auth/constants.js";
 import type { AccountAuth } from "../auth/service.js";
 import { authenticateGuestRequest, setGuestCookie } from "../guests/http.js";
 import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
+import { publicPrincipalFor } from "../identity/http.js";
 import type { Principal } from "../identity/principal.js";
-import { gameErrorMessages } from "../locales/en.js";
 import {
   AI_TURN_TIMEOUT_MS,
   DISCOVERY_TIMEOUT_MS,
   providerRequestScope,
 } from "../providers/request-scope.js";
 
-import { AiTurnError } from "./ai-turn.js";
-import { GameConflictError, GameRequestError } from "./errors.js";
+import { GameRequestError } from "./errors.js";
+import { gameErrorResponses, handleGameError } from "./http.js";
 import type { GameService } from "./service.js";
 
 export interface GameApiOptions {
@@ -55,29 +51,6 @@ export interface GameApiOptions {
   readonly webOrigin: string;
   readonly providerTimeouts?: { readonly discoveryMs?: number; readonly turnMs?: number };
 }
-
-const errorStatuses = {
-  INVALID_REQUEST: 400,
-  INVALID_UCI: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  PROFILE_REQUIRED: 403,
-  NOT_FOUND: 404,
-  GAME_CONFLICT: 409,
-  INVALID_GAME_STATE: 409,
-  ILLEGAL_MOVE: 422,
-  INTERNAL_SERVER_ERROR: 500,
-} as const satisfies Record<GameErrorCode, number>;
-
-const errorResponses = {
-  400: gameErrorResponseSchema,
-  401: gameErrorResponseSchema,
-  403: gameErrorResponseSchema,
-  404: gameErrorResponseSchema,
-  409: gameErrorResponseSchema,
-  422: gameErrorResponseSchema,
-  500: gameErrorResponseSchema,
-};
 
 export async function registerGameRoutes(
   app: FastifyInstance,
@@ -126,27 +99,7 @@ export async function registerGameRoutes(
       throw new GameRequestError("FORBIDDEN");
     }
   });
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof AiTurnError) {
-      return reply
-        .code(error.code === "AI_PARAMETERS_INVALID" ? 422 : 409)
-        .send(aiErrorResponseSchema.parse({ code: error.code, requestId: request.id }));
-    }
-    const code: GameErrorCode =
-      error instanceof GameRequestError || error instanceof GameConflictError
-        ? error.code
-        : isClientError(error)
-          ? "INVALID_REQUEST"
-          : "INTERNAL_SERVER_ERROR";
-    if (code === "INTERNAL_SERVER_ERROR") request.log.error({ err: error }, "Game request failed");
-    const response = gameErrorResponseSchema.parse({
-      code,
-      message: gameErrorMessages[code],
-      requestId: request.id,
-      ...(error instanceof GameConflictError ? { currentSnapshot: error.currentSnapshot } : {}),
-    });
-    return reply.code(errorStatuses[code]).send(response);
-  });
+  app.setErrorHandler(handleGameError);
 
   async function principalFor(
     request: FastifyRequest,
@@ -159,32 +112,14 @@ export async function registerGameRoutes(
     if (!accountOnly && params.success && (await options.games.isSandboxGame(params.data.gameId))) {
       return authenticateGuestRequest(options.guests, request, reply);
     }
-    const intent = gameIdentityIntentSchema.safeParse(request.headers["x-neurochess-identity"]);
-    const expected = expectedAccountSchema.safeParse(
-      request.headers["x-neurochess-expected-account"],
-    );
-    if (!intent.success || !expected.success) throw new GameRequestError("INVALID_REQUEST");
-    const account = await options.auth?.resolve(
-      new Headers(request.headers.cookie ? { cookie: request.headers.cookie } : {}),
-    );
-    // This assertion can only deny authority derived from the cookie, never grant it.
-    if (expected.data !== undefined && expected.data !== (account?.userId ?? "guest")) {
-      throw new GameRequestError("UNAUTHORIZED");
-    }
-    if (account) return account;
-    if (accountOnly) throw new GameRequestError("UNAUTHORIZED");
-    const hasAccountCookie = Object.keys(request.cookies).some(
-      (name) =>
-        name === `__Secure-${AUTH_COOKIE_PREFIX}.session_token` ||
-        name === `${AUTH_COOKIE_PREFIX}.session_token`,
-    );
-    if (intent.data === "account" || (hasAccountCookie && intent.data !== "guest")) {
-      throw new GameRequestError("UNAUTHORIZED");
-    }
-    return authenticateGuestRequest(options.guests, request, reply);
+    return publicPrincipalFor(options, request, reply, accountOnly);
   }
 
-  const aiErrors = { ...errorResponses, 409: aiErrorResponseSchema, 422: aiErrorResponseSchema };
+  const aiErrors = {
+    ...gameErrorResponses,
+    409: aiErrorResponseSchema,
+    422: aiErrorResponseSchema,
+  };
 
   routes.post(
     "/games/:gameId/delete",
@@ -194,7 +129,7 @@ export async function registerGameRoutes(
         params: gameParamsSchema,
         body: gameDeleteRequestSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameHistoryDeletedResponseSchema, ...errorResponses },
+        response: { 200: gameHistoryDeletedResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -214,7 +149,7 @@ export async function registerGameRoutes(
       schema: {
         body: gameHistoryClearRequestSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameHistoryDeletedResponseSchema, ...errorResponses },
+        response: { 200: gameHistoryDeletedResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -228,7 +163,7 @@ export async function registerGameRoutes(
     {
       schema: {
         querystring: gameHistoryQuerySchema,
-        response: { 200: gameHistoryResponseSchema, ...errorResponses },
+        response: { 200: gameHistoryResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -289,7 +224,7 @@ export async function registerGameRoutes(
       schema: {
         body: aiGameConfigurationSchema,
         querystring: emptyQuerySchema,
-        response: { 201: gameDetailsSchema, ...errorResponses },
+        response: { 201: gameDetailsSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -303,7 +238,7 @@ export async function registerGameRoutes(
     {
       schema: {
         querystring: emptyQuerySchema,
-        response: { 200: unfinishedGameDetailsSchema, ...errorResponses },
+        response: { 200: unfinishedGameDetailsSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => options.games.unfinishedGame(await principalFor(request, reply)),
@@ -315,7 +250,7 @@ export async function registerGameRoutes(
       schema: {
         params: gameParamsSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameDetailsSchema, ...errorResponses },
+        response: { 200: gameDetailsSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -328,7 +263,7 @@ export async function registerGameRoutes(
       schema: {
         params: gameParamsSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameInvocationsSchema, ...errorResponses },
+        response: { 200: gameInvocationsSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -386,7 +321,7 @@ export async function registerGameRoutes(
       schema: {
         body: guestSessionRequestSchema,
         querystring: emptyQuerySchema,
-        response: { 200: guestSessionResponseSchema, ...errorResponses },
+        response: { 200: guestSessionResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -418,7 +353,7 @@ export async function registerGameRoutes(
       schema: {
         body: createGameRequestSchema,
         querystring: emptyQuerySchema,
-        response: { 201: gameSnapshotSchema, ...errorResponses },
+        response: { 201: gameSnapshotSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -436,7 +371,7 @@ export async function registerGameRoutes(
       },
       schema: {
         querystring: emptyQuerySchema,
-        response: { 200: unfinishedGameResponseSchema, ...errorResponses },
+        response: { 200: unfinishedGameResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -467,7 +402,7 @@ export async function registerGameRoutes(
       schema: {
         params: gameParamsSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameReplayResponseSchema, ...errorResponses },
+        response: { 200: gameReplayResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -480,7 +415,7 @@ export async function registerGameRoutes(
       schema: {
         params: gameParamsSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gamePgnResponseSchema, ...errorResponses },
+        response: { 200: gamePgnResponseSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) =>
@@ -493,7 +428,7 @@ export async function registerGameRoutes(
       schema: {
         params: gameParamsSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameSnapshotSchema, ...errorResponses },
+        response: { 200: gameSnapshotSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -509,7 +444,7 @@ export async function registerGameRoutes(
         params: gameParamsSchema,
         body: moveCommandSchema,
         querystring: emptyQuerySchema,
-        response: { 200: gameSnapshotSchema, ...errorResponses },
+        response: { 200: gameSnapshotSchema, ...gameErrorResponses },
       },
     },
     async (request, reply) => {
@@ -520,9 +455,4 @@ export async function registerGameRoutes(
       return options.games.move(principal, request.body);
     },
   );
-}
-
-function isClientError(error: unknown): boolean {
-  if (error === null || typeof error !== "object" || !("statusCode" in error)) return false;
-  return typeof error.statusCode === "number" && error.statusCode >= 400 && error.statusCode < 500;
 }

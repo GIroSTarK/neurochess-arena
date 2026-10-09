@@ -4,6 +4,34 @@ import { describe, expect, it } from "vitest";
 import { createLoggerOptions } from "./logger.js";
 
 describe("secret-safe logging", () => {
+  it("redacts invitation fields and unexpected room URL segments, queries and fragments", () => {
+    const chunks: string[] = [];
+    const invitation = "invitation-canary-secret";
+    const logger = pino(createLoggerOptions("info"), {
+      write(chunk: string) {
+        chunks.push(chunk);
+      },
+    });
+    for (const path of [
+      `/rooms/join/${invitation}`,
+      `/rooms/join#invite=${invitation}`,
+      `/rooms/invitations/resolve?invitation=${invitation}`,
+    ]) {
+      logger.info(
+        {
+          req: { method: "POST", url: path },
+          nested: {
+            invitation,
+            invitationDigest: invitation,
+            invite: invitation,
+            joinedInvitationDigest: invitation,
+          },
+        },
+        "room request",
+      );
+    }
+    expect(chunks.join("")).not.toContain(invitation);
+  });
   it("omits protocol tokens embedded in authentication paths", () => {
     const chunks: string[] = [];
     const logger = pino(createLoggerOptions("info"), {

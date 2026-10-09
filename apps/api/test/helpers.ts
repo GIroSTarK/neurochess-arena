@@ -23,6 +23,7 @@ import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 import type { GuestPrincipal } from "../src/identity/principal.js";
 import { createProfileService } from "../src/profiles/service.js";
+import { createRoomService } from "../src/rooms/service.js";
 
 export const WEB_ORIGIN = "http://localhost:5173";
 export const KNIGHT_CYCLE = ["g1f3", "g8f6", "f3g1", "f6g8"];
@@ -73,6 +74,7 @@ export class ApiHarness {
       logger: options.logger ?? false,
       readiness: database,
       webOrigin: WEB_ORIGIN,
+      rooms: createRoomService(repository),
       ...(options.auth
         ? {
             auth: options.auth(database),

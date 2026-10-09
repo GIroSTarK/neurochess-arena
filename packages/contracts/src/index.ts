@@ -68,7 +68,7 @@ export {
   type GameDetails,
   type UnfinishedGameDetails,
 } from "./game-details.js";
-export { humanGameConfigurationSchema, type HumanGameConfiguration } from "./room.js";
+export * from "./room.js";
 export {
   healthResponseSchema,
   readinessResponseSchema,

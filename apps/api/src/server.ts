@@ -20,6 +20,7 @@ import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
 import { createOpenRouterAdapter } from "./providers/openrouter.js";
+import { createRoomService } from "./rooms/service.js";
 
 async function main(): Promise<void> {
   loadRootEnvironment();
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
     auth: createAccountAuth(database, environment, createAuthEmailSender(environment)),
     profiles: createProfileService(createProfileRepository(database)),
     credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
+    rooms: createRoomService(repository),
     gameApi: {
       games: createGameService(repository, {
         nodeEnv: environment.NODE_ENV,

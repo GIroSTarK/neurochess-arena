@@ -220,7 +220,7 @@ describe("seeded private human game reads", () => {
     });
   });
 
-  it("keeps rooms out of AI execution, invocation reads and expiry, and leaves gameplay gated for later PRs", async () => {
+  it("keeps rooms out of AI execution, invocation reads, expiry and generic Pause/Resume", async () => {
     const { api, owner, snapshot, service } = await fixture();
     const controller = {
       gameId: snapshot.gameId,
@@ -246,19 +246,16 @@ describe("seeded private human game reads", () => {
         { apiKey: "fixture", signal: new AbortController().signal },
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    for (const action of ["pause", "resume", "abort", "resign"] as const) {
+    for (const action of ["pause", "resume"] as const) {
       await expect(
         service.lifecycle(owner.principal, {
           gameId: snapshot.gameId,
           commandId: randomUUID(),
           expectedVersion: 0,
-          ...(action === "resign" ? { action, losingColor: "white" as const } : { action }),
+          action,
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
-    await expect(service.move(owner.principal, command(snapshot, "e2e4"))).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
     expect(await api.repository.expiredAiControllers()).not.toContainEqual(
       expect.objectContaining({ gameId: snapshot.gameId }),
     );

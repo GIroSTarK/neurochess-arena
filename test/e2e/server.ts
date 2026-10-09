@@ -21,6 +21,7 @@ import { createCredentialService } from "../../apps/api/src/credentials/service.
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
+import { createRoomService } from "../../apps/api/src/rooms/service.js";
 import { integrationDatabase } from "../database.js";
 
 import { accountHarness } from "./account-harness.js";
@@ -127,6 +128,7 @@ async function main() {
       auth: accounts.auth,
       profiles: createProfileService(createProfileRepository(database)),
       credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
+      rooms: createRoomService(repository),
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {

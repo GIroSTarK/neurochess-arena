@@ -55,6 +55,9 @@ export const gameCommandKind = pgEnum("game_command_kind", [
   "abort",
   "resign",
   "technical_loss",
+  "room_join",
+  "invitation_replace",
+  "invitation_revoke",
 ]);
 
 export const guestSessions = pgTable(

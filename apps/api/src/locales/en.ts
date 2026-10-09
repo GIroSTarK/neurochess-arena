@@ -1,4 +1,19 @@
-import type { AuthErrorCode, GameErrorCode, ProfileErrorCode } from "@neurochess/contracts";
+import type {
+  AuthErrorCode,
+  GameErrorCode,
+  ProfileErrorCode,
+  RoomErrorCode,
+} from "@neurochess/contracts";
+
+export const roomErrorMessages: Readonly<Record<RoomErrorCode, string>> = {
+  ROOM_OPERATION_UNAVAILABLE:
+    "This room creation request is unavailable. Start a new creation action.",
+  ROOM_OPERATION_CONFLICT: "This creation request was already used with a different color.",
+  ROOM_UNAVAILABLE: "This invitation is unavailable.",
+  ROOM_SELF_JOIN: "You already own this room. Share the invitation with another player.",
+  ROOM_ACCOUNT_UNVERIFIED: "Verify your email before using private rooms.",
+  RATE_LIMITED: "Too many invitation requests. Try again later.",
+};
 
 export const profileErrorMessages: Readonly<Record<ProfileErrorCode, string>> = {
   PROFILE_INVALID_REQUEST: "Choose a valid username or remove your provider avatar.",

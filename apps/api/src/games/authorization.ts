@@ -68,7 +68,7 @@ function ownsGame(principal: GameIdentity, game: StoredGame): boolean {
     : !game.isSandbox && game.ownerUserId === principal.userId;
 }
 
-function occupiesSeat(principal: GameIdentity, seat: StoredParticipant): boolean {
+export function occupiesSeat(principal: GameIdentity, seat: StoredParticipant): boolean {
   return isGuestPrincipal(principal)
     ? seat.guestSessionId === principal.guestSessionId
     : seat.userId === principal.userId;

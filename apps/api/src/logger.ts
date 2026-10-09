@@ -2,7 +2,7 @@ import type { LoggerOptions } from "pino";
 
 const redactedValue = "[Redacted]";
 const secretKeyPattern =
-  /api[-_]?key|authorization|cookie|credential|database[-_]?url|password|secret|session|token/i;
+  /api[-_]?key|authorization|cookie|credential|database[-_]?url|password|secret|session|token|invitation|invite/i;
 
 export function createLoggerOptions(level: string): LoggerOptions {
   return {
@@ -103,6 +103,17 @@ function serializeError(error: unknown): Record<string, unknown> {
 function stripQuery(value: string): string {
   // Email/auth protocols may put bearer tokens in path segments as well as queries.
   const authPath = value.split("?")[0]?.split("#")[0];
+  if (authPath?.startsWith("/rooms/")) {
+    if (
+      ["/rooms/creation-operation", "/rooms/invitations/resolve", "/rooms/join"].includes(
+        authPath,
+      ) ||
+      /^\/rooms\/[0-9a-f-]{36}(?:\/invitation)?$/i.test(authPath)
+    ) {
+      return authPath;
+    }
+    return "/rooms/[Redacted]";
+  }
   if (
     authPath?.startsWith("/credentials/") &&
     !["/credentials/revoke", "/credentials/clear"].includes(authPath)
@@ -115,14 +126,18 @@ function stripQuery(value: string): string {
   ) {
     return "/api/auth/[Redacted]";
   }
-  if (value.startsWith("/") && value.includes("?")) {
-    return value.slice(0, value.indexOf("?"));
+  if (value.startsWith("/")) {
+    return authPath ?? value;
   }
 
   try {
     const url = new URL(value);
     if (url.protocol === "http:" || url.protocol === "https:") {
-      if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/credentials/")) {
+      if (
+        url.pathname.startsWith("/api/auth/") ||
+        url.pathname.startsWith("/credentials/") ||
+        url.pathname.startsWith("/rooms/")
+      ) {
         url.pathname = stripQuery(url.pathname);
       }
       url.hash = "";

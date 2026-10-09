@@ -7,14 +7,7 @@ import {
   terminationReasonSchema,
 } from "./game.js";
 import { gameConfigurationSchema } from "./game-details.js";
-import { profileUsernameSchema } from "./profile.js";
-
-const historyPlayerSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("account"), username: profileUsernameSchema }),
-  z.strictObject({ kind: z.literal("guest") }),
-  z.strictObject({ kind: z.literal("deleted") }),
-  z.strictObject({ kind: z.literal("unassigned") }),
-]);
+import { humanPlayerSchema } from "./game-player.js";
 
 export const historyTimestampSchema = z.iso
   .datetime({ precision: 6 })
@@ -41,8 +34,8 @@ export const gameHistoryEntrySchema = z
     finishedAt: historyTimestampSchema,
     configuration: gameConfigurationSchema,
     players: z.strictObject({
-      white: historyPlayerSchema.nullable(),
-      black: historyPlayerSchema.nullable(),
+      white: humanPlayerSchema.nullable(),
+      black: humanPlayerSchema.nullable(),
     }),
     state: z.enum(["completed", "aborted"]),
     result: gameResultSchema,

@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { type ChessGame, createGame, restoreGame } from "@neurochess/chess";
+import { createGame } from "@neurochess/chess";
 import {
   aiControllerRequestSchema,
   type AiGameConfiguration,
   aiGameConfigurationSchema,
   type AiProvider,
   type AiTurnCommand,
-  type GameConfiguration,
   type GameDetails,
   type GameHistoryDeletedResponse,
   type GameHistoryQuery,
@@ -15,7 +14,6 @@ import {
   type GameHistoryResponse,
   gameHistoryResponseSchema,
   type GameInvocations,
-  gameLifecycleSchema,
   type GamePgnResponse,
   type GameReplayResponse,
   type GameSnapshot,
@@ -26,14 +24,7 @@ import {
   type UnfinishedGameDetails,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
-import type {
-  GameReader,
-  GameRepository,
-  GameTransaction,
-  StoredGame,
-  StoredMove,
-  StoredParticipant,
-} from "@neurochess/database";
+import type { GameReader, GameRepository, GameTransaction, StoredGame } from "@neurochess/database";
 
 import type { CredentialCipher } from "../credentials/crypto.js";
 import {
@@ -46,18 +37,14 @@ import { lockIdentity, lockPrincipal, requireActivePrincipal } from "../identity
 import { discoverModels } from "../providers/discovery.js";
 
 import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
-import {
-  authorizeGameControl,
-  authorizeGameRead,
-  authorizeHumanSeat,
-  ownerOf,
-} from "./authorization.js";
+import { authorizeGameControl, authorizeHumanSeat, ownerOf } from "./authorization.js";
 import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
 import { configurationOf, participantsFor } from "./configuration.js";
 import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 import { createHistoryDeletion } from "./history-deletion.js";
 import { readInvocations } from "./invocations.js";
+import { restoreAuthorizedGame } from "./restoration.js";
 
 export interface GameService {
   cleanupSharedRooms(): Promise<void>;
@@ -99,14 +86,6 @@ export interface GameService {
   pgn(principal: Principal, gameId: string): Promise<GamePgnResponse>;
 }
 
-interface RestoredGame {
-  readonly game: ChessGame;
-  readonly snapshot: GameSnapshot;
-  readonly moves: StoredMove[];
-  readonly participants: StoredParticipant[];
-  readonly configuration: GameConfiguration | null;
-}
-
 export function createGameService(
   repository: GameRepository,
   options: {
@@ -122,60 +101,8 @@ export function createGameService(
   const leaseMs = options.controllerLeaseMs ?? CONTROLLER_LEASE_MS;
   const useCredential = createProviderCredentialAccess(repository, options.credentialCipher);
 
-  async function restoreAuthorized(
-    reader: GameReader,
-    principal: GameIdentity,
-    stored: StoredGame,
-  ): Promise<RestoredGame> {
-    const participants = await reader.getParticipants(stored.id);
-    // Never reconstruct or disclose a private position before establishing access.
-    authorizeGameRead(
-      principal,
-      stored,
-      participants,
-      sandboxEnabled,
-      stored.mode === "human_vs_human" && principal.kind === "account"
-        ? await reader.hasRetainedRoomAccess(stored.id, principal.userId)
-        : false,
-    );
-    if (participants.length !== 2 || new Set(participants.map((seat) => seat.color)).size !== 2) {
-      throw new GameIntegrityError();
-    }
-    const room = stored.mode === "human_vs_human" ? await reader.getRoom(stored.id) : undefined;
-    const configuration = configurationOf(stored, participants, room);
-    const moves = await reader.getMoves(stored.id);
-    if (room?.state === "waiting" && moves.length !== 0) throw new GameIntegrityError();
-    const lifecycle = gameLifecycleSchema.safeParse({
-      state: stored.state,
-      result: stored.result,
-      terminationReason: stored.terminationReason,
-    });
-    if (!lifecycle.success) throw new GameIntegrityError();
-    const restored = restoreGame({
-      moves: moves.map((move) => move.uci),
-      lifecycle: lifecycle.data,
-    });
-    if (!restored.ok) throw new GameIntegrityError();
-    const domain = restored.value.snapshot();
-    if (domain.fen !== stored.fen || domain.pgn !== stored.pgn) throw new GameIntegrityError();
-    let previousVersion = 0;
-    for (const [index, move] of moves.entries()) {
-      const replayed = domain.moves[index];
-      if (
-        replayed?.ply !== move.ply ||
-        replayed.san !== move.san ||
-        replayed.fen !== move.fen ||
-        !Number.isSafeInteger(move.version) ||
-        move.version <= previousVersion ||
-        move.version > stored.version
-      ) {
-        throw new GameIntegrityError();
-      }
-      previousVersion = move.version;
-    }
-    const snapshot = transportSnapshot(stored.id, stored.version, domain);
-    return { game: restored.value, snapshot, moves, participants, configuration };
-  }
+  const restoreAuthorized = (reader: GameReader, principal: GameIdentity, stored: StoredGame) =>
+    restoreAuthorizedGame(reader, principal, stored, sandboxEnabled);
 
   function readDetails(principal: Principal, gameId: string): Promise<GameDetails> {
     return repository.read(async (reader) => {
@@ -199,7 +126,12 @@ export function createGameService(
     return snapshot;
   }
 
-  async function prepareCommand(tx: GameTransaction, principal: Principal, command: AiTurnCommand) {
+  async function prepareCommand(
+    tx: GameTransaction,
+    principal: Principal,
+    command: AiTurnCommand,
+    allowRoom = false,
+  ) {
     if ((await tx.getGame(command.gameId))?.mode === "human_vs_human") await tx.lockSharedRooms();
     if (!(await lockPrincipal(tx, principal))) {
       throw new GameRequestError("UNAUTHORIZED");
@@ -208,8 +140,7 @@ export function createGameService(
     await requireActivePrincipal(tx, principal);
     if (!stored) throw new GameRequestError("NOT_FOUND");
     const restored = await restoreAuthorized(tx, principal, stored);
-    // Public room commands are enabled with the room admission API in P4-05.
-    if (stored.mode === "human_vs_human") throw new GameRequestError("FORBIDDEN");
+    if (stored.mode === "human_vs_human" && !allowRoom) throw new GameRequestError("FORBIDDEN");
     // Accepted IDs span every command kind, including retries after completion.
     if (
       command.expectedVersion !== stored.version ||
@@ -222,7 +153,7 @@ export function createGameService(
 
   function mutate(principal: Principal, command: MoveCommand | LifecycleCommand) {
     return repository.write(async (tx) => {
-      const restored = await prepareCommand(tx, principal, command);
+      const restored = await prepareCommand(tx, principal, command, true);
       const { stored } = restored;
       const commandId = command.commandId.toLowerCase();
       if (
@@ -232,6 +163,14 @@ export function createGameService(
         throw new GameConflictError(restored.snapshot);
       }
       const isMove = "move" in command;
+      if (stored.mode === "human_vs_human" && !isMove) {
+        if (command.action === "pause" || command.action === "resume") {
+          throw new GameRequestError("FORBIDDEN");
+        }
+        if (command.action === "resign" && stored.state !== "active") {
+          throw new GameRequestError("INVALID_GAME_STATE");
+        }
+      }
       if (isMove) {
         if (stored.state !== "active") throw new GameRequestError("INVALID_GAME_STATE");
         authorizeHumanSeat(
@@ -274,13 +213,15 @@ export function createGameService(
         }
         throw new GameIntegrityError();
       }
-      return persistCommand(
+      const snapshot = await persistCommand(
         tx,
         stored,
         commandId,
         isMove ? "move" : command.action,
         accepted.value,
       );
+      await requireActivePrincipal(tx, principal);
+      return snapshot;
     });
   }
 

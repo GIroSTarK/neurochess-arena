@@ -134,6 +134,13 @@
       "when": 1791569942965,
       "tag": "0018_shared_room_history",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791579039701,
+      "tag": "0019_room_http_commands",
+      "breakpoints": true
     }
   ]
 }

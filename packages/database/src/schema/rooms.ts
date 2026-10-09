@@ -14,9 +14,20 @@ export const rooms = pgTable(
     state: text("state", { enum: ["waiting", "joined"] }).notNull(),
     invitationDigest: text("invitation_digest"),
     joinedAt: timestamp("joined_at", { withTimezone: true }),
+    joinCommandId: uuid("join_command_id"),
+    // A consumed receipt permits only the same still-authorized opponent to recover admission.
+    joinedInvitationDigest: text("joined_invitation_digest"),
   },
   (table) => [
     uniqueIndex("rooms_invitation_digest_unique").on(table.invitationDigest),
+    uniqueIndex("rooms_join_command_unique").on(table.joinCommandId),
+    check(
+      "rooms_join_receipt_check",
+      sql`
+      (${table.joinCommandId} is null and ${table.joinedInvitationDigest} is null)
+      or (${table.state} = 'joined' and ${table.joinCommandId} is not null
+        and ${table.joinedInvitationDigest} is not null and ${table.joinedInvitationDigest} ~ '^[0-9a-f]{64}$')`,
+    ),
     check(
       "rooms_invitation_digest_check",
       sql`${table.invitationDigest} is null or ${table.invitationDigest} ~ '^[0-9a-f]{64}$'`,

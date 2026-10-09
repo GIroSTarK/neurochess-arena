@@ -1,0 +1,149 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  gameSnapshotSchema,
+  roomCreationOperationSchema,
+  roomIssuedResponseSchema,
+  roomViewSchema,
+} from "@neurochess/contracts";
+import type { Page } from "@playwright/test";
+
+import { createAccount } from "./account-helpers";
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
+import { expect, test } from "./fixtures";
+
+async function post(page: Page, path: string, body: object) {
+  return page.evaluate(
+    async ({ url, body }) => {
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return { status: response.status, body: (await response.json()) as unknown };
+    },
+    { url: API_ORIGIN + path, body },
+  );
+}
+
+async function read(page: Page, path: string) {
+  return page.evaluate(async (url) => {
+    const response = await fetch(url, { credentials: "include" });
+    return { status: response.status, body: (await response.json()) as unknown };
+  }, API_ORIGIN + path);
+}
+
+test("two browser identities complete a private HTTP room with a Black owner and guest White", async ({
+  page,
+  newContext,
+}) => {
+  await createAccount(page.request);
+  await page.goto("/account");
+  const guestContext = await newContext();
+  const guest = await guestContext.newPage();
+  await guest.goto("/");
+  const operationResult = await post(page, "/rooms/creation-operation", {});
+  expect(operationResult.status).toBe(200);
+  const operation = roomCreationOperationSchema.parse(operationResult.body);
+  const creation = { operationId: operation.operationId, ownerColor: "black" };
+  const created = await post(page, "/rooms", creation);
+  expect(created.status).toBe(200);
+  const { room, invitation } = roomIssuedResponseSchema.parse(created.body);
+  const gameId = room.snapshot.gameId;
+  expect((await guest.request.get(API_ORIGIN + `/rooms/${gameId}`)).status()).toBe(401);
+  expect((await post(guest, "/rooms/invitations/resolve", { invitation })).body).toEqual({
+    status: "joinable",
+  });
+  expect((await guestContext.cookies()).some((cookie) => cookie.name.includes("guest"))).toBe(
+    false,
+  );
+  expect((await post(guest, "/guest-session", {})).status).toBe(200);
+  const join = { invitation, commandId: randomUUID() };
+  const admitted = await post(guest, "/rooms/join", join);
+  expect(admitted.status).toBe(200);
+  let snapshot = roomViewSchema.parse(admitted.body).snapshot;
+  expect((await post(guest, "/rooms/join", join)).body).toEqual(admitted.body);
+  expect(
+    roomIssuedResponseSchema.parse((await post(page, "/rooms", creation)).body).invitation,
+  ).toBeNull();
+  for (const move of ["f2f3", "e7e5", "g2g4", "d8h4"]) {
+    const player = snapshot.turn === "white" ? guest : page;
+    const accepted = await post(player, `/games/${gameId}/moves`, {
+      gameId,
+      expectedVersion: snapshot.version,
+      commandId: randomUUID(),
+      move,
+    });
+    expect(accepted.status).toBe(200);
+    snapshot = gameSnapshotSchema.parse(accepted.body);
+  }
+  expect(snapshot).toMatchObject({
+    state: "completed",
+    result: "0-1",
+    terminationReason: "checkmate",
+  });
+  for (const player of [page, guest]) {
+    expect(roomViewSchema.parse((await read(player, `/rooms/${gameId}`)).body).snapshot).toEqual(
+      snapshot,
+    );
+    expect((await read(player, `/games/${gameId}/pgn`)).body).toEqual({
+      gameId,
+      version: snapshot.version,
+      pgn: snapshot.pgn,
+    });
+    expect(player.url()).not.toContain(invitation!);
+    expect(
+      await player.evaluate(() =>
+        JSON.stringify({
+          local: Object.entries(localStorage),
+          session: Object.entries(sessionStorage),
+        }),
+      ),
+    ).not.toContain(invitation!);
+  }
+  expect((await post(guest, "/rooms/invitations/resolve", { invitation })).body).toEqual({
+    status: "unavailable",
+  });
+  await page.goto("/history");
+  await expect(page.getByText("Guest player", { exact: true })).toBeVisible();
+});
+
+test("two account browsers preserve private history when the owner closes an HTTP room", async ({
+  page,
+  newContext,
+}) => {
+  const owner = await createAccount(page.request);
+  await page.goto("/account");
+  const other = await (await newContext()).newPage();
+  const opponent = await createAccount(other.request);
+  await other.goto("/account");
+  const operation = roomCreationOperationSchema.parse(
+    (await post(page, "/rooms/creation-operation", {})).body,
+  );
+  const { room, invitation } = roomIssuedResponseSchema.parse(
+    (await post(page, "/rooms", { operationId: operation.operationId, ownerColor: "white" })).body,
+  );
+  const gameId = room.snapshot.gameId;
+  const joined = await post(other, "/rooms/join", { invitation, commandId: randomUUID() });
+  expect(joined.status).toBe(200);
+  const command = { gameId, expectedVersion: 1, commandId: randomUUID(), action: "abort" };
+  expect(
+    (
+      await other.request.post(API_ORIGIN + `/games/${gameId}/lifecycle`, {
+        headers: { origin: WEB_ORIGIN },
+        data: command,
+      })
+    ).status(),
+  ).toBe(403);
+  expect((await post(page, `/games/${gameId}/lifecycle`, command)).status).toBe(200);
+  await other.reload();
+  expect(roomViewSchema.parse((await read(other, `/rooms/${gameId}`)).body).snapshot.state).toBe(
+    "aborted",
+  );
+  for (const player of [page, other]) {
+    await player.goto("/history");
+    await expect(player.getByText(owner.username, { exact: true }).first()).toBeVisible();
+    await expect(player.getByText(opponent.username, { exact: true }).first()).toBeVisible();
+  }
+});

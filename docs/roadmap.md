@@ -129,7 +129,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 ## Phase 4 — Private online human games
 
-**Status:** P4-01 through P4-04 milestones complete. [ADR-0018](decisions/0018-private-room-lifecycle-and-shared-retention.md) defines the accepted policies. Typed human-game persistence and participant-wide unfinished slots are implemented. Shared history now has independent retained access, private replay/PGN removal, current participant labels, and atomic account deletion with abort, anonymization and slot release. PostgreSQL tests cover deletion/completion races, rollback, populated upgrades and renewal-safe guest cleanup; desktop/mobile tests cover shared history and account deletion. Public room commands and production entry remain disabled pending P4-05 and the subsequent API/UI work.
+**Status:** P4-01 through P4-05 milestones complete. [ADR-0018](decisions/0018-private-room-lifecycle-and-shared-retention.md) defines the accepted policies. Typed persistence, participant-wide unfinished slots and independent shared retention are implemented. The [room HTTP API](development.md#private-room-http-api) now supports bounded creation retries, private invitations, atomic account/guest joining, own-seat moves/resignation and owner closure. PostgreSQL tests verify concurrency, rollback, private access and history restoration; two independent browser identities can complete or close rooms through HTTP. WebSocket delivery and production room entry/gameplay remain for P4-06 through P4-09; the full Phase 4 exit is still pending.
 
 Deliverables:
 

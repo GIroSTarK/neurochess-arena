@@ -27,6 +27,12 @@ export async function persistCommand(
       await tx.clearAiController(stored.id);
     }
   }
+  if (
+    stored.mode === "human_vs_human" &&
+    (snapshot.state === "completed" || snapshot.state === "aborted")
+  ) {
+    await tx.setRoomInvitation(stored.id, null);
+  }
   return snapshot;
 }
 
