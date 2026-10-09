@@ -7,18 +7,22 @@ import {
 } from "@neurochess/contracts";
 import type WebSocket from "ws";
 
-import { GameRequestError } from "../games/errors.js";
 import type { Principal } from "../identity/principal.js";
-import { RoomRequestError } from "../rooms/errors.js";
 import type { RoomService } from "../rooms/service.js";
 
+import { watchRoomLiveness } from "./liveness.js";
+import { createRoomPresence } from "./presence.js";
 import type { RoomEvents } from "./room-events.js";
+import { createRoomSynchronization } from "./synchronization.js";
 
 export const ROOM_MESSAGE_BYTES = 4096;
 export const roomConnectionLimits = {
   handshakeMs: 5000,
   subscriptionMs: 5000,
   deliveryMs: 5000,
+  heartbeatMs: 15_000,
+  pongTimeoutMs: 10_000,
+  reconciliationMs: 15_000,
   maxConnections: 1024,
   maxConnectionsPerIdentity: 8,
   maxBufferedBytes: 1024 * 1024,
@@ -41,9 +45,12 @@ export function createRoomConnections(
   const limits = { ...roomConnectionLimits, ...overrides };
   const connections = new Map<Duplex, Connection>();
   let closed = false;
-  const unsubscribe = events.subscribe((gameId) => {
+  function refresh(gameId?: string) {
+    if (closed) return;
     for (const connection of connections.values()) connection.refresh?.(gameId);
-  });
+  }
+  const unsubscribe = events.subscribe(refresh);
+  const presence = createRoomPresence(refresh);
 
   function release(transport: Duplex) {
     const connection = connections.get(transport);
@@ -91,18 +98,28 @@ export function createRoomConnections(
       clearTimeout(connection.timer);
       let stopped = false;
       let gameId: string | undefined;
-      let running = false;
-      let pending = false;
-      let lastVersion = -1;
-      let lastProjection: string | undefined;
-      let deliveryTimer: ReturnType<typeof setTimeout> | undefined;
-      const isStopped = () => stopped;
+      let synchronization: ReturnType<typeof createRoomSynchronization> | undefined;
+      const reconciliation = setInterval(
+        () => synchronization?.refresh(true),
+        limits.reconciliationMs,
+      );
+      reconciliation.unref();
+      const stopLiveness = watchRoomLiveness(
+        socket,
+        limits.heartbeatMs,
+        limits.pongTimeoutMs,
+        () => {
+          stop();
+          socket.terminate();
+        },
+      );
 
       function stop() {
         stopped = true;
-        pending = false;
         clearTimeout(connection?.timer);
-        clearTimeout(deliveryTimer);
+        clearInterval(reconciliation);
+        stopLiveness();
+        synchronization?.stop();
       }
       connection.stop = stop;
 
@@ -129,48 +146,9 @@ export function createRoomConnections(
         return true;
       }
 
-      async function drain() {
-        if (running || stopped || !gameId) return;
-        running = true;
-        try {
-          while (pending && !isStopped()) {
-            pending = false;
-            deliveryTimer = setTimeout(() => close(1013), limits.deliveryMs);
-            deliveryTimer.unref();
-            const room = await rooms.read(principal, gameId);
-            // Snapshot reads are repeatable-read. The final authorization uses
-            // one current statement so a stale read cannot authorize delivery.
-            await rooms.authorize(principal, gameId);
-            if (isStopped()) return;
-            const projection = JSON.stringify(room);
-            if (room.snapshot.version >= lastVersion && projection !== lastProjection) {
-              if (!send({ protocol: 1, type: lastVersion < 0 ? "snapshot" : "update", room })) {
-                return;
-              }
-              lastVersion = room.snapshot.version;
-              lastProjection = projection;
-              clearTimeout(connection?.timer);
-            }
-            clearTimeout(deliveryTimer);
-          }
-        } catch (error) {
-          if (error instanceof GameRequestError || error instanceof RoomRequestError) {
-            close(1008, { protocol: 1, type: "access_lost" });
-          } else {
-            close(1011, { protocol: 1, type: "error", code: "UNAVAILABLE" });
-          }
-        } finally {
-          clearTimeout(deliveryTimer);
-          running = false;
-        }
-      }
-
       connection.refresh = (changedGameId) => {
         if (!gameId || (changedGameId !== undefined && changedGameId !== gameId) || stopped) return;
-        // Coalesce notifications, not snapshots: at most one pending read per
-        // recipient. Installation precedes the baseline read, so no commit is lost.
-        pending = true;
-        void drain();
+        synchronization?.refresh();
       };
       connection.timer = setTimeout(
         () => close(1008, { protocol: 1, type: "error", code: "INVALID_MESSAGE" }),
@@ -189,6 +167,16 @@ export function createRoomConnections(
             return;
           }
           gameId = parsed.data.gameId.toLowerCase();
+          synchronization = createRoomSynchronization({
+            rooms,
+            principal,
+            gameId,
+            presence,
+            send,
+            close,
+            deliveryMs: limits.deliveryMs,
+            synchronized: () => clearTimeout(connection.timer),
+          });
           connection.refresh?.(gameId);
         } catch {
           close(1008, { protocol: 1, type: "error", code: "INVALID_MESSAGE" });

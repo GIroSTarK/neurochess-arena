@@ -313,7 +313,10 @@ async function connect(api: TestApi, cookie: string, origin = WEB_ORIGIN) {
   let notify: (() => void) | undefined;
   socket.on("message", (data) => {
     if (!Buffer.isBuffer(data)) throw new Error("Unexpected socket frame encoding");
-    messages.push(roomServerMessageSchema.parse(JSON.parse(data.toString())));
+    const message = roomServerMessageSchema.parse(JSON.parse(data.toString()));
+    // This suite checks game delivery; recovery/presence have their own suites.
+    if (message.type === "presence" || message.type === "revision") return;
+    messages.push(message);
     notify?.();
   });
   const closed = new Promise<number>((resolve) => socket.once("close", resolve));

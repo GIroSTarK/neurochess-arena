@@ -17,6 +17,19 @@ export const roomServerMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ protocol: z.literal(1), type: z.literal("update"), room: roomViewSchema }),
   z.strictObject({
     protocol: z.literal(1),
+    type: z.literal("presence"),
+    gameId: gameIdSchema,
+    sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    online: z.strictObject({ white: z.boolean(), black: z.boolean() }),
+  }),
+  z.strictObject({
+    protocol: z.literal(1),
+    type: z.literal("revision"),
+    gameId: gameIdSchema,
+    version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  }),
+  z.strictObject({
+    protocol: z.literal(1),
     type: z.literal("error"),
     code: z.enum(["INVALID_MESSAGE", "UNAVAILABLE"]),
   }),

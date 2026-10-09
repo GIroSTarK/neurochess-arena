@@ -125,6 +125,7 @@ async function main() {
 
   async function start() {
     app = await buildApp({
+      roomRealtimeLimits: { heartbeatMs: 250, pongTimeoutMs: 1000, reconciliationMs: 250 },
       readiness: database,
       webOrigin: WEB_ORIGIN,
       auth: accounts.auth,

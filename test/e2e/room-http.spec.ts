@@ -66,7 +66,10 @@ async function socketRoom(
 ) {
   const latest = async () => {
     const frames = await client.evaluate(({ messages }) => messages);
-    return frames.map((message) => roomServerMessageSchema.parse(message)).at(-1);
+    return frames
+      .map((message) => roomServerMessageSchema.parse(message))
+      .filter((message) => "room" in message)
+      .at(-1);
   };
   await expect
     .poll(async () => {
@@ -88,6 +91,21 @@ async function closeSocket(client: JSHandle<{ socket: WebSocket; messages: unkno
       }),
   );
   await client.dispose();
+}
+
+async function socketPresence(
+  client: JSHandle<{ socket: WebSocket; messages: unknown[] }>,
+  online: { white: boolean; black: boolean },
+) {
+  await expect
+    .poll(async () => {
+      const messages = await client.evaluate(({ messages }) => messages);
+      return messages
+        .map((message) => roomServerMessageSchema.parse(message))
+        .filter((message) => message.type === "presence")
+        .at(-1)?.online;
+    })
+    .toEqual(online);
 }
 
 test("two browser identities complete a private HTTP room with a Black owner and guest White", async ({
@@ -198,6 +216,7 @@ test("two account browsers preserve private history when the owner closes an HTT
   const ownerSocket = await subscribe(page, gameId);
   const opponentSocket = await subscribe(other, gameId);
   for (const socket of [ownerSocket, opponentSocket]) await socketRoom(socket, 1);
+  await socketPresence(ownerSocket, { white: true, black: true });
   const command = { gameId, expectedVersion: 1, commandId: randomUUID(), action: "abort" };
   expect(
     (
@@ -207,11 +226,14 @@ test("two account browsers preserve private history when the owner closes an HTT
       })
     ).status(),
   ).toBe(403);
+  await closeSocket(opponentSocket);
+  await socketPresence(ownerSocket, { white: true, black: false });
   expect((await post(page, `/games/${gameId}/lifecycle`, command)).status).toBe(200);
-  for (const socket of [ownerSocket, opponentSocket]) {
+  const restoredOpponent = await subscribe(other, gameId);
+  for (const socket of [ownerSocket, restoredOpponent]) {
     expect((await socketRoom(socket, 2)).snapshot.state).toBe("aborted");
   }
-  await Promise.all([closeSocket(ownerSocket), closeSocket(opponentSocket)]);
+  await Promise.all([closeSocket(ownerSocket), closeSocket(restoredOpponent)]);
   await other.reload();
   expect(roomViewSchema.parse((await read(other, `/rooms/${gameId}`)).body).snapshot.state).toBe(
     "aborted",
@@ -221,4 +243,66 @@ test("two account browsers preserve private history when the owner closes an HTT
     await expect(player.getByText(owner.username, { exact: true }).first()).toBeVisible();
     await expect(player.getByText(opponent.username, { exact: true }).first()).toBeVisible();
   }
+});
+
+test("native room sockets aggregate tabs and resynchronize after both browsers disconnect", async ({
+  page,
+  newContext,
+}) => {
+  await createAccount(page.request);
+  await page.goto("/account");
+  const secondTab = await page.context().newPage();
+  await secondTab.goto("/account");
+  const guest = await (await newContext()).newPage();
+  await guest.goto("/");
+  const operation = roomCreationOperationSchema.parse(
+    (await post(page, "/rooms/creation-operation", {})).body,
+  );
+  const { room, invitation } = roomIssuedResponseSchema.parse(
+    (await post(page, "/rooms", { operationId: operation.operationId, ownerColor: "white" })).body,
+  );
+  const gameId = room.snapshot.gameId;
+  expect((await post(guest, "/guest-session", {})).status).toBe(200);
+  expect((await post(guest, "/rooms/join", { invitation, commandId: randomUUID() })).status).toBe(
+    200,
+  );
+  const first = await subscribe(page, gameId);
+  const second = await subscribe(secondTab, gameId);
+  const observer = await subscribe(guest, gameId);
+  for (const socket of [first, second, observer]) await socketRoom(socket, 1);
+  await socketPresence(observer, { white: true, black: true });
+  await closeSocket(first);
+  const revisionCount = await observer.evaluate(
+    ({ messages }) =>
+      messages.filter((message) => (message as { type: string }).type === "revision").length,
+  );
+  await expect
+    .poll(() =>
+      observer.evaluate(
+        ({ messages }) =>
+          messages.filter((message) => (message as { type: string }).type === "revision").length,
+      ),
+    )
+    .toBeGreaterThan(revisionCount);
+  await socketPresence(observer, { white: true, black: true });
+  await closeSocket(second);
+  await socketPresence(observer, { white: false, black: true });
+  await closeSocket(observer);
+  await page.reload();
+  const returned = await subscribe(page, gameId);
+  expect((await socketRoom(returned, 1)).snapshot.state).toBe("active");
+  await socketPresence(returned, { white: true, black: false });
+  const accepted = await post(page, `/games/${gameId}/moves`, {
+    gameId,
+    expectedVersion: 1,
+    commandId: randomUUID(),
+    move: "e2e4",
+  });
+  expect(accepted.status).toBe(200);
+  await guest.reload();
+  const opponent = await subscribe(guest, gameId);
+  expect((await socketRoom(opponent, 2)).snapshot).toEqual(gameSnapshotSchema.parse(accepted.body));
+  await socketPresence(returned, { white: true, black: true });
+  await Promise.all([closeSocket(returned), closeSocket(opponent)]);
+  await secondTab.close();
 });
