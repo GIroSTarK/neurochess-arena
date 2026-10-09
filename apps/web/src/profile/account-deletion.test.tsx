@@ -60,7 +60,8 @@ it.each(["success", "failure", "lost response", "stale"])(
     await userEvent.click(trigger);
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
-    expect(dialog).toHaveTextContent(/unfinished games/);
+    expect(dialog).toHaveTextContent(/unfinished shared human games are aborted/i);
+    expect(dialog).toHaveTextContent(/other participants keep anonymized history/i);
     expect(dialog).toHaveTextContent(/backups/);
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(trigger).toHaveFocus();

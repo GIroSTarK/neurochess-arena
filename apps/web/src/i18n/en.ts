@@ -11,7 +11,7 @@ export const en = {
     title: "Private game history",
     navigation: "History",
     description:
-      "Your completed and aborted games, newest first. Open a replay to review moves, commentary and PGN. Only you can access these games.",
+      "Your completed and aborted games, newest first. Open a replay to review moves, commentary and PGN. Human games are private to their participants.",
     guest:
       "Sign in to keep a private game history. Guest games stay separate from accounts and do not appear here.",
     arena: "Return to Arena",
@@ -23,6 +23,7 @@ export const en = {
     states: { completed: "Completed", aborted: "Aborted" },
     modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human", human_vs_human: "Human vs human" },
     model: "{{model}} · {{provider}}",
+    players: { guest: "Guest player", deleted: "Deleted player", unassigned: "No opponent" },
     replay: "Open replay",
     replayLabel: "Open replay · {{date}} · {{result}}",
     page: "Page {{number}}",
@@ -35,10 +36,12 @@ export const en = {
     deleteTitle: "Delete this game?",
     deleteHint:
       "Permanently remove this finished game and its moves, players, commentary, invocation attempts, replay, PGN and execution records from your account. This cannot be undone. Other games, saved provider keys and your profile are kept.",
+    deleteRoomHint:
+      "Remove this game from your history and end your access to its replay and PGN. The other participant keeps their access. Your username remains visible to them until you delete your account. This cannot be undone.",
     clear: "Clear history",
     clearTitle: "Clear all finished games?",
     clearHint:
-      "Permanently remove your completed and aborted games on every page, including their moves, players, commentary, invocation attempts, replay, PGN and execution records. This includes games finished before this request is processed; games finishing later remain. This cannot be undone. Active and paused games, saved provider keys and your profile are kept.",
+      "Remove your completed and aborted games on every page, including your replay and PGN access. Other participants keep their access to shared human games. This includes games finished before this request is processed; games finishing later remain. This cannot be undone. Active and paused games, saved provider keys and your profile are kept.",
     gameSummary: "{{date}} · {{result}}",
     deleted: { game: "Game deleted.", history: "Finished game history cleared." },
     deletionErrors: {
@@ -105,7 +108,7 @@ export const en = {
       title: "Delete account",
       hint: "Permanently remove your account and its data. Sign in within the last five minutes before confirming.",
       description:
-        "Delete your profile, saved provider keys, all owned games including unfinished games, moves, invocation history, and login and recovery records. Every device will be signed out. This cannot be undone. Separate guest games and other accounts are unaffected. This removes data from the application database; it does not remove external backups or undo provider requests or charges.",
+        "Delete your profile, saved provider keys, solo games, and login and recovery records. Unfinished shared human games are aborted; other participants keep anonymized history, replay and PGN. Every device will be signed out. This cannot be undone. Separate guest games and other accounts are kept. This removes data from the application database; it does not remove external backups or undo provider requests or charges.",
       confirm: "Permanently delete account",
       signIn: "Sign in again",
       deleted: "Account deleted",

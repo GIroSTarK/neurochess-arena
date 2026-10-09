@@ -10,7 +10,16 @@ export function authorizeGameRead(
   game: StoredGame,
   participants: readonly StoredParticipant[],
   sandboxEnabled: boolean,
+  retainedRoomAccess = false,
 ): void {
+  if (
+    game.mode === "human_vs_human" &&
+    (game.state === "completed" || game.state === "aborted") &&
+    principal.kind === "account" &&
+    !retainedRoomAccess
+  ) {
+    throw new GameRequestError("NOT_FOUND");
+  }
   const isOwner = ownsGame(principal, game);
   const allowed = game.isSandbox
     ? sandboxEnabled && isOwner

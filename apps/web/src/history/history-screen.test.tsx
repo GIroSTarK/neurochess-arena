@@ -18,6 +18,7 @@ const profile = {
 const entry = {
   gameId: GAME_ID,
   finishedAt: "2026-10-01T12:00:00.123456Z",
+  players: { white: { kind: "account", username: "Player" }, black: null },
   configuration: {
     mode: "ai_vs_human",
     seats: {
@@ -43,6 +44,38 @@ function visit() {
 }
 
 describe("private history presentation", () => {
+  it.each([
+    [{ kind: "account", username: "Opponent" }, "Opponent"],
+    [{ kind: "guest" }, "Guest player"],
+    [{ kind: "deleted" }, "Deleted player"],
+  ])(
+    "renders server-projected human identities and explains shared deletion: %j",
+    async (black, label) => {
+      const room = {
+        ...entry,
+        configuration: {
+          mode: "human_vs_human",
+          seats: { white: { type: "human" }, black: { type: "human" } },
+        },
+        players: { white: { kind: "account", username: "WhitePlayer" }, black },
+      };
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(session),
+        "GET /profile": () => jsonResponse(profile),
+        "GET /games/history?limit=20": () => jsonResponse({ games: [room], nextCursor: null }),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      visit();
+      const list = await screen.findByRole("list", { name: "Finished games" });
+      expect(await within(list).findByText("WhitePlayer")).toBeVisible();
+      expect(within(list).getByText(label)).toBeVisible();
+      await userEvent.click(within(list).getByRole("button", { name: /Delete game/ }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByText(/other participant keeps/i)).toBeVisible();
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+      http.assertNoUnexpectedRequests();
+    },
+  );
   it("supersedes a slow cursor read when the current History link reloads the newest page", async () => {
     const pending = Promise.withResolvers<Response>();
     const http = createHttpMock({

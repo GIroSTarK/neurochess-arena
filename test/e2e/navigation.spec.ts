@@ -359,6 +359,7 @@ test("Back restores history scroll after its delayed private read finishes", asy
     games: Array.from({ length: 20 }, (_, index) => ({
       gameId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       finishedAt: "2026-10-01T12:00:00.123456Z",
+      players: { white: null, black: null },
       configuration: {
         mode: "ai_vs_ai",
         seats: {

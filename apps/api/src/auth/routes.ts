@@ -211,6 +211,7 @@ export async function registerAuthRoutes(
               { event: "auth_email_delivery_failed" },
               "Authentication email delivery failed",
             ),
+          () => logger.error("Shared room cleanup failed"),
         );
         const cookies = response.headers.getSetCookie();
         if (cookies.length) reply.header("set-cookie", cookies);

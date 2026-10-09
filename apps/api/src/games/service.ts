@@ -60,8 +60,17 @@ import { createHistoryDeletion } from "./history-deletion.js";
 import { readInvocations } from "./invocations.js";
 
 export interface GameService {
-  deleteGame(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
-  clearHistory(principal: Principal, input: unknown): Promise<GameHistoryDeletedResponse>;
+  cleanupSharedRooms(): Promise<void>;
+  deleteGame(
+    principal: Principal,
+    input: unknown,
+    onCleanupFailure?: () => void,
+  ): Promise<GameHistoryDeletedResponse>;
+  clearHistory(
+    principal: Principal,
+    input: unknown,
+    onCleanupFailure?: () => void,
+  ): Promise<GameHistoryDeletedResponse>;
   history(principal: Principal, query: GameHistoryQuery): Promise<GameHistoryResponse>;
   isSandboxGame(gameId: string): Promise<boolean>;
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
@@ -120,7 +129,15 @@ export function createGameService(
   ): Promise<RestoredGame> {
     const participants = await reader.getParticipants(stored.id);
     // Never reconstruct or disclose a private position before establishing access.
-    authorizeGameRead(principal, stored, participants, sandboxEnabled);
+    authorizeGameRead(
+      principal,
+      stored,
+      participants,
+      sandboxEnabled,
+      stored.mode === "human_vs_human" && principal.kind === "account"
+        ? await reader.hasRetainedRoomAccess(stored.id, principal.userId)
+        : false,
+    );
     if (participants.length !== 2 || new Set(participants.map((seat) => seat.color)).size !== 2) {
       throw new GameIntegrityError();
     }
@@ -183,6 +200,7 @@ export function createGameService(
   }
 
   async function prepareCommand(tx: GameTransaction, principal: Principal, command: AiTurnCommand) {
+    if ((await tx.getGame(command.gameId))?.mode === "human_vs_human") await tx.lockSharedRooms();
     if (!(await lockPrincipal(tx, principal))) {
       throw new GameRequestError("UNAUTHORIZED");
     }
@@ -190,7 +208,7 @@ export function createGameService(
     await requireActivePrincipal(tx, principal);
     if (!stored) throw new GameRequestError("NOT_FOUND");
     const restored = await restoreAuthorized(tx, principal, stored);
-    // Room writes remain closed until participant slots and shared retention are implemented.
+    // Public room commands are enabled with the room admission API in P4-05.
     if (stored.mode === "human_vs_human") throw new GameRequestError("FORBIDDEN");
     // Accepted IDs span every command kind, including retries after completion.
     if (
@@ -312,6 +330,7 @@ export function createGameService(
 
   return {
     ...createHistoryDeletion(repository),
+    cleanupSharedRooms: () => repository.cleanupSharedRooms(),
     async history(principal, input) {
       if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");
       const parsed = gameHistoryQuerySchema.safeParse(input);
@@ -331,7 +350,21 @@ export function createGameService(
           games: page.map((game) => ({
             gameId: game.id,
             finishedAt: game.finishedAt,
-            configuration: configurationOf(game, game.participants),
+            configuration: configurationOf(game, game.participants, game.room),
+            players: Object.fromEntries(
+              game.participants.map((seat) => [
+                seat.color,
+                seat.seatType === "ai"
+                  ? null
+                  : seat.userId
+                    ? { kind: "account", username: seat.username }
+                    : seat.guestSessionId
+                      ? { kind: "guest" }
+                      : game.room?.state === "waiting" && seat.color !== game.room.ownerColor
+                        ? { kind: "unassigned" }
+                        : { kind: "deleted" },
+              ]),
+            ),
             state: game.state,
             result: game.result,
             terminationReason: game.terminationReason,

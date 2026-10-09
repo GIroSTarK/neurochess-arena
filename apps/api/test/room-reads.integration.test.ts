@@ -103,15 +103,15 @@ describe("seeded private human game reads", () => {
     });
   });
 
-  it("keeps seeded rooms outside solo history listing and physical history deletion", async () => {
-    const { owner, snapshot, service } = await fixture({ state: "completed" });
-    expect(await service.history(owner.principal, { limit: 20 })).toEqual({
-      games: [],
-      nextCursor: null,
-    });
+  it("removes seeded room history access while retaining the guest's replay", async () => {
+    const { owner, opponent, snapshot, service } = await fixture({ state: "completed" });
+    expect((await service.history(owner.principal, { limit: 20 })).games).toHaveLength(1);
     await service.deleteGame(owner.principal, { gameId: snapshot.gameId, confirm: true });
     await service.clearHistory(owner.principal, { confirm: true });
-    expect((await service.details(owner.principal, snapshot.gameId)).snapshot).toEqual(snapshot);
+    await expect(service.details(owner.principal, snapshot.gameId)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect((await service.details(opponent.principal, snapshot.gameId)).snapshot).toEqual(snapshot);
   });
   it.each(["white", "black"] as const)(
     "restores account participants with owner %s and grants only their own seat",

@@ -11,24 +11,21 @@ import { TextLink } from "../ui/text-link";
 
 import { useHistory } from "./use-history";
 
-function GameParticipants({
-  game,
-  username,
-}: {
-  readonly game: GameHistoryEntry;
-  readonly username: string;
-}) {
+function GameParticipants({ game }: { readonly game: GameHistoryEntry }) {
   const { t } = useTranslation();
   return (
     <dl className="grid min-w-0 gap-2">
       {(["white", "black"] as const).map((color) => {
         const seat = game.configuration.seats[color];
+        const player = game.players[color];
         return (
           <div key={color} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
             <dt className="text-text-secondary">{t(`players.${color}`)}</dt>
             <dd className="min-w-0 wrap-anywhere">
               {seat.type === "human"
-                ? username
+                ? player?.kind === "account"
+                  ? player.username
+                  : t(`history.players.${player?.kind ?? "deleted"}`)
                 : t("history.model", {
                     model: seat.modelId,
                     provider: t(`setup.providers.${seat.provider}`),
@@ -52,7 +49,7 @@ export function GuestHistory() {
   );
 }
 
-export function HistoryScreen({ username }: { readonly username: string }) {
+export function HistoryScreen() {
   const { t, i18n } = useTranslation();
   const state = useHistory();
   const listHeading = useRef<HTMLHeadingElement>(null);
@@ -130,7 +127,7 @@ export function HistoryScreen({ username }: { readonly username: string }) {
               <p className="text-label text-text-secondary">
                 {t(`history.modes.${game.configuration.mode}`)}
               </p>
-              <GameParticipants game={game} username={username} />
+              <GameParticipants game={game} />
               <p className="text-label wrap-anywhere text-text-secondary">{gameReference}</p>
               <p>
                 {t("game.resultWithScore", {
@@ -196,7 +193,13 @@ export function HistoryScreen({ username }: { readonly username: string }) {
       {state.confirmation ? (
         <ConfirmDialog
           title={t(state.confirmation === "all" ? "history.clearTitle" : "history.deleteTitle")}
-          description={t(state.confirmation === "all" ? "history.clearHint" : "history.deleteHint")}
+          description={t(
+            state.confirmation === "all"
+              ? "history.clearHint"
+              : state.confirmation.configuration.mode === "human_vs_human"
+                ? "history.deleteRoomHint"
+                : "history.deleteHint",
+          )}
           onCancel={state.cancelDeletion}
           cancelLabel={t("actions.cancel")}
           confirmLabel={t(
@@ -221,7 +224,7 @@ export function HistoryScreen({ username }: { readonly username: string }) {
               <p className="text-label text-text-secondary">
                 {t(`history.modes.${state.confirmation.configuration.mode}`)}
               </p>
-              <GameParticipants game={state.confirmation} username={username} />
+              <GameParticipants game={state.confirmation} />
               <p className="text-label text-text-secondary">
                 {t("history.gameReference", { gameId: state.confirmation.gameId })}
               </p>

@@ -53,7 +53,8 @@ test("account deletion confirms full scope, clears another tab and rejects old p
   await trigger.click();
   let dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await expect(dialog).toContainText("unfinished games");
+  await expect(dialog).toContainText("Unfinished shared human games are aborted");
+  await expect(dialog).toContainText("other participants keep anonymized history");
   await expect(dialog).toContainText("external backups");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");

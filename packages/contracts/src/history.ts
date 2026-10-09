@@ -7,6 +7,14 @@ import {
   terminationReasonSchema,
 } from "./game.js";
 import { gameConfigurationSchema } from "./game-details.js";
+import { profileUsernameSchema } from "./profile.js";
+
+const historyPlayerSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("account"), username: profileUsernameSchema }),
+  z.strictObject({ kind: z.literal("guest") }),
+  z.strictObject({ kind: z.literal("deleted") }),
+  z.strictObject({ kind: z.literal("unassigned") }),
+]);
 
 export const historyTimestampSchema = z.iso
   .datetime({ precision: 6 })
@@ -32,11 +40,20 @@ export const gameHistoryEntrySchema = z
     gameId: gameIdSchema,
     finishedAt: historyTimestampSchema,
     configuration: gameConfigurationSchema,
+    players: z.strictObject({
+      white: historyPlayerSchema.nullable(),
+      black: historyPlayerSchema.nullable(),
+    }),
     state: z.enum(["completed", "aborted"]),
     result: gameResultSchema,
     terminationReason: terminationReasonSchema,
   })
   .superRefine((entry, context) => {
+    for (const color of ["white", "black"] as const) {
+      if ((entry.configuration.seats[color].type === "human") !== (entry.players[color] !== null)) {
+        context.addIssue({ code: "custom", path: ["players", color] });
+      }
+    }
     if (
       !gameLifecycleSchema.safeParse({
         state: entry.state,

@@ -14,6 +14,7 @@ const id = "10000000-0000-4000-8000-000000000001";
 const entry = {
   gameId: id,
   finishedAt: "2026-10-01T00:00:00.123456Z",
+  players: { white: null, black: null },
   configuration: {
     mode: "ai_vs_ai",
     seats: {
@@ -26,6 +27,30 @@ const entry = {
   terminationReason: "aborted",
 };
 describe("history transport bounds", () => {
+  it("requires safe labels matching the actual human seats without private identity fields", () => {
+    const room = {
+      ...entry,
+      configuration: {
+        mode: "human_vs_human",
+        seats: { white: { type: "human" }, black: { type: "human" } },
+      },
+      players: { white: { kind: "account", username: "Player" }, black: { kind: "guest" } },
+    };
+    expect(gameHistoryEntrySchema.safeParse(room).success).toBe(true);
+    for (const white of [
+      null,
+      { kind: "account", username: "<script>" },
+      { kind: "account", username: "Player", userId: id },
+      { kind: "deleted", username: "FormerPlayer" },
+    ]) {
+      expect(
+        gameHistoryEntrySchema.safeParse({ ...room, players: { ...room.players, white } }).success,
+      ).toBe(false);
+    }
+    expect(gameHistoryEntrySchema.safeParse({ ...entry, players: room.players }).success).toBe(
+      false,
+    );
+  });
   it("requires explicit, strictly scoped deletion confirmation", () => {
     expect(gameDeleteRequestSchema.parse({ gameId: id, confirm: true })).toEqual({
       gameId: id,

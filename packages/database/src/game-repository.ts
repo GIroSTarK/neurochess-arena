@@ -1,12 +1,14 @@
-import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { DatabaseConnection } from "./client.js";
+import type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
 import {
   type RoomReader,
   roomReaderFor,
   type RoomTransaction,
   roomTransactionFor,
+  type StoredRoom,
 } from "./room-repository.js";
 import { session, user } from "./schema/auth.js";
 import { providerCredentials } from "./schema/credentials.js";
@@ -23,9 +25,16 @@ import {
   moves,
 } from "./schema/index.js";
 import { profiles } from "./schema/profiles.js";
+import { rooms } from "./schema/rooms.js";
+import { roomHistoryAccess } from "./schema/shared-history.js";
+import {
+  cleanupSharedRooms,
+  removeRoomHistory,
+  retainedRoomAccess,
+} from "./shared-history-repository.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
-export type StoredGame = typeof games.$inferSelect;
+export type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
 export type StoredParticipant = typeof gameParticipants.$inferSelect;
 export type StoredHistoryGame = Pick<
   StoredGame,
@@ -39,9 +48,9 @@ export type StoredHistoryGame = Pick<
   | "terminationReason"
 > & {
   finishedAt: string;
-  participants: StoredParticipant[];
+  participants: (StoredParticipant & { username: string | null })[];
+  room: StoredRoom | undefined;
 };
-export type StoredMove = typeof moves.$inferSelect;
 export type NewGame = typeof games.$inferInsert;
 export type NewParticipant = typeof gameParticipants.$inferInsert;
 export type NewMove = typeof moves.$inferInsert;
@@ -74,10 +83,6 @@ export type InvocationResult = Pick<
 export type NewAiTurnReservation = Pick<
   StoredAiTurnReservation,
   "gameId" | "reservationId" | "commandId" | "expectedVersion"
->;
-export type GamePositionUpdate = Pick<
-  StoredGame,
-  "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
 >;
 
 const gameSlotReservationSchema = z.intersection(
@@ -161,6 +166,7 @@ export interface GameTransaction extends GameReader, RoomTransaction {
 }
 
 export interface GameRepository {
+  cleanupSharedRooms(): Promise<void>;
   expiredAiControllers(): Promise<
     { gameId: string; ownerGuestSessionId: string | null; ownerUserId: string | null }[]
   >;
@@ -170,7 +176,7 @@ export interface GameRepository {
   write<T>(action: (transaction: GameTransaction) => Promise<T>): Promise<T>;
 }
 
-type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
+type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update" | "execute">;
 
 function readerFor(db: Executor): GameReader {
   return {
@@ -191,9 +197,11 @@ function readerFor(db: Executor): GameReader {
         .from(games)
         .where(
           and(
-            eq(games.ownerUserId, userId),
             eq(games.isSandbox, false),
-            inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
+            or(
+              and(eq(games.ownerUserId, userId), inArray(games.mode, ["ai_vs_ai", "ai_vs_human"])),
+              and(eq(games.mode, "human_vs_human"), exists(retainedRoomAccess(db, userId))),
+            ),
             inArray(games.state, ["completed", "aborted"]),
             before
               ? sql`(${games.updatedAt}, ${games.id}) < (${before.finishedAt}::timestamptz, ${before.gameId}::uuid)`
@@ -204,21 +212,36 @@ function readerFor(db: Executor): GameReader {
         .limit(limit);
       if (records.length === 0) return [];
       const participants = await db
-        .select()
+        .select({ participant: gameParticipants, username: profiles.username })
         .from(gameParticipants)
+        .leftJoin(profiles, eq(profiles.userId, gameParticipants.userId))
         .where(
           inArray(
             gameParticipants.gameId,
             records.map((game) => game.id),
           ),
         );
-      const seats = new Map<string, StoredParticipant[]>();
-      for (const participant of participants) {
+      const roomRecords = await db
+        .select()
+        .from(rooms)
+        .where(
+          inArray(
+            rooms.gameId,
+            records.map((game) => game.id),
+          ),
+        );
+      const roomById = new Map(roomRecords.map((room) => [room.gameId, room]));
+      const seats = new Map<string, StoredHistoryGame["participants"]>();
+      for (const { participant, username } of participants) {
         const group = seats.get(participant.gameId) ?? [];
-        group.push(participant);
+        group.push({ ...participant, username });
         seats.set(participant.gameId, group);
       }
-      return records.map((game) => ({ ...game, participants: seats.get(game.id) ?? [] }));
+      return records.map((game) => ({
+        ...game,
+        participants: seats.get(game.id) ?? [],
+        room: roomById.get(game.id),
+      }));
     },
     async getProviderCredential(userId, credentialId, provider) {
       const [record] = await db
@@ -326,6 +349,7 @@ function readerFor(db: Executor): GameReader {
 export function createGameRepository(connection: DatabaseConnection): GameRepository {
   const { db } = connection;
   return {
+    cleanupSharedRooms: () => cleanupSharedRooms(connection),
     expiredAiControllers: () =>
       db
         .select({
@@ -358,20 +382,29 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
       return guest;
     },
     async renewGuest(tokenHash, ttlSeconds) {
-      const [guest] = await db
-        .update(guestSessions)
-        .set({
-          lastSeenAt: sql`clock_timestamp()`,
-          expiresAt: sql`clock_timestamp() + ${ttlSeconds} * interval '1 second'`,
-        })
-        .where(
-          and(
-            eq(guestSessions.tokenHash, tokenHash),
-            gt(guestSessions.expiresAt, sql`clock_timestamp()`),
-          ),
-        )
-        .returning();
-      return guest;
+      return db.transaction(async (tx) => {
+        await tx
+          .select({ id: guestSessions.id })
+          .from(guestSessions)
+          .where(eq(guestSessions.tokenHash, tokenHash))
+          .for("update");
+        // An UPDATE can evaluate its clock predicate before a row wait. Lock first,
+        // then check expiry in a fresh statement shared with terminal room cleanup.
+        const [guest] = await tx
+          .update(guestSessions)
+          .set({
+            lastSeenAt: sql`clock_timestamp()`,
+            expiresAt: sql`clock_timestamp() + ${ttlSeconds} * interval '1 second'`,
+          })
+          .where(
+            and(
+              eq(guestSessions.tokenHash, tokenHash),
+              gt(guestSessions.expiresAt, sql`clock_timestamp()`),
+            ),
+          )
+          .returning();
+        return guest;
+      });
     },
     read: (action) =>
       db.transaction((tx) => action(readerFor(tx)), {
@@ -403,6 +436,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
             reserveGameSlot,
             releaseGameSlots,
             async deleteAccountHistory(userId, gameId) {
+              await removeRoomHistory(tx, userId, gameId);
               await tx
                 .delete(games)
                 .where(
@@ -484,6 +518,12 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
               const [created] = await tx.insert(games).values(game).returning();
               if (!created) throw new Error("Game insertion failed");
               if (participants.length) await tx.insert(gameParticipants).values(participants);
+              if (created.mode === "human_vs_human") {
+                const accounts = participants.flatMap((seat) =>
+                  seat.userId ? [{ gameId: created.id, userId: seat.userId }] : [],
+                );
+                if (accounts.length) await tx.insert(roomHistoryAccess).values(accounts);
+              }
               if (created.state === "active" || created.state === "paused") {
                 const scope = created.isSandbox ? "sandbox" : "ordinary";
                 const identities = new Map<string, GameSlotReservation>();

@@ -25,6 +25,7 @@ const profile = {
 const entry = {
   gameId: OTHER_GAME_ID,
   finishedAt: "2026-10-01T12:00:00.123456Z",
+  players: { white: { kind: "account", username: "Player" }, black: null },
   configuration: {
     mode: "ai_vs_human",
     seats: {

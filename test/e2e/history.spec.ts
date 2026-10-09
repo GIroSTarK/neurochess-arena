@@ -2,12 +2,17 @@ import { randomUUID } from "node:crypto";
 import { text as streamText } from "node:stream/consumers";
 
 import AxeBuilder from "@axe-core/playwright";
+import { createGame } from "@neurochess/chess";
 import {
   gameDetailsSchema,
   gamePgnResponseSchema,
   gameSnapshotSchema,
 } from "@neurochess/contracts";
+import { createGameRepository, games } from "@neurochess/database";
 import type { Page } from "@playwright/test";
+import { eq } from "drizzle-orm";
+
+import { integrationDatabase } from "../database";
 
 import { createAccount } from "./account-helpers";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
@@ -15,6 +20,98 @@ import { expect, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
 const headers = { origin: WEB_ORIGIN };
+
+test("shared history keeps each participant's labels and access through history and account deletion", async ({
+  page,
+  newContext,
+}) => {
+  const owner = await createAccount(page.request);
+  const otherContext = await newContext();
+  const other = await otherContext.newPage();
+  const opponent = await createAccount(other.request);
+  const database = integrationDatabase();
+  const id = randomUUID();
+  try {
+    const ownerSession = (await (
+      await page.request.get(API_ORIGIN + "/api/auth/get-session")
+    ).json()) as { user: { id: string } };
+    const opponentSession = (await (
+      await other.request.get(API_ORIGIN + "/api/auth/get-session")
+    ).json()) as { user: { id: string } };
+    const domain = createGame();
+    domain.start();
+    domain.abort();
+    const { state, result, terminationReason, fen, pgn } = domain.snapshot();
+    await createGameRepository(database).write(async (tx) => {
+      await tx.lockSharedRooms();
+      await tx.insertGame(
+        {
+          id,
+          ownerUserId: ownerSession.user.id,
+          mode: "human_vs_human",
+          state,
+          result,
+          terminationReason,
+          fen,
+          pgn,
+        },
+        [
+          { gameId: id, color: "white", seatType: "human", userId: opponentSession.user.id },
+          { gameId: id, color: "black", seatType: "human", userId: ownerSession.user.id },
+        ],
+      );
+      await tx.insertRoom({
+        gameId: id,
+        ownerColor: "black",
+        state: "joined",
+        joinedAt: new Date(),
+      });
+    });
+    for (const view of [page, other]) {
+      await view.goto("/history");
+      const list = view.getByRole("list", { name: "Finished games" });
+      await expect(list.getByText(opponent.username, { exact: true })).toBeVisible();
+      await expect(list.getByText(owner.username, { exact: true })).toBeVisible();
+      await expect(list.locator("dl > div").first()).toHaveText("White" + opponent.username);
+      expect((await new AxeBuilder({ page: view }).analyze()).violations).toEqual([]);
+    }
+    await page.getByRole("button", { name: /Delete game ·/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("The other participant keeps their access");
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await dialog.getByRole("button", { name: "Delete game", exact: true }).click();
+    await expect(
+      page.getByRole("list", { name: "Finished games" }).getByRole("listitem"),
+    ).toHaveCount(0);
+    expect((await page.request.get(`${API_ORIGIN}/games/${id}/pgn`)).status()).toBe(404);
+    await other.getByRole("button", { name: "Refresh history" }).click();
+    await expect(
+      other
+        .getByRole("list", { name: "Finished games" })
+        .getByText(owner.username, { exact: true }),
+    ).toBeVisible();
+    expect((await other.request.get(`${API_ORIGIN}/games/${id}/pgn`)).ok()).toBe(true);
+    expect(
+      (
+        await page.request.post(API_ORIGIN + "/api/auth/delete-account", {
+          headers,
+          data: { confirm: true },
+        })
+      ).ok(),
+    ).toBe(true);
+    await other.getByRole("button", { name: "Refresh history" }).click();
+    await expect(other.getByText("Deleted player", { exact: true })).toBeVisible();
+    await expect(
+      other
+        .getByRole("list", { name: "Finished games" })
+        .getByText(owner.username, { exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    await database.db.delete(games).where(eq(games.id, id));
+    await database.close();
+    await otherContext.close();
+  }
+});
 const configuration = {
   mode: "ai_vs_ai",
   seats: {

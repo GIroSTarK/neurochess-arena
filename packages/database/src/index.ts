@@ -1,6 +1,8 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { runMigrations } from "./migrations.js";
 export { rooms, roomCreationOperations } from "./schema/rooms.js";
+export { roomHistoryAccess } from "./schema/shared-history.js";
+export { cleanupSharedRooms, type AbortSharedGame } from "./shared-history-repository.js";
 export type {
   RoomReader,
   RoomTransaction,

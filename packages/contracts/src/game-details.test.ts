@@ -41,6 +41,7 @@ describe("common game details", () => {
     const entry = {
       gameId: snapshot.gameId,
       finishedAt: "2026-10-09T12:00:00.123456Z",
+      players: { white: { kind: "account", username: "Player" }, black: { kind: "guest" } },
       configuration: humanConfiguration,
       state: "aborted",
       result: "*",

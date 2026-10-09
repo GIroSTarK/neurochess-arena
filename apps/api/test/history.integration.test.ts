@@ -64,11 +64,15 @@ describe("private account history", () => {
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.headers["set-cookie"]).toBeUndefined();
     const result = gameHistoryResponseSchema.parse(response.json());
+    const username = await api.repository.read((reader) =>
+      reader.getAccountUsername(owner.principal.userId),
+    );
     expect(result).toEqual({
       games: [completed, stopped].map((snapshot) => ({
         gameId: snapshot.gameId,
         finishedAt: result.games.find((game) => game.gameId === snapshot.gameId)?.finishedAt,
         configuration: humanMatch,
+        players: { white: null, black: { kind: "account", username } },
         state: snapshot.state,
         result: snapshot.result,
         terminationReason: snapshot.terminationReason,

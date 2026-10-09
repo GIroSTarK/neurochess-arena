@@ -127,6 +127,13 @@
       "when": 1791568253935,
       "tag": "0017_backfill_participant_game_slots",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791569942965,
+      "tag": "0018_shared_room_history",
+      "breakpoints": true
     }
   ]
 }

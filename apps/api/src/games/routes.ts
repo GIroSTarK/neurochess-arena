@@ -97,13 +97,28 @@ export async function registerGameRoutes(
   };
   const presenceTimer = setInterval(sweep, 2_000);
   presenceTimer.unref();
+  let roomCleanup: Promise<void> | undefined;
+  const sweepRooms = () => {
+    roomCleanup ??= options.games
+      .cleanupSharedRooms()
+      .catch(() => {
+        app.log.error("Shared room cleanup failed");
+      })
+      .finally(() => {
+        roomCleanup = undefined;
+      });
+  };
+  const roomTimer = setInterval(sweepRooms, 30_000);
+  roomTimer.unref();
   app.addHook("onReady", async () => {
     sweep();
-    await sweeping;
+    sweepRooms();
+    await Promise.all([sweeping, roomCleanup]);
   });
   app.addHook("onClose", async () => {
     clearInterval(presenceTimer);
-    await sweeping;
+    clearInterval(roomTimer);
+    await Promise.all([sweeping, roomCleanup]);
   });
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
@@ -186,7 +201,9 @@ export async function registerGameRoutes(
       if (request.params.gameId.toLowerCase() !== request.body.gameId.toLowerCase()) {
         throw new GameRequestError("INVALID_REQUEST");
       }
-      return options.games.deleteGame(await principalFor(request, reply, true), request.body);
+      return options.games.deleteGame(await principalFor(request, reply, true), request.body, () =>
+        request.log.error("Shared room cleanup failed"),
+      );
     },
   );
 
@@ -201,7 +218,9 @@ export async function registerGameRoutes(
       },
     },
     async (request, reply) =>
-      options.games.clearHistory(await principalFor(request, reply, true), request.body),
+      options.games.clearHistory(await principalFor(request, reply, true), request.body, () =>
+        request.log.error("Shared room cleanup failed"),
+      ),
   );
 
   routes.get(

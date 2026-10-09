@@ -1,9 +1,14 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
 import * as schema from "./schema/auth.js";
 import { games } from "./schema/index.js";
+import {
+  type AbortSharedGame,
+  deleteAccountRooms,
+  lockSharedRooms,
+} from "./shared-history-repository.js";
 
 export class AuthAccountUnavailableError extends Error {}
 export class AccountDeletionSessionError extends Error {
@@ -27,8 +32,10 @@ export async function withAuthUserLock<T>(
     adapter: ReturnType<typeof createAuthDatabaseAdapter>,
     actions: AuthAccountActions,
   ) => Promise<T>,
+  accountDeletion?: { abortSharedGame: AbortSharedGame },
 ): Promise<T> {
   return database.db.transaction(async (transaction) => {
+    if (accountDeletion) await lockSharedRooms(transaction);
     const [user] = await transaction
       .select({ id: schema.user.id })
       .from(schema.user)
@@ -39,6 +46,9 @@ export async function withAuthUserLock<T>(
     // both this account lock and connection, including nested adapter work.
     return operation(drizzleAdapter(transaction, { provider: "pg", schema, transaction: true }), {
       async deleteAccount(sessionId, freshAgeSeconds) {
+        if (!accountDeletion) {
+          throw new Error("Account deletion requires the shared-room lock protocol");
+        }
         // Keep authentication rejection counts in the outer transaction while
         // rolling back every application/auth deletion on a late identity failure.
         await transaction.transaction(async (deletion) => {
@@ -62,7 +72,15 @@ export async function withAuthUserLock<T>(
             return session;
           };
           await requireSession();
-          await deletion.delete(games).where(eq(games.ownerUserId, userId));
+          await deleteAccountRooms(deletion, userId, accountDeletion.abortSharedGame);
+          await deletion
+            .delete(games)
+            .where(
+              and(
+                eq(games.ownerUserId, userId),
+                or(isNull(games.mode), ne(games.mode, "human_vs_human")),
+              ),
+            );
           // Recovery records have no user foreign key. OAuth state is unassociated
           // until callback, and email verification uses account-bound signed tokens.
           await deletion.delete(schema.verification).where(eq(schema.verification.value, userId));

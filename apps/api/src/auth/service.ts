@@ -10,6 +10,7 @@ import {
   AccountDeletionSessionError,
   type AuthAccountActions,
   AuthAccountUnavailableError,
+  cleanupSharedRooms,
   createAuthDatabaseAdapter,
   type DatabaseConnection,
   withAuthUserLock,
@@ -17,6 +18,8 @@ import {
 import { betterAuth } from "better-auth/minimal";
 import { z } from "zod";
 
+import { abortSharedGame } from "../games/account-deletion.js";
+import { cleanupAfterCommit } from "../games/shared-room-cleanup.js";
 import type { AccountPrincipal } from "../identity/principal.js";
 
 import { accountDeletion } from "./account-deletion.js";
@@ -28,7 +31,11 @@ export interface AccountAuth {
   readonly baseURL: string;
   readonly emailEnabled?: boolean;
   readonly oauthProviders?: readonly AuthOAuthProvider[];
-  handle(request: Request, onEmailDeliveryFailure?: () => void): Promise<Response>;
+  handle(
+    request: Request,
+    onEmailDeliveryFailure?: () => void,
+    onCleanupFailure?: () => void,
+  ): Promise<Response>;
   resolve(headers: Headers): Promise<AccountPrincipal | null>;
   close?(): Promise<void>;
 }
@@ -67,7 +74,7 @@ export function createAccountAuth(
       query: { disableCookieCache: true, disableRefresh: true },
     });
 
-  async function handleRequest(request: Request): Promise<Response> {
+  async function handleRequest(request: Request, onCleanupFailure?: () => void): Promise<Response> {
     const path = new URL(request.url).pathname;
     const deleting = path === `${AUTH_BASE_PATH}/delete-account`;
     let userId: string | undefined;
@@ -114,15 +121,26 @@ export function createAccountAuth(
     }
     if (!userId) return auth.handler(request);
     try {
-      return await withAuthUserLock(database, z.uuid().parse(userId), async (adapter, actions) => {
-        const response = await createAuth(adapter, deleting ? actions : undefined).handler(request);
-        // The library converts adapter errors into responses. Roll back password,
-        // token and session changes together when it reports a server failure.
-        if (response.status >= 500) {
-          throw new AuthTransactionFailure(response);
-        }
-        return response;
-      });
+      const response = await withAuthUserLock(
+        database,
+        z.uuid().parse(userId),
+        async (adapter, actions) => {
+          const response = await createAuth(adapter, deleting ? actions : undefined).handler(
+            request,
+          );
+          // The library converts adapter errors into responses. Roll back password,
+          // token and session changes together when it reports a server failure.
+          if (response.status >= 500) {
+            throw new AuthTransactionFailure(response);
+          }
+          return response;
+        },
+        deleting ? { abortSharedGame } : undefined,
+      );
+      if (deleting && response.ok) {
+        await cleanupAfterCommit(() => cleanupSharedRooms(database), onCleanupFailure);
+      }
+      return response;
     } catch (error) {
       if (error instanceof AuthTransactionFailure) return error.response;
       if (
@@ -160,9 +178,9 @@ export function createAccountAuth(
     baseURL: environment.BETTER_AUTH_URL,
     emailEnabled: Boolean(sender),
     oauthProviders: Object.keys(options.socialProviders) as AuthOAuthProvider[],
-    async handle(request, onEmailDeliveryFailure) {
+    async handle(request, onEmailDeliveryFailure, onCleanupFailure) {
       const pending: AuthEmail[] = [];
-      const response = await delivery.run(pending, () => handleRequest(request));
+      const response = await delivery.run(pending, () => handleRequest(request, onCleanupFailure));
       // Dispatch only after commit. Neither SMTP outcomes nor SMTP delays may
       // reveal which unauthenticated requests resulted in an email attempt.
       if (response.ok && sender && pending.length) {

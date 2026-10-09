@@ -185,6 +185,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0015_private_room_foundation",
         "0016_participant_game_slots",
         "0017_backfill_participant_game_slots",
+        "0018_shared_room_history",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -525,6 +526,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       expect(afterRoomFoundation).toEqual(afterHistoryIndex);
       await applyMigration(migrationFiles[15]!);
       await applyMigration(migrationFiles[16]!);
+      await applyMigration(migrationFiles[17]!);
       const slots = await tx.execute<{
         game_id: string;
         scope: string;
