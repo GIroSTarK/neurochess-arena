@@ -129,6 +129,8 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 ## Phase 4 — Private online human games
 
+**Status:** P4-01 policy milestone complete. [ADR-0018](decisions/0018-private-room-lifecycle-and-shared-retention.md) defines the accepted room lifecycle, invitations, participant retention, and concurrency rules. Room implementation (P4-02 onward) has not started.
+
 Deliverables:
 
 - authenticated room creation and owner color choice;
@@ -138,7 +140,7 @@ Deliverables:
 - server-authoritative turn broadcasts;
 - disconnect and indefinite reconnect behavior;
 - owner-controlled abort with `aborted` history state;
-- extend database-enforced unfinished-game slots to non-owning human participants and resolve shared-participant retention/deletion before enabling joins;
+- extend database-enforced unfinished-game slots to non-owning human participants and implement the accepted shared-participant retention/deletion policy before enabling joins;
 - authorization and privacy tests.
 
 Exit condition: two separate browser sessions can complete or abort a private game and recover correctly from disconnections.

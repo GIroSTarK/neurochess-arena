@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-09
 
 ## Vision
 
@@ -39,7 +39,7 @@ A guest can:
 
 - start AI-versus-AI and AI-versus-human games using session-only API keys;
 - join a private human game through an invitation link or code;
-- recover an unfinished game after a page refresh through a guest session in the `paused` state, but must re-enter any API key;
+- recover an unfinished AI game after a page refresh through a guest session in the `paused` state, but must re-enter any API key; human-room recovery follows the [room lifecycle](#human-versus-human);
 - have only one game across the public modes in the `active` or `paused` state at a time.
 
 A guest cannot:
@@ -99,13 +99,35 @@ Every authentication method uses the same username onboarding requirement before
 
 Account history lists completed and aborted public games together, newest first, with explicit state/result labels and private replay access. Keep active/paused recovery separate. Sandbox and temporary guest records never appear in account history.
 
-Individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion is a separate operation that removes associated application/authentication data, including unfinished owned games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. Shared-room participant retention and deletion semantics must be resolved before Phase 4 rooms ship.
+For solo public games, individual game deletion and clear-history affect terminal account-owned games only, including their dependent game records. Active or paused games must first be stopped through lifecycle controls. Account deletion removes associated application/authentication data, including unfinished solo games and saved credentials, and prevents late work from recreating deleted data. Database deletion does not claim deletion from external backups. The shared-room exception is defined [below](#shared-room-retention).
 
-Game deletion and history clearing have separate explicit confirmations describing the removed game data, with Cancel initially focused. An individual deletion can be repeated safely; a missing or out-of-scope game has the same successful response without revealing its existence. Clear-history includes every page and serializes with that account's game writes: games finished before the clear acquires the account lock are removed; games finishing afterward remain. Each explicitly repeated clear takes a new boundary. Neither operation removes unfinished games, saved credentials, profiles, separate guest games, or another account's data. A failed acknowledgement requires an explicit refresh or retry; the browser never automatically retries deletion.
+Game deletion and history clearing have separate explicit confirmations describing the removed game data, with Cancel initially focused. An individual deletion can be repeated safely; a missing or out-of-scope game has the same successful response without revealing its existence. Clear-history includes every page and serializes with that account's game writes: solo games finished before the clear acquires the account lock are removed; games finishing afterward remain. The shared-room policy extends this boundary to completion by either participant. Each explicitly repeated clear takes a new boundary. Neither operation removes unfinished games, saved credentials, profiles, separate guest games, or another account's retained access. A failed acknowledgement requires an explicit refresh or retry; the browser never automatically retries deletion.
 
-Account deletion has its own Cancel-first confirmation in Account, available before profile onboarding too. Password, Google and GitHub users must have signed in within the last five minutes; session renewal does not count as a new sign-in. Otherwise sign in again, return to Account and confirm explicitly. Deletion atomically removes the profile, saved credentials, all owned games and their dependent records, every device session, login methods and account recovery records. It fences new commands, controller renewal, provider retries and late outcomes through the account's write lock. Already-dispatched provider requests and charges cannot be undone. Separate guests and other accounts remain untouched.
+Account deletion has its own Cancel-first confirmation in Account, available before profile onboarding too. Password, Google and GitHub users must have signed in within the last five minutes; session renewal does not count as a new sign-in. Otherwise sign in again, return to Account and confirm explicitly. Deletion atomically removes the profile, saved credentials, all owned solo games and their dependent records, every device session, login methods and account recovery records. It fences new commands, controller renewal, provider retries and late outcomes through the account's write lock. Already-dispatched provider requests and charges cannot be undone. Separate guest games and other accounts' identities remain untouched; shared-game effects are defined below.
 
-The browser clears page-owned keys and private state when deletion starts, and confirms deletion only after a successful acknowledgement. A failed or lost acknowledgement shows an unconfirmed outcome and requires an explicit status check or retry; a missing session alone does not prove deletion. Old cookies cannot repeat deletion successfully or access deleted data. A new registration is a separate account, even with the same email: verification links are bound to their original account. External backup retention and shared-room participant retention still need deployment and Phase 4 decisions respectively.
+The browser clears page-owned keys and private state when deletion starts, and confirms deletion only after a successful acknowledgement. A failed or lost acknowledgement shows an unconfirmed outcome and requires an explicit status check or retry; a missing session alone does not prove deletion. Old cookies cannot repeat deletion successfully or access deleted data. A new registration is a separate account, even with the same email: verification links are bound to their original account. External backup retention remains a deployment decision.
+
+#### Shared-room retention
+
+Each registered participant receives their own retained access when seated. Once the game is completed or aborted, that access permits a history entry, direct private reads, replay, and PGN. Room ownership controls closure and invitations; it does not control the opponent's history. A guest receives temporary participant access through the original unexpired guest identity, including terminal replay/PGN, but no account-history entry.
+
+| Operation                     | Requesting participant                                                                              | Other participant and shared record                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Delete one terminal room game | Remove the account's retained access, including direct URL, replay, and PGN access                  | Preserve the other participant's access and the game while anyone remains entitled                                          |
+| Clear history                 | Apply the same removal to every terminal retained game at the serialized boundary, across all pages | Preserve unfinished games and the other participant's access                                                                |
+| Delete either account         | Remove its access and identifying bindings from every associated room, even previously hidden games | Abort an unfinished room, release both public slots, and retain an anonymized record for any remaining entitled participant |
+| Guest identity expires        | Immediately deny all guest reads, commands, subscriptions, replay, and PGN                          | No automatic game result, closure, or seat replacement; a valid owner may still close the room                              |
+| Last access ends              | No participant can reopen the record                                                                | Physically delete the terminal game and dependent records under the cleanup rule below                                      |
+
+Deleting history is not account deletion: the opponent can still see the living account's current username in their retained game. Removed access cannot be restored through ownership, a seat reference, an old invitation, a repeated join, or a new registration. A non-owner must wait for completion or resign themselves before removing an unfinished game from history; only the owner can close it without a chess result.
+
+Deleting either account aborts a waiting or active room with result `*`, not a win or loss. A terminal result is preserved if completion committed first. Deletion removes the account's owner/seat/access and other identifying bindings, including any stored username/avatar copies, without retaining a deleted account UUID as a tombstone. Remaining displays use a localized **Deleted player** label. Moves, colors, result, and identity-free PGN can remain for the other participant. Ownership is never transferred; an ownerless retained room is terminal. The other account and its credentials are not deleted.
+
+If both accounts delete, the final deletion removes the shared record; concurrent deletion must have the same outcome. An owner deleting a waiting room leaves no opponent entitled to retention. If the only remaining participant is a guest, preserve the aborted/terminal record only while that guest identity remains valid. Lost cookies, sign-in, and newly bootstrapped guests do not transfer access.
+
+When the final account entitlement is removed from a terminal room with no guest participant binding, physically delete the game in that transaction. Guest-bound terminal records instead pass to cleanup after commit and on periodic/startup sweeps: preserve them while the guest remains valid, and delete once no account entitlement or valid guest remains. Cleanup synchronizes with guest renewal before checking expiry; expiry makes the record immediately eligible with no additional retention grace period. API downtime delays physical cleanup, never access denial. Guest expiry alone does not abort an unfinished game or release its slots: the owner can close it, or account deletion can abort it. This chooses shared-room cleanup eligibility, not a production retention period for unrelated solo guest games or external backups.
+
+Clear-history must serialize with room completion by either player, not just the requester. A room becoming terminal before the clear's shared-room/account boundary loses only that account's access; a room finishing after it remains visible. [The lock protocol](architecture.md#shared-room-write-order) defines that boundary. Reads already in progress may finish with their consistent pre-deletion view; subsequent requests cannot regain removed access. Acknowledged deletion clears the requesting browser's cached views, and subscriptions must stop delivering protected data after access is lost. Downloaded PGNs and copies already delivered to another participant cannot be recalled.
 
 ## Saved credential use and revocation
 
@@ -138,7 +160,42 @@ The user selects their color and configures the AI opponent with the same provid
 
 A registered user creates a private room, chooses their color, and shares an invitation link or code. A registered user or guest can join. There is no public room directory or automatic matchmaking.
 
-If a participant disconnects, the game remains available for reconnection without a time limit. The room owner may close the active room; this marks the game as `aborted` rather than deleting the record. Completed and aborted games appear in the history of registered participants. A guest has no durable history.
+If a participant disconnects, the game remains available for reconnection without a gameplay deadline. The room owner may close the room; this marks the game as `aborted` rather than deleting the record. Completed and aborted games appear in the history of registered participants. A guest has no durable history. Indefinite reconnection does not extend a session's validity.
+
+#### Room lifecycle and permissions
+
+Creation requires a valid account session and completed profile. Create one standard-position game in `paused` with separate room admission state `waiting`, reserve the creator's public slot, and assign their chosen color. Waiting is not a new chess state. A successful explicit join assigns the opposite color, reserves the joiner's public slot, consumes admission, and changes the game to `active` in one transaction. White moves first even when the owner chose Black. Revoking an invitation leaves the waiting room and its reserved slot intact.
+
+| Room condition                             | Canonical game state                      | Who can act                                                                                       | Transition                                                                                  | Public slots    |
+| ------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------- |
+| Waiting, one seated owner                  | `paused`                                  | Owner may replace/revoke the invitation or close; eligible invitee may join                       | Join → joined/active; close or owner account deletion → aborted                             | Creator only    |
+| Joined, both seats assigned                | `active`                                  | Side to move may move; either player may resign themselves; owner may close                       | Legal play → completed; resignation → completed; close or either account deletion → aborted | Both identities |
+| Either/both disconnected, or API restarted | Unchanged waiting/paused or joined/active | Valid connected participants keep their ordinary permissions; returning clients synchronize first | Reconnection does not issue Pause/Resume or advance the game                                | Unchanged       |
+| Completed                                  | `completed`                               | Entitled participants may read/replay/export; accounts may delete retained access                 | No return to play or admission                                                              | None            |
+| Aborted, including closure before join     | `aborted`, result `*`                     | Same retained-access rules as completed                                                           | No return to play or admission                                                              | None            |
+
+| Capability                                 | Owner                                                               | Joined opponent                                                             | Invitation holder / outsider                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Private board, moves, metadata, replay/PGN | Participant access; terminal reads require retained access          | Same                                                                        | None before successful join                                                    |
+| Join the open seat                         | Self-join is rejected                                               | An identical accepted-join retry may recover the same still-authorized seat | One valid account or explicitly bootstrapped guest, subject to its public slot |
+| Move / resign                              | Own color only; moves on turn, resignation also off-turn after join | Same                                                                        | None                                                                           |
+| Replace/revoke invitation                  | Waiting only                                                        | None                                                                        | None                                                                           |
+| Close room                                 | Waiting or active, with confirmation                                | None                                                                        | None                                                                           |
+| Delete terminal history                    | Own account's access only                                           | Own account's access only; guests have no history-delete control            | None                                                                           |
+
+No room Pause/Resume, AI controller, provider credential, seat replacement, ownership transfer, or disconnect forfeiture is introduced. Waiting owners cannot resign an absent opponent into a win. An expired guest cannot reconnect as a replacement identity; the owner may close that unfinished game. A disconnected opponent does not prevent the connected player from making their legal move, resigning themselves, or, if owner, closing. Account deletion is the explicit system-abort exception to owner-only closure.
+
+Create/join retries must not create another room or seat. Two competing joins yield one admitted opponent, with no partial slot, seat, or invitation changes for the loser. A retry after lost acknowledgement may recover only the same principal's existing admission; it cannot restore deleted access. The same identity cannot occupy both seats, and valid account precedence cannot be bypassed using its guest cookie.
+
+Room creation uses a server-issued, account-bound operation valid for ten minutes, obtained only by an explicit creation action. Retain at most one pending or consumed creation operation per account. An identical retry within that window returns the original room only while access remains; if it was deleted, the result is unavailable and creates nothing. Expired, replaced, or unknown operations also create nothing. A new explicit creation action may obtain a new operation, subject to the public slot. Account deletion removes this operation too. This retry window is not a waiting-room or invitation expiry.
+
+#### Invitations and entry
+
+An invitation admits exactly one opponent; it never grants a preview, private read, replay, or spectator subscription. Use 32 cryptographically random bytes encoded as a URL-safe link/code, with only a digest stored by the API. It stays usable while the room is waiting unless the owner revokes or replaces it; there is no separate invitation deadline. Replacement invalidates the old value. Join, closure, and account deletion invalidate admission. Only the owner can issue a replacement while waiting; a lost raw value cannot be read back from storage.
+
+Use `/rooms` for setup and `/rooms/join` for link/code entry, followed by the authorized canonical `/games/:gameId` for waiting, play, and replay. A shared link carries the secret only in `/rooms/join#invite=…`. Scrub the fragment before router initialization and retain the value only in page memory; manual codes follow the same policy. Resolve/join through POST bodies, never API URLs. Before join, resolution returns only **joinable** or **unavailable**, without a game ID, identities, colors, board, or history. Opening a link is read-only: joining and guest bootstrap require an explicit action.
+
+Never put invitations in logs, analytics, referrers, router results/history state, browser storage, or authentication return URLs. Token-free room entry paths may be allowlisted as auth returns. Clear the secret on successful join, leaving the entry flow, identity change, or pagehide. Sign-in/onboarding that leaves this flow, including OAuth/full-document navigation, requires reopening the link or pasting the code again; explain that before departure. An authenticated owner returning without the raw value can replace the invitation. Canonical game URLs carry only the game UUID and still require participant authorization.
 
 ### Development sandbox
 
@@ -150,7 +207,7 @@ Arena is the default page at `/`, with AI-versus-AI observation, AI-versus-human
 
 The same private game path covers live play, paused recovery, and completed/aborted replay. A game UUID grants no access. Old `/?game=<uuid>` and `/sandbox?game=<uuid>` links intentionally show Page unavailable without redirects, guest bootstrap, or unfinished-game discovery, including empty or duplicate `game` values. A `game` query also invalidates a game path. Entry URLs without that parameter keep unfinished-game discovery. Opening a game through the wrong mode preserves the authorized explanation and explicit link; it does not automatically change modes.
 
-In-app links and Back/Forward keep the document open. Leaving a game stops its controller and clears page-owned keys immediately, including while the destination loads; canceling a departure requires explicit recovery. Successful Start preserves its controller and keys while changing to the canonical game path. Reloading or returning later uses paused recovery.
+In-app links and Back/Forward keep the document open. Leaving a game stops its controller and clears page-owned keys immediately, including while the destination loads; canceling a departure requires explicit recovery. Successful Start preserves its controller and keys while changing to the canonical game path. AI games and Sandbox use paused recovery on reload or return; the human-room flow synchronizes without changing lifecycle.
 
 - Pause and Resume preserve the position and history. Abort stops play without awarding a win or loss. Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.
@@ -250,7 +307,7 @@ Saved games are private in the MVP. There are no public game or live spectator l
 
 ## Game lifecycle
 
-The canonical game states are:
+The canonical game states are `configuring`, `active`, `paused`, `completed`, and `aborted`. The existing AI/Sandbox flow is:
 
 ```text
 configuring -> active <-> paused -> completed
@@ -261,6 +318,8 @@ configuring -> active <-> paused -> completed
 
 Only one game across the three public modes may be `active` or `paused` for a given authenticated user or guest session. The [development sandbox](#development-sandbox) has a separate limit.
 Paused games count toward this limit. Completion or abortion releases the slot. Completed and aborted games reject further moves; replay does not modify their accepted positions or result.
+
+Under the [room lifecycle](#room-lifecycle-and-permissions), waiting reserves the owner's slot and joined play reserves both participants' slots, regardless of color or ownership. Terminal transitions release every participant's slot atomically. AI-versus-AI still reserves its owner's slot despite having no human seat. Connection/presence changes neither occupy a new slot nor release an existing one.
 
 ## Localization and responsive design
 
@@ -285,6 +344,5 @@ The MVP is ready when:
 
 - Exact retention period for an inactive guest game
 - Exact supported parameter matrix for each provider and model
-- Retention and deletion rights for shared human-room participants (Phase 4)
 - Final deployment platform and production region
 - Repository license

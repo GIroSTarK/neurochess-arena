@@ -23,6 +23,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0015](0015-saved-credential-dispatch-and-revocation.md)        | Accepted   | Saved credential dispatch authorization, retries and in-flight revocation                |
 | [0016](0016-atomic-account-deletion.md)                         | Accepted   | Atomic account deletion, fresh identity checks and in-flight work fencing                |
 | [0017](0017-data-router-and-canonical-game-paths.md)            | Accepted   | Data router, canonical private game paths, and navigation lifetime boundaries            |
+| [0018](0018-private-room-lifecycle-and-shared-retention.md)     | Accepted   | Private room lifecycle, participant retention, invitations, and shared write ordering    |
 
 ## Status values
 
