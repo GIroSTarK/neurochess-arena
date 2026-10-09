@@ -182,6 +182,7 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0012_provider_credentials",
         "0013_owner_scoped_credential_ids",
         "0014_account_history_index",
+        "0015_private_room_foundation",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -508,6 +509,38 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         );
       }
       expect(afterHistoryIndex).toEqual(afterCredentialScope);
+      await applyMigration(migrationFiles[14]!);
+      const afterRoomFoundation = [];
+      for (const table of scopePreservedTables) {
+        afterRoomFoundation.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      expect(afterRoomFoundation).toEqual(afterHistoryIndex);
+      expect((await tx.execute(sql`select * from rooms`)).rows).toEqual([]);
+      expect((await tx.execute(sql`select * from room_creation_operations`)).rows).toEqual([]);
+      for (const mode of [null, "ai_vs_ai", "ai_vs_human"]) {
+        await expect(
+          tx.transaction((savepoint) =>
+            savepoint.execute(sql`
+          insert into games(mode, state, result, termination_reason, fen, pgn)
+          values (${mode}, 'aborted', '*', 'aborted', 'position', 'history')`),
+          ),
+        ).rejects.toThrow();
+      }
+      const modes = await tx.execute<{ enumlabel: string }>(sql`
+        select e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid
+        join pg_namespace n on n.oid = t.typnamespace
+        where n.nspname = ${schemaName} and t.typname = 'ai_game_mode' order by e.enumsortorder`);
+      expect(modes.rows.map((row) => row.enumlabel)).toEqual([
+        "ai_vs_ai",
+        "ai_vs_human",
+        "human_vs_human",
+      ]);
       const historyIndex = await tx.execute<{ indexdef: string }>(
         sql`select indexdef from pg_indexes where schemaname = ${schemaName} and indexname = 'games_account_history_idx'`,
       );

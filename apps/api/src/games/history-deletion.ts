@@ -2,6 +2,7 @@ import {
   gameDeleteRequestSchema,
   gameHistoryClearRequestSchema,
   type GameHistoryDeletedResponse,
+  isAiGameMode,
 } from "@neurochess/contracts";
 import type { GameRepository } from "@neurochess/database";
 
@@ -24,7 +25,7 @@ export function createHistoryDeletion(repository: GameRepository) {
         if (
           candidate?.ownerUserId !== principal.userId ||
           candidate.isSandbox ||
-          candidate.mode === null
+          !isAiGameMode(candidate.mode)
         ) {
           await requireActivePrincipal(tx, principal);
           return { status: "deleted" };

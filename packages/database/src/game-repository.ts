@@ -1,6 +1,12 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
+import {
+  type RoomReader,
+  roomReaderFor,
+  type RoomTransaction,
+  roomTransactionFor,
+} from "./room-repository.js";
 import { session, user } from "./schema/auth.js";
 import { providerCredentials } from "./schema/credentials.js";
 import {
@@ -72,7 +78,7 @@ export type GamePositionUpdate = Pick<
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
 >;
 
-export interface GameReader {
+export interface GameReader extends RoomReader {
   findAccountHistory(
     userId: string,
     limit: number,
@@ -104,7 +110,7 @@ export interface GameReader {
   findUnfinishedAccountGame(userId: string): Promise<StoredGame | undefined>;
 }
 
-export interface GameTransaction extends GameReader {
+export interface GameTransaction extends GameReader, RoomTransaction {
   deleteAccountHistory(userId: string, gameId?: string): Promise<void>;
   getAiController(
     gameId: string,
@@ -154,6 +160,7 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update">;
 
 function readerFor(db: Executor): GameReader {
   return {
+    ...roomReaderFor(db),
     async findAccountHistory(userId, limit, before) {
       const records = await db
         .select({
@@ -172,7 +179,7 @@ function readerFor(db: Executor): GameReader {
           and(
             eq(games.ownerUserId, userId),
             eq(games.isSandbox, false),
-            isNotNull(games.mode),
+            inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
             inArray(games.state, ["completed", "aborted"]),
             before
               ? sql`(${games.updatedAt}, ${games.id}) < (${before.finishedAt}::timestamptz, ${before.gameId}::uuid)`
@@ -361,6 +368,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           const reader = readerFor(tx);
           return action({
             ...reader,
+            ...roomTransactionFor(tx),
             async deleteAccountHistory(userId, gameId) {
               await tx
                 .delete(games)
@@ -368,7 +376,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                   and(
                     eq(games.ownerUserId, userId),
                     eq(games.isSandbox, false),
-                    isNotNull(games.mode),
+                    inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
                     inArray(games.state, ["completed", "aborted"]),
                     gameId === undefined ? undefined : eq(games.id, gameId),
                   ),

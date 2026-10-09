@@ -29,7 +29,7 @@ export function MatchDetails({
 }) {
   const { t } = useTranslation();
   const { details } = state;
-  if (!details?.configuration) return null;
+  if (!details?.configuration || details.configuration.mode === "human_vs_human") return null;
   const { snapshot, configuration } = details;
   return (
     <PausedCredentials

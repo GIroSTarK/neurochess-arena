@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-import { aiGameConfigurationSchema } from "./ai-game.js";
 import {
   gameIdSchema,
   gameLifecycleSchema,
   gameResultSchema,
   terminationReasonSchema,
 } from "./game.js";
+import { gameConfigurationSchema } from "./game-details.js";
 
 export const historyTimestampSchema = z.iso
   .datetime({ precision: 6 })
@@ -31,7 +31,7 @@ export const gameHistoryEntrySchema = z
   .strictObject({
     gameId: gameIdSchema,
     finishedAt: historyTimestampSchema,
-    configuration: aiGameConfigurationSchema,
+    configuration: gameConfigurationSchema,
     state: z.enum(["completed", "aborted"]),
     result: gameResultSchema,
     terminationReason: terminationReasonSchema,

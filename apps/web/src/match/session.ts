@@ -93,6 +93,7 @@ export class MatchSession {
       // Seeded entries also yield so a discarded mount cannot begin recovery writes.
       const details = await Promise.resolve(entry.details);
       if (!this.live(signal)) return;
+      if (details.configuration?.mode === "human_vs_human") throw new ApiFailure("malformed");
       if (parseGameId(details.snapshot.gameId) !== id) throw new ApiFailure("malformed");
       this.store.setFlow({ ...empty, details, phase: "ready" });
       this.navigation?.game(id, "recovered");
@@ -107,6 +108,10 @@ export class MatchSession {
   async created(details: GameDetails) {
     const flow = this.store.getFlow();
     if (!this.lifetime || flow.activity.busy || flow.phase !== "setup") return;
+    if (details.configuration?.mode === "human_vs_human") {
+      this.fail(new ApiFailure("malformed"), "unavailable");
+      return;
+    }
     this.services.invocations.clear();
     this.store.setFlow({
       ...flow,

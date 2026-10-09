@@ -88,6 +88,24 @@ function harness(routes: HttpRoutes = {}) {
 }
 
 describe("Arena entry loaders", () => {
+  it("does not load credentials or mount the AI entry for a human room", async () => {
+    const { read, http } = harness({
+      "GET /api/auth/get-session": () => jsonResponse(account),
+      "GET /profile": () => jsonResponse(profile),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({
+          ...details,
+          configuration: {
+            mode: "human_vs_human",
+            seats: { white: { type: "human" }, black: { type: "human" } },
+          },
+        }),
+    });
+    expect(await read(`/games/${GAME_ID}`, undefined, GAME_ID)).toMatchObject({
+      data: { entry: { kind: "unavailable", code: "unavailable" }, credentials: null },
+    });
+    expect(http.fetch.mock.calls.map(([url]) => requestPath(url))).not.toContain("/credentials");
+  });
   it.each(["setup", "game"])(
     "classifies PROFILE_REQUIRED as denied access for the %s entry",
     async (kind) => {

@@ -1,3 +1,4 @@
+import { isAiGameMode } from "@neurochess/contracts";
 import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
 import { createAiApi } from "../api/ai-client";
@@ -60,7 +61,10 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
           entry = { kind: "setup", existingGameId: game?.snapshot.gameId ?? null, issue: null };
         } else if (target.kind === "game") {
           const details = await api.details(target.gameId, signal);
-          entry = { kind: "game", gameId: target.gameId, details };
+          entry =
+            details.configuration?.mode === "human_vs_human"
+              ? { kind: "unavailable", code: "unavailable" }
+              : { kind: "game", gameId: target.gameId, details };
         } else return null;
       } catch (error) {
         if (cancelled()) return cancelledResult();
@@ -82,7 +86,7 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
       const needsCredentials =
         entry.kind === "setup" ||
         (entry.kind === "game" &&
-          entry.details.configuration !== null &&
+          isAiGameMode(entry.details.configuration?.mode) &&
           (entry.details.snapshot.state === "active" || entry.details.snapshot.state === "paused"));
       let credentials: CredentialCatalogState | null = null;
       if (identity.intent === "account" && needsCredentials) {

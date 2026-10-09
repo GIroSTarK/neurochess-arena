@@ -550,6 +550,8 @@ All default acceptance tests use real application/auth/database services with in
 
 ## Migrations
 
+Migration `0015_private_room_foundation.sql` extends the existing mode enum with `human_vs_human` and adds digest-only room metadata and bounded account creation-operation records. It preserves existing game data and unfinished-owner indexes. Only terminal human games may lack an owner; unfinished human games require an account owner, and solo/Sandbox ownership stays unchanged. Game deletion cascades room metadata but only clears a creation operation's result reference; account deletion removes that operation. Stop API writers, apply the reviewed forward migration, and restart the updated API together. This migration does not enable room creation or joining; follow the [Phase 4 delivery order](roadmap.md#phase-4--private-online-human-games) before enabling shared writes.
+
 Migration `0014_account_history_index.sql` adds a partial account/terminal-timestamp/UUID index for private history, without rewriting rows. Stop API writers while applying the forward migration and restart afterward; ordinary index creation can block writes on a populated database. The migration test upgrades populated prior schemas and checks that all application/authentication rows remain unchanged.
 
 Schema definitions live under `packages/database/src/schema`. Generate SQL with Drizzle Kit, inspect the generated SQL and metadata, and commit both. Apply migrations explicitly; the API does not mutate the schema during startup.

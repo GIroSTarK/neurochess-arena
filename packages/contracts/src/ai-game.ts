@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { commandIdSchema, gameIdSchema, gameSnapshotSchema, gameVersionSchema } from "./game.js";
+import { commandIdSchema, gameIdSchema, gameVersionSchema } from "./game.js";
 import { aiParametersSchema, aiProviderSchema, modelIdSchema } from "./provider.js";
 
 export const aiGameModeSchema = z.enum(["ai_vs_ai", "ai_vs_human"]);
@@ -27,17 +27,6 @@ export const aiGameConfigurationSchema = z.discriminatedUnion("mode", [
     ]),
   }),
 ]);
-
-export const gameDetailsSchema = z.strictObject({
-  snapshot: gameSnapshotSchema,
-  // Legacy games, including Sandbox, have no ordinary AI configuration.
-  configuration: aiGameConfigurationSchema.nullable(),
-});
-export const unfinishedGameDetailsSchema = z.strictObject({
-  game: gameDetailsSchema
-    .refine(({ snapshot }) => snapshot.state === "active" || snapshot.state === "paused")
-    .nullable(),
-});
 
 export const aiTurnCommandSchema = z.strictObject({
   gameId: gameIdSchema,
@@ -68,8 +57,6 @@ export type AiGameMode = z.infer<typeof aiGameModeSchema>;
 export type AiSeat = z.infer<typeof aiSeatSchema>;
 export type GameSeat = z.infer<typeof gameSeatSchema>;
 export type AiGameConfiguration = z.infer<typeof aiGameConfigurationSchema>;
-export type GameDetails = z.infer<typeof gameDetailsSchema>;
-export type UnfinishedGameDetails = z.infer<typeof unfinishedGameDetailsSchema>;
 export type AiTurnCommand = z.infer<typeof aiTurnCommandSchema>;
 export type AiControlledTurnCommand = z.infer<typeof aiControlledTurnCommandSchema>;
 export type AiControllerRequest = z.infer<typeof aiControllerRequestSchema>;

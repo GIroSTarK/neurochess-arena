@@ -48,8 +48,6 @@ export {
   aiSeatSchema,
   gameSeatSchema,
   aiGameConfigurationSchema,
-  gameDetailsSchema,
-  unfinishedGameDetailsSchema,
   aiTurnCommandSchema,
   aiControlledTurnCommandSchema,
   aiControllerRequestSchema,
@@ -59,10 +57,18 @@ export {
   type AiSeat,
   type GameSeat,
   type AiGameConfiguration,
-  type GameDetails,
-  type UnfinishedGameDetails,
   type AiTurnCommand,
 } from "./ai-game.js";
+export {
+  gameConfigurationSchema,
+  gameDetailsSchema,
+  unfinishedGameDetailsSchema,
+  isAiGameMode,
+  type GameConfiguration,
+  type GameDetails,
+  type UnfinishedGameDetails,
+} from "./game-details.js";
+export { humanGameConfigurationSchema, type HumanGameConfiguration } from "./room.js";
 export {
   healthResponseSchema,
   readinessResponseSchema,

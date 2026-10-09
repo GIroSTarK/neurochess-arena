@@ -47,9 +47,13 @@ describe("chess/transport compatibility", () => {
     expect(gameParticipants.color.enumValues).toEqual(domain.CHESS_COLORS);
     expectTypeOf<StoredGame["state"]>().toEqualTypeOf<contracts.GameState>();
     expectTypeOf<StoredGame["result"]>().toEqualTypeOf<contracts.GameResult>();
-    expect(games.mode.enumValues).toEqual(contracts.aiGameModeSchema.options);
+    expect(games.mode.enumValues).toEqual(
+      contracts.gameConfigurationSchema.options.map((option) => option.shape.mode.value),
+    );
     expect(gameParticipants.provider.enumValues).toEqual(contracts.aiProviderSchema.options);
-    expectTypeOf<NonNullable<StoredGame["mode"]>>().toEqualTypeOf<contracts.AiGameMode>();
+    expectTypeOf<NonNullable<StoredGame["mode"]>>().toEqualTypeOf<
+      contracts.GameConfiguration["mode"]
+    >();
     expectTypeOf<
       NonNullable<StoredParticipant["provider"]>
     >().toEqualTypeOf<contracts.AiProvider>();

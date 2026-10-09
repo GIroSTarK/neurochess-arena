@@ -5,9 +5,9 @@ import { isDeepStrictEqual } from "node:util";
 import type { ChessGame } from "@neurochess/chess";
 import {
   aiControlledTurnCommandSchema,
-  type AiGameConfiguration,
   type AiProvider,
   type AiTurnCommand,
+  type GameConfiguration,
   type GameSnapshot,
   type NormalizedMoveResponse,
 } from "@neurochess/contracts";
@@ -41,7 +41,7 @@ interface PreparedCommand {
   readonly game: ChessGame;
   readonly snapshot: GameSnapshot;
   readonly participants: readonly StoredParticipant[];
-  readonly configuration: AiGameConfiguration | null;
+  readonly configuration: GameConfiguration | null;
 }
 
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;

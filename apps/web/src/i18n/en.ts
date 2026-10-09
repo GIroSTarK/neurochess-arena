@@ -21,7 +21,7 @@ export const en = {
     empty: "No completed or aborted games yet. Your unfinished game is available in Arena.",
     list: "Finished games",
     states: { completed: "Completed", aborted: "Aborted" },
-    modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human" },
+    modes: { ai_vs_ai: "AI vs AI", ai_vs_human: "AI vs human", human_vs_human: "Human vs human" },
     model: "{{model}} · {{provider}}",
     replay: "Open replay",
     replayLabel: "Open replay · {{date}} · {{result}}",

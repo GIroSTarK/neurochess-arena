@@ -1,23 +1,76 @@
-import { type AiGameConfiguration, aiGameConfigurationSchema } from "@neurochess/contracts";
-import type { NewParticipant, StoredGame, StoredParticipant } from "@neurochess/database";
+import {
+  type AiGameConfiguration,
+  type GameConfiguration,
+  gameConfigurationSchema,
+} from "@neurochess/contracts";
+import type {
+  NewParticipant,
+  StoredGame,
+  StoredParticipant,
+  StoredRoom,
+} from "@neurochess/database";
 
 import type { GameIdentity } from "../identity/principal.js";
 
 import { GameIntegrityError } from "./errors.js";
 
 export function configurationOf(
-  stored: Pick<StoredGame, "mode" | "isSandbox" | "ownerGuestSessionId" | "ownerUserId">,
+  stored: Pick<
+    StoredGame,
+    "id" | "mode" | "state" | "isSandbox" | "ownerGuestSessionId" | "ownerUserId"
+  >,
   participants: readonly StoredParticipant[],
-): AiGameConfiguration | null {
+  room?: StoredRoom,
+): GameConfiguration | null {
   if (stored.mode === null) return null;
-  if (stored.isSandbox) throw new GameIntegrityError();
+  if (
+    stored.isSandbox ||
+    participants.length !== 2 ||
+    new Set(participants.map((seat) => seat.color)).size !== 2
+  ) {
+    throw new GameIntegrityError();
+  }
+  if (stored.mode === "human_vs_human") {
+    const terminal = stored.state === "completed" || stored.state === "aborted";
+    const ownerSeat = participants.find((seat) => seat.color === room?.ownerColor);
+    const otherSeat = participants.find((seat) => seat.color !== room?.ownerColor);
+    if (
+      room?.gameId !== stored.id ||
+      !["waiting", "joined"].includes(room.state) ||
+      (room.invitationDigest !== null && !/^[0-9a-f]{64}$/.test(room.invitationDigest)) ||
+      !ownerSeat ||
+      !otherSeat ||
+      stored.ownerGuestSessionId !== null ||
+      (!terminal && stored.ownerUserId === null) ||
+      ownerSeat.userId !== stored.ownerUserId ||
+      ownerSeat.guestSessionId !== null ||
+      participants.some(
+        (seat) =>
+          seat.seatType !== "human" || (seat.userId !== null && seat.guestSessionId !== null),
+      ) ||
+      (room.state === "waiting"
+        ? (stored.state !== "paused" && stored.state !== "aborted") ||
+          room.joinedAt !== null ||
+          otherSeat.userId !== null ||
+          otherSeat.guestSessionId !== null
+        : (!terminal && stored.state !== "active") ||
+          !(room.joinedAt instanceof Date) ||
+          !Number.isFinite(room.joinedAt.getTime()) ||
+          room.invitationDigest !== null ||
+          (!terminal && otherSeat.userId === null && otherSeat.guestSessionId === null)) ||
+      (terminal && room.invitationDigest !== null)
+    ) {
+      throw new GameIntegrityError();
+    }
+  }
 
   const seats: Partial<Record<"white" | "black", unknown>> = {};
   for (const participant of participants) {
     if (participant.seatType === "human") {
       if (
-        participant.guestSessionId !== stored.ownerGuestSessionId ||
-        participant.userId !== stored.ownerUserId ||
+        (stored.mode !== "human_vs_human" &&
+          (participant.guestSessionId !== stored.ownerGuestSessionId ||
+            participant.userId !== stored.ownerUserId)) ||
         participant.provider !== null ||
         participant.modelId !== null ||
         participant.parameters !== null
@@ -38,7 +91,7 @@ export function configurationOf(
       };
     }
   }
-  const configuration = aiGameConfigurationSchema.safeParse({ mode: stored.mode, seats });
+  const configuration = gameConfigurationSchema.safeParse({ mode: stored.mode, seats });
   if (!configuration.success) throw new GameIntegrityError();
   return configuration.data;
 }

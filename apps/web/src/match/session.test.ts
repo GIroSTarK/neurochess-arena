@@ -11,6 +11,25 @@ afterEach(() => {
 });
 
 describe("MatchSession", () => {
+  it.each(["enter", "created"] as const)(
+    "rejects room details on %s before AI recovery, telemetry or controller work",
+    async (entry) => {
+      const details = {
+        ...matchDetails(),
+        configuration: {
+          mode: "human_vs_human" as const,
+          seats: { white: { type: "human" as const }, black: { type: "human" as const } },
+        },
+      };
+      const h = matchHarness(details);
+      if (entry === "enter") await h.enter();
+      else await h.session.created(details);
+      expect(h.store.get()).toMatchObject({ phase: "unavailable", details: null, canMove: false });
+      for (const operation of [h.api.lifecycle, h.api.controller, h.api.invocations, h.api.turn]) {
+        expect(operation).not.toHaveBeenCalled();
+      }
+    },
+  );
   it("clears every published private slice together and fences late work across lifetimes", async () => {
     const details = matchDetails();
     const h = matchHarness(details);

@@ -7,6 +7,7 @@ import {
   aiGameConfigurationSchema,
   type AiProvider,
   type AiTurnCommand,
+  type GameConfiguration,
   type GameDetails,
   type GameHistoryDeletedResponse,
   type GameHistoryQuery,
@@ -18,6 +19,7 @@ import {
   type GamePgnResponse,
   type GameReplayResponse,
   type GameSnapshot,
+  isAiGameMode,
   type LifecycleCommand,
   type ModelDiscoveryResult,
   type MoveCommand,
@@ -93,7 +95,7 @@ interface RestoredGame {
   readonly snapshot: GameSnapshot;
   readonly moves: StoredMove[];
   readonly participants: StoredParticipant[];
-  readonly configuration: AiGameConfiguration | null;
+  readonly configuration: GameConfiguration | null;
 }
 
 export function createGameService(
@@ -122,8 +124,10 @@ export function createGameService(
     if (participants.length !== 2 || new Set(participants.map((seat) => seat.color)).size !== 2) {
       throw new GameIntegrityError();
     }
-    const configuration = configurationOf(stored, participants);
+    const room = stored.mode === "human_vs_human" ? await reader.getRoom(stored.id) : undefined;
+    const configuration = configurationOf(stored, participants, room);
     const moves = await reader.getMoves(stored.id);
+    if (room?.state === "waiting" && moves.length !== 0) throw new GameIntegrityError();
     const lifecycle = gameLifecycleSchema.safeParse({
       state: stored.state,
       result: stored.result,
@@ -186,6 +190,8 @@ export function createGameService(
     await requireActivePrincipal(tx, principal);
     if (!stored) throw new GameRequestError("NOT_FOUND");
     const restored = await restoreAuthorized(tx, principal, stored);
+    // Room writes remain closed until participant slots and shared retention are implemented.
+    if (stored.mode === "human_vs_human") throw new GameRequestError("FORBIDDEN");
     // Accepted IDs span every command kind, including retries after completion.
     if (
       command.expectedVersion !== stored.version ||
@@ -202,7 +208,7 @@ export function createGameService(
       const { stored } = restored;
       const commandId = command.commandId.toLowerCase();
       if (
-        stored.mode !== null &&
+        isAiGameMode(stored.mode) &&
         (await tx.getAiTurnReservation(stored.id))?.commandId === commandId
       ) {
         throw new GameConflictError(restored.snapshot);
@@ -228,7 +234,7 @@ export function createGameService(
       } else {
         authorizeGameControl(principal, stored);
       }
-      if (!isMove && stored.mode !== null && command.action !== "resign") {
+      if (!isMove && isAiGameMode(stored.mode) && command.action !== "resign") {
         if (command.action === "resume") {
           await requireController(tx, stored.id, command.controllerId);
         } else if (command.action === "pause" && !command.controllerId) {
@@ -239,7 +245,7 @@ export function createGameService(
         ? restored.game.playMove(command.move)
         : command.action === "resign"
           ? restored.game.resignHuman(command.losingColor)
-          : command.action === "pause" && stored.mode !== null && stored.state === "paused"
+          : command.action === "pause" && isAiGameMode(stored.mode) && stored.state === "paused"
             ? { ok: true as const, value: restored.game.snapshot() }
             : restored.game[command.action]();
       if (!accepted.ok) {
@@ -350,7 +356,7 @@ export function createGameService(
         if (!stored) throw new GameRequestError("NOT_FOUND");
         const { snapshot } = await restoreAuthorized(tx, principal, stored);
         authorizeGameControl(principal, stored);
-        if (stored.mode === null) throw new GameRequestError("FORBIDDEN");
+        if (!isAiGameMode(stored.mode)) throw new GameRequestError("FORBIDDEN");
         if (stored.state !== "active" && stored.state !== "paused") {
           throw new GameConflictError(snapshot);
         }
@@ -391,7 +397,7 @@ export function createGameService(
           // System cleanup locks the stored owner even after session expiry.
           await lockIdentity(tx, owner);
           const stored = await tx.lockGame(candidate.gameId);
-          if (!stored?.mode) return;
+          if (!stored || !isAiGameMode(stored.mode)) return;
           const lease = await tx.getAiController(stored.id);
           if (lease?.expired === false) return;
           if (
@@ -449,6 +455,7 @@ export function createGameService(
         const stored = await reader.getGame(gameId);
         if (!stored) throw new GameRequestError("NOT_FOUND");
         const { snapshot } = await restoreAuthorized(reader, principal, stored);
+        if (stored.mode === "human_vs_human") throw new GameRequestError("FORBIDDEN");
         return readInvocations(reader, snapshot);
       }),
     move: mutate,

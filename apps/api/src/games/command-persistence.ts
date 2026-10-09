@@ -1,5 +1,5 @@
 import type { ChessSnapshot } from "@neurochess/chess";
-import { type GameSnapshot, gameSnapshotSchema } from "@neurochess/contracts";
+import { type GameSnapshot, gameSnapshotSchema, isAiGameMode } from "@neurochess/contracts";
 import type { GameTransaction, NewGameCommand, StoredGame } from "@neurochess/database";
 
 import { GameIntegrityError } from "./errors.js";
@@ -21,9 +21,11 @@ export async function persistCommand(
   if (!(await tx.updatePosition(stored.id, stored.version, positionOf(snapshot)))) {
     throw new GameIntegrityError();
   }
-  if (stored.mode !== null) await tx.clearAiTurn(stored.id);
-  if (snapshot.state === "completed" || snapshot.state === "aborted") {
-    await tx.clearAiController(stored.id);
+  if (isAiGameMode(stored.mode)) {
+    await tx.clearAiTurn(stored.id);
+    if (snapshot.state === "completed" || snapshot.state === "aborted") {
+      await tx.clearAiController(stored.id);
+    }
   }
   return snapshot;
 }

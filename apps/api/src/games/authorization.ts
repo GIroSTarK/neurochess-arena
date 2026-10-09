@@ -14,7 +14,9 @@ export function authorizeGameRead(
   const isOwner = ownsGame(principal, game);
   const allowed = game.isSandbox
     ? sandboxEnabled && isOwner
-    : isOwner || (game.mode === null && participants.some((seat) => occupiesSeat(principal, seat)));
+    : isOwner ||
+      ((game.mode === null || game.mode === "human_vs_human") &&
+        participants.some((seat) => occupiesSeat(principal, seat)));
   if (!allowed) throw new GameRequestError("NOT_FOUND");
 }
 

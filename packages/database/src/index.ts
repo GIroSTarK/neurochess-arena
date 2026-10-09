@@ -1,5 +1,12 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
 export { runMigrations } from "./migrations.js";
+export { rooms, roomCreationOperations } from "./schema/rooms.js";
+export type {
+  RoomReader,
+  RoomTransaction,
+  StoredRoom,
+  StoredRoomCreationOperation,
+} from "./room-repository.js";
 export { profiles } from "./schema/profiles.js";
 export {
   createProfileRepository,
