@@ -129,7 +129,7 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 ## Phase 4 — Private online human games
 
-**Status:** P4-01 policy and P4-02 persistence milestones complete. [ADR-0018](decisions/0018-private-room-lifecycle-and-shared-retention.md) defines the accepted policies. Typed human-game details, room metadata, bounded creation-operation storage, and seeded private reads are implemented with migration and regression coverage. Room writes and production entry remain disabled pending participant slots, shared retention, and the subsequent API/UI work (P4-03 onward).
+**Status:** P4-01 policy, P4-02 persistence, and P4-03 participant-slot milestones complete. [ADR-0018](decisions/0018-private-room-lifecycle-and-shared-retention.md) defines the accepted policies. Typed human-game details, room metadata, bounded creation-operation storage, and seeded private reads are implemented. Normalized unfinished-game reservations now cover owners and non-owner participants, including recovery, atomic terminal release, cross-mode races, populated upgrades, and independent Sandbox regression coverage. Room writes and production entry remain disabled pending shared retention and the subsequent API/UI work (P4-04 onward).
 
 Deliverables:
 

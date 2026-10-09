@@ -9,7 +9,14 @@ import {
   type LifecycleCommand,
   unfinishedGameResponseSchema,
 } from "@neurochess/contracts";
-import { gameCommands, gameParticipants, games, guestSessions, moves } from "@neurochess/database";
+import {
+  gameCommands,
+  gameParticipants,
+  games,
+  gameSlots,
+  guestSessions,
+  moves,
+} from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -365,9 +372,20 @@ describe("private discovery, replay and PGN", () => {
       .set({ isSandbox: false })
       .where(eq(games.id, initial.gameId));
     await api.database.db
+      .update(gameSlots)
+      .set({ scope: "ordinary" })
+      .where(eq(gameSlots.gameId, initial.gameId));
+    await api.database.db
       .update(gameParticipants)
       .set({ guestSessionId: opponent.id })
       .where(and(eq(gameParticipants.gameId, initial.gameId), eq(gameParticipants.color, "black")));
+    await api.repository.write((tx) =>
+      tx.reserveGameSlot({
+        gameId: initial.gameId,
+        scope: "ordinary",
+        guestSessionId: opponent.id,
+      }),
+    );
     for (const action of ["pause", "resume", "abort"] as const) {
       expect((await send(api, opponent, control(initial, { action }))).statusCode).toBe(403);
     }

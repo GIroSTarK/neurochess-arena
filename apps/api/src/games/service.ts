@@ -305,6 +305,7 @@ export function createGameService(
         participantsFor(snapshot.gameId, principal, configuration),
       );
       if (configuration) await tx.setAiController(snapshot.gameId, null, leaseMs);
+      await requireActivePrincipal(tx, principal);
       return { snapshot, configuration };
     });
   }

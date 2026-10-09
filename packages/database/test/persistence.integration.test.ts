@@ -183,6 +183,8 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         "0013_owner_scoped_credential_ids",
         "0014_account_history_index",
         "0015_private_room_foundation",
+        "0016_participant_game_slots",
+        "0017_backfill_participant_game_slots",
       ].map((name) => readFile(new URL(`../drizzle/${name}.sql`, import.meta.url), "utf8")),
     );
     await database.db.transaction(async (tx) => {
@@ -521,6 +523,38 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         );
       }
       expect(afterRoomFoundation).toEqual(afterHistoryIndex);
+      await applyMigration(migrationFiles[15]!);
+      await applyMigration(migrationFiles[16]!);
+      const slots = await tx.execute<{
+        game_id: string;
+        scope: string;
+        user_id: string | null;
+        guest_session_id: string | null;
+      }>(sql`select game_id, scope, user_id, guest_session_id from game_slots`);
+      expect(slots.rows).toContainEqual({
+        game_id: accountGameId,
+        scope: "ordinary",
+        user_id: authUserId,
+        guest_session_id: null,
+      });
+      expect(slots.rows).toContainEqual({
+        game_id: aiGame,
+        scope: "ordinary",
+        user_id: null,
+        guest_session_id: aiOwner,
+      });
+      expect(slots.rows.filter((slot) => slot.scope === "sandbox")).toHaveLength(2);
+      const afterSlots = [];
+      for (const table of scopePreservedTables) {
+        afterSlots.push(
+          (
+            await tx.execute(
+              sql`select to_jsonb(t) as value from ${sql.identifier(table)} t order by to_jsonb(t)::text`,
+            )
+          ).rows,
+        );
+      }
+      expect(afterSlots).toEqual(afterRoomFoundation);
       expect((await tx.execute(sql`select * from rooms`)).rows).toEqual([]);
       expect((await tx.execute(sql`select * from room_creation_operations`)).rows).toEqual([]);
       for (const mode of [null, "ai_vs_ai", "ai_vs_human"]) {

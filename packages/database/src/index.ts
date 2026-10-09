@@ -16,6 +16,7 @@ export {
 } from "./profile-repository.js";
 export {
   games,
+  gameSlots,
   gameParticipants,
   guestSessions,
   moves,
@@ -46,6 +47,7 @@ export {
   type NewModelInvocation,
   type InvocationResult,
   type GamePositionUpdate,
+  type GameSlotReservation,
 } from "./game-repository.js";
 export {
   createAuthDatabaseAdapter,

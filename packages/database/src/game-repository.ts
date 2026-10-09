@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import type { DatabaseConnection } from "./client.js";
 import {
@@ -16,6 +17,7 @@ import {
   gameCommands,
   gameParticipants,
   games,
+  gameSlots,
   guestSessions,
   modelInvocations,
   moves,
@@ -78,6 +80,15 @@ export type GamePositionUpdate = Pick<
   "state" | "result" | "terminationReason" | "fen" | "pgn" | "version"
 >;
 
+const gameSlotReservationSchema = z.intersection(
+  z.object({ gameId: z.uuid(), scope: z.enum(["ordinary", "sandbox"]) }),
+  z.union([
+    z.object({ userId: z.uuid(), guestSessionId: z.never().optional() }),
+    z.object({ guestSessionId: z.uuid(), userId: z.never().optional() }),
+  ]),
+);
+export type GameSlotReservation = z.infer<typeof gameSlotReservationSchema>;
+
 export interface GameReader extends RoomReader {
   findAccountHistory(
     userId: string,
@@ -111,6 +122,9 @@ export interface GameReader extends RoomReader {
 }
 
 export interface GameTransaction extends GameReader, RoomTransaction {
+  // Call under the requester's identity lock and the appropriate game/room write protocol.
+  reserveGameSlot(reservation: GameSlotReservation): Promise<void>;
+  releaseGameSlots(gameId: string): Promise<void>;
   deleteAccountHistory(userId: string, gameId?: string): Promise<void>;
   getAiController(
     gameId: string,
@@ -280,29 +294,31 @@ function readerFor(db: Executor): GameReader {
         .orderBy(asc(modelInvocations.attemptNumber)),
     async findUnfinishedGame(guestId, scope) {
       const [game] = await db
-        .select()
+        .select({ game: games })
         .from(games)
+        .innerJoin(gameSlots, eq(gameSlots.gameId, games.id))
         .where(
           and(
-            eq(games.ownerGuestSessionId, guestId),
+            eq(gameSlots.guestSessionId, guestId),
             inArray(games.state, ["active", "paused"]),
-            eq(games.isSandbox, scope === "sandbox"),
+            eq(gameSlots.scope, scope),
           ),
         );
-      return game;
+      return game?.game;
     },
     async findUnfinishedAccountGame(userId) {
       const [game] = await db
-        .select()
+        .select({ game: games })
         .from(games)
+        .innerJoin(gameSlots, eq(gameSlots.gameId, games.id))
         .where(
           and(
-            eq(games.ownerUserId, userId),
+            eq(gameSlots.userId, userId),
             inArray(games.state, ["active", "paused"]),
-            eq(games.isSandbox, false),
+            eq(gameSlots.scope, "ordinary"),
           ),
         );
-      return game;
+      return game?.game;
     },
   };
 }
@@ -366,9 +382,26 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
       db.transaction(
         async (tx) => {
           const reader = readerFor(tx);
+          async function reserveGameSlot(input: GameSlotReservation) {
+            const reservation = gameSlotReservationSchema.parse(input);
+            const game = await reader.getGame(reservation.gameId);
+            if (
+              !game ||
+              !["active", "paused"].includes(game.state) ||
+              game.isSandbox !== (reservation.scope === "sandbox")
+            ) {
+              throw new Error("Game slot requires an unfinished game in the matching scope");
+            }
+            await tx.insert(gameSlots).values(reservation);
+          }
+          async function releaseGameSlots(gameId: string) {
+            await tx.delete(gameSlots).where(eq(gameSlots.gameId, gameId));
+          }
           return action({
             ...reader,
             ...roomTransactionFor(tx),
+            reserveGameSlot,
+            releaseGameSlots,
             async deleteAccountHistory(userId, gameId) {
               await tx
                 .delete(games)
@@ -448,8 +481,33 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
               await tx.insert(gameCommands).values(command);
             },
             async insertGame(game, participants) {
-              await tx.insert(games).values(game);
-              await tx.insert(gameParticipants).values(participants);
+              const [created] = await tx.insert(games).values(game).returning();
+              if (!created) throw new Error("Game insertion failed");
+              if (participants.length) await tx.insert(gameParticipants).values(participants);
+              if (created.state === "active" || created.state === "paused") {
+                const scope = created.isSandbox ? "sandbox" : "ordinary";
+                const identities = new Map<string, GameSlotReservation>();
+                for (const identity of [
+                  { userId: created.ownerUserId, guestSessionId: created.ownerGuestSessionId },
+                  ...participants,
+                ]) {
+                  if (identity.userId) {
+                    identities.set(`account:${identity.userId}`, {
+                      gameId: created.id,
+                      scope,
+                      userId: identity.userId,
+                    });
+                  }
+                  if (identity.guestSessionId) {
+                    identities.set(`guest:${identity.guestSessionId}`, {
+                      gameId: created.id,
+                      scope,
+                      guestSessionId: identity.guestSessionId,
+                    });
+                  }
+                }
+                for (const reservation of identities.values()) await reserveGameSlot(reservation);
+              }
             },
             async appendMove(move) {
               await tx.insert(moves).values(move);
@@ -552,6 +610,12 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                 .set({ ...position, updatedAt: sql`clock_timestamp()` })
                 .where(and(eq(games.id, gameId), eq(games.version, expectedVersion)))
                 .returning({ id: games.id });
+              if (
+                updated.length === 1 &&
+                (position.state === "completed" || position.state === "aborted")
+              ) {
+                await releaseGameSlots(gameId);
+              }
               return updated.length === 1;
             },
           });

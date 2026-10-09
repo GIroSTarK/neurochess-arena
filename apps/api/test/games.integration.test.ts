@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { gameErrorResponseSchema, gameSnapshotSchema } from "@neurochess/contracts";
-import { gameCommands, gameParticipants, games, guestSessions, moves } from "@neurochess/database";
+import {
+  gameCommands,
+  gameParticipants,
+  games,
+  gameSlots,
+  guestSessions,
+  moves,
+} from "@neurochess/database";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -360,9 +367,20 @@ describe("private ownership and sandbox authority", () => {
       .set({ isSandbox: false })
       .where(eq(games.id, initial.gameId));
     await api.database.db
+      .update(gameSlots)
+      .set({ scope: "ordinary" })
+      .where(eq(gameSlots.gameId, initial.gameId));
+    await api.database.db
       .update(gameParticipants)
       .set({ guestSessionId: opponent.id })
       .where(and(eq(gameParticipants.gameId, initial.gameId), eq(gameParticipants.color, "black")));
+    await api.repository.write((tx) =>
+      tx.reserveGameSlot({
+        gameId: initial.gameId,
+        scope: "ordinary",
+        guestSessionId: opponent.id,
+      }),
+    );
     const blackTurn = await play(api, owner, initial, ["e2e4"]);
     expect((await submit(api, owner, command(blackTurn, "e7e5"))).statusCode).toBe(403);
     expect(await snapshot(api, opponent, initial.gameId)).toEqual(blackTurn);
