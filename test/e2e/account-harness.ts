@@ -15,11 +15,12 @@ import { z } from "zod";
 import type { AuthEmailSender } from "../../apps/api/src/auth/email.js";
 import { AUTH_IP_HEADER } from "../../apps/api/src/auth/options.js";
 import { createAccountAuth } from "../../apps/api/src/auth/service.js";
+import type { RoomEvents } from "../../apps/api/src/realtime/room-events.js";
 
 import { API_ORIGIN, WEB_ORIGIN } from "./environment.js";
 
 // Only the disposable browser-test entrypoint installs these transports and routes.
-export function accountHarness(database: DatabaseConnection) {
+export function accountHarness(database: DatabaseConnection, roomEvents?: RoomEvents) {
   const createdUserIds = new Set<string>();
   const createdSessionIds = new Set<string>();
   const states = new Set<string>();
@@ -58,6 +59,7 @@ export function accountHarness(database: DatabaseConnection) {
       GITHUB_CLIENT_SECRET: "github-fixture-secret",
     },
     sender,
+    roomEvents,
   );
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {

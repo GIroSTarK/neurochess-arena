@@ -27,7 +27,7 @@ export class AccountGameHarness extends ApiHarness {
   createAuthenticatedApi(options: Parameters<ApiHarness["createApi"]>[0] = {}) {
     return this.createApi({
       ...options,
-      auth: (database) => createAccountAuth(database, authEnvironment),
+      auth: (database, events) => createAccountAuth(database, authEnvironment, undefined, events),
     });
   }
 

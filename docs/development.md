@@ -402,7 +402,28 @@ Invitations are canonical base64url encodings of 32 random bytes. Only issuance 
 
 Join atomically seats the opposite color, reserves its public slot, consumes the invitation and activates White's turn, advancing the revision. Reusing the identical invitation and command ID recovers only the same still-authorized opponent's current view; changed requests or other identities receive `409 ROOM_UNAVAILABLE`. A self-join returns `409 ROOM_SELF_JOIN`. Resolution and join share a per-socket-IP limit of 30 requests per minute in the single API instance, with bounded limiter storage; rejection returns `429 RATE_LIMITED`. No invitation is retained in limiter keys or diagnostics.
 
-Use the existing `/games/:gameId/moves` and `/games/:gameId/lifecycle` commands for play, self-resignation and owner abort. They preserve full-history restoration, side-to-move legality, version checks and accepted-command deduplication. Join and invitation mutations also advance the same aggregate revision, so revisions need not equal move counts. Terminal transitions release both slots. Rooms reject AI controller, invocation and turn endpoints; disconnect/restart does not pause them. `/games/unfinished` recovers either participant's room. History, replay and PGN follow [participant retention](product.md#shared-room-retention). WebSocket delivery and production room screens follow the [Phase 4 roadmap](roadmap.md#phase-4--private-online-human-games).
+Use the existing `/games/:gameId/moves` and `/games/:gameId/lifecycle` commands for play, self-resignation and owner abort. They preserve full-history restoration, side-to-move legality, version checks and accepted-command deduplication. Join and invitation mutations also advance the same aggregate revision, so revisions need not equal move counts. Terminal transitions release both slots. Rooms reject AI controller, invocation and turn endpoints; disconnect/restart does not pause them. `/games/unfinished` recovers either participant's room. History, replay and PGN follow [participant retention](product.md#shared-room-retention). Production room screens follow the [Phase 4 roadmap](roadmap.md#phase-4--private-online-human-games).
+
+### Private room WebSocket protocol
+
+Open `/rooms/realtime` with the existing HttpOnly cookies and exact `WEB_ORIGIN`, without query parameters or subprotocols. Send one text subscription before receiving private state:
+
+```json
+{
+  "protocol": 1,
+  "type": "subscribe",
+  "gameId": "<game UUID>",
+  "expectedIdentity": "<observed account UUID or guest>"
+}
+```
+
+The expectation only rejects identity mismatches. Cookie authority, account precedence, completed/verified account profiles, and participant/retained access still apply. Invalid account cookies cannot fall back to a guest. The connection stays bound to its original session; it never bootstraps an identity or accepts moves/lifecycle commands.
+
+`packages/contracts/src/room-realtime.ts` defines strict protocol-v1 messages. `snapshot` and `update` each carry a full, validated `room: RoomView`, including that recipient's capabilities. Use `room.snapshot.version` as the canonical aggregate revision, not the number of moves. Pending notifications coalesce into current full views; duplicate views are suppressed. Terminal player anonymization can change the projection without changing the game revision. Safe failures contain only `error` with `INVALID_MESSAGE`/`UNAVAILABLE`, or `access_lost`, followed by closure.
+
+The single API process installs the subscription before reading its baseline, buffers a pending invalidation during reads, and publishes notifications only after command/deletion commits. A fresh SQL statement checks exact identity validity and room access together immediately before delivery. Default bounds are 4 KiB incoming messages, 1 MiB outbound buffered data including the next frame, 1,024 connections total, eight per account/guest identity, five seconds each for authentication, subscription and a delivery read, and one second for close completion. Slow or invalid connections close; HTTP commands remain authoritative. Presence, idle authorization checks and reconciliation of missed publications are tracked separately in the roadmap.
+
+Run `npm run test:unit -- packages/contracts/src/room-realtime.test.ts` and `npm run test:integration -- apps/api/test/room-realtime.integration.test.ts` for protocol, real socket/PostgreSQL authorization, commit boundaries and controlled snapshot races. `npm run test:e2e -- test/e2e/room-http.spec.ts` also verifies native cookie-authenticated sockets in two independent desktop/mobile browser contexts while using HTTP for commands.
 
 ## AI provider and game API
 

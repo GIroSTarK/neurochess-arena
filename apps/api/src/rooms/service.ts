@@ -28,11 +28,13 @@ import { GameConflictError, GameIntegrityError, GameRequestError } from "../game
 import { restoreAuthorizedGame } from "../games/restoration.js";
 import type { AccountPrincipal, Principal } from "../identity/principal.js";
 import { lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
+import type { RoomEvents } from "../realtime/room-events.js";
 
 import { RoomRequestError } from "./errors.js";
 import { invitationDigest, issueInvitation, matchesInvitation } from "./invitations.js";
 
 export interface RoomService {
+  authorize(principal: Principal, gameId?: string): Promise<void>;
   issueCreationOperation(principal: Principal): Promise<RoomCreationOperation>;
   create(principal: Principal, input: unknown): Promise<RoomIssuedResponse>;
   resolve(input: unknown): Promise<RoomResolution>;
@@ -133,8 +135,19 @@ function joinable(room: StoredRoom, stored: StoredGame | undefined): stored is S
   );
 }
 
-export function createRoomService(repository: GameRepository): RoomService {
+export function createRoomService(repository: GameRepository, events?: RoomEvents): RoomService {
   return {
+    async authorize(principal, gameId) {
+      await repository.read((reader) => requireRoomPrincipal(reader, principal));
+      if (gameId === undefined) return;
+      const identity =
+        principal.kind === "account"
+          ? { userId: principal.userId, sessionId: principal.sessionId }
+          : { guestSessionId: principal.guestSessionId };
+      if (!(await repository.hasCurrentRoomAccess(gameId, identity))) {
+        throw new GameRequestError("UNAUTHORIZED");
+      }
+    },
     issueCreationOperation(principal) {
       const owner = account(principal);
       return repository.write(async (tx) => {
@@ -218,11 +231,11 @@ export function createRoomService(repository: GameRepository): RoomService {
         };
       });
     },
-    join(principal, input) {
+    async join(principal, input) {
       const command = parse(roomJoinRequestSchema, input);
       const commandId = command.commandId.toLowerCase();
       const digest = invitationDigest(command.invitation);
-      return repository.write(async (tx) => {
+      const view = await repository.write(async (tx) => {
         await prepare(tx, principal);
         const receipt = await tx.findRoomJoin(commandId);
         if (receipt) {
@@ -283,10 +296,12 @@ export function createRoomService(repository: GameRepository): RoomService {
         await requireRoomPrincipal(tx, principal);
         return view;
       });
+      events?.publish(view.snapshot.gameId);
+      return view;
     },
-    invitation(principal, input) {
+    async invitation(principal, input) {
       const command = parse(roomInvitationRequestSchema, input);
-      return repository.write(async (tx) => {
+      const issued = await repository.write(async (tx) => {
         await prepare(tx, principal);
         const stored = await tx.lockGame(command.gameId);
         await requireRoomPrincipal(tx, principal);
@@ -317,6 +332,8 @@ export function createRoomService(repository: GameRepository): RoomService {
         await requireRoomPrincipal(tx, principal);
         return { room, invitation: issued?.invitation ?? null };
       });
+      events?.publish(issued.room.snapshot.gameId);
+      return issued;
     },
     read(principal, gameId) {
       return repository.read(async (reader) => {

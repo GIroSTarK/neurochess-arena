@@ -21,6 +21,7 @@ import { createCredentialService } from "../../apps/api/src/credentials/service.
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
+import { createRoomEvents } from "../../apps/api/src/realtime/room-events.js";
 import { createRoomService } from "../../apps/api/src/rooms/service.js";
 import { integrationDatabase } from "../database.js";
 
@@ -34,7 +35,8 @@ async function main() {
   // This guard runs before creating a pool, applying migrations or listening.
   // There is deliberately no DATABASE_URL fallback and no reuse of a dev API.
   const database = integrationDatabase();
-  const accounts = accountHarness(database);
+  const roomEvents = createRoomEvents();
+  const accounts = accountHarness(database, roomEvents);
   const credentialCipher = createCredentialCipher({
     keyId: "browser-fixture",
     key: randomBytes(32).toString("base64"),
@@ -128,10 +130,12 @@ async function main() {
       auth: accounts.auth,
       profiles: createProfileService(createProfileRepository(database)),
       credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
-      rooms: createRoomService(repository),
+      rooms: createRoomService(repository, roomEvents),
+      roomEvents,
       gameApi: {
         guests: createGuestService(repository, 86_400),
         games: createGameService(repository, {
+          roomEvents,
           nodeEnv: "test",
           sandboxEnabled: true,
           aiAdapters: setupProviders(),

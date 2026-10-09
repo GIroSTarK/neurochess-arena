@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { DatabaseConnection } from "./client.js";
 import type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
+import { hasCurrentRoomAccess, type RoomAccessIdentity } from "./room-access.js";
 import {
   type RoomReader,
   roomReaderFor,
@@ -166,6 +167,7 @@ export interface GameTransaction extends GameReader, RoomTransaction {
 }
 
 export interface GameRepository {
+  hasCurrentRoomAccess(gameId: string, identity: RoomAccessIdentity): Promise<boolean>;
   cleanupSharedRooms(): Promise<void>;
   expiredAiControllers(): Promise<
     { gameId: string; ownerGuestSessionId: string | null; ownerUserId: string | null }[]
@@ -350,6 +352,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
   const { db } = connection;
   return {
     cleanupSharedRooms: () => cleanupSharedRooms(connection),
+    hasCurrentRoomAccess: (gameId, identity) => hasCurrentRoomAccess(connection, gameId, identity),
     expiredAiControllers: () =>
       db
         .select({

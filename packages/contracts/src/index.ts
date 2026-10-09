@@ -177,3 +177,4 @@ export {
   type ProfileErrorCode,
 } from "./profile.js";
 export * from "./credential.js";
+export * from "./room-realtime.js";

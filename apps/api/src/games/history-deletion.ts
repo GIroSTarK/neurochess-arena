@@ -8,11 +8,12 @@ import type { GameRepository } from "@neurochess/database";
 
 import type { Principal } from "../identity/principal.js";
 import { lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
+import type { RoomEvents } from "../realtime/room-events.js";
 
 import { GameRequestError } from "./errors.js";
 import { cleanupAfterCommit } from "./shared-room-cleanup.js";
 
-export function createHistoryDeletion(repository: GameRepository) {
+export function createHistoryDeletion(repository: GameRepository, events?: RoomEvents) {
   async function remove(
     principal: Principal,
     gameId?: string,
@@ -47,6 +48,7 @@ export function createHistoryDeletion(repository: GameRepository) {
       await requireActivePrincipal(tx, principal);
       return { status: "deleted" as const };
     });
+    events?.publish(gameId);
     await cleanupAfterCommit(() => repository.cleanupSharedRooms(), onCleanupFailure);
     return result;
   }

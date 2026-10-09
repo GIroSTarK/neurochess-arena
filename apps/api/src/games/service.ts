@@ -35,6 +35,7 @@ import {
 import type { GameIdentity, Principal } from "../identity/principal.js";
 import { lockIdentity, lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
 import { discoverModels } from "../providers/discovery.js";
+import type { RoomEvents } from "../realtime/room-events.js";
 
 import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
 import { authorizeGameControl, authorizeHumanSeat, ownerOf } from "./authorization.js";
@@ -94,6 +95,7 @@ export function createGameService(
     readonly aiAdapters?: AiAdapters;
     readonly controllerLeaseMs?: number;
     readonly credentialCipher?: Pick<CredentialCipher, "decrypt">;
+    readonly roomEvents?: RoomEvents;
   },
 ): GameService {
   const sandboxEnabled = options.sandboxEnabled && options.nodeEnv !== "production";
@@ -151,8 +153,8 @@ export function createGameService(
     return { ...restored, stored };
   }
 
-  function mutate(principal: Principal, command: MoveCommand | LifecycleCommand) {
-    return repository.write(async (tx) => {
+  async function mutate(principal: Principal, command: MoveCommand | LifecycleCommand) {
+    const result = await repository.write(async (tx) => {
       const restored = await prepareCommand(tx, principal, command, true);
       const { stored } = restored;
       const commandId = command.commandId.toLowerCase();
@@ -221,8 +223,10 @@ export function createGameService(
         accepted.value,
       );
       await requireActivePrincipal(tx, principal);
-      return snapshot;
+      return { snapshot, roomChanged: stored.mode === "human_vs_human" };
     });
+    if (result.roomChanged) options.roomEvents?.publish(result.snapshot.gameId);
+    return result.snapshot;
   }
 
   function createOwnedGame(
@@ -270,7 +274,7 @@ export function createGameService(
   }
 
   return {
-    ...createHistoryDeletion(repository),
+    ...createHistoryDeletion(repository, options.roomEvents),
     cleanupSharedRooms: () => repository.cleanupSharedRooms(),
     async history(principal, input) {
       if (principal.kind !== "account") throw new GameRequestError("UNAUTHORIZED");

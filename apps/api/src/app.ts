@@ -20,6 +20,9 @@ import type { CredentialService } from "./credentials/service.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
+import type { RoomConnectionLimits } from "./realtime/connections.js";
+import type { RoomEvents } from "./realtime/room-events.js";
+import { registerRoomRealtime } from "./realtime/routes.js";
 import { registerRoomRoutes } from "./rooms/routes.js";
 import type { RoomService } from "./rooms/service.js";
 
@@ -36,6 +39,8 @@ export interface BuildAppOptions {
   readonly profiles?: ProfileService;
   readonly credentials?: CredentialService;
   readonly rooms?: RoomService;
+  readonly roomEvents?: RoomEvents;
+  readonly roomRealtimeLimits?: Partial<RoomConnectionLimits>;
 }
 
 export async function buildApp(options: BuildAppOptions) {
@@ -54,6 +59,17 @@ export async function buildApp(options: BuildAppOptions) {
       callback(null, origin === options.webOrigin);
     },
   });
+
+  if (options.rooms && options.gameApi && options.roomEvents) {
+    await app.register(registerRoomRealtime, {
+      rooms: options.rooms,
+      guests: options.gameApi.guests,
+      webOrigin: options.webOrigin,
+      events: options.roomEvents,
+      ...(options.auth ? { auth: options.auth } : {}),
+      ...(options.roomRealtimeLimits ? { limits: options.roomRealtimeLimits } : {}),
+    });
+  }
 
   routes.get(
     "/health",

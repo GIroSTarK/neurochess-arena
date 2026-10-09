@@ -42,8 +42,11 @@ export class RoomApiHarness extends AccountGameHarness {
     return roomCreationOperationSchema.parse(response.json());
   }
 
-  async room(ownerColor: "white" | "black" = "white") {
-    const api = await this.createAuthenticatedApi();
+  async room(
+    ownerColor: "white" | "black" = "white",
+    options: Parameters<AccountGameHarness["createAuthenticatedApi"]>[0] = {},
+  ) {
+    const api = await this.createAuthenticatedApi(options);
     const owner = await this.account(api);
     const operation = await this.operation(api, owner.cookie);
     const payload = { operationId: operation.operationId, ownerColor };

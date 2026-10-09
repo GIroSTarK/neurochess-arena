@@ -20,6 +20,7 @@ import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
 import { createOpenRouterAdapter } from "./providers/openrouter.js";
+import { createRoomEvents } from "./realtime/room-events.js";
 import { createRoomService } from "./rooms/service.js";
 
 async function main(): Promise<void> {
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   const environment = parseApiEnvironment(process.env);
   const database = createDatabase(environment.DATABASE_URL);
   const repository = createGameRepository(database);
+  const roomEvents = createRoomEvents();
   const credentialCipher =
     environment.CREDENTIAL_ENCRYPTION_KEY_ID && environment.CREDENTIAL_ENCRYPTION_KEY
       ? createCredentialCipher({
@@ -38,12 +40,14 @@ async function main(): Promise<void> {
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
-    auth: createAccountAuth(database, environment, createAuthEmailSender(environment)),
+    auth: createAccountAuth(database, environment, createAuthEmailSender(environment), roomEvents),
     profiles: createProfileService(createProfileRepository(database)),
     credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
-    rooms: createRoomService(repository),
+    rooms: createRoomService(repository, roomEvents),
+    roomEvents,
     gameApi: {
       games: createGameService(repository, {
+        roomEvents,
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
         ...(credentialCipher ? { credentialCipher } : {}),

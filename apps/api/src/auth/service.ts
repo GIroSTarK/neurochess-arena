@@ -21,6 +21,7 @@ import { z } from "zod";
 import { abortSharedGame } from "../games/account-deletion.js";
 import { cleanupAfterCommit } from "../games/shared-room-cleanup.js";
 import type { AccountPrincipal } from "../identity/principal.js";
+import type { RoomEvents } from "../realtime/room-events.js";
 
 import { accountDeletion } from "./account-deletion.js";
 import type { AuthEmail, AuthEmailSender } from "./email.js";
@@ -44,6 +45,7 @@ export function createAccountAuth(
   database: DatabaseConnection,
   environment: AuthEnvironment,
   sender?: AuthEmailSender,
+  roomEvents?: RoomEvents,
 ): AccountAuth {
   const delivery = new AsyncLocalStorage<AuthEmail[]>();
   const pendingDeliveries = new Set<Promise<void>>();
@@ -138,6 +140,7 @@ export function createAccountAuth(
         deleting ? { abortSharedGame } : undefined,
       );
       if (deleting && response.ok) {
+        roomEvents?.publish();
         await cleanupAfterCommit(() => cleanupSharedRooms(database), onCleanupFailure);
       }
       return response;

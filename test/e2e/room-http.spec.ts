@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  authSessionResponseSchema,
   gameSnapshotSchema,
   roomCreationOperationSchema,
   roomIssuedResponseSchema,
+  roomServerMessageSchema,
   roomViewSchema,
 } from "@neurochess/contracts";
-import type { Page } from "@playwright/test";
+import type { JSHandle, Page } from "@playwright/test";
 
 import { createAccount } from "./account-helpers";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
@@ -34,6 +36,60 @@ async function read(page: Page, path: string) {
   }, API_ORIGIN + path);
 }
 
+async function subscribe(page: Page, gameId: string) {
+  const session = authSessionResponseSchema.parse((await read(page, "/api/auth/get-session")).body);
+  return page.evaluateHandle(
+    ({ url, gameId, expectedIdentity }) =>
+      new Promise<{ socket: WebSocket; messages: unknown[] }>((resolve, reject) => {
+        const socket = new WebSocket(url);
+        const messages: unknown[] = [];
+        socket.onmessage = (event) => {
+          messages.push(JSON.parse(String(event.data)));
+        };
+        socket.onerror = () => reject(new Error("Room socket failed"));
+        socket.onopen = () => {
+          socket.send(JSON.stringify({ protocol: 1, type: "subscribe", gameId, expectedIdentity }));
+          resolve({ socket, messages });
+        };
+      }),
+    {
+      url: API_ORIGIN.replace(/^http/, "ws") + "/rooms/realtime",
+      gameId,
+      expectedIdentity: session?.user.id ?? "guest",
+    },
+  );
+}
+
+async function socketRoom(
+  client: JSHandle<{ socket: WebSocket; messages: unknown[] }>,
+  version: number,
+) {
+  const latest = async () => {
+    const frames = await client.evaluate(({ messages }) => messages);
+    return frames.map((message) => roomServerMessageSchema.parse(message)).at(-1);
+  };
+  await expect
+    .poll(async () => {
+      const frame = await latest();
+      return frame && "room" in frame ? frame.room.snapshot.version : null;
+    })
+    .toBe(version);
+  const frame = await latest();
+  if (!frame || !("room" in frame)) throw new Error("Expected a private room frame");
+  return frame.room;
+}
+
+async function closeSocket(client: JSHandle<{ socket: WebSocket; messages: unknown[] }>) {
+  await client.evaluate(
+    ({ socket }) =>
+      new Promise<void>((resolve) => {
+        socket.onclose = () => resolve();
+        socket.close();
+      }),
+  );
+  await client.dispose();
+}
+
 test("two browser identities complete a private HTTP room with a Black owner and guest White", async ({
   page,
   newContext,
@@ -51,6 +107,8 @@ test("two browser identities complete a private HTTP room with a Black owner and
   expect(created.status).toBe(200);
   const { room, invitation } = roomIssuedResponseSchema.parse(created.body);
   const gameId = room.snapshot.gameId;
+  const ownerSocket = await subscribe(page, gameId);
+  expect(await socketRoom(ownerSocket, 0)).toEqual(room);
   expect((await guest.request.get(API_ORIGIN + `/rooms/${gameId}`)).status()).toBe(401);
   expect((await post(guest, "/rooms/invitations/resolve", { invitation })).body).toEqual({
     status: "joinable",
@@ -63,6 +121,12 @@ test("two browser identities complete a private HTTP room with a Black owner and
   const admitted = await post(guest, "/rooms/join", join);
   expect(admitted.status).toBe(200);
   let snapshot = roomViewSchema.parse(admitted.body).snapshot;
+  const guestSocket = await subscribe(guest, gameId);
+  expect((await socketRoom(ownerSocket, 1)).viewer).toEqual({ color: "black", isOwner: true });
+  expect((await socketRoom(guestSocket, 1)).capabilities).toMatchObject({
+    canMove: true,
+    canClose: false,
+  });
   expect((await post(guest, "/rooms/join", join)).body).toEqual(admitted.body);
   expect(
     roomIssuedResponseSchema.parse((await post(page, "/rooms", creation)).body).invitation,
@@ -77,6 +141,9 @@ test("two browser identities complete a private HTTP room with a Black owner and
     });
     expect(accepted.status).toBe(200);
     snapshot = gameSnapshotSchema.parse(accepted.body);
+    for (const socket of [ownerSocket, guestSocket]) {
+      expect((await socketRoom(socket, snapshot.version)).snapshot).toEqual(snapshot);
+    }
   }
   expect(snapshot).toMatchObject({
     state: "completed",
@@ -105,6 +172,7 @@ test("two browser identities complete a private HTTP room with a Black owner and
   expect((await post(guest, "/rooms/invitations/resolve", { invitation })).body).toEqual({
     status: "unavailable",
   });
+  await Promise.all([closeSocket(ownerSocket), closeSocket(guestSocket)]);
   await page.goto("/history");
   await expect(page.getByText("Guest player", { exact: true })).toBeVisible();
 });
@@ -127,6 +195,9 @@ test("two account browsers preserve private history when the owner closes an HTT
   const gameId = room.snapshot.gameId;
   const joined = await post(other, "/rooms/join", { invitation, commandId: randomUUID() });
   expect(joined.status).toBe(200);
+  const ownerSocket = await subscribe(page, gameId);
+  const opponentSocket = await subscribe(other, gameId);
+  for (const socket of [ownerSocket, opponentSocket]) await socketRoom(socket, 1);
   const command = { gameId, expectedVersion: 1, commandId: randomUUID(), action: "abort" };
   expect(
     (
@@ -137,6 +208,10 @@ test("two account browsers preserve private history when the owner closes an HTT
     ).status(),
   ).toBe(403);
   expect((await post(page, `/games/${gameId}/lifecycle`, command)).status).toBe(200);
+  for (const socket of [ownerSocket, opponentSocket]) {
+    expect((await socketRoom(socket, 2)).snapshot.state).toBe("aborted");
+  }
+  await Promise.all([closeSocket(ownerSocket), closeSocket(opponentSocket)]);
   await other.reload();
   expect(roomViewSchema.parse((await read(other, `/rooms/${gameId}`)).body).snapshot.state).toBe(
     "aborted",

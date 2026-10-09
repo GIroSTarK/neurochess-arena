@@ -23,6 +23,7 @@ import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 import type { GuestPrincipal } from "../src/identity/principal.js";
 import { createProfileService } from "../src/profiles/service.js";
+import { createRoomEvents, type RoomEvents } from "../src/realtime/room-events.js";
 import { createRoomService } from "../src/rooms/service.js";
 
 export const WEB_ORIGIN = "http://localhost:5173";
@@ -33,6 +34,7 @@ export interface TestApi {
   readonly app: Awaited<ReturnType<typeof buildApp>>;
   readonly database: DatabaseConnection;
   readonly repository: GameRepository;
+  readonly roomEvents: RoomEvents;
 }
 
 export interface TestGuest {
@@ -55,7 +57,8 @@ export class ApiHarness {
       logger?: BuildAppOptions["logger"];
       aiAdapters?: AiAdapters;
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
-      auth?: (database: DatabaseConnection) => AccountAuth;
+      auth?: (database: DatabaseConnection, roomEvents: RoomEvents) => AccountAuth;
+      roomRealtimeLimits?: BuildAppOptions["roomRealtimeLimits"];
       credentials?: (database: DatabaseConnection) => NonNullable<BuildAppOptions["credentials"]>;
       credentialCipher?: CredentialCipher | null;
     } = {},
@@ -63,6 +66,7 @@ export class ApiHarness {
     const database = integrationDatabase();
     const original = createGameRepository(database);
     const repository = options.repository?.(original) ?? original;
+    const roomEvents = createRoomEvents();
     const credentialCipher =
       options.credentialCipher === undefined
         ? createCredentialCipher({
@@ -74,10 +78,12 @@ export class ApiHarness {
       logger: options.logger ?? false,
       readiness: database,
       webOrigin: WEB_ORIGIN,
-      rooms: createRoomService(repository),
+      rooms: createRoomService(repository, roomEvents),
+      roomEvents,
+      ...(options.roomRealtimeLimits ? { roomRealtimeLimits: options.roomRealtimeLimits } : {}),
       ...(options.auth
         ? {
-            auth: options.auth(database),
+            auth: options.auth(database, roomEvents),
             profiles: createProfileService(createProfileRepository(database)),
             credentials:
               options.credentials?.(database) ??
@@ -89,6 +95,7 @@ export class ApiHarness {
         : {}),
       gameApi: {
         games: createGameService(repository, {
+          roomEvents,
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,
           aiAdapters: options.aiAdapters ?? {},
@@ -98,7 +105,7 @@ export class ApiHarness {
         providerTimeouts: options.providerTimeouts ?? {},
       },
     });
-    const instance = { app, database, repository };
+    const instance = { app, database, repository, roomEvents };
     this.instances.add(instance);
     return instance;
   }
