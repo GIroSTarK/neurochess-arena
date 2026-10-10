@@ -6,6 +6,7 @@ import {
   authUsers,
   authVerifications,
   type DatabaseConnection,
+  gameParticipants,
   games,
 } from "@neurochess/database";
 import { eq, inArray, like, or } from "drizzle-orm";
@@ -262,7 +263,20 @@ export function accountHarness(database: DatabaseConnection, roomEvents?: RoomEv
       if (createdUserIds.size) {
         const ids = [...createdUserIds];
         await database.db.transaction(async (tx) => {
-          await tx.delete(games).where(inArray(games.ownerUserId, ids));
+          await tx
+            .delete(games)
+            .where(
+              or(
+                inArray(games.ownerUserId, ids),
+                inArray(
+                  games.id,
+                  tx
+                    .select({ id: gameParticipants.gameId })
+                    .from(gameParticipants)
+                    .where(inArray(gameParticipants.userId, ids)),
+                ),
+              ),
+            );
           await tx.delete(authVerifications).where(inArray(authVerifications.value, ids));
           await tx.delete(authUsers).where(inArray(authUsers.id, ids));
         });

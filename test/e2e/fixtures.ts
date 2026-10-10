@@ -6,7 +6,7 @@ import {
   gameSnapshotSchema,
   moveCommandSchema,
 } from "@neurochess/contracts";
-import { games, guestSessions } from "@neurochess/database";
+import { gameParticipants, games, guestSessions } from "@neurochess/database";
 import {
   type BrowserContext,
   type BrowserContextOptions,
@@ -17,7 +17,7 @@ import {
   type Response,
   test as base,
 } from "@playwright/test";
-import { inArray } from "drizzle-orm";
+import { inArray, or } from "drizzle-orm";
 
 import { integrationDatabase } from "../database";
 
@@ -160,7 +160,20 @@ export const test = base.extend<{
           ];
           if (guestIds.length > 0) {
             await database.db.transaction(async (tx) => {
-              await tx.delete(games).where(inArray(games.ownerGuestSessionId, guestIds));
+              await tx
+                .delete(games)
+                .where(
+                  or(
+                    inArray(games.ownerGuestSessionId, guestIds),
+                    inArray(
+                      games.id,
+                      tx
+                        .select({ id: gameParticipants.gameId })
+                        .from(gameParticipants)
+                        .where(inArray(gameParticipants.guestSessionId, guestIds)),
+                    ),
+                  ),
+                );
               await tx.delete(guestSessions).where(inArray(guestSessions.id, guestIds));
             });
           }

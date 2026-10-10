@@ -15,18 +15,39 @@ afterEach(() => harness.dispose());
 
 describe("authoritative private human commands", () => {
   it.each([
-    { color: "white" as const, moves: FOOLS_MATE, result: "0-1", reason: "checkmate" },
+    {
+      color: "white" as const,
+      moves: FOOLS_MATE,
+      result: "0-1",
+      reason: "checkmate",
+      kind: "guest",
+    },
     {
       color: "black" as const,
       moves: [...KNIGHT_CYCLE, ...KNIGHT_CYCLE],
       result: "1/2-1/2",
       reason: "threefold_repetition",
+      kind: "guest",
+    },
+    {
+      color: "black" as const,
+      moves: FOOLS_MATE,
+      result: "0-1",
+      reason: "checkmate",
+      kind: "account",
+    },
+    {
+      color: "white" as const,
+      moves: [...KNIGHT_CYCLE, ...KNIGHT_CYCLE],
+      result: "1/2-1/2",
+      reason: "threefold_repetition",
+      kind: "account",
     },
   ])(
-    "plays both seats to $reason and restores all history between turns",
-    async ({ color, moves, result, reason }) => {
+    "plays with a $kind opponent to $reason and restores all history between turns",
+    async ({ color, moves, result, reason, kind }) => {
       const { api, owner, invitation } = await harness.room(color);
-      const opponent = await harness.guest(api);
+      const opponent = kind === "account" ? await harness.account(api) : await harness.guest(api);
       const outsider = await harness.guest(api);
       const joined = await harness.join(api, opponent.cookie, invitation, randomUUID());
       const gameId = joined.snapshot.gameId;

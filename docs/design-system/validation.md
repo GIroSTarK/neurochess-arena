@@ -8,7 +8,7 @@
 - Firefox, WebKit, physical touch devices, browser/operating-system zoom, and on-screen keyboards remain unverified. Chromium touch emulation and root-text enlargement are not substitutes for those checks.
 - The production build splits vendor code into separate chunks, but no bundle size budget or field-performance baseline has been established.
 
-The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Automated browser coverage includes Sandbox, the AI modes, account journeys, and private room entry/gameplay/recovery. Broader private-room acceptance combinations remain pending. Stockfish analysis still needs its own acceptance coverage when implemented.
+The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Automated browser coverage includes Sandbox, the AI modes, account journeys, and private room entry/gameplay/recovery, with account/guest combinations, either owner color, participant deletion and privacy, multiple-tab recovery, and maximum-length participant names. Stockfish analysis still needs its own acceptance coverage when implemented.
 
 ## Static reference limitations
 

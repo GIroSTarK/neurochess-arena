@@ -7,12 +7,13 @@ import {
   createCredentialRepository,
   createGameRepository,
   createProfileRepository,
+  gameParticipants,
   type GameRepository,
   games,
   guestSessions,
   runMigrations,
 } from "@neurochess/database";
-import { inArray } from "drizzle-orm";
+import { inArray, or } from "drizzle-orm";
 import { createServer } from "vite";
 
 import { buildApp } from "../../apps/api/src/app.js";
@@ -68,7 +69,18 @@ async function main() {
         close: async () => {
           if (guestIds.size > 0) {
             await database.db.transaction(async (tx) => {
-              await tx.delete(games).where(inArray(games.ownerGuestSessionId, [...guestIds]));
+              await tx.delete(games).where(
+                or(
+                  inArray(games.ownerGuestSessionId, [...guestIds]),
+                  inArray(
+                    games.id,
+                    tx
+                      .select({ id: gameParticipants.gameId })
+                      .from(gameParticipants)
+                      .where(inArray(gameParticipants.guestSessionId, [...guestIds])),
+                  ),
+                ),
+              );
               await tx.delete(guestSessions).where(inArray(guestSessions.id, [...guestIds]));
             });
           }

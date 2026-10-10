@@ -1,45 +1,11 @@
-import { readFile } from "node:fs/promises";
-
 import AxeBuilder from "@axe-core/playwright";
-import { type MoveCommand, roomViewSchema } from "@neurochess/contracts";
-import type { Page } from "@playwright/test";
+import type { MoveCommand } from "@neurochess/contracts";
 
 import { createAccount } from "./account-helpers";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { acceptedMove, activate, expect, playMove, readSnapshot, square, test } from "./fixtures";
+import { confirm, createRoom, expectSharedResult, joinRoom, room } from "./room-helpers";
 import { setPseudoLocalization } from "./text-layout";
-
-async function createRoom(page: Page, color: "White" | "Black") {
-  await createAccount(page.request);
-  await page.goto("/rooms");
-  await page.getByRole("radio", { name: color, exact: true }).check();
-  await page.getByRole("button", { name: "Create room", exact: true }).click();
-  await expect(page).toHaveURL(/\/games\/[a-f0-9-]+$/);
-  await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
-  const invitation = await page
-    .getByRole("textbox", { name: "Invitation link", exact: true })
-    .inputValue();
-  return { invitation, gameId: new URL(page.url()).pathname.split("/").at(-1)! };
-}
-async function joinRoom(page: Page, invitation: string, gameId: string) {
-  await page.goto(invitation);
-  await expect(page).toHaveURL(WEB_ORIGIN + "/rooms/join");
-  await expect(page.getByRole("grid")).toHaveCount(0);
-  await page.getByRole("button", { name: "Join as guest", exact: true }).click();
-  await expect(page).toHaveURL(WEB_ORIGIN + "/games/" + gameId);
-  await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
-}
-async function confirm(page: Page, label: string, confirmLabel: string) {
-  await page.getByRole("button", { name: label, exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await dialog.getByRole("button", { name: confirmLabel, exact: true }).click();
-}
-async function room(page: Page, gameId: string) {
-  return roomViewSchema.parse(
-    await (await page.request.get(API_ORIGIN + "/rooms/" + gameId)).json(),
-  );
-}
 
 test("a dropped native socket resynchronizes both seats without pausing or losing the latest move", async ({
   page,
@@ -85,80 +51,86 @@ test("a dropped native socket resynchronizes both seats without pausing or losin
   ]);
 });
 
-test("Black owner and guest White complete a public UI game, replay and download matching private PGN", async ({
-  page,
-  newContext,
-}, testInfo) => {
-  const forbidden: string[] = [];
-  const inspect = (url: string) => {
-    if (
-      url.startsWith(API_ORIGIN + "/") &&
-      /\/(?:credentials|providers|ai-turn|controller|invocations)(?:\/|$)/.test(url)
-    ) {
-      forbidden.push(new URL(url).pathname);
-    }
-  };
-  page.on("request", (request) => inspect(request.url()));
-  const { invitation, gameId } = await createRoom(page, "Black");
-  const touch = testInfo.project.name === "mobile-touch";
-  const guest = await (
-    await newContext({
-      hasTouch: touch,
-      isMobile: touch,
-      viewport: testInfo.project.use.viewport ?? null,
-    })
-  ).newPage();
-  guest.on("request", (request) => inspect(request.url()));
-  await joinRoom(guest, invitation, gameId);
-  await expect(page.getByRole("grid").locator("[data-square]").first()).toHaveAttribute(
-    "data-square",
-    "h1",
-  );
-  await expect(guest.getByRole("grid").locator("[data-square]").first()).toHaveAttribute(
-    "data-square",
-    "a8",
-  );
-  await expect(guest.getByRole("button", { name: "Close room", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
-  const line = ["f2f3", "e7e5", "g2g4", "d8h4"];
-  for (let index = 0; index < line.length; index++) {
-    const player = index % 2 === 0 ? guest : page;
-    const move = line[index]!;
-    await expect(player.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
-    const before = await readSnapshot(player, gameId);
-    if (!touch && index === 0) {
-      await square(player, "f2").focus();
-      await player.keyboard.press("Space");
-      await player.keyboard.press("ArrowUp");
-      const response = player.waitForResponse((response) =>
-        response.url().endsWith(`/games/${gameId}/moves`),
+for (const ownerColor of ["White", "Black"] as const) {
+  for (const kind of ["account", "guest"] as const) {
+    test(`${ownerColor} owner and ${kind} opponent complete a public UI game with matching replay and PGN`, async ({
+      page,
+      newContext,
+    }, testInfo) => {
+      const forbidden: string[] = [];
+      const inspect = (url: string) => {
+        if (
+          url.startsWith(API_ORIGIN + "/") &&
+          /\/(?:credentials|providers|ai-turn|controller|invocations)(?:\/|$)/.test(url)
+        ) {
+          forbidden.push(new URL(url).pathname);
+        }
+      };
+      page.on("request", (request) => inspect(request.url()));
+      const { invitation, gameId } = await createRoom(page, ownerColor);
+      const touch = testInfo.project.name === "mobile-touch";
+      const guest = await (
+        await newContext({
+          hasTouch: touch,
+          isMobile: touch,
+          viewport: testInfo.project.use.viewport ?? null,
+        })
+      ).newPage();
+      if (kind === "account") await createAccount(guest.request);
+      guest.on("request", (request) => inspect(request.url()));
+      await joinRoom(guest, invitation, gameId, kind);
+      await expect(page.getByRole("grid").locator("[data-square]").first()).toHaveAttribute(
+        "data-square",
+        ownerColor === "Black" ? "h1" : "a8",
       );
-      await player.keyboard.press("Enter");
-      await acceptedMove(await response, before, move, player);
-    } else await playMove(player, before, move, touch);
-    await expect((index % 2 === 0 ? page : guest).getByRole("status")).toContainText(
-      (await readSnapshot(player, gameId)).moves.at(-1)!.san,
-    );
+      await expect(guest.getByRole("grid").locator("[data-square]").first()).toHaveAttribute(
+        "data-square",
+        ownerColor === "Black" ? "a8" : "h1",
+      );
+      await expect(guest.getByRole("button", { name: "Close room", exact: true })).toHaveCount(0);
+      const white = ownerColor === "White" ? page : guest;
+      const black = ownerColor === "Black" ? page : guest;
+      await expect(black.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+      const line = ["f2f3", "e7e5", "g2g4", "d8h4"];
+      for (let index = 0; index < line.length; index++) {
+        const player = index % 2 === 0 ? white : black;
+        const move = line[index]!;
+        await expect(player.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+        const before = await readSnapshot(player, gameId);
+        if (!touch && index === 0) {
+          await square(player, "f2").focus();
+          await player.keyboard.press("Space");
+          await player.keyboard.press("ArrowUp");
+          const response = player.waitForResponse((response) =>
+            response.url().endsWith(`/games/${gameId}/moves`),
+          );
+          await player.keyboard.press("Enter");
+          await acceptedMove(await response, before, move, player);
+        } else await playMove(player, before, move, touch);
+        await expect((index % 2 === 0 ? black : white).getByRole("status")).toContainText(
+          (await readSnapshot(player, gameId)).moves.at(-1)!.san,
+        );
+      }
+      const final = await readSnapshot(page, gameId);
+      expect(final).toMatchObject({
+        state: "completed",
+        result: "0-1",
+        terminationReason: "checkmate",
+        fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
+      });
+      await expectSharedResult([page, guest], final, "Black wins");
+      for (const player of kind === "account" ? [page, guest] : [page]) {
+        await player.getByRole("link", { name: "History", exact: true }).click();
+        await player.locator(`a[href="/games/${gameId}"]`).click();
+        await expect(
+          player.getByRole("heading", { name: "Black wins", exact: true }),
+        ).toBeVisible();
+        await expect(square(player, "h4").locator('[data-piece="black-q"]')).toBeVisible();
+      }
+      expect(forbidden).toEqual([]);
+    });
   }
-  for (const player of [page, guest]) {
-    await expect(player.getByRole("heading", { name: "Black wins", exact: true })).toBeVisible();
-    await player.getByRole("button", { name: "First", exact: true }).click();
-    await expect(player.getByText("Ply 0 of 4", { exact: true })).toBeVisible();
-    await player.getByRole("button", { name: "Last", exact: true }).click();
-    await expect(player.getByText("Ply 4 of 4", { exact: true })).toBeVisible();
-  }
-  const final = await readSnapshot(page, gameId);
-  expect(await readSnapshot(guest, gameId)).toEqual(final);
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download PGN", exact: true }).click();
-  const downloadPath = await (await download).path();
-  if (!downloadPath) throw new Error("Expected a PGN download");
-  expect(await readFile(downloadPath, "utf8")).toBe(final.pgn);
-  await page.getByRole("link", { name: "History", exact: true }).click();
-  await page.locator(`a[href="/games/${gameId}"]`).click();
-  await expect(page.getByRole("heading", { name: "Black wins", exact: true })).toBeVisible();
-  expect(forbidden).toEqual([]);
-});
+}
 
 test("two human seats promote explicitly, cancel safely and resign only their own color", async ({
   page,
@@ -290,7 +262,23 @@ test("room controls, live announcements and expanded text stay accessible on des
 }, testInfo) => {
   const { invitation, gameId } = await createRoom(page, "Black");
   const guest = await (await newContext()).newPage();
-  await joinRoom(guest, invitation, gameId);
+  await createAccount(guest.request);
+  const names = ["WWWWWWWWWWWWWWW_", "MMMMMMMMMMMMMMM_"].map(
+    (prefix) => prefix + randomUUID().slice(0, 8),
+  );
+  for (const [index, player] of [page, guest].entries()) {
+    expect(
+      (
+        await player.request.post(API_ORIGIN + "/profile", {
+          headers: { origin: WEB_ORIGIN },
+          data: { username: names[index] },
+        })
+      ).status(),
+    ).toBe(200);
+  }
+  await joinRoom(guest, invitation, gameId, "account");
+  await expect(page.locator('[data-seat="black"]')).toContainText(names[0]!);
+  await expect(page.locator('[data-seat="white"]')).toContainText(names[1]!);
   await expect(page.getByRole("button", { name: "Resign", exact: true })).toHaveAttribute(
     "aria-disabled",
     "false",
@@ -315,3 +303,4 @@ test("room controls, live announcements and expanded text stay accessible on des
     await expect(page.getByRole("button", { name: /^Close room/ })).toBeInViewport();
   }
 });
+import { randomUUID } from "node:crypto";

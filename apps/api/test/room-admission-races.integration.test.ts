@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createRoomService } from "../src/rooms/service.js";
 
-import { aiMatch } from "./ai-turn-helpers.js";
+import { aiMatch, humanMatch } from "./ai-turn-helpers.js";
 import { RoomApiHarness } from "./room-api-helpers.js";
 
 const harness = new RoomApiHarness();
@@ -80,15 +80,20 @@ describe("private room admission transactions", () => {
     ).toBeNull();
   });
 
-  it.each(["account", "guest"] as const)(
-    "arbitrates AI creation versus %s room joining at the public slot",
-    async (kind) => {
+  it.each([
+    { kind: "account", configuration: aiMatch },
+    { kind: "guest", configuration: aiMatch },
+    { kind: "account", configuration: humanMatch },
+    { kind: "guest", configuration: humanMatch },
+  ] as const)(
+    "arbitrates $configuration.mode creation versus $kind room joining at the public slot",
+    async ({ kind, configuration }) => {
       const { api, invitation, room } = await harness.room();
       const second = await harness.createAuthenticatedApi();
       const opponent = kind === "account" ? await harness.account(api) : await harness.guest(api);
       const [join, ai] = await Promise.all([
         harness.post(api, opponent.cookie, "/rooms/join", { invitation, commandId: randomUUID() }),
-        harness.post(second, opponent.cookie, "/games", aiMatch),
+        harness.post(second, opponent.cookie, "/games", configuration),
       ]);
       expect([join.statusCode, ai.statusCode].sort()).toEqual(
         join.statusCode === 200 ? [200, 409] : [201, 409],
