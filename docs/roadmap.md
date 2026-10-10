@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–3 and the Sandbox presentation remake completed
+**Status:** Phases 0–4 completed; Phase 5 analysis policy accepted, implementation pending
 
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-10
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -147,8 +147,11 @@ Exit condition: two separate browser sessions can complete or abort a private ga
 
 ## Phase 5 — Analysis, polish, and release hardening
 
+**Status:** P5-01 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) accepts the engine distribution, bounded analysis lifecycle, score/provenance, account sample ownership and deletion policies. Worker assets, persistence, and visible analysis remain pending in P5-02–P5-04; Phase 5 is not complete.
+
 Deliverables:
 
+- [x] define the Stockfish analysis and private persistence contract;
 - Stockfish Web Worker analysis after every move;
 - live and post-game evaluation graph;
 - richer commentary, attempt, latency, token, and estimated-cost views;

@@ -24,6 +24,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0016](0016-atomic-account-deletion.md)                         | Accepted   | Atomic account deletion, fresh identity checks and in-flight work fencing                |
 | [0017](0017-data-router-and-canonical-game-paths.md)            | Accepted   | Data router, canonical private game paths, and navigation lifetime boundaries            |
 | [0018](0018-private-room-lifecycle-and-shared-retention.md)     | Accepted   | Private room lifecycle, participant retention, invitations, and shared write ordering    |
+| [0019](0019-browser-analysis-and-private-samples.md)            | Accepted   | Bounded browser Stockfish analysis, private account samples, and engine distribution     |
 
 ## Status values
 

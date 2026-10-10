@@ -1,7 +1,7 @@
 # Product specification
 
 **Status:** Draft for MVP implementation  
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-10
 
 ## Vision
 
@@ -304,6 +304,16 @@ The result page provides:
 - PGN copy and download.
 
 Saved games are private in the MVP. There are no public game or live spectator links.
+
+### Stockfish analysis
+
+All three public modes show asynchronous Stockfish evaluation from the initial position and after every accepted move, including live human rooms. The displayed position takes priority; missing historical positions fill while the page is visible. Slow analysis, hidden tabs, unavailable engines, and upload failures do not delay play or change results. Returning to saved replay needs no provider credentials.
+
+Scores favor White when positive and Black when negative; mate names the benefiting color and distance separately. Unknown positions remain graph gaps. Show achieved depth and engine/profile provenance, including older saved analysis and incomplete backfill. A game won by resignation or technical loss is not automatically a Stockfish mate. Evaluation is not a win probability. The MVP exposes scores and graphs only, without principal variations, best-move hints, or coaching actions.
+
+Accounts automatically retain their own client-computed samples with each authorized public game; room participants never receive each other's samples and may see different scores. Guests and Sandbox keep analysis only in page memory. Reloading may recompute missing samples, and signing in does not transfer guest analysis. Removing a participant's retained room access removes that account's samples while preserving the opponent's access and samples; solo game/account deletion removes the corresponding analysis. Existing backup and already-delivered-copy limitations still apply.
+
+Analysis has its own availability and Retry control. Retrying analysis neither retries an AI turn nor resumes a game. Locally computed but unsaved results stay visibly unsaved after a persistence failure. The [accepted policy](decisions/0019-browser-analysis-and-private-samples.md) and [architecture](architecture.md#stockfish-worker) define limits, replacement, and privacy boundaries.
 
 ## Game lifecycle
 

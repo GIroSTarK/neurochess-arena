@@ -4,7 +4,7 @@
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-10
 
 ## Purpose and authority
 
@@ -169,6 +169,14 @@ Use the shared `ui/select` for native single-value dropdowns. Its decorative arr
 | Result summary       | Result, winner where applicable, termination reason, totals, replay actions, PGN copy/download. Draw, technical loss, and stopped game receive their own wording. A generic red “Error” cannot replace the result.                                                           |
 
 Commentary is viewer-facing explanation, never a transcript of hidden reasoning. Render it as untrusted text; the empty state is exactly **No commentary provided**. Keep it visually separate from Stockfish analysis. Neither commentary nor analysis changes legal move authority or enters the opponent's model prompt.
+
+### Stockfish analysis
+
+Apply the [product analysis policy](product.md#stockfish-analysis) to AI observation, either human color against AI, human rooms, and private replay. Label scores as client-computed Stockfish evaluation, expose engine/profile and achieved depth, and distinguish older saved profiles, incomplete backfill, and unsaved local results. Keep the current position's pending/computing state explicit; never borrow a previous ply's score while waiting.
+
+Show positive/negative centipawns in pawn units with White/Black meaning independent of board orientation. Mate labels name the benefiting color and moves to mate; verified distance zero reads as checkmate. The game result remains a separate label. Gaps, mate markers, and mixed-profile markers need a textual equivalent; do not join unknown samples or map mate to invented centipawns. Graph/replay selection and the accessible text/table view refer to the same ply and preserve keyboard focus.
+
+Suspension explains that analysis resumes when the page is visible. Unavailable copy gives a concise reason and a distinct analysis Retry action when applicable, without replacing gameplay/provider recovery controls. Do not announce every streamed engine update, steal focus, display principal variations/best moves, or add move-suggestion interactions. Link engine attribution to the distributed license and corresponding source.
 
 ### Keyboard and chess interaction
 
