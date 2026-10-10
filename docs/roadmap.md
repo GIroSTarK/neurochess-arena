@@ -133,15 +133,15 @@ Exit condition: registered and guest lifecycle rules match the product specifica
 
 Deliverables:
 
-- authenticated room creation and owner color choice;
-- unguessable invitation link/code;
-- registered or guest join flow;
-- authenticated WebSocket snapshot and event protocol;
-- server-authoritative turn broadcasts;
-- disconnect and indefinite reconnect behavior;
-- owner-controlled abort with `aborted` history state;
-- extend database-enforced unfinished-game slots to non-owning human participants and implement the accepted shared-participant retention/deletion policy before enabling joins;
-- authorization and privacy tests.
+- [x] authenticated room creation and owner color choice;
+- [x] unguessable invitation link/code;
+- [x] registered or guest join flow;
+- [x] authenticated WebSocket snapshot and event protocol;
+- [x] server-authoritative turn broadcasts;
+- [x] disconnect and indefinite reconnect behavior;
+- [x] owner-controlled abort with `aborted` history state;
+- [x] extend database-enforced unfinished-game slots to non-owning human participants and implement the accepted shared-participant retention/deletion policy before enabling joins;
+- [x] authorization and privacy tests.
 
 Exit condition: two separate browser sessions can complete or abort a private game and recover correctly from disconnections.
 
