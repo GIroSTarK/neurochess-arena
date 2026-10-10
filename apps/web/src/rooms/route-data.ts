@@ -352,6 +352,20 @@ export function roomRouteData(
 
   return {
     memory,
+    peekHandoff(gameId: string) {
+      return handoff === gameId ? memory.getSnapshot().room : null;
+    },
+    takeInvitation: (gameId: string) => {
+      if (handoff !== gameId) return null;
+      const invitation = memory.getSnapshot().issuedInvitation;
+      const lifetime = memory.signal;
+      // StrictMode repeats the mounted owner's first effect before the microtask
+      // boundary. Both setups adopt the same issuance; no later entry can reuse it.
+      queueMicrotask(() => {
+        if (!lifetime.aborted && handoff === gameId) clear();
+      });
+      return invitation;
+    },
     setup: { loader: loader("setup"), action, shouldRevalidate: selfPostRevalidation("/rooms") },
     join: { loader: loader("join"), action, shouldRevalidate: selfPostRevalidation("/rooms/join") },
     waiting: {

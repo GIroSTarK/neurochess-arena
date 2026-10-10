@@ -5,7 +5,8 @@ import type { AuthEntry } from "../auth/auth-entry";
 import type { RouteNavigation } from "./route-navigation";
 import type { RouteRuntime } from "./route-runtime";
 
-export type AppPage = "arena" | "account" | "history" | "sandbox" | "reference" | "not-found";
+export type AppPage =
+  "arena" | "rooms" | "account" | "history" | "sandbox" | "reference" | "not-found";
 
 export interface RouteMetadata {
   readonly page: AppPage;

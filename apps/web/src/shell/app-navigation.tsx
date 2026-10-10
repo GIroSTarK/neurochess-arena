@@ -12,6 +12,7 @@ export function AppNavigation({ page }: { readonly page: AppPage }) {
   const routePage = useContext(PageContext) ?? page;
   const links = [
     { page: "arena", href: "/", label: t("app.arena") },
+    { page: "rooms", href: "/rooms", label: t("rooms.navigation") },
     { page: "history", href: "/history", label: t("history.navigation") },
     ...(sandboxEnabled ? [{ page: "sandbox", href: "/sandbox", label: t("sandbox.title") }] : []),
   ];

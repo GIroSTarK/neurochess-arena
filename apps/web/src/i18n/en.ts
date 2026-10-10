@@ -1,5 +1,31 @@
 export const en = {
   rooms: {
+    navigation: "Private rooms",
+    online: "Online",
+    offline: "Offline",
+    presenceUnknown: "Connecting",
+    reconnect: "Retry connection",
+    retryMove: "Retry same move",
+    resign: "Resign",
+    newRoom: "New private room",
+    boardHint:
+      "Select your piece and destination. Use arrow keys to explore the board, then Enter or Space to select.",
+    replayHint: "This game is finished. Explore its positions with the replay controls.",
+    connection: {
+      connecting: "Synchronizing room…",
+      synchronized: "Room connected",
+      reconnecting: "Reconnecting… Your game remains available.",
+      failed: "Connection unavailable. Retry when you are ready; there is no deadline to return.",
+      access: "Room access ended",
+      stopped: "Room connection stopped",
+    },
+    playErrors: {
+      uncertain:
+        "The acknowledgement was lost. Wait for synchronization or explicitly retry the same move. A close or resignation needs a fresh decision after reconnecting.",
+      synchronize:
+        "The room changed. Review the synchronized position and confirm your decision again.",
+      unavailable: "The room could not be loaded. Try reconnecting.",
+    },
     title: "Private human game",
     description:
       "Create a private room and invite one opponent. Choose your color; White moves first.",

@@ -11,6 +11,8 @@ import { ArenaRoute } from "../match/arena-route";
 import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
 import { ProfileRoute } from "../profile/profile-route";
 import { accountAction, profileLoader } from "../profile/route-data";
+import { RoomEntryRoute } from "../rooms/room-entry-route";
+import type { RoomEntryFeature } from "../rooms/route-data";
 import { type AppRouteContext, RouteContext } from "../routing/route-context";
 import { RouteNotice } from "../shell/route-notice";
 import { StaticScreen } from "../shell/static-screen";
@@ -20,10 +22,28 @@ import { RouteRoot } from "./route-root";
 
 declare const __ARENA_REFERENCE_ENABLED__: boolean;
 
-export function createAppRoutes(context: AppRouteContext): RouteObject[] {
+export function createAppRoutes(context: AppRouteContext, rooms?: RoomEntryFeature): RouteObject[] {
   const sandboxEnabled = context.sandboxEnabled && import.meta.env.SANDBOX_ENABLED === "true";
   const enabledContext = { ...context, sandboxEnabled };
   const publicPages: RouteObject[] = [
+    ...(rooms
+      ? [
+          {
+            id: "rooms-setup",
+            path: "rooms",
+            handle: { page: "rooms" },
+            ...rooms.setup,
+            element: <RoomEntryRoute feature={rooms} mode="setup" />,
+          },
+          {
+            id: "rooms-join",
+            path: "rooms/join",
+            handle: { page: "rooms" },
+            ...rooms.join,
+            element: <RoomEntryRoute feature={rooms} mode="join" />,
+          },
+        ]
+      : []),
     {
       id: "history",
       path: "history",
@@ -82,7 +102,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
           children: [
             {
               id: "arena",
-              element: <ArenaRoute />,
+              element: <ArenaRoute rooms={rooms} />,
               handle: { page: "arena" },
               children: [
                 {
@@ -95,7 +115,7 @@ export function createAppRoutes(context: AppRouteContext): RouteObject[] {
                   id: "arena-game",
                   path: "games/:gameId",
                   caseSensitive: true,
-                  ...arenaGameLoader(context),
+                  ...arenaGameLoader(context, rooms),
                   element: <></>,
                 },
               ],

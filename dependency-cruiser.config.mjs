@@ -19,6 +19,7 @@ const webFeatureImports = {
     "auth/use-route-auth-entry",
   ],
   history: ["auth/account-frame", "auth/context"],
+  rooms: ["auth/account-access", "auth/account-field", "auth/context"],
   match: [
     "auth/account-access",
     "auth/auth-route",
@@ -28,6 +29,8 @@ const webFeatureImports = {
     "credentials/use-credentials",
     "setup/arena-setup-screen",
     "setup/controller",
+    "rooms/room-route",
+    "rooms/route-data",
   ],
   setup: ["auth/account-access"],
   sandbox: [],

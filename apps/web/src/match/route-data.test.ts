@@ -16,6 +16,7 @@ import {
   snapshot,
 } from "../test/fixtures";
 import { createHttpMock, type HttpRoutes } from "../test/http";
+import { joinedRoom } from "../test/rooms";
 
 const configuration = {
   mode: "ai_vs_ai",
@@ -92,6 +93,7 @@ describe("Arena entry loaders", () => {
     const { read, http } = harness({
       "GET /api/auth/get-session": () => jsonResponse(account),
       "GET /profile": () => jsonResponse(profile),
+      [`GET /rooms/${GAME_ID}`]: () => jsonResponse(joinedRoom()),
       [`GET /games/${GAME_ID}/details`]: () =>
         jsonResponse({
           ...details,
@@ -102,7 +104,7 @@ describe("Arena entry loaders", () => {
         }),
     });
     expect(await read(`/games/${GAME_ID}`, undefined, GAME_ID)).toMatchObject({
-      data: { entry: { kind: "unavailable", code: "unavailable" }, credentials: null },
+      data: { entry: { kind: "room", room: joinedRoom() }, credentials: null },
     });
     expect(http.fetch.mock.calls.map(([url]) => requestPath(url))).not.toContain("/credentials");
   });

@@ -26,7 +26,7 @@ export function MatchRoute({
       new MatchController(createAiApi(apiBaseUrl, { identity }), undefined, navigation),
     (controller) => {
       const entry = result?.data?.entry;
-      if (entry && entry.kind !== "handoff") void controller.enter(entry);
+      if (entry && entry.kind !== "handoff" && entry.kind !== "room") void controller.enter(entry);
     },
     identity.signal,
     {

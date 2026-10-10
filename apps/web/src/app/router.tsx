@@ -2,6 +2,8 @@ import { createBrowserRouter, matchRoutes, type RouteObject } from "react-router
 
 import { createAuthApi } from "../api/auth-client";
 import type { AuthEntry } from "../auth/auth-entry";
+import { consumeRoomInvitation } from "../rooms/invitation";
+import { roomRouteData } from "../rooms/route-data";
 import { RouteNavigation } from "../routing/route-navigation";
 import { gameRouteKey } from "../routing/route-navigation";
 import { RouteRuntime } from "../routing/route-runtime";
@@ -20,7 +22,9 @@ export function createAppRouter(
 ) {
   const navigation = new RouteNavigation();
   const runtime = new RouteRuntime(createAuthApi(options.apiBaseUrl), options.authEntry);
-  const router = factory(createAppRoutes({ ...options, navigation, runtime }));
+  const context = { ...options, navigation, runtime };
+  const rooms = roomRouteData(context, consumeRoomInvitation());
+  const router = factory(createAppRoutes(context, rooms));
   const initial = router.state.location;
   runtime.navigating(initial);
   let disposed = false;
@@ -86,6 +90,7 @@ export function createAppRouter(
     disposed = true;
     unsubscribeAccount();
     unsubscribeRouter();
+    rooms.dispose();
     runtime.dispose();
     dispose();
   };

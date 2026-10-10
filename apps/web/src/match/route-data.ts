@@ -1,11 +1,13 @@
-import { isAiGameMode } from "@neurochess/contracts";
+import { isAiGameMode, type RoomView } from "@neurochess/contracts";
 import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
 import { createAiApi } from "../api/ai-client";
 import { createCredentialApi } from "../api/credential-client";
 import { ApiFailure } from "../api/failures";
+import { createRoomGameApi } from "../api/room-game-client";
 import type { CredentialCatalogState } from "../credentials/catalog";
 import { isAccessFailure } from "../gameplay/failures";
+import type { RoomEntryFeature } from "../rooms/route-data";
 import type { AppRouteContext } from "../routing/route-context";
 import { protectedLoader } from "../routing/route-data";
 import { gameRouteKey, gameRouteTarget } from "../routing/route-navigation";
@@ -17,6 +19,7 @@ import type { MatchEntry } from "./controller";
 export type ArenaEntry =
   | (SetupEntry & { readonly kind: "setup" })
   | Exclude<MatchEntry, { kind: "setup" }>
+  | { readonly kind: "room"; readonly room: RoomView }
   | { readonly kind: "handoff"; readonly gameId: string };
 export type ArenaRouteData = ScopedRouteData<{
   readonly access: PublicAccess;
@@ -25,7 +28,7 @@ export type ArenaRouteData = ScopedRouteData<{
 }>;
 type ArenaContext = Pick<AppRouteContext, "apiBaseUrl" | "runtime" | "navigation">;
 
-function entryLoader(context: ArenaContext, kind: "setup" | "game") {
+function entryLoader(context: ArenaContext, kind: "setup" | "game", rooms?: RoomEntryFeature) {
   const { runtime, apiBaseUrl, navigation } = context;
   let latest: ArenaRouteData | null = null;
   const loader = protectedLoader(
@@ -49,6 +52,8 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
       // revalidate after resolution, even if it was still waiting for this read.
       const cancelledResult = () => (request.signal.aborted ? null : result(null));
       if (cancelled()) return cancelledResult();
+      const handoff = target.kind === "game" ? rooms?.peekHandoff(target.gameId) : null;
+      if (handoff) return result({ kind: "room", room: handoff });
       // Only a still-mounted owner can authorize this one navigation to reuse its creation.
       if (target.kind === "game" && navigation.hasHandoff(url)) {
         return result({ kind: "handoff", gameId: target.gameId });
@@ -63,7 +68,10 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
           const details = await api.details(target.gameId, signal);
           entry =
             details.configuration?.mode === "human_vs_human"
-              ? { kind: "unavailable", code: "unavailable" }
+              ? {
+                  kind: "room",
+                  room: await createRoomGameApi(apiBaseUrl, identity).read(target.gameId, signal),
+                }
               : { kind: "game", gameId: target.gameId, details };
         } else return null;
       } catch (error) {
@@ -112,4 +120,5 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game") {
 }
 
 export const arenaSetupLoader = (context: ArenaContext) => entryLoader(context, "setup");
-export const arenaGameLoader = (context: ArenaContext) => entryLoader(context, "game");
+export const arenaGameLoader = (context: ArenaContext, rooms?: RoomEntryFeature) =>
+  entryLoader(context, "game", rooms);
