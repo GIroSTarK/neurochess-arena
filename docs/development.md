@@ -642,6 +642,8 @@ Run `npm run test:e2e -- test/e2e/ai-human.spec.ts` for either human color, AI-f
 
 Run `npm run test:e2e -- test/e2e/ai-telemetry.spec.ts` for replay-linked commentary/usage, retry Events, incomplete operational totals, and detail-read recovery. `telemetry-fixture` supplies two initial invalid outputs followed by legal moves, literal markup commentary, and mixed reported/missing usage. `retry-fixture` supplies an invalid output followed by a quota pause; replacing it with an ordinary placeholder key permits explicit retry. These are test-server fixtures only. The provider matrix in `apps/api/test/provider-matrix.integration.test.ts` instead exercises all four real adapters through injected HTTP responses, the API, and PostgreSQL. Neither suite establishes current live-provider availability.
 
+The same telemetry suite uses `cost-fixture` with identical OpenAI `gpt-4.1-mini-2025-04-14` seats, reported billing dimensions, two initial invalid responses and a zero-cost accepted call to verify stored estimates across live play, replay, Events and seat/game totals. `cost-partial-fixture` omits a required billing counter and reports an unknown service tier; `cost-invalid-fixture` reaches technical loss without an accepted move. These injected adapters exercise real API costing and persistence without paid provider calls. Unit/component/feed tests under `apps/web/src/match` additionally cover exact large/tiny amounts, historical gaps, same-revision discarded outcomes and identity cancellation.
+
 After installing dependencies, prepare Chromium and the disposable database:
 
 ```text

@@ -7,7 +7,8 @@ import { Button } from "../ui/button";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/dialog";
 
-import { acceptedAttempt, metricValue } from "./telemetry";
+import { MoveCost } from "./move-cost";
+import { acceptedAttempt, metricValue, moveCost } from "./telemetry";
 
 const commentaryMetrics = ["durationMs", "inputTokens", "outputTokens"] as const;
 const previewMessages = [
@@ -157,6 +158,10 @@ export function CommentaryPanel({
                     </div>
                   );
                 })}
+                <MoveCost
+                  cost={move ? moveCost(records, move.ply) : null}
+                  pending={!move || (!attempt && pending)}
+                />
               </dl>
             </article>
           );

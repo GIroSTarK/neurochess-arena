@@ -21,12 +21,12 @@ async function start(page: Page, key: string, human?: "white" | "black") {
     );
     await seat
       .getByLabel("Provider", { exact: true })
-      .selectOption(color === "White" ? "openai" : "anthropic");
+      .selectOption(key.startsWith("cost-") || color === "White" ? "openai" : "anthropic");
     await seat.getByLabel("API key", { exact: true }).fill(key);
     await seat.getByRole("button", { name: "Load models", exact: true }).click();
     const model = seat.getByRole("combobox", { name: "Model", exact: true });
     await expect(model).toHaveAttribute("aria-disabled", "false");
-    await model.fill("model-a");
+    await model.fill(key.startsWith("cost-") ? "gpt-4.1-mini" : "model-a");
     await model.press("ArrowDown");
     await model.press("Enter");
   }
@@ -34,6 +34,119 @@ async function start(page: Page, key: string, human?: "white" | "black") {
   await expect(page).toHaveURL(/\/games\/[\da-f-]+$/);
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
+
+test("stored estimates compare identical seats, include retries and follow live and saved replay", async ({
+  page,
+}, testInfo) => {
+  let release: (() => void) | undefined;
+  await page.route("**/ai-turn", async (route) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await route.continue();
+  });
+  const gameId = await start(page, "cost-fixture");
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  await expect.poll(() => Boolean(release)).toBe(true);
+  release!();
+  const commentary = page.getByRole("region", { name: "Commentary & move details" });
+  await expect(commentary.getByText("$0.0024", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const game = page.getByRole("region", { name: "Game totals", exact: true });
+  await expect(game.getByText("$0.0024", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Black totals", exact: true })
+      .getByText("No attempts recorded", { exact: true }),
+  ).toBeVisible();
+  await page.unroute("**/ai-turn");
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  await expect(game.getByText("$0.006", { exact: true })).toBeVisible();
+  const white = page.getByRole("region", { name: "White totals", exact: true });
+  const black = page.getByRole("region", { name: "Black totals", exact: true });
+  await white.scrollIntoViewIfNeeded();
+  await expect(white.getByText("$0.0036", { exact: true })).toBeInViewport();
+  await black.scrollIntoViewIfNeeded();
+  await expect(black.getByText("$0.0024", { exact: true })).toBeInViewport();
+  for (const seat of [white, black]) {
+    await expect(seat.getByText("OpenAI · gpt-4.1-mini-2025-04-14", { exact: true })).toBeVisible();
+  }
+  const response = await page.request.get(`${API_ORIGIN}/games/${gameId}/invocations`);
+  const records = gameInvocationsSchema.parse(await response.json());
+  expect(
+    records.turns[0]!.attempts.map(({ cost }) =>
+      cost.status === "estimated" ? cost.amount : cost.reason,
+    ),
+  ).toEqual(["0.001200000000", "0.001200000000", "0.000000000000"]);
+  await page.getByRole("button", { name: "First", exact: true }).click();
+  await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
+  await expect(game.getByText("$0.006", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(commentary.getByText("$0.0024", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await expect(events.getByText("$0.00", { exact: true })).toBeVisible();
+  await expect(events.getByText("$0.0012", { exact: true })).toHaveCount(5);
+  await page.reload();
+  await expect(game.getByText("$0.006", { exact: true })).toBeVisible();
+  await game.scrollIntoViewIfNeeded();
+  await expect(game.getByText("$0.006", { exact: true })).toBeInViewport();
+  expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("cost-comparison.png"), fullPage: true });
+});
+
+test("incomplete billing keeps known details while game and seat estimates are unavailable", async ({
+  page,
+}) => {
+  await start(page, "cost-partial-fixture");
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const game = page.getByRole("region", { name: "Game totals", exact: true });
+  await expect(game.getByText("Known estimate subtotal: $0.0024", { exact: true })).toBeVisible();
+  await expect(game.getByText("Estimated for 3 of 6 attempts", { exact: true })).toBeVisible();
+  await expect(game.getByText("Usage incomplete", { exact: true })).toBeVisible();
+  await expect(game.getByText("Service tier unknown", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Black totals", exact: true })
+      .getByText("Estimated for 0 of 2 attempts", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "First", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Commentary & move details" })
+      .getByText("Usage incomplete", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await expect(events.getByText("$0.0012", { exact: true })).toHaveCount(2);
+  await expect(events.getByText("$0.00", { exact: true })).toBeVisible();
+  await expect(events.getByText("Service tier unknown", { exact: true })).toHaveCount(2);
+});
+
+test("technical loss retains estimated spend for attempts that never produced a move", async ({
+  page,
+}) => {
+  await start(page, "cost-invalid-fixture");
+  await expect(
+    page.getByRole("heading", { name: "Black wins · Technical loss", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const game = page.getByRole("region", { name: "Game totals", exact: true });
+  await expect(game.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
+  await expect(game.getByText("$0.0036", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await expect(events.getByText("No accepted move for this turn.", { exact: true })).toBeVisible();
+  await expect(events.getByText("Invalid responses: 3 of 3", { exact: true })).toBeVisible();
+  await expect(events.getByText("$0.0012", { exact: true })).toHaveCount(3);
+});
 
 for (const human of [undefined, "white", "black"] as const) {
   test(`details keep their anchors from the first move through refresh and pause (${human ?? "AI vs AI"})`, async ({
@@ -135,7 +248,9 @@ for (const human of [undefined, "white", "black"] as const) {
     expect(await geometry()).toEqual(before);
     await page.getByRole("tab", { name: "Analysis", exact: true }).click();
     const totals = page.getByRole("region", { name: "Operational totals" });
-    const count = totals.getByText(/^Recorded attempts:/);
+    const count = totals
+      .getByRole("region", { name: "Game totals", exact: true })
+      .getByText(/^Recorded attempts:/);
     await expect(count).toBeVisible();
     const recordedCount = await count.textContent();
     await expect(
@@ -174,8 +289,11 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   const totals = page.getByRole("region", { name: "Operational totals" });
   await expect(totals.getByText("Recorded attempts: 6", { exact: true })).toBeVisible();
-  await expect(totals.getByText("Unavailable", { exact: true })).toHaveCount(3);
-  await expect(totals.getByText("Reported for 3 of 6 attempts", { exact: true })).toHaveCount(3);
+  const gameTotals = totals.getByRole("region", { name: "Game totals", exact: true });
+  await expect(gameTotals.getByText("Unavailable", { exact: true })).toHaveCount(4);
+  await expect(gameTotals.getByText("Reported for 3 of 6 attempts", { exact: true })).toHaveCount(
+    3,
+  );
   const response = await page.request.get(`${API_ORIGIN}/games/${gameId}/invocations`);
   const records = gameInvocationsSchema.parse(await response.json());
   const commentary = page.getByRole("region", { name: "Commentary & move details" });
@@ -260,7 +378,8 @@ test("provider pause keeps the invalid budget and attempt history through manual
   await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   const totals = page.getByRole("region", { name: "Operational totals" });
-  await expect(totals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
+  const gameTotals = totals.getByRole("region", { name: "Game totals", exact: true });
+  await expect(gameTotals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
   expect(await (await page.request.get(`${API_ORIGIN}/games/${gameId}/pgn`)).json()).toEqual(
     await pgn.json(),
   );
@@ -269,10 +388,10 @@ test("provider pause keeps the invalid budget and attempt history through manual
   );
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
   await expect(totals.getByText(/Could not refresh details/)).toBeVisible();
-  await expect(totals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
+  await expect(gameTotals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
   await page.unroute("**/invocations");
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
-  await expect(totals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
+  await expect(gameTotals.getByText("Recorded attempts: 3", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("telemetry-aborted.png"), fullPage: true });
 });
 
@@ -452,7 +571,8 @@ test("live details stay within the primary controls across tabs and long comment
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
   await events.focus();
   await page.keyboard.press("Control+End");
-  await expect(events.getByRole("heading", { name: "Black · Move 1" })).toBeInViewport();
+  await expect(events.getByText("Model price unknown", { exact: true }).last()).toBeInViewport();
+  expect(await events.evaluate((panel) => panel.scrollTop)).toBeGreaterThan(0);
   expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
   await setPseudoLocalization(page, true);
   await page.evaluate(() => {

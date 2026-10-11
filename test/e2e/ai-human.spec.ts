@@ -147,7 +147,7 @@ for (const human of ["white", "black"] as const) {
     await page.getByRole("tab", { name: "Analysis", exact: true }).click();
     await expect(
       page
-        .getByRole("region", { name: "Operational totals" })
+        .getByRole("region", { name: "Game totals", exact: true })
         .getByText("Recorded attempts: 2", { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Last", exact: true }).click();

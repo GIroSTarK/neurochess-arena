@@ -112,7 +112,9 @@ describe("minimal Arena telemetry panels", () => {
     expect(screen.getByText("1,000 ms")).toBeVisible();
     expect(screen.getByText("Recorded attempts: 4")).toBeVisible();
     expect(screen.getByText("Reported for 2 of 4 attempts")).toBeVisible();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+    expect(
+      within(screen.getByRole("region", { name: "Game totals" })).getAllByText("Unavailable"),
+    ).toHaveLength(4);
     view.rerender(<TelemetryPanel {...props} records={null} error />);
     expect(screen.getByText(/Telemetry could not be loaded/)).toBeVisible();
     await userEvent.setup().click(screen.getByRole("button", { name: "Refresh details" }));

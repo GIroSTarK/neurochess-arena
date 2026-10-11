@@ -2,7 +2,12 @@ import type { GameInvocations } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiFailure } from "../api/failures";
-import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
+import {
+  estimatedCost,
+  invocationRecords,
+  pricedInvocationRecords,
+  telemetryDetails,
+} from "../test/ai-invocations";
 import { snapshot } from "../test/fixtures";
 import { cleanupMatches, matchDetails, matchHarness } from "../test/match-session";
 
@@ -13,6 +18,71 @@ afterEach(() => {
 });
 
 describe("InvocationFeed", () => {
+  it("refreshes a late discarded estimate at the same terminal revision without dispatching a turn", async () => {
+    const details = {
+      ...telemetryDetails,
+      snapshot: snapshot(["e2e4", "e7e5"], {
+        state: "aborted",
+        terminationReason: "aborted",
+        legalMoves: [],
+      }),
+    };
+    const records = pricedInvocationRecords();
+    const first = records.turns[0]!.attempts[0]!;
+    records.turns.push({
+      id: crypto.randomUUID(),
+      ply: 3,
+      color: "white",
+      acceptedMovePly: null,
+      invalidOutputCount: 0,
+      attempts: [
+        {
+          ...first,
+          id: crypto.randomUUID(),
+          outcome: "interrupted",
+          error: null,
+          durationMs: null,
+          usage: null,
+          cost: { status: "unavailable", reason: "dispatch_unknown" },
+        },
+      ],
+    });
+    const h = matchHarness(details);
+    h.api.invocations.mockResolvedValue(records);
+    await h.enter();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.store.get().invocations?.turns[2]!.attempts[0]!.cost).toEqual({
+      status: "unavailable",
+      reason: "dispatch_unknown",
+    });
+    const updated = structuredClone(records);
+    const late = updated.turns[2]!.attempts[0]!;
+    Object.assign(late, {
+      outcome: "discarded",
+      durationMs: 900,
+      cost: estimatedCost("0.000000000009", late),
+    });
+    h.api.invocations.mockResolvedValue(updated);
+    await h.invocations.load();
+    expect(h.store.get().invocations?.turns[2]!.attempts[0]!.cost).toMatchObject({
+      status: "estimated",
+      amount: "0.000000000009",
+    });
+    expect(h.store.get().details?.snapshot).toEqual(details.snapshot);
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
+
+  it("cannot restore private cost data from a read completed after an identity lifetime ends", async () => {
+    const h = matchHarness(telemetryDetails);
+    await h.enter();
+    const old = Promise.withResolvers<GameInvocations>();
+    h.api.invocations.mockReturnValueOnce(old.promise);
+    const reading = h.invocations.load();
+    await h.session.enter({ kind: "setup" });
+    old.resolve({ ...pricedInvocationRecords(), version: 3 });
+    await reading;
+    expect(h.store.get()).toMatchObject({ phase: "setup", details: null, invocations: null });
+  });
   it("retains received totals across revisions and a failed refresh", async () => {
     const h = matchHarness(telemetryDetails);
     await h.enter();

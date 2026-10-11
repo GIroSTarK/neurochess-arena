@@ -17,7 +17,18 @@ export function setupProviders(): AiAdapters {
           }
           return {
             ok: true as const,
-            models: apiKey === "empty-fixture" ? [] : setupModels(provider),
+            models:
+              apiKey === "empty-fixture"
+                ? []
+                : apiKey.startsWith("cost-")
+                  ? [
+                      {
+                        ...setupModels(provider)[0]!,
+                        id: "gpt-4.1-mini-2025-04-14",
+                        name: "GPT-4.1 mini (test fixture)",
+                      },
+                    ]
+                  : setupModels(provider),
           };
         },
         async requestMove(input: MoveRequest) {
@@ -52,6 +63,47 @@ export function setupProviders(): AiAdapters {
             (input.context.turn === "black" ? 1 : 0);
           const attempt = (attempts.get(input.signal) ?? 0) + 1;
           attempts.set(input.signal, attempt);
+          if (input.apiKey.startsWith("cost-")) {
+            const zero =
+              moveIndex === 0 && attempt === 3 && input.apiKey !== "cost-invalid-fixture";
+            const dimensions = {
+              inputTokens: zero ? 0 : 1000,
+              cachedInputTokens: 0,
+              outputTokens: zero ? 0 : 500,
+            };
+            const measured = {
+              ...base,
+              usage: {
+                inputTokens: dimensions.inputTokens,
+                outputTokens: dimensions.outputTokens,
+                totalTokens: zero ? 0 : 1500,
+              },
+              billing: {
+                status: "reported" as const,
+                provider,
+                pricingMatch:
+                  input.apiKey === "cost-partial-fixture" && moveIndex % 2 === 1
+                    ? ("tier_unknown" as const)
+                    : ("standard" as const),
+                dimensions:
+                  input.apiKey === "cost-partial-fixture" && moveIndex === 0 && attempt === 2
+                    ? { inputTokens: 1000, outputTokens: 500 }
+                    : dimensions,
+              },
+            };
+            if (input.apiKey === "cost-invalid-fixture" || (moveIndex === 0 && attempt < 3)) {
+              return {
+                ...measured,
+                ok: false as const,
+                error: { code: "model_invalid" as const, reason: "illegal_move" as const },
+              };
+            }
+            return {
+              ...measured,
+              ok: true as const,
+              output: { move: ["f2f3", "e7e5", "g2g4", "d8h4"][moveIndex]! },
+            };
+          }
           if (moveIndex === 0 && input.apiKey === "retry-fixture") {
             return attempt === 1
               ? {

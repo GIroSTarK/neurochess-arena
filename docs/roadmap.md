@@ -1,6 +1,6 @@
 # MVP roadmap
 
-**Status:** Phases 0–4 completed; Phase 5 analysis and versioned invocation costing implemented, telemetry views and release work pending
+**Status:** Phases 0–4 completed; Phase 5 analysis, versioned invocation costing and telemetry views implemented, release polish and operational gates pending
 
 **Last updated:** 2026-10-11
 
@@ -147,7 +147,7 @@ Exit condition: two separate browser sessions can complete or abort a private ga
 
 ## Phase 5 — Analysis, polish, and release hardening
 
-**Status:** P5-01–P5-05 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) now supplies live evaluation and accessible replay graphs in all public modes, with bounded backfill, separate retry controls and private lifetime cancellation. The [private analysis API](development.md#private-analysis-api) retains each account's own samples; guests and Sandbox use page memory. Desktop/mobile Chromium acceptance covers real engine loading, all three modes, synchronized replay, independent room samples, refresh, deletion and engine/upload failures. [Versioned invocation costing](development.md#ai-cost-estimates) now records normalized billing, exact list-price estimates, immutable price provenance and explicit unavailable reasons while preserving retry, interruption and deletion behavior. Phase 5 remains incomplete: telemetry cost displays and aggregates, release polish and operational gates follow. The owner's repository-license decision and compatibility review still gate public engine distribution.
+**Status:** P5-01–P5-06 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) now supplies live evaluation and accessible replay graphs in all public modes, with bounded backfill, separate retry controls and private lifetime cancellation. The [private analysis API](development.md#private-analysis-api) retains each account's own samples; guests and Sandbox use page memory. Desktop/mobile Chromium acceptance covers real engine loading, all three modes, synchronized replay, independent room samples, refresh, deletion and engine/upload failures. [Versioned invocation costing](development.md#ai-cost-estimates) records normalized billing, exact list-price estimates, immutable price provenance and explicit unavailable reasons while preserving retry, interruption and deletion behavior. [Telemetry views](architecture.md#telemetry-and-cost) now show per-attempt and per-move estimates, White/Black comparisons and whole-game totals with incomplete coverage explicit, preserving accepted-call measurements and replay selection. Phase 5 remains incomplete: release polish and operational gates follow. The owner's repository-license decision and compatibility review still gate public engine distribution.
 
 Deliverables:
 
@@ -157,8 +157,8 @@ Deliverables:
 - [x] Stockfish Web Worker analysis after every move;
 - [x] live and post-game evaluation graph;
 - [x] record versioned per-invocation estimates, normalized billing dimensions and unavailable reasons;
-- richer commentary, attempt, latency, token, and estimated-cost views;
-- display explicit unavailable states for incomplete pricing or usage data in telemetry views;
+- [x] richer commentary, attempt, latency, token, and estimated-cost views;
+- [x] display explicit unavailable states for incomplete pricing or usage data in telemetry views;
 - desktop and mobile UX refinement;
 - keyboard navigation, contrast, focus, and reduced-motion review;
 - cross-browser end-to-end suite;
