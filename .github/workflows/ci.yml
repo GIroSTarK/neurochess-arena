@@ -70,7 +70,76 @@ jobs:
         run: npm run smoke
 
   e2e:
-    name: e2e-${{ matrix.project }}
+    name: e2e-${{ matrix.project }}-shard-${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile-touch]
+        shard: [1, 2]
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: neurochess_test
+          POSTGRES_PASSWORD: neurochess_ci
+          POSTGRES_USER: neurochess
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U neurochess -d neurochess_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://neurochess:neurochess_ci@127.0.0.1:5432/neurochess_test
+      NODE_ENV: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: npm run build:packages
+
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test browser project
+        id: browser-tests
+        run: npm run test:e2e -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2 --workers=1 --output="$RUNNER_TEMP/neurochess-e2e-${{ matrix.project }}-shard-${{ matrix.shard }}"
+
+      - name: Upload browser durations
+        if: ${{ !cancelled() && steps.browser-tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-durations-${{ matrix.project }}-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}-shard-${{ matrix.shard }}/durations.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload browser failure evidence
+        if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failures-${{ matrix.project }}-shard-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}-shard-${{ matrix.shard }}/**/test-failed-*.png
+            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}-shard-${{ matrix.shard }}/durations.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  performance:
+    name: performance-${{ matrix.project }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -113,33 +182,9 @@ jobs:
       - name: Install Chromium for browser tests
         run: npx playwright install --with-deps chromium
 
-      - name: Test browser project
-        id: browser-tests
-        run: npm run test:e2e -- --project=${{ matrix.project }} --output="$RUNNER_TEMP/neurochess-e2e-${{ matrix.project }}"
-
-      - name: Upload browser durations
-        if: ${{ !cancelled() && steps.browser-tests.outcome != 'skipped' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-durations-${{ matrix.project }}
-          path: ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/durations.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload browser failure evidence
-        if: ${{ failure() && steps.browser-tests.outcome == 'failure' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-failures-${{ matrix.project }}
-          path: |
-            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/**/test-failed-*.png
-            ${{ runner.temp }}/neurochess-e2e-${{ matrix.project }}/durations.json
-          if-no-files-found: warn
-          retention-days: 7
-
       - name: Check production performance budgets
         id: performance-tests
-        run: npm run test:performance -- --project=${{ matrix.project }} --output="$RUNNER_TEMP/neurochess-performance-${{ matrix.project }}"
+        run: npm run test:performance -- --project=${{ matrix.project }} --workers=1 --output="$RUNNER_TEMP/neurochess-performance-${{ matrix.project }}"
 
       - name: Upload performance measurements
         if: ${{ !cancelled() && steps.performance-tests.outcome != 'skipped' }}
@@ -156,7 +201,7 @@ jobs:
 
   verify:
     if: ${{ always() }}
-    needs: [checks, e2e]
+    needs: [checks, e2e, performance]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -164,6 +209,8 @@ jobs:
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
         run: |
           test "$CHECKS_RESULT" = success
           test "$E2E_RESULT" = success
+          test "$PERFORMANCE_RESULT" = success

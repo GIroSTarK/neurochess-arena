@@ -612,8 +612,9 @@ they share the disposable database and ports. It builds a temporary production w
 artifact through the same build entry, serves
 it with Vite preview solely as a test harness, and uses the real application/API,
 injected provider transports and packaged Stockfish. It does not exercise production
-hosting or call paid providers. CI runs each viewport project sequentially after its
-browser suite and retains only allowlisted numeric measurements and asset names.
+hosting or call paid providers. CI runs each viewport project in its own performance
+job with one Playwright worker, independently of the browser shards, and retains only
+allowlisted numeric measurements and asset names.
 
 Budgets for this repeatable Chromium lab profile:
 
@@ -732,9 +733,11 @@ Screenshots and failure context default to `neurochess-playwright-results` in th
 
 The duration reporter writes `durations.json` in the same output directory. It records the run status/start/duration and each attempt's project, source location, static test title, repeat/retry index, status and duration in milliseconds. Its field allowlist excludes errors, console output, steps, attachments and configuration metadata. Keep credentials and runtime values out of test titles. Collection-only runs do not replace duration evidence.
 
-CI runs on pull requests and pushes to `master`. The `checks` job runs Compose and migration checks, `npm run verify`, and the built-service startup check `npm run smoke`. In parallel, the `e2e` matrix runs `desktop` and `mobile-touch` on separate runners, each with its own PostgreSQL service, shared-package build, Chromium installation, and one Playwright worker. All jobs retain a 15-minute timeout. The final `verify` check runs even when a dependency fails, is cancelled, or is skipped, and passes only when both `checks` and the entire E2E matrix succeed.
+CI runs on pull requests and pushes to `master`. The `checks` job runs Compose and migration checks, `npm run verify`, and the built-service startup check `npm run smoke`. In parallel, the `e2e` matrix splits each of `desktop` and `mobile-touch` into two shards, while the independent `performance` matrix runs each project once without sharding. Each of these six browser jobs has its own runner, PostgreSQL service, shared-package build, Chromium installation, and one Playwright worker. All jobs retain a 15-minute timeout. The final `verify` check runs even when a dependency fails, is cancelled, or is skipped, and passes only when `checks`, the entire E2E matrix, and the entire performance matrix succeed.
 
-Each E2E matrix job uses its own runner-temporary output directory. Completed browser runs upload `e2e-durations-<project>`; failed runs also upload `e2e-failures-<project>` with only failure PNGs and the duration report. Both artifacts expire after seven days. Raw logs, failure-context files, downloads and authentication state are excluded from uploads.
+To reproduce an E2E shard, run `npm run test:e2e -- --project=desktop --shard=1/2 --workers=1`, substituting the project and shard as needed. Keep local shard, performance, and integration runs sequential because they share the test server ports.
+
+Each E2E matrix job uses its own runner-temporary output directory including the project and shard. Completed browser runs upload `e2e-durations-<project>-shard-<shard>`; failed runs also upload `e2e-failures-<project>-shard-<shard>` with only failure PNGs and the duration report. Performance jobs retain `performance-<project>` with `measurements.json`, `long-replay.json`, `wasm-memory.json`, and `lifetimes.json`. All artifacts expire after seven days. Raw logs, failure-context files, downloads and authentication state are excluded from uploads.
 
 Automated checks do not certify screen-reader behavior or every browser engine. Consult the [current validation limits](design-system/validation.md) for remaining coverage gaps. Report each run in the change summary, PR, or CI; update that document only when a gap changes.
 
