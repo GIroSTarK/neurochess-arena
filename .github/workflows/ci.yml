@@ -137,6 +137,23 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Check production performance budgets
+        id: performance-tests
+        run: npm run test:performance -- --project=${{ matrix.project }} --output="$RUNNER_TEMP/neurochess-performance-${{ matrix.project }}"
+
+      - name: Upload performance measurements
+        if: ${{ !cancelled() && steps.performance-tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-${{ matrix.project }}
+          path: |
+            ${{ runner.temp }}/neurochess-performance-${{ matrix.project }}/**/measurements.json
+            ${{ runner.temp }}/neurochess-performance-${{ matrix.project }}/**/long-replay.json
+            ${{ runner.temp }}/neurochess-performance-${{ matrix.project }}/**/wasm-memory.json
+            ${{ runner.temp }}/neurochess-performance-${{ matrix.project }}/**/lifetimes.json
+          if-no-files-found: warn
+          retention-days: 7
+
   verify:
     if: ${{ always() }}
     needs: [checks, e2e]

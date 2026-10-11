@@ -131,7 +131,7 @@ export function EvaluationGraph({
         <summary className="min-h-target cursor-pointer py-3 text-label text-accent">
           {t("analysis.values")}
         </summary>
-        <table className="w-full table-fixed text-left text-caption">
+        <table className="w-full table-fixed text-left text-caption wrap-anywhere">
           <caption className="sr-only">{t("analysis.values")}</caption>
           <thead>
             <tr>

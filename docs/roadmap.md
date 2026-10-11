@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–4 completed; Phase 5 analysis, versioned invocation costing and telemetry views implemented, release polish and operational gates pending
+**Status:** Phases 0–4 completed; Phase 5 analysis, costing, telemetry and responsive/performance refinement implemented; accessibility, cross-browser and operational gates pending
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-10-12
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -147,7 +147,7 @@ Exit condition: two separate browser sessions can complete or abort a private ga
 
 ## Phase 5 — Analysis, polish, and release hardening
 
-**Status:** P5-01–P5-06 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) now supplies live evaluation and accessible replay graphs in all public modes, with bounded backfill, separate retry controls and private lifetime cancellation. The [private analysis API](development.md#private-analysis-api) retains each account's own samples; guests and Sandbox use page memory. Desktop/mobile Chromium acceptance covers real engine loading, all three modes, synchronized replay, independent room samples, refresh, deletion and engine/upload failures. [Versioned invocation costing](development.md#ai-cost-estimates) records normalized billing, exact list-price estimates, immutable price provenance and explicit unavailable reasons while preserving retry, interruption and deletion behavior. [Telemetry views](architecture.md#telemetry-and-cost) now show per-attempt and per-move estimates, White/Black comparisons and whole-game totals with incomplete coverage explicit, preserving accepted-call measurements and replay selection. Phase 5 remains incomplete: release polish and operational gates follow. The owner's repository-license decision and compatibility review still gate public engine distribution.
+**Status:** P5-01–P5-07 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) now supplies live evaluation and accessible replay graphs in all public modes, with bounded backfill, separate retry controls and private lifetime cancellation. The [private analysis API](development.md#private-analysis-api) retains each account's own samples; guests and Sandbox use page memory. Desktop/mobile Chromium acceptance covers real engine loading, all three modes, synchronized replay, independent room samples, refresh, deletion and engine/upload failures. [Versioned invocation costing](development.md#ai-cost-estimates) records normalized billing, exact list-price estimates, immutable price provenance and explicit unavailable reasons while preserving retry, interruption and deletion behavior. [Telemetry views](architecture.md#telemetry-and-cost) now show per-attempt and per-move estimates, White/Black comparisons and whole-game totals with incomplete coverage explicit, preserving accepted-call measurements and replay selection. Responsive telemetry, evaluation tables and history now fit enlarged text, and the shared production build excludes development React. The [performance budgets](development.md#responsive-layouts-and-performance-budgets) cover entry/engine loading, worker resources and lifetime, and long replay in desktop/touch Chromium, with CI checks. Phase 5 remains incomplete: accessibility, cross-browser and operational gates follow. The owner's repository-license decision and compatibility review still gate public engine distribution.
 
 Deliverables:
 
@@ -159,7 +159,7 @@ Deliverables:
 - [x] record versioned per-invocation estimates, normalized billing dimensions and unavailable reasons;
 - [x] richer commentary, attempt, latency, token, and estimated-cost views;
 - [x] display explicit unavailable states for incomplete pricing or usage data in telemetry views;
-- desktop and mobile UX refinement;
+- [x] desktop and mobile UX refinement with measured loading/runtime budgets;
 - keyboard navigation, contrast, focus, and reduced-motion review;
 - cross-browser end-to-end suite;
 - rate limiting, security headers, dependency audit, backup and restore check;

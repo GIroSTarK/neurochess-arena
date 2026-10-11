@@ -6,7 +6,7 @@
 
 - Actual screen-reader speech with NVDA, JAWS, VoiceOver, or Narrator remains unverified. DOM semantics, focus tests, and automated accessibility checks do not establish full accessibility conformance.
 - Firefox, WebKit, physical touch devices, browser/operating-system zoom, and on-screen keyboards remain unverified. Chromium touch emulation and root-text enlargement are not substitutes for those checks.
-- The production build splits vendor code into separate chunks, but no bundle size budget or field-performance baseline has been established.
+- Physical-device performance, OS background throttling, safe-area hardware and field-performance baselines remain unverified. The [production lab budgets](../development.md#responsive-layouts-and-performance-budgets) cover Chromium desktop/touch emulation, bundle/engine loading, sampled worker resources, 200-ply replay and injected lifecycle events; these do not establish device-wide memory use or low-memory phone behavior.
 
 The [roadmap](../roadmap.md) tracks feature delivery and release hardening. Automated browser coverage includes Sandbox, the AI modes, account journeys, and private room entry/gameplay/recovery, with account/guest combinations, either owner color, participant deletion and privacy, multiple-tab recovery, and maximum-length participant names. Chromium also exercises live Stockfish evaluation, private saved replay, keyboard graph/table selection, independent room samples, and engine/upload failure recovery. The manual and cross-browser gaps above still apply to these analysis views.
 

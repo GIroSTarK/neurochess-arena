@@ -14,12 +14,15 @@ import { useHistory } from "./use-history";
 function GameParticipants({ game }: { readonly game: GameHistoryEntry }) {
   const { t } = useTranslation();
   return (
-    <dl className="grid min-w-0 gap-2">
+    <dl className="@container grid min-w-0 gap-2">
       {(["white", "black"] as const).map((color) => {
         const seat = game.configuration.seats[color];
         const player = game.players[color];
         return (
-          <div key={color} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
+          <div
+            key={color}
+            className="grid min-w-0 gap-x-3 gap-y-1 @min-[24rem]:grid-cols-[auto_minmax(0,1fr)]"
+          >
             <dt className="text-text-secondary">{t(`players.${color}`)}</dt>
             <dd className="min-w-0 wrap-anywhere">
               {seat.type === "human"

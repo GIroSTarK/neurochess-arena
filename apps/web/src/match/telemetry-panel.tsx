@@ -13,7 +13,7 @@ function Totals({ totals }: { readonly totals: ReturnType<typeof operationalTota
   return (
     <>
       <p className="text-label">{t("telemetry.attemptCount", { count: totals.attempts })}</p>
-      <dl className="grid grid-cols-2 gap-3 text-label">
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3 text-label wrap-anywhere">
         {totals.metrics.map(({ name, value, reported }) => (
           <div key={name} className="min-w-0">
             <dt className="text-text-secondary">

@@ -82,6 +82,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 | `npm run test:unit`          | Run database-free unit tests                                     |
 | `npm run test:integration`   | Run required PostgreSQL-backed tests; fail if unavailable        |
 | `npm run test:e2e`           | Run desktop/mobile browser gameplay and accessibility checks     |
+| `npm run test:performance`   | Check production bundle, worker and replay lab budgets           |
 | `npm run format:check`       | Verify Prettier formatting                                       |
 | `npm run verify`             | Run formatting, lint, types, tests, and build                    |
 | `npm run smoke`              | Start and probe both built services                              |
@@ -592,6 +593,68 @@ links, JS/WASM failures, explicit Retry, and verified no-move checkmate. The tes
 entry is added only to that temporary build. These are correctness checks, not
 device performance measurements. WASM load rejection may surface only through
 the bounded initialization timeout in the upstream loader.
+
+### Responsive layouts and performance budgets
+
+Run `npm run test:e2e -- test/e2e/responsive-analysis.spec.ts --workers=1` for entry,
+live analysis, credential recovery, replay/Events, history, account and credential
+settings, and room invitation/replay layouts. The desktop and touch projects together
+cover 320, 390, 768, 1024 and 1440 CSS px, long model/credential/participant labels,
+expanded translations and 200% root text. The short-viewport check verifies focused
+fields and actions remain reachable; it does not emulate an operating-system keyboard.
+
+`npm run build` uses `apps/web/build.ts` to set production mode before Vite resolves
+the shared API environment. This keeps development React out of production web
+artifacts even when the API's `NODE_ENV` is `development` or `test`.
+
+Run `npm run test:performance` separately from integration and other browser suites:
+they share the disposable database and ports. It builds a temporary production web
+artifact through the same build entry, serves
+it with Vite preview solely as a test harness, and uses the real application/API,
+injected provider transports and packaged Stockfish. It does not exercise production
+hosting or call paid providers. CI runs each viewport project sequentially after its
+browser suite and retains only allowlisted numeric measurements and asset names.
+
+Budgets for this repeatable Chromium lab profile:
+
+| Measurement                                                           | Budget                                                                                             |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Initial requested JS + CSS, sum of individual gzip sizes              | 300 KiB (1 MiB uncompressed)                                                                       |
+| Engine JS + WASM pair, uncompressed                                   | 2 MiB; zero engine requests on entry/account routes                                                |
+| Worker creation through first `readyok`, cold localhost fetch         | 2 seconds                                                                                          |
+| Exported WASM linear-memory allocation after initial/live analysis    | 160 MiB                                                                                            |
+| Worker JavaScript used heap                                           | 16 MiB                                                                                             |
+| Sampled worker CPU active fraction during live/200-ply replay windows | 90% of one worker thread                                                                           |
+| Human move through UI and local API acknowledgement                   | 1 second                                                                                           |
+| Board DOM commit through two animation frames                         | 100 ms                                                                                             |
+| Open 200-ply private replay / select a position through two frames    | 2 seconds / 200 ms                                                                                 |
+| Worker lifetime and scheduling                                        | Peak one, zero after hide/unmount; no dispatch while hidden; at least 250 ms idle between searches |
+
+The initial reference host is Windows 11, Intel Core Ultra 5 225F (10 logical CPUs),
+32 GiB RAM, Playwright 1.63.0 Chromium 153, with 1440×1080 desktop and 390×844 Pixel 7
+touch emulation, no CPU/network throttle, and localhost transport. Each run records
+its actual browser, host and viewport alongside timings. Size budgets are deterministic;
+timing/CPU limits include headroom for the CI runner and are regression gates, not
+field-performance or physical-device guarantees. Investigate changed artifacts,
+environment and repeated measurements before changing a budget.
+
+Reports are printed to the command output and written under the configured Playwright
+performance output directory (by default the OS temporary directory). Gzip sizes are
+computed comparisons; the local preview transfer is uncompressed. Resource Timing
+records the WASM transfer separately. A separate memory-only test wraps WASM
+instantiation to read exported memory sizes, because the CDP JavaScript heap excludes
+WASM linear memory. Timing and CPU runs use untouched engine assets. These memory
+figures exclude browser/native overhead and do not replace the profile's verified
+2 GiB compiled maximum. CPU sampling reduces the profile to numeric active/elapsed
+time; raw stacks, UCI, private game content, cookies and keys are not retained.
+
+Delayed and rejected JS/WASM loads must leave moves, terminal replay and explicit
+analysis Retry usable. Repeated in-app mount/dispose and injected visibility events
+must terminate workers and resume missing work through access revalidation, without
+accumulating workers or queues. Headless visibility events exercise the application
+handler; actual OS backgrounding, low-memory phones, browser zoom, safe-area hardware
+and on-screen keyboards remain manual release checks. See the [current validation
+limits](design-system/validation.md).
 
 ## Unit test environments
 

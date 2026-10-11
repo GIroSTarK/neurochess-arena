@@ -14,7 +14,7 @@ import {
   runMigrations,
 } from "@neurochess/database";
 import { inArray, or } from "drizzle-orm";
-import { createServer } from "vite";
+import { createServer, preview, type PreviewServer } from "vite";
 
 import { createAnalysisService } from "../../apps/api/src/analysis/service.js";
 import { buildApp } from "../../apps/api/src/app.js";
@@ -25,6 +25,7 @@ import { createGuestService } from "../../apps/api/src/guests/service.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
 import { createRoomEvents } from "../../apps/api/src/realtime/room-events.js";
 import { createRoomService } from "../../apps/api/src/rooms/service.js";
+import { buildWeb } from "../../apps/web/build.js";
 import { integrationDatabase } from "../database.js";
 
 import { accountHarness } from "./account-harness.js";
@@ -56,6 +57,7 @@ async function main() {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   let web: Awaited<ReturnType<typeof createServer>> | undefined;
   let disabledWeb: Awaited<ReturnType<typeof createServer>> | undefined;
+  let productionWeb: PreviewServer | undefined;
   let closing: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
 
@@ -63,6 +65,14 @@ async function main() {
     closing ??= closeResources([
       { name: "web", close: () => web?.close() },
       { name: "disabled web", close: () => disabledWeb?.close() },
+      {
+        name: "production web",
+        close: () =>
+          productionWeb &&
+          new Promise<void>((resolve, reject) =>
+            productionWeb!.httpServer.close((error) => (error ? reject(error) : resolve())),
+          ),
+      },
       { name: "API", close: () => app?.close() },
       { name: "test accounts", close: () => accounts.close() },
       {
@@ -161,6 +171,30 @@ async function main() {
     accounts.install(app);
     process.env.VITE_API_BASE_URL = API_ORIGIN;
     process.env.SANDBOX_ENABLED = "false";
+    const productionDirectory =
+      process.argv[2] === "--production-web" ? process.argv[3] : undefined;
+    if (productionDirectory) {
+      const config = {
+        root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
+        configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
+        mode: "production",
+        logLevel: "error" as const,
+        build: { outDir: productionDirectory },
+      };
+      await buildWeb(config);
+      await database.check();
+      await runMigrations(database);
+      await app.listen({ host: "localhost", port: Number(new URL(API_ORIGIN).port) });
+      productionWeb = await preview({
+        ...config,
+        preview: {
+          host: "localhost",
+          port: Number(new URL(WEB_ORIGIN).port),
+          strictPort: true,
+        },
+      });
+      return;
+    }
     disabledWeb = await createServer({
       cacheDir: join(tmpdir(), "neurochess-playwright-disabled-vite"),
       root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
