@@ -1,7 +1,8 @@
-import type { ProviderFailure, TokenUsage } from "@neurochess/contracts";
+import type { BillingUsage, ProviderFailure, TokenUsage } from "@neurochess/contracts";
 import { z } from "zod";
 
 import type { ListModelsInput } from "./adapter.js";
+import { normalizeBilling } from "./billing.js";
 import { cancellationFailure } from "./invoke-move.js";
 
 const errorSchema = z.object({
@@ -40,7 +41,8 @@ export const openRouterUsageSchema = z
         },
   );
 type JsonResult =
-  { ok: true; value: unknown } | { ok: false; error: ProviderFailure; usage?: TokenUsage | null };
+  | { ok: true; value: unknown }
+  | { ok: false; error: ProviderFailure; usage?: TokenUsage | null; billing?: BillingUsage };
 type OpenRouterOperation = { body: object } | { offset: number };
 const invalidResponse: ProviderFailure = {
   code: "provider_unavailable",
@@ -186,6 +188,7 @@ export async function openRouterRequest(
       ok: false,
       error: httpFailure(response.status, generation, error.data?.error),
       usage: usage.data?.usage ?? null,
+      ...(generation ? { billing: normalizeBilling("openrouter", "", raw) } : {}),
     };
   } catch {
     return {

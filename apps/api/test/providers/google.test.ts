@@ -477,8 +477,6 @@ describe("Google candidates and usage", () => {
         name: "unsafe prompt token integer",
         usageMetadata: { promptTokenCount: Number.MAX_SAFE_INTEGER + 1 },
       },
-      { name: "non-numeric thought tokens", usageMetadata: { thoughtsTokenCount: "invalid" } },
-      { name: "negative cache tokens", usageMetadata: { cachedContentTokenCount: -1 } },
       { name: "non-object usage", usageMetadata: "unavailable" },
     ].map(({ name, usageMetadata }) => ({
       name,

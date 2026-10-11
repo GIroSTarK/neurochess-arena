@@ -177,6 +177,13 @@ export {
   type ProfileErrorCode,
 } from "./profile.js";
 export * from "./credential.js";
+export * from "./pricing.js";
+export {
+  billingUsageSchema,
+  billingDimensionsSchema,
+  type BillingUsage,
+  type BillingDimensions,
+} from "./provider.js";
 export * from "./room-realtime.js";
 export {
   analysisProfileIdSchema,

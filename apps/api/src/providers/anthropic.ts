@@ -20,6 +20,7 @@ import {
   unknownAnthropicCapabilities,
 } from "./anthropic-capabilities.js";
 import { anthropicRequest } from "./anthropic-http.js";
+import { normalizeBilling } from "./billing.js";
 
 const modelsSchema = z.object({
   data: z.array(anthropicModelSchema).max(1000),
@@ -55,8 +56,6 @@ const responseSchema = z.object({
     .object({
       input_tokens: count,
       output_tokens: count,
-      cache_creation_input_tokens: count,
-      cache_read_input_tokens: count,
     })
     .nullish(),
 });
@@ -66,10 +65,18 @@ const invalidResponse: ProviderFailure = {
 };
 
 function extractMove(raw: unknown, input: MoveRequest, durationMs: number): NormalizedMoveResponse {
+  const billing = normalizeBilling("anthropic", input.modelId, raw);
   const failure = (
     error: ProviderFailure,
     usage: TokenUsage | null = null,
-  ): NormalizedMoveResponse => ({ ok: false, error, usage, durationMs, providerRequestId: null });
+  ): NormalizedMoveResponse => ({
+    ok: false,
+    error,
+    usage,
+    billing,
+    durationMs,
+    providerRequestId: null,
+  });
   const parsed = responseSchema.safeParse(raw);
   if (!parsed.success) return failure(invalidResponse);
   const response = parsed.data;
@@ -115,6 +122,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
         : output.data,
     usage,
     durationMs,
+    billing,
     providerRequestId: null,
   };
 }

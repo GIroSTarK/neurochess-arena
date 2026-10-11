@@ -326,7 +326,6 @@ describe("Anthropic content and usage", () => {
       name: "unsafe input token integer",
       fields: { usage: { input_tokens: Number.MAX_SAFE_INTEGER + 1 } },
     },
-    { name: "non-numeric cache tokens", fields: { usage: { cache_read_input_tokens: "invalid" } } },
     { name: "non-object usage", fields: { usage: "unavailable" } },
     { name: "user message role", fields: { role: "user" } },
     { name: "error message type", fields: { type: "error" } },

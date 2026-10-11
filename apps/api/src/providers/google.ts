@@ -13,6 +13,7 @@ import {
 import { z } from "zod";
 
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
+import { normalizeBilling } from "./billing.js";
 import { effectiveParameters } from "./discovery.js";
 import {
   googleCapabilities,
@@ -80,9 +81,6 @@ const responseSchema = z.object({
       promptTokenCount: count,
       candidatesTokenCount: count,
       totalTokenCount: count,
-      cachedContentTokenCount: count,
-      thoughtsTokenCount: count,
-      toolUsePromptTokenCount: count,
     })
     .nullish(),
 });
@@ -92,6 +90,7 @@ const invalidResponse: ProviderFailure = {
 };
 
 function extractMove(raw: unknown, input: MoveRequest, durationMs: number): NormalizedMoveResponse {
+  const billing = normalizeBilling("google", input.modelId, raw);
   const failure = (
     error: ProviderFailure,
     usage: TokenUsage | null = null,
@@ -99,6 +98,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
     ok: false,
     error,
     usage,
+    billing,
     durationMs,
     providerRequestId: null,
   });
@@ -167,6 +167,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
         : output.data,
     usage,
     durationMs,
+    billing,
     providerRequestId: null,
   };
 }

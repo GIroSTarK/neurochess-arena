@@ -74,6 +74,11 @@ export type NewModelInvocation = Pick<
   | "provider"
   | "modelId"
   | "effectiveParameters"
+  | "pricingVersion"
+  | "pricingSource"
+  | "pricingCheckedAt"
+  | "pricingRates"
+  | "pricingUnavailableReason"
 >;
 export type InvocationResult = Pick<
   StoredModelInvocation,
@@ -86,6 +91,9 @@ export type InvocationResult = Pick<
   | "outputTokens"
   | "totalTokens"
   | "commentary"
+  | "billingUsage"
+  | "costAmount"
+  | "costUnavailableReason"
 >;
 export type NewAiTurnReservation = Pick<
   StoredAiTurnReservation,
@@ -621,7 +629,11 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
               if (!turn) throw new Error("AI turn missing");
               const [attempt] = await tx
                 .insert(modelInvocations)
-                .values({ ...invocation, attemptNumber: turn.attemptCount })
+                .values({
+                  ...invocation,
+                  attemptNumber: turn.attemptCount,
+                  costUnavailableReason: "dispatch_unknown",
+                })
                 .returning();
               if (!attempt) throw new Error("Invocation insertion failed");
               return attempt;

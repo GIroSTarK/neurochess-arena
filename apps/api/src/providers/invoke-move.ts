@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 
 import {
+  type BillingUsage,
   type NormalizedMoveResponse,
   normalizedMoveResponseSchema,
   type ProviderFailure,
@@ -29,11 +30,13 @@ export async function invokeMove(
   const failure = (
     error: ProviderFailure,
     usage: TokenUsage | null = null,
+    billing?: BillingUsage,
   ): NormalizedMoveResponse => ({
     ok: false,
     error,
     durationMs: duration(),
     usage,
+    ...(billing === undefined ? {} : { billing }),
     providerRequestId: null,
   });
   const isAborted = () => input.signal.aborted;
@@ -72,7 +75,11 @@ export async function invokeMove(
     }
     const envelope = outputEnvelopeSchema.safeParse(raw);
     return envelope.success
-      ? failure({ code: "model_invalid", reason: "malformed_output" }, envelope.data.usage)
+      ? failure(
+          { code: "model_invalid", reason: "malformed_output" },
+          envelope.data.usage,
+          envelope.data.billing,
+        )
       : failure({ code: "provider_unavailable", reason: "invalid_response" });
   } catch {
     // Never forward exception text, request objects, or AbortSignal.reason.

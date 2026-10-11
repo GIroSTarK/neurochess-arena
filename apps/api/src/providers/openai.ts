@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
+import { normalizeBilling } from "./billing.js";
 import { effectiveParameters } from "./discovery.js";
 import { openAiCapabilities } from "./openai-capabilities.js";
 import { openAiFailure, openAiRequest } from "./openai-http.js";
@@ -66,6 +67,7 @@ const invalidResponse: ProviderFailure = {
 };
 
 function extractMove(raw: unknown, input: MoveRequest, durationMs: number): NormalizedMoveResponse {
+  const billing = normalizeBilling("openai", input.modelId, raw);
   const failure = (
     error: ProviderFailure,
     usage: TokenUsage | null = null,
@@ -73,6 +75,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
     ok: false,
     error,
     usage,
+    billing,
     durationMs,
     providerRequestId: null,
   });
@@ -142,6 +145,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
         : output.data,
     usage,
     durationMs,
+    billing,
     // Omit upstream identifiers entirely, even if an upstream header echoes a key.
     providerRequestId: null,
   };

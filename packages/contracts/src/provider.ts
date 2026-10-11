@@ -66,6 +66,37 @@ export const tokenUsageSchema = z.strictObject({
   totalTokens: tokenCountSchema,
 });
 
+export const billingDimensionsSchema = z.strictObject({
+  inputTokens: tokenCountSchema.optional(),
+  cachedInputTokens: tokenCountSchema.optional(),
+  cacheWriteTokens: tokenCountSchema.optional(),
+  cacheWrite5mTokens: tokenCountSchema.optional(),
+  cacheWrite1hTokens: tokenCountSchema.optional(),
+  outputTokens: tokenCountSchema.optional(),
+  reasoningTokens: tokenCountSchema.optional(),
+});
+
+export const billingUsageSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("reported"),
+    provider: aiProviderSchema,
+    pricingMatch: z.enum([
+      "standard",
+      "model_unknown",
+      "tier_unknown",
+      "unsupported_dimensions",
+      "routing_unknown",
+    ]),
+    // Ordinary input excludes cache reads/writes. Output includes reasoning for
+    // OpenAI/Anthropic/OpenRouter, but Google reports thinking separately.
+    dimensions: billingDimensionsSchema,
+  }),
+  z.strictObject({
+    status: z.literal("unavailable"),
+    reason: z.enum(["usage_missing", "usage_invalid"]),
+  }),
+]);
+
 // Only enumerated diagnostics cross this boundary, never upstream exception text.
 export const providerFailureSchema = z.discriminatedUnion("code", [
   z.strictObject({
@@ -84,6 +115,9 @@ export const providerFailureSchema = z.discriminatedUnion("code", [
 const invocationFields = {
   durationMs: z.number().nonnegative().max(Number.MAX_SAFE_INTEGER),
   usage: tokenUsageSchema.nullable(),
+  // Optional for adapters without billing support. Broken billing metadata must
+  // not change move validity, provider error classification, or the retry budget.
+  billing: billingUsageSchema.optional().catch({ status: "unavailable", reason: "usage_invalid" }),
   providerRequestId: z
     .string()
     .min(1)
@@ -117,6 +151,8 @@ export type ModelCapabilities = z.infer<typeof modelCapabilitiesSchema>;
 export type ModelDescriptor = z.infer<typeof modelDescriptorSchema>;
 export type AiMoveOutput = z.infer<typeof aiMoveOutputSchema>;
 export type TokenUsage = z.infer<typeof tokenUsageSchema>;
+export type BillingUsage = z.infer<typeof billingUsageSchema>;
+export type BillingDimensions = z.infer<typeof billingDimensionsSchema>;
 export type ProviderFailure = z.infer<typeof providerFailureSchema>;
 export type NormalizedMoveResponse = z.infer<typeof normalizedMoveResponseSchema>;
 export type ModelDiscoveryResult = z.infer<typeof modelDiscoveryResultSchema>;

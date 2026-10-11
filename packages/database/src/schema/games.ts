@@ -3,10 +3,12 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -372,11 +374,52 @@ export const modelInvocations = pgTable(
     inputTokens: bigint("input_tokens", { mode: "number" }),
     outputTokens: bigint("output_tokens", { mode: "number" }),
     totalTokens: bigint("total_tokens", { mode: "number" }),
+    billingUsage: jsonb("billing_usage").$type<unknown>(),
+    pricingVersion: text("pricing_version"),
+    pricingSource: text("pricing_source"),
+    pricingCheckedAt: date("pricing_checked_at", { mode: "string" }),
+    pricingRates: jsonb("pricing_rates").$type<unknown>(),
+    pricingUnavailableReason: text("pricing_unavailable_reason").default("legacy_record"),
+    costAmount: numeric("cost_amount", { precision: 38, scale: 12 }),
+    costCurrency: text("cost_currency").notNull().default("USD"),
+    costUnavailableReason: text("cost_unavailable_reason").default("legacy_record"),
     commentary: text("commentary"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("model_invocations_attempt_unique").on(table.turnId, table.attemptNumber),
+    check(
+      "model_invocations_price_check",
+      sql`(
+      (${table.pricingVersion} is null and ${table.pricingSource} is null and ${table.pricingCheckedAt} is null and ${table.pricingRates} is null
+        and ${table.pricingUnavailableReason} in ('legacy_record', 'model_price_unknown', 'routing_price_unknown', 'pricing_invalid'))
+      or (${table.pricingVersion} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.[0-9]{1,4}$'
+        and ${table.pricingSource} in (
+          'https://developers.openai.com/api/docs/models/gpt-4.1-mini',
+          'https://developers.openai.com/api/docs/models/gpt-5-mini',
+          'https://platform.claude.com/docs/en/about-claude/pricing',
+          'https://ai.google.dev/gemini-api/docs/pricing')
+        and ${table.pricingCheckedAt} is not null and jsonb_typeof(${table.pricingRates}) = 'object'
+        and octet_length(${table.pricingRates}::text) <= 512 and ${table.pricingUnavailableReason} is null)
+      ) is true`,
+    ),
+    check(
+      "model_invocations_cost_check",
+      sql`(${table.costCurrency} = 'USD' and (
+      (${table.costAmount} is null and ${table.costUnavailableReason} in (
+        'legacy_record', 'dispatch_unknown', 'model_price_unknown', 'routing_price_unknown',
+        'usage_missing', 'usage_incomplete', 'usage_invalid', 'model_unknown', 'tier_unknown',
+        'unsupported_dimensions', 'pricing_invalid'))
+      or (${table.costAmount} >= 0 and ${table.costAmount} <> 'NaN'::numeric and ${table.costUnavailableReason} is null
+        and ${table.pricingVersion} is not null and ${table.billingUsage} is not null and ${table.outcome} not in ('in_flight', 'interrupted'))
+      )) is true`,
+    ),
+    check(
+      "model_invocations_billing_check",
+      sql`${table.billingUsage} is null or (
+      jsonb_typeof(${table.billingUsage}) = 'object' and octet_length(${table.billingUsage}::text) <= 2048
+      and ${table.outcome} not in ('in_flight', 'interrupted'))`,
+    ),
     index("model_invocations_reservation_idx").on(table.reservationId),
     uniqueIndex("model_invocations_pending_unique")
       .on(table.reservationId)

@@ -1,9 +1,11 @@
 import { z } from "zod";
 
 import { chessColorSchema, commandIdSchema, gameIdSchema, gameVersionSchema } from "./game.js";
+import { costEstimateSchema } from "./pricing.js";
 import {
   aiParametersSchema,
   aiProviderSchema,
+  billingUsageSchema,
   modelIdSchema,
   providerFailureSchema,
   tokenUsageSchema,
@@ -31,14 +33,25 @@ export const modelInvocationSchema = z
     error: providerFailureSchema.nullable(),
     durationMs: z.number().int().nonnegative().nullable(),
     usage: tokenUsageSchema.nullable(),
+    billing: billingUsageSchema.nullable().default(null),
+    cost: costEstimateSchema.default({ status: "unavailable", reason: "legacy_record" }),
     commentary: z.string().max(2000).nullable(),
   })
   .refine((attempt) => {
+    if (
+      attempt.cost.status === "estimated" &&
+      (attempt.cost.pricing.provider !== attempt.provider ||
+        attempt.cost.pricing.modelId !== attempt.modelId)
+    ) {
+      return false;
+    }
     if (attempt.outcome === "in_flight" || attempt.outcome === "interrupted") {
       return (
         attempt.error === null &&
         attempt.durationMs === null &&
         attempt.usage === null &&
+        attempt.billing === null &&
+        attempt.cost.status === "unavailable" &&
         attempt.commentary === null
       );
     }

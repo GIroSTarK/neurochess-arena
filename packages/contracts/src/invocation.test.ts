@@ -16,6 +16,8 @@ const accepted = {
   durationMs: 12,
   usage: null,
   commentary: null,
+  billing: null,
+  cost: { status: "unavailable", reason: "legacy_record" },
 };
 const unknown = { ...accepted, outcome: "in_flight", durationMs: null };
 

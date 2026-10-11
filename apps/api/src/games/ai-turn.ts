@@ -16,6 +16,7 @@ import type {
   GameTransaction,
   InvocationResult,
   StoredGame,
+  StoredModelInvocation,
   StoredParticipant,
 } from "@neurochess/database";
 
@@ -26,6 +27,8 @@ import {
 } from "../credentials/provider-access.js";
 import type { Principal } from "../identity/principal.js";
 import { lockIdentity } from "../identity/validity.js";
+import { calculateCost, pinPricing } from "../pricing/calculator.js";
+import { pricingColumns, readBilling, storedPricing } from "../pricing/persistence.js";
 import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapter.js";
 import { discoverModels, effectiveParameters } from "../providers/discovery.js";
 import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
@@ -61,8 +64,14 @@ function aiSeat(principal: Principal, prepared: PreparedCommand, step = false) {
   return { seat, participantId: participant.id, color: snapshot.turn };
 }
 
-function invocationResult(response: NormalizedMoveResponse, discarded = false): InvocationResult {
+function invocationResult(
+  response: NormalizedMoveResponse,
+  attempt: StoredModelInvocation,
+  discarded = false,
+): InvocationResult {
   const error = response.ok ? null : response.error;
+  const billingUsage = readBilling(response.billing);
+  const cost = calculateCost(storedPricing(attempt), billingUsage);
   return {
     outcome: discarded
       ? "discarded"
@@ -78,6 +87,9 @@ function invocationResult(response: NormalizedMoveResponse, discarded = false): 
     inputTokens: response.usage?.inputTokens ?? null,
     outputTokens: response.usage?.outputTokens ?? null,
     totalTokens: response.usage?.totalTokens ?? null,
+    billingUsage,
+    costAmount: cost.status === "estimated" ? cost.amount : null,
+    costUnavailableReason: cost.status === "unavailable" ? cost.reason : null,
     commentary: response.ok && !discarded ? (response.output.commentary ?? null) : null,
   };
 }
@@ -214,7 +226,11 @@ export function createAiTurnExecutor(options: {
         });
         throw new AiTurnError("AI_PARAMETERS_INVALID");
       }
-      const invocation = { ...reserved.invocation, effectiveParameters: parameters };
+      const invocation = {
+        ...reserved.invocation,
+        effectiveParameters: parameters,
+        ...pricingColumns(pinPricing(reserved.invocation.provider, reserved.invocation.modelId)),
+      };
       attempt = await repository.write(async (tx) => {
         await recheck(tx);
         return tx.beginModelInvocation(invocation);
@@ -270,7 +286,7 @@ export function createAiTurnExecutor(options: {
             !(await tx.finishModelInvocation(
               currentAttempt.id,
               reserved.reservationId,
-              invocationResult(classified),
+              invocationResult(classified, currentAttempt),
             ))
           ) {
             throw new GameIntegrityError();
@@ -349,7 +365,7 @@ export function createAiTurnExecutor(options: {
             await tx.finishModelInvocation(
               attempt.id,
               reserved.reservationId,
-              invocationResult(response, true),
+              invocationResult(response, attempt, true),
               true,
             );
           }

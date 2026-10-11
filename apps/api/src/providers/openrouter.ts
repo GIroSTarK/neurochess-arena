@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import {
   aiMoveOutputSchema,
   aiParametersSchema,
+  type BillingUsage,
   type ModelDescriptor,
   type ModelDiscoveryResult,
   modelDiscoveryResultSchema,
@@ -13,6 +14,7 @@ import {
 import { z } from "zod";
 
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
+import { normalizeBilling } from "./billing.js";
 import { effectiveParameters } from "./discovery.js";
 import {
   openRouterCapabilities,
@@ -55,6 +57,7 @@ const invalidResponse: ProviderFailure = {
 };
 
 function extractMove(raw: unknown, input: MoveRequest, durationMs: number): NormalizedMoveResponse {
+  const billing = normalizeBilling("openrouter", input.modelId, raw);
   const failure = (
     error: ProviderFailure,
     usage: TokenUsage | null = null,
@@ -62,6 +65,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
     ok: false,
     error,
     usage,
+    billing,
     durationMs,
     providerRequestId: null,
   });
@@ -112,6 +116,7 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
         : output.data,
     usage,
     durationMs,
+    billing,
     providerRequestId: null,
   };
 }
@@ -173,10 +178,12 @@ export function createOpenRouterAdapter(transport: typeof fetch = fetch): AiProv
       const failure = (
         error: ProviderFailure,
         usage: TokenUsage | null = null,
+        billing?: BillingUsage,
       ): NormalizedMoveResponse => ({
         ok: false,
         error,
         usage,
+        ...(billing === undefined ? {} : { billing }),
         durationMs: duration(),
         providerRequestId: null,
       });
@@ -216,7 +223,7 @@ export function createOpenRouterAdapter(transport: typeof fetch = fetch): AiProv
       });
       return response.ok
         ? extractMove(response.value, input, duration())
-        : failure(response.error, response.usage);
+        : failure(response.error, response.usage, response.billing);
     },
   };
 }

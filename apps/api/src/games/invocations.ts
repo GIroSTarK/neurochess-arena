@@ -5,6 +5,8 @@ import {
 } from "@neurochess/contracts";
 import type { GameReader, StoredModelInvocation } from "@neurochess/database";
 
+import { readBilling, readCost } from "../pricing/persistence.js";
+
 import { GameIntegrityError } from "./errors.js";
 
 export async function readInvocations(
@@ -58,6 +60,8 @@ export async function readInvocations(
               }
             : null,
           commentary: attempt.commentary,
+          billing: readBilling(attempt.billingUsage),
+          cost: readCost(attempt),
         })),
       };
     }),
