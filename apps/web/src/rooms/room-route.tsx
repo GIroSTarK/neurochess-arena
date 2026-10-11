@@ -54,7 +54,12 @@ export function RoomRoute({
   if (stopped) return <RouteNotice kind={departing ? "loading" : "stopped"} onRetry={retry} />;
   return (
     <PageContext value="rooms">
-      <RoomScreen controller={controller} onRetry={retry} />
+      <RoomScreen
+        controller={controller}
+        onRetry={retry}
+        identity={identity}
+        apiBaseUrl={apiBaseUrl}
+      />
     </PageContext>
   );
 }

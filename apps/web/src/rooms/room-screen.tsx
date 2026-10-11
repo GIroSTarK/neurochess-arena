@@ -1,8 +1,12 @@
 import { useId, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { AiIdentity } from "../api/identity";
+import { ArenaDetails } from "../arena/arena-details";
 import { ArenaHeader } from "../arena/arena-header";
 import { ArenaLayout } from "../arena/arena-layout";
+import { EvaluationIndicator } from "../arena/panels/evaluation-indicator";
+import { EvaluationPanel } from "../arena/panels/evaluation-panel";
 import { MoveHistory } from "../arena/panels/move-history";
 import { PgnActions } from "../arena/panels/pgn-actions";
 import type { PlayerSummaryData } from "../arena/panels/player-summary";
@@ -11,6 +15,7 @@ import { resultReason, resultTitle } from "../arena/result";
 import { AccountAccess } from "../auth/account-access";
 import { Chessboard } from "../board/chessboard";
 import { isTerminal, plyColor } from "../gameplay/snapshot";
+import { useGameAnalysis } from "../gameplay/use-game-analysis";
 import { replayView } from "../position/replay";
 import { AppNavigation } from "../shell/app-navigation";
 import { AppShell } from "../shell/app-shell";
@@ -20,17 +25,38 @@ import { TextLink } from "../ui/text-link";
 import type { RoomController } from "./controller";
 import { InvitationShare } from "./invitation-share";
 import { RoomControls } from "./room-controls";
+import type { RoomState } from "./state";
+
+const analysisPosition = (state: RoomState) =>
+  state.room
+    ? {
+        snapshot: state.room.snapshot,
+        ply: state.replay ? state.replayPly : state.room.snapshot.moves.length,
+      }
+    : null;
 
 export function RoomScreen({
   controller,
   onRetry,
+  identity,
+  apiBaseUrl,
 }: {
   readonly controller: RoomController;
   readonly onRetry: () => void;
+  readonly identity: AiIdentity;
+  readonly apiBaseUrl: string;
 }) {
   const { t } = useTranslation();
   const helpId = useId();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const evaluation = useGameAnalysis(
+    controller,
+    analysisPosition,
+    controller.authorizeAnalysis,
+    apiBaseUrl,
+    identity,
+  );
+  const evaluationPly = state.replay ? state.replayPly : (state.room?.snapshot.moves.length ?? 0);
   const room = state.room;
   const snapshot = room?.snapshot;
   const terminal = snapshot && isTerminal(snapshot);
@@ -175,6 +201,15 @@ export function RoomScreen({
                   />
                 </>
               ) : null}
+              <div className="mt-3">
+                <EvaluationIndicator
+                  state={evaluation.view.plies[evaluationPly]}
+                  onRetry={() => evaluation.onRetry(evaluationPly)}
+                  suspended={evaluation.view.suspended}
+                  obsolete={evaluation.view.persistence === "obsolete"}
+                  accessError={evaluation.view.accessError}
+                />
+              </div>
             </>
           }
           details={
@@ -210,10 +245,24 @@ export function RoomScreen({
                   {!room.invitationAvailable ? <p>{t("rooms.revoked")}</p> : null}
                 </div>
               ) : null}
-              <MoveHistory
-                moves={snapshot.moves}
-                selectedPly={state.replay ? state.replayPly : undefined}
-                onSelect={state.replay ? controller.selectPly : undefined}
+              <ArenaDetails
+                initialTab={terminal ? "analysis" : "moves"}
+                moves={
+                  <MoveHistory
+                    moves={snapshot.moves}
+                    selectedPly={state.replay ? state.replayPly : undefined}
+                    onSelect={state.replay ? controller.selectPly : undefined}
+                  />
+                }
+                analysis={
+                  <EvaluationPanel
+                    view={evaluation.view}
+                    selectedPly={evaluationPly}
+                    moves={snapshot.moves}
+                    onSelect={state.replay ? controller.selectPly : undefined}
+                    onRetrySave={evaluation.onRetrySave}
+                  />
+                }
               />
               {terminal ? <TextLink to="/rooms">{t("rooms.newRoom")}</TextLink> : null}
             </>

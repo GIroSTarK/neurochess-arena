@@ -65,6 +65,14 @@ export class SandboxController {
 
   readonly getSnapshot = (): SandboxState => this.store.get();
   readonly subscribe = (listener: () => void): (() => void) => this.store.subscribe(listener);
+  readonly authorizeAnalysis = async (gameId: string, signal: AbortSignal) => {
+    try {
+      await this.api.snapshot(gameId, signal);
+    } catch (error) {
+      if (!signal.aborted) this.session.loseAccess(safeFailure(error));
+      throw error;
+    }
+  };
 
   endLifetime(): void {
     if (this.ended) return;

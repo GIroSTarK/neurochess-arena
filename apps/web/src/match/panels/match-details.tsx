@@ -2,8 +2,10 @@ import type { CredentialMetadata } from "@neurochess/contracts";
 import { useTranslation } from "react-i18next";
 
 import { ArenaDetails } from "../../arena/arena-details";
+import { EvaluationPanel } from "../../arena/panels/evaluation-panel";
 import { MoveHistory } from "../../arena/panels/move-history";
 import type { SavedCredentialChoices } from "../../arena/setup/credential-source";
+import type { EvaluationView } from "../../gameplay/analysis-controller";
 import { Button } from "../../ui/button";
 import { StableText } from "../../ui/stable-text";
 import { CommentaryPanel } from "../commentary-panel";
@@ -20,12 +22,14 @@ export function MatchDetails({
   controller,
   credentials,
   savedCredentials,
+  evaluation,
 }: {
   readonly state: MatchState;
   readonly view: MatchPresentation;
   readonly controller: MatchController;
   readonly credentials: readonly CredentialMetadata[];
   readonly savedCredentials?: SavedCredentialChoices;
+  readonly evaluation?: { readonly view: EvaluationView; readonly onRetrySave: () => void };
 }) {
   const { t } = useTranslation();
   const { details } = state;
@@ -43,27 +47,41 @@ export function MatchDetails({
       }}
     >
       <ArenaDetails
+        initialTab={view.terminal ? "analysis" : "moves"}
         commentary={
           <CommentaryPanel
             key={snapshot.gameId}
             details={details}
             records={state.invocations}
-            selectedPly={view.terminal ? state.replayPly : null}
+            selectedPly={
+              view.terminal ? (state.replay ? state.replayPly : snapshot.moves.length) : null
+            }
             loading={state.invocationsLoading}
             error={state.invocationsError}
           />
         }
         analysis={
-          <TelemetryPanel
-            details={details}
-            records={state.invocations}
-            recordedMoveCount={state.invocationsMoveCount}
-            loading={state.invocationsLoading}
-            error={state.invocationsError}
-            onRefresh={() => {
-              void controller.loadInvocations();
-            }}
-          />
+          <div className="grid gap-6">
+            {evaluation ? (
+              <EvaluationPanel
+                view={evaluation.view}
+                selectedPly={state.replay ? state.replayPly : snapshot.moves.length}
+                moves={snapshot.moves}
+                onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+                onRetrySave={evaluation.onRetrySave}
+              />
+            ) : null}
+            <TelemetryPanel
+              details={details}
+              records={state.invocations}
+              recordedMoveCount={state.invocationsMoveCount}
+              loading={state.invocationsLoading}
+              error={state.invocationsError}
+              onRefresh={() => {
+                void controller.loadInvocations();
+              }}
+            />
+          </div>
         }
         events={
           <InvocationEvents

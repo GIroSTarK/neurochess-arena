@@ -4,7 +4,7 @@ import type { RouteObject } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FOOLS_MATE, GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
-import { createHttpMock } from "../test/http";
+import { createHttpMock as createBaseHttpMock, type HttpRoutes } from "../test/http";
 import { renderApp } from "../test/render";
 import { INVITATION, joinedRoom, roomProfile, roomSession, waitingRoom } from "../test/rooms";
 
@@ -13,6 +13,12 @@ const configuration = {
   seats: { white: { type: "human" }, black: { type: "human" } },
 };
 const options = { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false };
+const createHttpMock = (routes: HttpRoutes) =>
+  createBaseHttpMock({
+    [`GET /games/${GAME_ID}/analysis?limit=128`]: () =>
+      jsonResponse({ gameId: GAME_ID, samples: [], nextCursor: null }),
+    ...routes,
+  });
 class Socket extends EventTarget {
   static instances: Socket[] = [];
   constructor() {
@@ -67,6 +73,11 @@ describe("production private room routes", () => {
     expect(screen.getByRole("grid")).toBeVisible();
     expect(Socket.instances.length).toBe(1);
     unavailable = false;
+    const analysisReads = () =>
+      http.fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/analysis")).length;
+    const savedReads = analysisReads();
+    await act(() => router.revalidate());
+    expect(analysisReads()).toBe(savedReads);
     let pending = Promise.resolve();
     await act(async () => {
       pending = router.navigate("/history");

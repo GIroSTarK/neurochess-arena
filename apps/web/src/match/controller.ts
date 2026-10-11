@@ -83,6 +83,14 @@ export class MatchController {
 
   readonly getSnapshot = () => this.store.get();
   readonly subscribe = (listener: () => void) => this.store.subscribe(listener);
+  readonly authorizeAnalysis = async (gameId: string, signal: AbortSignal) => {
+    try {
+      await this.api.snapshot(gameId, signal);
+    } catch (error) {
+      if (!signal.aborted) this.session.accessLost(error);
+      throw error;
+    }
+  };
   get credentials() {
     return this.seats.current;
   }

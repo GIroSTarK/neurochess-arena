@@ -92,6 +92,27 @@ function harness() {
 }
 
 describe("bounded analysis scheduling", () => {
+  it("converges to the server-retained sample after losing an equal-depth write tie", async () => {
+    const h = harness();
+    h.scheduler.show(0);
+    await h.advance(0);
+    h.finish();
+    await settle();
+    await h.scheduler.seed(
+      [
+        {
+          ...initialTarget,
+          generation: 1,
+          depth: 8,
+          durationMs: 40,
+          score: { kind: "cp", value: 25 },
+        },
+      ],
+      true,
+    );
+    expect(h.scheduler.getState(0).sample?.score).toEqual({ kind: "cp", value: 25 });
+    h.scheduler.dispose();
+  });
   it.each(["cancel", "suspend", "unavailable"] as const)(
     "keeps a newly seeded ready sample when overlapping work ends with %s",
     async (end) => {

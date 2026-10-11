@@ -6,10 +6,12 @@ import { useNavigate } from "react-router";
 import type { AiIdentity } from "../api/identity";
 import { ArenaLayout } from "../arena/arena-layout";
 import { BoardTools } from "../arena/board-tools";
+import { EvaluationIndicator } from "../arena/panels/evaluation-indicator";
 import { AccountAccess } from "../auth/account-access";
 import { useAccount } from "../auth/context";
 import type { ChessboardHandle } from "../board/chessboard";
 import { useCredentials } from "../credentials/use-credentials";
+import { useGameAnalysis } from "../gameplay/use-game-analysis";
 import { useAppRoute } from "../routing/route-context";
 import { gameHref } from "../routing/route-urls";
 import { ArenaSetupScreen } from "../setup/arena-setup-screen";
@@ -25,6 +27,15 @@ import { MatchDetails } from "./panels/match-details";
 import { MatchHeader } from "./panels/match-header";
 import { matchPresentation } from "./presentation";
 import type { ArenaRouteData } from "./route-data";
+import type { MatchState } from "./state";
+
+const analysisPosition = (state: MatchState) =>
+  state.details?.configuration && state.details.configuration.mode !== "human_vs_human"
+    ? {
+        snapshot: state.details.snapshot,
+        ply: state.replay ? state.replayPly : state.details.snapshot.moves.length,
+      }
+    : null;
 
 export function MatchScreen({
   identity,
@@ -42,10 +53,20 @@ export function MatchScreen({
   readonly entry: ArenaRouteData["data"];
 }) {
   const { t } = useTranslation();
-  const { sandboxEnabled } = useAppRoute();
+  const { sandboxEnabled, apiBaseUrl } = useAppRoute();
   const account = useAccount();
   const navigate = useNavigate();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const evaluation = useGameAnalysis(
+    controller,
+    analysisPosition,
+    controller.authorizeAnalysis,
+    apiBaseUrl,
+    identity,
+  );
+  const evaluationPly = state.replay
+    ? state.replayPly
+    : (state.details?.snapshot.moves.length ?? 0);
   const view = matchPresentation(state, t, account?.state.profile?.username);
   const boardView = view.board;
   const { refresh, state: savedState } = useCredentials(
@@ -148,6 +169,15 @@ export function MatchScreen({
           constrainDetails
           boardTools={
             <div className="min-w-0">
+              <div className="mt-3">
+                <EvaluationIndicator
+                  state={evaluation.view.plies[evaluationPly]}
+                  onRetry={() => evaluation.onRetry(evaluationPly)}
+                  suspended={evaluation.view.suspended}
+                  obsolete={evaluation.view.persistence === "obsolete"}
+                  accessError={evaluation.view.accessError}
+                />
+              </div>
               <BoardTools
                 helpId={helpId}
                 orientation={orientation}
@@ -177,6 +207,7 @@ export function MatchScreen({
               view={view}
               controller={controller}
               credentials={savedState.credentials}
+              evaluation={evaluation}
               {...(savedCredentials ? { savedCredentials } : {})}
             />
           }

@@ -302,7 +302,7 @@ Run `npm run test:e2e -- test/e2e/accounts.spec.ts` against the isolated browser
 
 History reads use a bounded summary projection. Each entry includes `players.white` and `players.black`: null for AI seats, or a strict `kind` of `account` (with current `username`), `guest`, `deleted`, or `unassigned` for a waiting room closed without an opponent. No account/guest identifiers or permanent name copies are included. Shared entries require the requesting account's retained access; removing it also denies subsequent details, replay and PGN reads. The other participant retains access under the [shared retention policy](product.md#shared-room-retention).
 
-Opening a result restores and validates the complete accepted history through the existing details/replay/PGN endpoints; invocation records apply only to AI games. Neither flow acquires a controller, resumes a game, requests a provider credential, or dispatches inference. Results remain private across sessions and after starting another game. Stockfish and richer cost analysis remain separate work.
+Opening a result restores and validates the complete accepted history through the existing details/replay/PGN endpoints; invocation records apply only to AI games. Neither flow acquires a controller, resumes a game, requests a provider credential, or dispatches inference. Results remain private across sessions and after starting another game. [Browser analysis](#browser-analysis-service) loads the account's saved evaluations and fills missing positions without provider credentials.
 
 History rows offer **Delete game**, and **Clear history** covers terminal games on every page. Separate dialogs explain the scope, initially focus Cancel, and block duplicate submissions. Success clears old list data, resets to the newest page, announces the result and focuses the list heading. Unconfirmed requests retain their dialog and offer explicit retry or Cancel/refresh; a failed refresh after confirmed deletion never restores old rows or claims the games are still saved.
 
@@ -539,6 +539,20 @@ must complete reauthorization before computation resumes. Use `retry(ply)` only 
 an explicit analysis Retry; it is independent of provider recovery. Feature adapters
 own authorized history and access refresh; the service does not discover games or
 grant access. Delivery status is in the [roadmap](roadmap.md#phase-5--analysis-polish-and-release-hardening).
+
+`gameplay/analysis-binding.ts` connects accepted match, room and Sandbox snapshots
+to the scheduler through a separate `GameAnalysisController`. It owns cancellable
+sample reads, one upload at a time (up to 32 samples), retained-write convergence,
+and explicit saving retries. Feature adapters supply read-only access refresh and
+the replay selection; shared arena components receive data and callbacks. Account
+samples persist through the private API, while guests and Sandbox remain in page
+memory. Engine Retry and saving Retry never issue game commands. An obsolete
+profile requires a page reload.
+
+Run `npm run test:e2e -- test/e2e/evaluation.spec.ts` for desktop/mobile Chromium
+acceptance of all public modes, private saved replay, independent room samples,
+worker failure and unsaved-result recovery. Provider fixtures assert that their
+chess context contains no analysis, opponent commentary or identities.
 
 Vite verifies and emits only the pinned lite single-threaded pair under
 `<base>/engines/sf19-lite-single-v1/`. Its `index.html` links the manifest, exact

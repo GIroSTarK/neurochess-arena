@@ -15,6 +15,7 @@ const webNodeTestFiles = [
   "apps/web/src/analysis/uci.test.ts",
   "apps/web/src/analysis/worker-client.test.ts",
   "apps/web/src/analysis/scheduler.test.ts",
+  "apps/web/src/gameplay/analysis-controller.test.ts",
   "apps/web/src/routing/route-data.test.ts",
   "apps/web/src/routing/fenced-results.test.ts",
   "apps/web/src/position/position.test.ts",

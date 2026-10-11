@@ -197,6 +197,8 @@ describe("committed Arena route data", () => {
     http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(currentSession),
       "GET /profile": () => jsonResponse(profile),
+      [`GET ${gamePath}/analysis?limit=128`]: () =>
+        jsonResponse({ gameId: GAME_ID, samples: [], nextCursor: null }),
       "GET /credentials": () => jsonResponse({ credentials: [] }),
       [`GET ${gamePath}/details`]: (init) => {
         if (new Headers(init?.headers).get("x-neurochess-expected-account") === GAME_ID) {

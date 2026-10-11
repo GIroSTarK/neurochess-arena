@@ -21,6 +21,12 @@ export function setupProviders(): AiAdapters {
           };
         },
         async requestMove(input: MoveRequest) {
+          if (
+            Object.keys(input.context).sort().join(",") !== "color,fen,legalMoves,pgn,turn" ||
+            /Stockfish|sf19-lite|Viewer note|opponent/i.test(JSON.stringify(input.context))
+          ) {
+            throw new Error("Provider context isolation failed");
+          }
           if (input.apiKey === "slow-fixture") {
             await new Promise<void>((resolve) => {
               const timer = setTimeout(resolve, 10_000);

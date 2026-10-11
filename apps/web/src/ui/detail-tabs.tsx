@@ -12,15 +12,17 @@ export interface DetailTab {
 export function DetailTabs({
   label,
   tabs,
+  initialTab,
 }: {
   readonly label: string;
   readonly tabs: readonly [DetailTab, ...DetailTab[]];
+  readonly initialTab?: string | undefined;
 }) {
   const prefix = useId();
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const removedFocus = useRef<HTMLElement | null>(null);
-  const [selected, setSelected] = useState(tabs[0].id);
-  const [focused, setFocused] = useState(tabs[0].id);
+  const [selected, setSelected] = useState(initialTab ?? tabs[0].id);
+  const [focused, setFocused] = useState(initialTab ?? tabs[0].id);
   const selectedId = tabs.some((tab) => tab.id === selected) ? selected : tabs[0].id;
   const focusedId = tabs.some((tab) => tab.id === focused) ? focused : selectedId;
 

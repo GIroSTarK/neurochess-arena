@@ -144,7 +144,7 @@ export class AnalysisScheduler {
     this.schedule();
   }
 
-  async seed(input: unknown): Promise<void> {
+  async seed(input: unknown, retained = false): Promise<void> {
     const parsed = seedSchema.safeParse(input);
     const history = this.history;
     const epoch = this.epoch;
@@ -194,7 +194,9 @@ export class AnalysisScheduler {
       const existing = this.states.get(sample.ply);
       if (
         existing?.sample?.profileId === PROFILE_ID &&
-        (sample.profileId !== PROFILE_ID || existing.sample.depth >= sample.depth)
+        (sample.profileId !== PROFILE_ID ||
+          existing.sample.depth > sample.depth ||
+          (existing.sample.depth === sample.depth && !retained))
       ) {
         continue;
       }

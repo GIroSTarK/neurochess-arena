@@ -7,6 +7,8 @@ import { ArenaHeader } from "../arena/arena-header";
 import { ArenaLayout } from "../arena/arena-layout";
 import { BoardTools } from "../arena/board-tools";
 import { EntryPanel } from "../arena/entry-panel";
+import { EvaluationIndicator } from "../arena/panels/evaluation-indicator";
+import { EvaluationPanel } from "../arena/panels/evaluation-panel";
 import { MoveHistory } from "../arena/panels/move-history";
 import { RecoveryNotice } from "../arena/recovery-notice";
 import { ServiceStatus } from "../arena/service-status";
@@ -32,7 +34,7 @@ import { useSandbox } from "./use-sandbox";
 export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
   const { t } = useTranslation();
   const helpId = useId();
-  const { state, controller, stopped, departing, retry, recover, checkReadiness } =
+  const { state, controller, stopped, departing, retry, recover, checkReadiness, evaluation } =
     useSandbox(apiBaseUrl);
   const [orientation, setOrientation] = useState<ChessColor>("white");
   const board = useRef<ChessboardHandle>(null);
@@ -59,6 +61,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
     feedback.notice !== null ||
     feedback.followUp !== null;
   const { startedGameId } = view;
+  const evaluationPly = state.replay ? state.replayPly : (state.snapshot?.moves.length ?? 0);
 
   useLayoutEffect(() => {
     if (startedGameId === null) return;
@@ -270,6 +273,28 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
           )
         }
       />
+      {view.board && state.snapshot ? (
+        <div className="mx-auto mt-6 grid max-w-[1120px] min-w-0 gap-3">
+          <EvaluationIndicator
+            state={evaluation.view.plies[evaluationPly]}
+            onRetry={() => evaluation.onRetry(evaluationPly)}
+            suspended={evaluation.view.suspended}
+            accessError={evaluation.view.accessError}
+          />
+          <details>
+            <summary className="min-h-target cursor-pointer py-3 text-label text-accent">
+              {t("details.analysis")}
+            </summary>
+            <EvaluationPanel
+              view={evaluation.view}
+              selectedPly={evaluationPly}
+              moves={state.snapshot.moves}
+              onSelect={state.replay ? (ply) => controller.selectPly(ply) : undefined}
+              onRetrySave={evaluation.onRetrySave}
+            />
+          </details>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

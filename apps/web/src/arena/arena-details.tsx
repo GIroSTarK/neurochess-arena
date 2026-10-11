@@ -10,6 +10,7 @@ export function ArenaDetails({
   analysis,
   events,
   children,
+  initialTab,
 }: {
   readonly moves: ReactNode;
   readonly commentary?: ReactNode;
@@ -17,6 +18,7 @@ export function ArenaDetails({
   readonly analysis?: ReactNode;
   readonly events?: ReactNode;
   readonly children?: ReactNode;
+  readonly initialTab?: string;
 }) {
   const { t } = useTranslation();
   const tabs: [DetailTab, ...DetailTab[]] = [
@@ -29,7 +31,11 @@ export function ArenaDetails({
     <>
       {commentary}
       {telemetry}
-      {tabs.length > 1 ? <DetailTabs label={t("details.label")} tabs={tabs} /> : moves}
+      {tabs.length > 1 ? (
+        <DetailTabs label={t("details.label")} tabs={tabs} initialTab={initialTab} />
+      ) : (
+        moves
+      )}
       {children}
     </>
   );

@@ -24,6 +24,14 @@ export class RoomController {
   private watchdog: ReturnType<typeof setTimeout> | undefined;
   readonly getSnapshot = this.store.get;
   readonly subscribe = this.store.subscribe;
+  readonly authorizeAnalysis = async (gameId: string, signal: AbortSignal) => {
+    try {
+      await this.api.read(gameId, signal);
+    } catch (error) {
+      if (!signal.aborted) this.loseAccess(error);
+      throw error;
+    }
+  };
 
   constructor(
     private readonly api: RoomGameApi,

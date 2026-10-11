@@ -1,4 +1,56 @@
 export const en = {
+  analysis: {
+    title: "Stockfish evaluation",
+    graph: "Evaluation graph",
+    graphDescription:
+      "White-relative evaluation by ply. Unknown positions are gaps; M marks mate separately from the pawn scale. The values table gives every position.",
+    clientComputed:
+      "Client-computed Stockfish analysis. Each participant retains their own evaluations.",
+    scale:
+      "Pawn scale: positive favors White, negative favors Black. Mate is shown separately. This is not a win probability.",
+    advantage: "{{value}} · {{color}} advantage",
+    equal: "{{value}} · Equal evaluation",
+    mate_one: "{{color}} mates in {{count}} move",
+    mate_other: "{{color}} mates in {{count}} moves",
+    checkmate: "{{color}} delivered checkmate",
+    provenance: "{{profile}} · Depth {{depth}}",
+    older: "Older profile · awaiting current analysis",
+    initial: "Initial position · Ply 0",
+    ply: "Ply {{ply}} · {{move}}",
+    position: "Replay position",
+    value: "Evaluation",
+    details: "Depth and storage",
+    values: "Evaluation values",
+    unknown: "No evaluation yet",
+    coverage: "Current profile: {{current}} of {{total}} positions. Missing positions remain gaps.",
+    retry: "Retry analysis",
+    retrySave: "Retry saving analysis",
+    loading: "Loading your saved analysis…",
+    saveError:
+      "Analysis could not be saved or loaded. Local results remain available and are marked Not saved.",
+    obsolete: "This analysis profile is obsolete. Reload the page to use the current profile.",
+    accessError: "Access could not be refreshed. Retry analysis to check access again.",
+    attribution: "Stockfish 19 · License and exact source",
+    saved: { saved: "Saved privately", unsaved: "Not saved", memory: "Page memory only" },
+    states: {
+      pending: "Waiting for analysis…",
+      computing: "Computing this position…",
+      suspended:
+        "Analysis suspended. It resumes after access is checked when this page is visible.",
+      unavailable: "Analysis unavailable",
+      ready: "Analysis ready",
+    },
+    reasons: {
+      unsupported_browser: "This browser cannot run the analysis engine.",
+      engine_load_failed: "The analysis engine could not load.",
+      initialization_timeout: "The analysis engine took too long to start.",
+      engine_protocol_error: "The analysis engine returned an invalid response.",
+      search_timeout: "Analysis of this position timed out.",
+      engine_crashed: "The analysis engine stopped unexpectedly.",
+      resource_limit: "The analysis engine reached its resource limit.",
+      no_score: "No exact evaluation is available for this position.",
+    },
+  },
   rooms: {
     navigation: "Private rooms",
     online: "Online",

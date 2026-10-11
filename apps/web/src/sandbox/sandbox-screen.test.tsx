@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { emptyEvaluation } from "../gameplay/analysis-controller";
 import {
   FOOLS_MATE,
   GAME_ID,
@@ -14,6 +15,7 @@ import { renderRouteScreen } from "../test/render";
 
 import { SandboxScreen } from "./sandbox-screen";
 import type { SandboxState } from "./state";
+import type { useSandbox } from "./use-sandbox";
 
 const sandbox = vi.hoisted(() => ({
   useSandbox: vi.fn<
@@ -22,6 +24,7 @@ const sandbox = vi.hoisted(() => ({
       controller: ReturnType<typeof mockController>;
       recover: () => void;
       checkReadiness: () => void;
+      evaluation: ReturnType<typeof useSandbox>["evaluation"];
     }
   >(),
 }));
@@ -31,7 +34,12 @@ vi.mock("./use-sandbox", () => sandbox);
 function renderSandbox(state: SandboxState = readyState()) {
   const controller = mockController();
   const checkReadiness = vi.fn();
-  const actions = { controller, recover: controller.recover, checkReadiness };
+  const actions = {
+    controller,
+    recover: controller.recover,
+    checkReadiness,
+    evaluation: { view: emptyEvaluation, onRetry: vi.fn(), onRetrySave: vi.fn() },
+  };
   sandbox.useSandbox.mockReturnValue({ state, ...actions });
   const { rerender, ...rendered } = renderRouteScreen(
     <SandboxScreen apiBaseUrl="http://localhost:3001" />,

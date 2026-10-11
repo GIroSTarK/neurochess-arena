@@ -2,10 +2,20 @@ import { useLayoutEffect, useSyncExternalStore } from "react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
 import { createSandboxApi } from "../api/sandbox-client";
+import { useGameAnalysis } from "../gameplay/use-game-analysis";
 import { useGameRouteController } from "../routing/use-game-route-controller";
 
 import { SandboxController } from "./controller";
 import type { SandboxRouteData } from "./route-data";
+import type { SandboxState } from "./state";
+
+const analysisPosition = (state: SandboxState) =>
+  state.snapshot
+    ? {
+        snapshot: state.snapshot,
+        ply: state.replay ? state.replayPly : state.snapshot.moves.length,
+      }
+    : null;
 
 export function useSandbox(apiBaseUrl: string) {
   const gameData = useRouteLoaderData<SandboxRouteData>("sandbox-game");
@@ -39,6 +49,12 @@ export function useSandbox(apiBaseUrl: string) {
     }
   }, [controller, entry, stopped]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const evaluation = useGameAnalysis(
+    controller,
+    analysisPosition,
+    controller.authorizeAnalysis,
+    apiBaseUrl,
+  );
   const recover = () => {
     if (entry?.issue && !state.snapshot) retry();
     else void controller.recover();
@@ -46,5 +62,5 @@ export function useSandbox(apiBaseUrl: string) {
   const checkReadiness = () => {
     void revalidator.revalidate();
   };
-  return { controller, state, stopped, departing, retry, recover, checkReadiness };
+  return { controller, state, stopped, departing, retry, recover, checkReadiness, evaluation };
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouteLoaderData } from "react-router";
 
 import { useRequiredAccount } from "../auth/context";
@@ -12,6 +12,12 @@ import type { ArenaRouteData } from "./route-data";
 export function MatchRouteLayout({ rooms }: { readonly rooms?: RoomEntryFeature | undefined }) {
   const { apiBaseUrl } = useAppRoute();
   const account = useRequiredAccount();
+  const identity = useMemo(
+    () => account.controller.identity(),
+    // A revision replaces authority; ordinary profile/revalidation renders do not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [account.controller, account.state.revision],
+  );
   const { gameId } = useParams();
   const result = useRouteLoaderData<ArenaRouteData>("arena-game");
   const entry = result?.data?.entry;
@@ -27,7 +33,7 @@ export function MatchRouteLayout({ rooms }: { readonly rooms?: RoomEntryFeature 
       <RoomRoute
         key={account.state.revision}
         apiBaseUrl={apiBaseUrl}
-        identity={account.controller.identity()}
+        identity={identity}
         room={entry.kind === "room" ? entry.room : null}
         accessLost={entry.kind === "unavailable" && entry.code === "access"}
         entryData={result}
@@ -35,11 +41,5 @@ export function MatchRouteLayout({ rooms }: { readonly rooms?: RoomEntryFeature 
       />
     );
   }
-  return (
-    <MatchRoute
-      key={account.state.revision}
-      apiBaseUrl={apiBaseUrl}
-      identity={account.controller.identity()}
-    />
-  );
+  return <MatchRoute key={account.state.revision} apiBaseUrl={apiBaseUrl} identity={identity} />;
 }
