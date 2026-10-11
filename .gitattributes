@@ -6,3 +6,6 @@
 *.jpeg binary
 *.gif binary
 *.webp binary
+
+# Preserve the upstream license bytes verified by the Stockfish manifest.
+apps/web/vendor/stockfish/Copying.txt -text whitespace=cr-at-eol
