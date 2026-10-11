@@ -42,6 +42,22 @@ const webFeatures = Object.keys(webFeatureImports).join("|");
 export default {
   forbidden: [
     {
+      name: "analysis-no-controllers-or-api",
+      comment:
+        "Browser analysis receives authorized history; it cannot call commands, providers or feature controllers.",
+      severity: "error",
+      from: { path: "(^|/)apps/web/src/analysis/", pathNot: "\\.test\\.tsx?$" },
+      to: { path: "(^|/)apps/web/src/(?!analysis/)" },
+    },
+    {
+      name: "stockfish-only-as-worker-asset",
+      comment:
+        "Engine code is copied as a verified lazy worker asset, never imported into application code.",
+      severity: "error",
+      from: { path: "(^|/)(apps/.*/src|packages)/" },
+      to: { path: "(^|/)node_modules/stockfish/" },
+    },
+    {
       name: "web-routing-no-composition",
       comment: "Routing services cannot depend on application wiring or shell presentation.",
       severity: "error",

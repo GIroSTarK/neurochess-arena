@@ -1,4 +1,5 @@
 export { createGame, restoreGame } from "./game.js";
+export { replayPositions, type ReplayedPosition } from "./positions.js";
 export {
   CHESS_COLORS,
   DOMAIN_ERROR_CODES,

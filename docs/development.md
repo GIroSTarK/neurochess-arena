@@ -506,6 +506,47 @@ OpenRouter uses the fixed `https://openrouter.ai/api/v1` origin with request-sco
 
 `apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. These tests do not establish live provider availability, billing behavior, or response quality.
 
+## Browser analysis service
+
+`apps/web/src/analysis` owns the reusable browser service described by the
+[Stockfish contract](architecture.md#stockfish-worker). Create one `AnalysisScheduler`
+per authorized game view with its identity/game lifetime and complete canonical
+history. `show(ply)` selects the foreground position; `updateHistory` accepts only
+extensions of that history. `seed` accepts bounded, verified-prefix samples in page
+memory and preserves older profiles until replacement. Subscribe to per-ply states;
+analysis never calls game commands or provider clients.
+
+Prefix validation uses the domain's read-only `replayPositions` iterator and yields
+between batches of at most eight plies or after eight milliseconds of elapsed batch
+work (an individual rules-engine step is indivisible). Seed batches share one replay
+pass, and lifetime cancellation interrupts validation before any new worker starts.
+
+Bind it with `bindAnalysisLifetime`, supplying the view's abort signal and an access
+reauthorization callback. Abort that signal on navigation, identity/access loss, or
+acknowledged deletion, and call the returned cleanup on unmount. Visibility return
+must complete reauthorization before computation resumes. Use `retry(ply)` only for
+an explicit analysis Retry; it is independent of provider recovery. Feature adapters
+own authorized history and access refresh; the service does not discover games or
+grant access. Delivery status is in the [roadmap](roadmap.md#phase-5--analysis-polish-and-release-hardening).
+
+Vite verifies and emits only the pinned lite single-threaded pair under
+`<base>/engines/sf19-lite-single-v1/`. Its `index.html` links the manifest, exact
+source archive, embedded network, notices and rebuild instructions from
+`apps/web/vendor/stockfish`. Ordinary application entry does not fetch the engine.
+The unnecessary npm postinstall is disabled; builds consume the versioned files
+directly. Keep corresponding source materials with every distributed version.
+Public release still requires the owner's repository-license decision and the
+[ADR-0019 compatibility review](decisions/0019-browser-analysis-and-private-samples.md#distribution-and-licensing).
+
+Run `npm run test:unit -- apps/web/src/analysis apps/web/stockfish-assets.test.ts`
+for protocol, scheduler, lifetime and distribution checks. Run
+`npm run test:e2e -- test/e2e/analysis.spec.ts --workers=1` for the real engine in an
+isolated production build, including a non-root application base, private deep
+links, JS/WASM failures, explicit Retry, and verified no-move checkmate. The test
+entry is added only to that temporary build. These are correctness checks, not
+device performance measurements. WASM load rejection may surface only through
+the bounded initialization timeout in the upstream loader.
+
 ## Unit test environments
 
 `npm run test:unit` runs both projects in `vitest.config.ts`. Select one with

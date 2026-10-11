@@ -9,6 +9,14 @@ const { bin } = JSON.parse(
 const executable = resolve(dependencyCruiserDirectory, bin.depcruise);
 const fixtures = [
   {
+    path: "apps/web/src/analysis/forbidden-controller-import.ts",
+    rule: "analysis-no-controllers-or-api",
+  },
+  {
+    path: "apps/web/src/analysis/forbidden-engine-import.ts",
+    rule: "stockfish-only-as-worker-asset",
+  },
+  {
     path: "apps/web/src/routing/forbidden-app-import.ts",
     rule: "web-routing-no-composition",
   },

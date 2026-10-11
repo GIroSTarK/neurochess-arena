@@ -7,6 +7,7 @@ import { defineConfig, loadEnv } from "vite";
 
 import { parseSandboxFlag } from "./src/app/env.ts";
 import { en } from "./src/i18n/en.ts";
+import { stockfishAssets } from "./stockfish-assets.ts";
 
 function escapeHtml(value: string): string {
   return value
@@ -59,6 +60,7 @@ export default defineConfig(({ mode, command }) => ({
   clearScreen: false,
   envDir: "../..",
   plugins: [
+    stockfishAssets(),
     react(),
     tailwindcss(),
     {

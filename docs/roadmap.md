@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–4 completed; Phase 5 analysis policy accepted, implementation pending
+**Status:** Phases 0–4 completed; Phase 5 bounded analysis service implemented, integration and release work pending
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-11
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -147,11 +147,12 @@ Exit condition: two separate browser sessions can complete or abort a private ga
 
 ## Phase 5 — Analysis, polish, and release hardening
 
-**Status:** P5-01 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) accepts the engine distribution, bounded analysis lifecycle, score/provenance, account sample ownership and deletion policies. Worker assets, persistence, and visible analysis remain pending in P5-02–P5-04; Phase 5 is not complete.
+**Status:** P5-01–P5-02 complete. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) provides verified engine/source assets, bounded worker execution, fair backfill and private lifetime cancellation, with real production-build desktop/mobile Chromium coverage. Persistence and visible analysis remain pending in P5-03–P5-04; Phase 5 is not complete. The owner's repository-license decision and compatibility review still gate public engine distribution.
 
 Deliverables:
 
 - [x] define the Stockfish analysis and private persistence contract;
+- [x] package and verify the bounded Stockfish worker and scheduler;
 - Stockfish Web Worker analysis after every move;
 - live and post-game evaluation graph;
 - richer commentary, attempt, latency, token, and estimated-cost views;
