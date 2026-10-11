@@ -5,7 +5,7 @@ import { configureCredential, saveCredential } from "./credential-helpers";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, submitGame, test } from "./fixtures";
 import { confirm, createRoom } from "./room-helpers";
-import { setPseudoLocalization } from "./text-layout";
+import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
 async function inspectLayouts(page: Page, info: TestInfo, flow: string, action: Locator) {
   const widths = info.project.name === "desktop" ? [768, 1024, 1440] : [320, 390];
@@ -42,6 +42,14 @@ async function inspectLayouts(page: Page, info: TestInfo, flow: string, action: 
         page: 0,
         content: [],
       });
+      await expectUnbrokenWords(
+        page.getByRole("tab").or(
+          page
+            .getByRole("term")
+            .filter({ hasText: /^All-attempt estimate/ })
+            .locator(".."),
+        ),
+      );
       await expect(action).toBeVisible();
       await action.scrollIntoViewIfNeeded();
       await action.focus();
@@ -75,6 +83,7 @@ test("entry, live analysis, recovery and replay keep expanded telemetry and acti
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  await expect(page.getByRole("term").filter({ hasText: "All-attempt estimate" })).toHaveCount(2);
   await inspectLayouts(
     page,
     info,

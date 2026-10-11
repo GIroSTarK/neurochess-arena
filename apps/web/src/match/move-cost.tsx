@@ -30,7 +30,7 @@ export function MoveCost({
           ? t(`telemetry.costReasons.${reason}`)
           : t("telemetry.costIncomplete");
   return (
-    <div className="col-span-full grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+    <div className="col-span-full grid min-w-0 grid-cols-1 gap-x-2 gap-y-1 @min-[18rem]:grid-cols-[auto_minmax(0,1fr)]">
       <dt className="text-text-secondary">{t("telemetry.moveEstimate")}</dt>
       <dd className="grid min-w-0 wrap-anywhere">
         {variants.map((variant) => (

@@ -45,7 +45,11 @@ export function DetailTabs({
 
   return (
     <div className="flex min-h-min min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 border-b border-divider" role="tablist" aria-label={label}>
+      <div
+        className="flex shrink-0 flex-wrap border-b border-divider"
+        role="tablist"
+        aria-label={label}
+      >
         {tabs.map((tab, index) => (
           <button
             key={tab.id}
@@ -63,7 +67,7 @@ export function DetailTabs({
             aria-controls={`${prefix}-panel-${tab.id}`}
             aria-selected={tab.id === selectedId}
             tabIndex={tab.id === focusedId ? 0 : -1}
-            className="min-h-target min-w-0 flex-1 border-b-2 border-transparent px-3 py-2 text-label wrap-anywhere text-text-secondary hover:bg-surface-raised aria-selected:border-accent aria-selected:font-semibold aria-selected:text-text"
+            className="min-h-target min-w-0 flex-auto border-b-2 border-transparent px-3 py-2 text-label wrap-anywhere text-text-secondary hover:bg-surface-raised aria-selected:border-accent aria-selected:font-semibold aria-selected:text-text"
             onFocus={() => setFocused(tab.id)}
             onClick={() => setSelected(tab.id)}
             onKeyDown={(event) => {
