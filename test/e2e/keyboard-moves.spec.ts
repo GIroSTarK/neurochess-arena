@@ -7,6 +7,7 @@ import {
   startSandbox,
   test,
 } from "./fixtures";
+import { expectRenderedContrast } from "./rendered-contrast";
 
 for (const scenario of [
   {
@@ -55,6 +56,7 @@ for (const scenario of [
         /Legal en passant capture/,
       );
     }
+    await expectRenderedContrast(page);
     for (const key of scenario.keys) await page.keyboard.press(key);
     await expect(square(page, scenario.destination)).toBeFocused();
     const response = page.waitForResponse((response) =>
@@ -74,6 +76,7 @@ for (const scenario of [
     );
     await expect(page.getByRole("grid")).toHaveAttribute("data-fen", current.fen);
     expect(await readSnapshot(page, current.gameId)).toEqual(current);
+    await expectRenderedContrast(page);
     await page.screenshot({
       path: testInfo.outputPath(`keyboard-${scenario.name.replaceAll(" ", "-")}.png`),
       fullPage: true,

@@ -26,7 +26,7 @@ export function AccountField({
       />
       {hint || error ? (
         <p id={id + "-hint"} className="text-label text-text-secondary">
-          {error ?? hint}
+          {error ? <span role="alert">{error}</span> : hint}
         </p>
       ) : null}
     </div>

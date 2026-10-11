@@ -45,7 +45,7 @@ it("dismisses the callback error when an invalid local submission is attempted",
   await userEvent.type(screen.getByLabelText("Email"), "invalid");
   await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
   expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Enter a valid email address.");
   http.assertNoUnexpectedRequests();
 });
 
@@ -109,6 +109,13 @@ it.each([
     await userEvent.type(screen.getByLabelText("Password", { exact: true }), password);
     await userEvent.click(screen.getByRole("button", { name: button }));
     expect(screen.getByLabelText(field, { exact: true })).toHaveAttribute("aria-invalid", "true");
+    const message =
+      field === "Email"
+        ? "Enter a valid email address."
+        : "Enter a password. New passwords must contain 12–128 characters.";
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByLabelText(field, { exact: true })).toHaveAccessibleDescription(message);
+    expect(screen.getByRole("button", { name: button })).toHaveFocus();
     expect(screen.getByLabelText("Email")).toHaveValue(email);
     expect(screen.getByLabelText("Password", { exact: true })).toHaveValue(password);
     http.assertNoUnexpectedRequests();

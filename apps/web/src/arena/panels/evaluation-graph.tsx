@@ -39,6 +39,13 @@ export function EvaluationGraph({
   if (segment.length > 1) segments.push(segment);
   const label = (ply: number) =>
     ply === 0 ? t("analysis.initial") : t("analysis.ply", { ply, move: moves[ply - 1]?.san ?? "" });
+  const selectedSample = plies[selectedPly]?.sample;
+  const selectedValue = t("analysis.selectedValue", {
+    position: label(selectedPly),
+    evaluation: selectedSample
+      ? evaluationScore(selectedSample.score, t, i18n.language)
+      : t("analysis.unknown"),
+  });
   return (
     <section className="grid min-w-0 gap-3" aria-label={t("analysis.graph")}>
       <h2 className="font-display text-section">{t("analysis.graph")}</h2>
@@ -116,16 +123,14 @@ export function EvaluationGraph({
             min={0}
             max={plies.length - 1}
             value={selectedPly}
+            aria-valuetext={selectedValue}
             onChange={(event) => onSelect(Number(event.target.value))}
             className="min-h-target w-full accent-accent"
           />
         </label>
       ) : null}
       <p className="text-label" data-testid="evaluation-selected">
-        {label(selectedPly)} ·{" "}
-        {plies[selectedPly]?.sample
-          ? evaluationScore(plies[selectedPly].sample.score, t, i18n.language)
-          : t("analysis.unknown")}
+        {selectedValue}
       </p>
       <details>
         <summary className="min-h-target cursor-pointer py-3 text-label text-accent">

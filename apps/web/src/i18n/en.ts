@@ -18,6 +18,7 @@ export const en = {
     initial: "Initial position · Ply 0",
     ply: "Ply {{ply}} · {{move}}",
     position: "Replay position",
+    selectedValue: "{{position}} · {{evaluation}}",
     value: "Evaluation",
     details: "Depth and storage",
     values: "Evaluation values",

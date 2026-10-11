@@ -23,6 +23,40 @@ const ready: EvaluationPly = {
 };
 
 describe("evaluation presentation", () => {
+  it.each([
+    { state: ready, value: "+1.25 · White advantage" },
+    {
+      state: { ...ready, sample: { ...ready.sample!, score: { kind: "cp", value: 0 } } },
+      value: "0.00 · Equal evaluation",
+    },
+    {
+      state: {
+        ...ready,
+        sample: { ...ready.sample!, score: { kind: "mate", winner: "black", moves: 0 } },
+      },
+      value: "Black delivered checkmate",
+    },
+    { state: { status: "pending", saved: "memory" }, value: "No evaluation yet" },
+  ] satisfies { state: EvaluationPly; value: string }[])(
+    "exposes the selected position and $value to slider users without a live metric feed",
+    ({ state, value }) => {
+      const { container, rerender } = render(
+        <EvaluationGraph plies={[state, ready]} selectedPly={0} moves={[]} onSelect={vi.fn()} />,
+      );
+      const slider = screen.getByRole("slider", { name: "Replay position" });
+      slider.focus();
+      expect(slider).toHaveAttribute("aria-valuetext", `Initial position · Ply 0 · ${value}`);
+      expect(screen.getByTestId("evaluation-selected")).toHaveTextContent(
+        `Initial position · Ply 0 · ${value}`,
+      );
+      rerender(
+        <EvaluationGraph plies={[ready, ready]} selectedPly={0} moves={[]} onSelect={vi.fn()} />,
+      );
+      expect(slider).toHaveFocus();
+      expect(container.querySelector('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+    },
+  );
+
   it("labels White-relative scores, provenance, depth, memory and pending positions", () => {
     const { rerender } = render(<EvaluationIndicator state={ready} onRetry={vi.fn()} />);
     expect(screen.getByText(/\+1.25/)).toBeVisible();

@@ -1,8 +1,268 @@
-import AxeBuilder from "@axe-core/playwright";
+import { readFile } from "node:fs/promises";
 
+import AxeBuilder from "@axe-core/playwright";
+import type { Locator, Page } from "@playwright/test";
+
+import { createAccount } from "./account-helpers";
 import { expectArenaLayout } from "./arena-layout";
 import { activate, expect, square, startSandbox, test } from "./fixtures";
+import { expectRenderedContrast } from "./rendered-contrast";
 import { setPseudoLocalization } from "./text-layout";
+
+async function tabTo(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  for (let step = 0; step < 100; step++) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  await expect(target).toBeFocused();
+}
+
+async function enter(page: Page, target: Locator) {
+  await tabTo(page, target);
+  await page.keyboard.press("Enter");
+}
+
+test("keyboard account, setup, key recovery, replay, export and history form one usable journey", async ({
+  page,
+  newContext,
+}, testInfo) => {
+  const seed = await newContext();
+  const account = await createAccount(seed.request);
+  await seed.close();
+  await page.goto("/auth/sign-in");
+  await enter(page, page.getByRole("button", { name: "Sign in", exact: true }));
+  await expect(page.getByRole("alert")).toHaveText("Enter a valid email address.");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveAccessibleDescription(
+    "Enter a valid email address.",
+  );
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeFocused();
+  await expectRenderedContrast(page);
+  await tabTo(page, page.getByLabel("Email", { exact: true }));
+  await page.keyboard.insertText(account.email);
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
+  await page.keyboard.insertText(account.password);
+  await enter(page, page.getByRole("button", { name: "Sign in", exact: true }));
+  await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
+
+  await tabTo(page, page.getByLabel("Game mode"));
+  await page.keyboard.press("End");
+  await expect(page.getByLabel("Game mode")).toHaveValue("ai_vs_human");
+  const seat = page.getByRole("group", { name: "Black", exact: true });
+  await tabTo(page, seat.getByLabel("API key", { exact: true }));
+  await page.keyboard.insertText("match-fixture");
+  await enter(page, seat.getByRole("button", { name: "Load models", exact: true }));
+  const model = seat.getByRole("combobox", { name: "Model", exact: true });
+  await expect(model).toHaveAttribute("aria-disabled", "false");
+  await tabTo(page, model);
+  await page.keyboard.insertText("model-a");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(model).toHaveValue("Model A (test fixture)");
+  await enter(page, page.getByRole("button", { name: "Start game", exact: true }));
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  await page.reload();
+  const key = page.getByLabel("Black · OpenAI · API key", { exact: true });
+  await expect(key).toBeVisible();
+  const resume = page.getByRole("button", { name: "Resume", exact: true });
+  await enter(page, resume);
+  await expect(resume).toHaveAttribute("aria-disabled", "true");
+  await expect(resume).toBeFocused();
+  await expectRenderedContrast(page);
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  await tabTo(page, key);
+  await page.keyboard.insertText("match-fixture");
+  await enter(page, resume);
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const turn = Promise.withResolvers<void>();
+  await page.route("**/ai-turn", async (route) => {
+    await turn.promise;
+    await route.continue();
+  });
+  await tabTo(page, page.locator('[data-square][tabindex="0"]'));
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowUp");
+  await expect(square(page, "f2")).toBeFocused();
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  try {
+    await expect(
+      page.getByRole("heading", { name: "Black is choosing a move…", exact: true }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.getAnimations().filter((animation) => animation.playState === "running")
+              .length,
+        ),
+      )
+      .toBe(0);
+  } finally {
+    turn.resolve();
+  }
+  await expect(page.getByRole("status")).toContainText("e5");
+  await page.unroute("**/ai-turn");
+  await expect(square(page, "f3")).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Black wins by checkmate", exact: true }),
+  ).toBeVisible();
+  await expectRenderedContrast(page);
+
+  await tabTo(page, page.getByRole("tab", { name: "Moves", exact: true }));
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toBeFocused();
+  await page.keyboard.press("Space");
+  const slider = page.getByRole("slider", { name: "Replay position", exact: true });
+  await tabTo(page, slider);
+  await page.keyboard.press("Home");
+  await expect(slider).toHaveAttribute("aria-valuetext", /^Initial position · Ply 0 · /);
+  await page.keyboard.press("End");
+  await expect(slider).toHaveAttribute(
+    "aria-valuetext",
+    "Ply 4 · Qh4# · Black delivered checkmate",
+  );
+  await page.keyboard.press("Tab");
+  const values = page.getByText("Evaluation values", { exact: true }).first();
+  await expect(values).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "0");
+  await expect(
+    page.getByRole("table", { name: "Evaluation values" }).getByRole("button").first(),
+  ).toBeFocused();
+  await expectRenderedContrast(page);
+  await page.screenshot({ path: testInfo.outputPath("keyboard-replay.png"), fullPage: true });
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+
+  const download = page.waitForEvent("download");
+  await enter(page, page.getByRole("button", { name: "Download PGN", exact: true }));
+  const path = await (await download).path();
+  expect(await readFile(path, "utf8")).toContain("1. f3 e5 2. g4 Qh4# 0-1");
+  await enter(page, page.getByRole("link", { name: "History", exact: true }));
+  await enter(page, page.getByRole("button", { name: /^Delete game ·/ }));
+  const dialog = page.getByRole("dialog", { name: "Delete this game?" });
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await expectRenderedContrast(page);
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Delete game", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /^Delete game ·/ })).toBeFocused();
+  await enter(page, page.getByRole("link", { name: /^Open replay/ }));
+  await expect(
+    page.getByRole("heading", { name: "Black wins by checkmate", exact: true }),
+  ).toBeVisible();
+});
+
+test("keyboard room entry, remote updates and confirmation preserve each participant's focus", async ({
+  page,
+  newContext,
+}) => {
+  await createAccount(page.request);
+  await page.goto("/rooms");
+  await enter(page, page.getByRole("button", { name: "Create room", exact: true }));
+  await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
+  await tabTo(page, page.getByRole("textbox", { name: "Invitation link", exact: true }));
+  const invitation = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  const peer = await (await newContext()).newPage();
+  await peer.goto(invitation);
+  await enter(peer, peer.getByRole("button", { name: "Join as guest", exact: true }));
+  await expect(peer.getByTestId("room-connection")).toHaveText("Room connected");
+  await tabTo(peer, peer.getByRole("button", { name: "Resign", exact: true }));
+  await tabTo(page, page.locator('[data-square][tabindex="0"]'));
+  await page.keyboard.press("Control+End");
+  for (let index = 0; index < 3; index++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(peer.getByRole("status")).toContainText("e4");
+  await expect(peer.getByRole("button", { name: "Resign", exact: true })).toBeFocused();
+  await expect(square(page, "e4")).toBeFocused();
+  await expect(peer.getByRole("status")).toHaveAttribute("aria-live", "polite");
+  expect((await peer.getByRole("status").innerText()).length).toBeLessThan(250);
+  await enter(peer, peer.getByRole("button", { name: "Resign", exact: true }));
+  const dialog = peer.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await peer.keyboard.press("Escape");
+  await expect(peer.getByRole("button", { name: "Resign", exact: true })).toBeFocused();
+  await peer.keyboard.press("Enter");
+  await enter(
+    peer,
+    peer.getByRole("dialog").getByRole("button", { name: "Confirm resignation", exact: true }),
+  );
+  for (const player of [page, peer]) {
+    await expect(player.getByRole("heading", { name: "White wins", exact: true })).toBeVisible();
+    await expect(player.getByRole("status")).toContainText("White wins by resignation");
+    expect((await new AxeBuilder({ page: player }).analyze()).violations).toEqual([]);
+  }
+});
+
+test("keyboard credential consent, reveal and revoke keep safe dialog focus", async ({ page }) => {
+  await createAccount(page.request);
+  await page.goto("/account/credentials");
+  await enter(page, page.getByRole("button", { name: "Save key", exact: true }));
+  await expect(page.getByRole("button", { name: "Save key", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await tabTo(page, page.getByLabel("Label", { exact: true }));
+  await page.keyboard.insertText("Keyboard fixture");
+  await page.keyboard.press("Tab");
+  const key = page.getByLabel("API key", { exact: true });
+  await expect(key).toBeFocused();
+  await page.keyboard.insertText("match-fixture");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Show key", exact: true })).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(key).toHaveAttribute("type", "text");
+  await page.keyboard.press("Space");
+  await expect(key).toHaveAttribute("type", "password");
+  await page.keyboard.press("Tab");
+  const consent = page.getByRole("checkbox", { name: "Save this key to my account" });
+  await expect(consent).toBeFocused();
+  await page.keyboard.press("Space");
+  await enter(page, page.getByRole("button", { name: "Save key", exact: true }));
+  await expect(page.getByText("Keyboard fixture", { exact: true })).toBeVisible();
+  await expect(key).toHaveValue("");
+  await enter(page, page.getByRole("button", { name: "Revoke Keyboard fixture" }));
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Revoke key", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Revoke Keyboard fixture" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await enter(
+    page,
+    page.getByRole("dialog").getByRole("button", { name: "Revoke key", exact: true }),
+  );
+  await expect(page.getByRole("heading", { name: "Your saved keys", exact: true })).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
 
 test("keeps keyboard-focused squares in view on short viewports in both orientations", async ({
   page,
@@ -113,6 +373,14 @@ test("supports keyboard inspection in both orientations, reflow, and enlarged lo
     .getByRole("button", { name: "Flip board" })
     .evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(animations).toBe("0s");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.getAnimations().filter((animation) => animation.playState === "running").length,
+      ),
+    )
+    .toBe(0);
   await page.setViewportSize({ width: 320, height: 900 });
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expectArenaLayout(page);
