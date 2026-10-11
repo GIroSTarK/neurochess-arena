@@ -5,6 +5,7 @@ import {
   createProfileRepository,
 } from "@neurochess/database";
 
+import { createAnalysisService } from "./analysis/service.js";
 import { buildApp } from "./app.js";
 import { createAccountAuth } from "./auth/service.js";
 import { createAuthEmailSender } from "./auth/smtp.js";
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   const app = await buildApp({
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
+    analysis: createAnalysisService(repository),
     webOrigin: environment.WEB_ORIGIN,
     auth: createAccountAuth(database, environment, createAuthEmailSender(environment), roomEvents),
     profiles: createProfileService(createProfileRepository(database)),

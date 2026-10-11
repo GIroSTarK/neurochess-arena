@@ -178,3 +178,22 @@ export {
 } from "./profile.js";
 export * from "./credential.js";
 export * from "./room-realtime.js";
+export {
+  analysisProfileIdSchema,
+  analysisScoreSchema,
+  analysisSampleSchema,
+  storedAnalysisSampleSchema,
+  analysisWriteRequestSchema,
+  analysisWriteResponseSchema,
+  analysisReadResponseSchema,
+  analysisObsoleteResponseSchema,
+  analysisCursorSchema,
+  analysisQuerySchema,
+  type AnalysisScore,
+  type AnalysisSample,
+  type StoredAnalysisSample,
+  type AnalysisWriteRequest,
+  type AnalysisWriteResponse,
+  type AnalysisReadResponse,
+  type AnalysisQuery,
+} from "./analysis.js";

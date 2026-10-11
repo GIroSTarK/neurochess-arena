@@ -1,6 +1,12 @@
 import { and, asc, eq, exists, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import {
+  type AnalysisReader,
+  analysisReaderFor,
+  type AnalysisTransaction,
+  analysisTransactionFor,
+} from "./analysis-repository.js";
 import type { DatabaseConnection } from "./client.js";
 import type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
 import { hasCurrentRoomAccess, type RoomAccessIdentity } from "./room-access.js";
@@ -95,7 +101,7 @@ const gameSlotReservationSchema = z.intersection(
 );
 export type GameSlotReservation = z.infer<typeof gameSlotReservationSchema>;
 
-export interface GameReader extends RoomReader {
+export interface GameReader extends RoomReader, AnalysisReader {
   findAccountHistory(
     userId: string,
     limit: number,
@@ -127,7 +133,7 @@ export interface GameReader extends RoomReader {
   findUnfinishedAccountGame(userId: string): Promise<StoredGame | undefined>;
 }
 
-export interface GameTransaction extends GameReader, RoomTransaction {
+export interface GameTransaction extends GameReader, RoomTransaction, AnalysisTransaction {
   // Call under the requester's identity lock and the appropriate game/room write protocol.
   reserveGameSlot(reservation: GameSlotReservation): Promise<void>;
   releaseGameSlots(gameId: string): Promise<void>;
@@ -183,6 +189,7 @@ type Executor = Pick<DatabaseConnection["db"], "select" | "insert" | "update" | 
 function readerFor(db: Executor): GameReader {
   return {
     ...roomReaderFor(db),
+    ...analysisReaderFor(db),
     async findAccountHistory(userId, limit, before) {
       const records = await db
         .select({
@@ -436,6 +443,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
           return action({
             ...reader,
             ...roomTransactionFor(tx),
+            ...analysisTransactionFor(tx),
             reserveGameSlot,
             releaseGameSlots,
             async deleteAccountHistory(userId, gameId) {

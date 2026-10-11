@@ -72,3 +72,5 @@ export {
   type NewCredential,
   type StoredCredentialMetadata,
 } from "./credential-repository.js";
+export { gameAnalysisSamples } from "./schema/analysis.js";
+export type { StoredAnalysisRecord, NewAnalysisRecord } from "./analysis-repository.js";

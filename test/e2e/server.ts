@@ -16,6 +16,7 @@ import {
 import { inArray, or } from "drizzle-orm";
 import { createServer } from "vite";
 
+import { createAnalysisService } from "../../apps/api/src/analysis/service.js";
 import { buildApp } from "../../apps/api/src/app.js";
 import { createCredentialCipher } from "../../apps/api/src/credentials/crypto.js";
 import { createCredentialService } from "../../apps/api/src/credentials/service.js";
@@ -137,6 +138,7 @@ async function main() {
 
   async function start() {
     app = await buildApp({
+      analysis: createAnalysisService(repository),
       roomRealtimeLimits: { heartbeatMs: 250, pongTimeoutMs: 1000, reconciliationMs: 250 },
       readiness: database,
       webOrigin: WEB_ORIGIN,

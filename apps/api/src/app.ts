@@ -13,6 +13,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
+import { registerAnalysisRoutes } from "./analysis/routes.js";
+import type { AnalysisService } from "./analysis/service.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import type { AccountAuth } from "./auth/service.js";
 import { registerCredentialRoutes } from "./credentials/routes.js";
@@ -38,6 +40,7 @@ export interface BuildAppOptions {
   readonly auth?: AccountAuth;
   readonly profiles?: ProfileService;
   readonly credentials?: CredentialService;
+  readonly analysis?: AnalysisService;
   readonly rooms?: RoomService;
   readonly roomEvents?: RoomEvents;
   readonly roomRealtimeLimits?: Partial<RoomConnectionLimits>;
@@ -103,6 +106,14 @@ export async function buildApp(options: BuildAppOptions) {
   );
 
   if (options.gameApi) {
+    if (options.analysis) {
+      await app.register(registerAnalysisRoutes, {
+        analysis: options.analysis,
+        guests: options.gameApi.guests,
+        webOrigin: options.webOrigin,
+        ...(options.auth ? { auth: options.auth } : {}),
+      });
+    }
     if (options.rooms) {
       await app.register(registerRoomRoutes, {
         rooms: options.rooms,

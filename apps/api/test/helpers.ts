@@ -14,6 +14,7 @@ import { eq, inArray } from "drizzle-orm";
 import { expect } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
+import { createAnalysisService } from "../src/analysis/service.js";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import type { AccountAuth } from "../src/auth/service.js";
 import { createCredentialCipher, type CredentialCipher } from "../src/credentials/crypto.js";
@@ -77,6 +78,7 @@ export class ApiHarness {
     const app = await buildApp({
       logger: options.logger ?? false,
       readiness: database,
+      analysis: createAnalysisService(repository),
       webOrigin: WEB_ORIGIN,
       rooms: createRoomService(repository, roomEvents),
       roomEvents,

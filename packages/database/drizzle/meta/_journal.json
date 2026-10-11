@@ -141,6 +141,13 @@
       "when": 1791579039701,
       "tag": "0019_room_http_commands",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791711745501,
+      "tag": "0020_private_analysis_samples",
+      "breakpoints": true
     }
   ]
 }

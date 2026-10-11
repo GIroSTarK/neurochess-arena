@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNotNull, notExists, or, sql } from "drizzle-or
 
 import type { DatabaseConnection } from "./client.js";
 import type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
+import { gameAnalysisSamples } from "./schema/analysis.js";
 import { gameSlots } from "./schema/game-slots.js";
 import { gameParticipants, games, guestSessions, moves } from "./schema/games.js";
 import { rooms } from "./schema/rooms.js";
@@ -72,6 +73,9 @@ export async function removeRoomHistory(db: Executor, userId: string, gameId?: s
     .orderBy(asc(games.id))
     .for("update");
   for (const game of records) {
+    await db
+      .delete(gameAnalysisSamples)
+      .where(and(eq(gameAnalysisSamples.gameId, game.id), eq(gameAnalysisSamples.userId, userId)));
     await db
       .delete(roomHistoryAccess)
       .where(and(eq(roomHistoryAccess.gameId, game.id), eq(roomHistoryAccess.userId, userId)));

@@ -506,6 +506,17 @@ OpenRouter uses the fixed `https://openrouter.ai/api/v1` origin with request-sco
 
 `apps/api/test/providers/openrouter.test.ts` runs the shared HTTP adapter contract. `apps/api/test/openrouter.integration.test.ts` covers authorized discovery/turns, parameter persistence, retries, routed quota recovery, cancellation, late responses, and redaction through real PostgreSQL orchestration with mocked transport. These tests do not establish live provider availability, billing behavior, or response quality.
 
+## Private analysis API
+
+`GET /games/:gameId/analysis` and `POST /games/:gameId/analysis` use the current profile-complete account session and the existing expected-account/identity headers. Writes require the exact web Origin. Responses are private `no-store`; guests and Sandbox cannot persist analysis. Each account reads only its own samples, including in shared rooms. The [analysis contract](architecture.md#private-persistence-and-replacement) owns authorization, score limits, replacement and deletion semantics.
+
+- GET accepts `limit` (1–128, default 128) and an optional returned `cursor`. It returns `{ gameId, samples, nextCursor }` in ascending ply order. Cursors are bound to the requesting account and game; every page rechecks access.
+- POST accepts `{ samples }` with 1–32 distinct plies, a 64 KiB body limit and 1 KiB scalar sample limit. Each sample contains `ply`, `fen`, `historyDigest`, `profileId`, `depth`, `durationMs`, and `score`: either `{ kind: "cp", value }` or `{ kind: "mate", winner, moves }`, relative to White. The API verifies the FEN/digest against canonical accepted history, including ply 0. No current game version is required.
+- POST returns `{ gameId, samples }` containing the retained rows with server `recordedAt` timestamps, so duplicate or losing writes converge. GET returns those same sample fields. These are untrusted client evaluations; reads perform no engine/provider work and writes change no canonical game or execution state.
+- Only the registered current profile accepts uploads. Noncurrent or unknown profile IDs return HTTP 409 with `{ code: "profile_obsolete", currentProfileId, requestId }`. Reload to compute the current profile; do not loop retries. Older registered profiles remain readable until a replacement commits. Other failures use the existing game error envelope.
+
+The server registry in `apps/api/src/analysis/profiles.ts` binds each immutable profile to SHA-256 of UTF-8 `JSON.stringify(manifest)` for its distributed engine/source/options manifest. A new profile needs an increasing rank, preserved old registry entries/manifests, and reviewed transport/database bounds if its limits change. Tests verify the current manifest binding. Apply migration `0020` and restart all API writers together before enabling persistence, because old history-deletion code does not remove participant samples.
+
 ## Browser analysis service
 
 `apps/web/src/analysis` owns the reusable browser service described by the
@@ -652,6 +663,8 @@ For a fresh-install check, run `npm ci`, provision a new empty database in the d
 All default acceptance tests use real application/auth/database services with injected email, OAuth and inference transports; SMTP protocol tests use a loopback mailbox. They do not verify live consent screens, external inbox delivery, live provider availability or production infrastructure. Before deployment, configure and manually verify Google/GitHub clients and callback URLs, SMTP sender/TLS/deliverability, same-site HTTPS origins and proxy trust, stable auth/encryption secrets, and separate encryption-key backup/recovery. Hosting, monitoring, database/backup retention, inactive guest retention and key rotation still require the decisions/procedures in [deployment constraints](architecture.md#deployment-constraints) and [credential operations](#saved-credential-api). Cross-browser release expansion and Stockfish retain their [roadmap phases](roadmap.md).
 
 ## Migrations
+
+Migration `0020_private_analysis_samples.sql` adds normalized account/game/ply samples, bounded scalar/score checks and account/game deletion cascades without rewriting existing records or backfilling evaluations. Stop old API writers, apply the reviewed forward migration, and restart the updated API together. Room history removal now deletes the requester's samples in the same retained-access transaction; account and physical game deletion cascade the rest. The test suite verifies a populated upgrade, schema constraints, rollback and deletion races on disposable databases.
 
 Migration `0019_room_http_commands.sql` adds identity-free accepted-join receipt fields to rooms and command kinds for join and invitation changes. Existing room metadata, creation operations, history, slots, moves and solo command receipts are preserved. Stop old API writers, apply the reviewed forward migration, commit it before using the new enum values, and start the updated API. Only the consumed invitation digest and command UUID are stored for join recovery; current seat/access checks still authorize every retry. No data backfill or personal development database migration is required for the test suite.
 
