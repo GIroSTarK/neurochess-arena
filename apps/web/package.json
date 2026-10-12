@@ -13,12 +13,12 @@
     "@fontsource-variable/orbitron": "5.3.0",
     "@neurochess/chess": "*",
     "@neurochess/contracts": "*",
-    "i18next": "26.4.2",
+    "i18next": "26.4.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-i18next": "17.0.16",
     "react-router": "8.4.0",
     "stockfish": "19.0.0",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   }
 }
