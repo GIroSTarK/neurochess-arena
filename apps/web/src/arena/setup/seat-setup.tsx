@@ -48,10 +48,14 @@ export function SeatSetup(props: SeatSetupProps) {
   const model = props.models.find((model) => model.id === props.modelId);
   return (
     <fieldset className="grid min-w-0 content-start gap-6 rounded-panel border border-divider bg-surface p-4 md:p-6 lg:border-0 lg:bg-transparent">
-      <legend className="float-left mb-2 flex w-full items-center gap-3 border-b border-divider pb-4 text-section font-semibold">
+      <legend className="sr-only">{t(`players.${props.color}`)}</legend>
+      <div
+        aria-hidden="true"
+        className="mb-2 flex w-full items-center gap-3 border-b border-divider pb-4 text-section font-semibold"
+      >
         <PieceIcon color={props.color} kind="k" className="size-8 shrink-0" />
         {t(`players.${props.color}`)}
-      </legend>
+      </div>
       <div className="grid min-w-0 gap-2 text-label">
         <label htmlFor={`${id}-provider`}>{t("setup.provider")}</label>
         <Select

@@ -30,6 +30,7 @@ import { integrationDatabase } from "../database.js";
 
 import { accountHarness } from "./account-harness.js";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { testApiServerFactory, testTls } from "./https.js";
 import { closeResources, notifyParent, shutdownMessage } from "./lifecycle.js";
 import { setupHarness } from "./setup-harness.js";
 import { setupProviders } from "./setup-providers.js";
@@ -148,6 +149,7 @@ async function main() {
 
   async function start() {
     app = await buildApp({
+      serverFactory: testApiServerFactory,
       analysis: createAnalysisService(repository),
       roomRealtimeLimits: { heartbeatMs: 250, pongTimeoutMs: 1000, reconciliationMs: 250 },
       readiness: database,
@@ -188,6 +190,7 @@ async function main() {
       productionWeb = await preview({
         ...config,
         preview: {
+          https: testTls,
           host: "localhost",
           port: Number(new URL(WEB_ORIGIN).port),
           strictPort: true,
@@ -201,6 +204,9 @@ async function main() {
       configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
       mode: "test",
       server: {
+        https: testTls,
+        // Browser fixtures classify diagnostics without forwarding arbitrary private console data.
+        forwardConsole: false,
         host: "localhost",
         port: Number(new URL(DISABLED_WEB_ORIGIN).port),
         strictPort: true,
@@ -213,7 +219,13 @@ async function main() {
       root: fileURLToPath(new URL("../../apps/web", import.meta.url)),
       configFile: fileURLToPath(new URL("../../apps/web/vite.config.ts", import.meta.url)),
       mode: "test",
-      server: { host: "localhost", port: Number(new URL(WEB_ORIGIN).port), strictPort: true },
+      server: {
+        https: testTls,
+        forwardConsole: false,
+        host: "localhost",
+        port: Number(new URL(WEB_ORIGIN).port),
+        strictPort: true,
+      },
       logLevel: "error",
     });
     await database.check();

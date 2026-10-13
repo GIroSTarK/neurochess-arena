@@ -119,7 +119,7 @@ for (const human of ["white", "black"] as const) {
         page,
         await readSnapshot(page, details.snapshot.gameId),
         move,
-        testInfo.project.name === "mobile-touch",
+        Boolean(testInfo.project.use.hasTouch),
       );
     }
     await expect(
@@ -150,8 +150,8 @@ test("independent room accounts keep private samples through socket play, refres
   const peer = await (
     await newContext({
       viewport: page.viewportSize(),
-      isMobile: testInfo.project.name === "mobile-touch",
-      hasTouch: testInfo.project.name === "mobile-touch",
+      isMobile: Boolean(testInfo.project.use.isMobile),
+      hasTouch: Boolean(testInfo.project.use.hasTouch),
     })
   ).newPage();
   await createAccount(peer.request);
@@ -168,7 +168,7 @@ test("independent room accounts keep private samples through socket play, refres
     peer,
     gameId,
     ["f2f3", "e7e5", "g2g4", "d8h4"],
-    testInfo.project.name === "mobile-touch",
+    Boolean(testInfo.project.use.hasTouch),
   );
   for (const player of [page, peer]) {
     await graph(player);

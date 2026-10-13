@@ -3,6 +3,7 @@ import { roomViewSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { createAccount } from "./account-helpers";
+import { expectClipboardCopy } from "./clipboard";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
@@ -216,6 +217,7 @@ test("sign-in departure and Back/Forward clear invitations and token-free auth r
 
 test("entry and waiting remain accessible with keyboard, clipboard fallback and expanded mobile text", async ({
   page,
+  browserName,
 }) => {
   await page.goto(entryPath);
   await expect(
@@ -223,18 +225,16 @@ test("entry and waiting remain accessible with keyboard, clipboard fallback and 
   ).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await createRoom(page, "Black");
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.getByRole("button", { name: "Copy invitation", exact: true }).click();
-  await expect(page.getByText("Invitation copied.", { exact: true })).toBeVisible();
   const expectedLink = await page
     .getByRole("textbox", { name: "Invitation link", exact: true })
     .inputValue();
-  expect(
-    await page.evaluate(
-      async (link) => (await navigator.clipboard.readText()) === link,
-      expectedLink,
-    ),
-  ).toBe(true);
+  await expectClipboardCopy(
+    page,
+    page.getByRole("button", { name: "Copy invitation", exact: true }),
+    expectedLink,
+    browserName,
+  );
+  await expect(page.getByText("Invitation copied.", { exact: true })).toBeVisible();
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,

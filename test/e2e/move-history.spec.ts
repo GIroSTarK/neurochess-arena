@@ -17,7 +17,7 @@ const longGameMoves = [
 test("uses available rail height without letting move rows grow the arena", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
@@ -83,8 +83,12 @@ test("uses available rail height without letting move rows grow the arena", asyn
   }
 });
 
-test("scrolls the page over empty and short move histories", async ({ page }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+test("scrolls the page with empty and short move histories", async ({
+  page,
+  browserName,
+  isMobile,
+}, testInfo) => {
+  const touch = Boolean(testInfo.project.use.hasTouch);
   await page.setViewportSize({ width: touch ? 390 : 1440, height: 500 });
   let current = await startSandbox(page, touch);
   const history = page.getByRole("region", { name: "Move history", exact: true });
@@ -96,7 +100,11 @@ test("scrolls the page over empty and short move histories", async ({ page }, te
     await history.hover();
     const before = await page.evaluate(() => window.scrollY);
     const direction = before > 50 ? -1 : 1;
-    await page.mouse.wheel(0, direction * 200);
+    if (browserName === "webkit" && isMobile) {
+      await page.keyboard.press(direction < 0 ? "PageUp" : "PageDown");
+    } else {
+      await page.mouse.wheel(0, direction * 200);
+    }
     await expect
       .poll(async () => ((await page.evaluate(() => window.scrollY)) - before) * direction)
       .toBeGreaterThan(50);
@@ -112,7 +120,7 @@ for (const longHistory of [false, true]) {
   test(`keeps ${longHistory ? "long" : "short"} history readable after an uncertain Resume with enlarged translations`, async ({
     page,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let current = await startSandbox(page, touch);
     // Populate through real commands; only the Resume acknowledgement is replaced below.
     for (const move of longHistory ? longGameMoves : ["f2f3", "e7e5", "g2g4"]) {
@@ -175,7 +183,16 @@ for (const longHistory of [false, true]) {
         expect(layout.scrollHeight).toBeGreaterThan(layout.height);
         await history.focus();
         for (const key of ["Home", "End"]) {
+          // Keyboard scrolling animates, and Chromium can drop a key pressed before it ends.
+          const scrolled = history.evaluate(
+            (element) =>
+              new Promise<void>((resolve) => {
+                element.addEventListener("scrollend", () => resolve(), { once: true });
+                setTimeout(resolve, 2_000);
+              }),
+          );
           await page.keyboard.press(key);
+          await scrolled;
           const rows = history.locator("tbody tr");
           const row = key === "Home" ? rows.first() : rows.last();
           await expect
@@ -210,7 +227,7 @@ for (const enlarged of [false, true]) {
   test(`keeps move history in place while moves are submitted and accepted${enlarged ? " with enlarged translations" : ""}`, async ({
     page,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let current = await startSandbox(page, touch);
     if (enlarged) {
       await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
@@ -282,8 +299,10 @@ for (const enlarged of [false, true]) {
 
   test(`reveals the selected SAN in long replays without moving page scroll or focus${enlarged ? " with enlarged text" : ""}`, async ({
     page,
+    browserName,
+    isMobile,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let current = await startSandbox(page, touch);
     const initialFen = current.fen;
     // Build a long history through real commands; this test exercises replay navigation, not move entry.
@@ -314,6 +333,14 @@ for (const enlarged of [false, true]) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const history = page.getByRole("region", { name: "Move history", exact: true });
     const scrollTop = () => history.evaluate((element) => element.scrollTop);
+    // WebKit can apply focus scrolling in the next rendering update, so read settled positions.
+    const settledPageScroll = () =>
+      page.evaluate(
+        () =>
+          new Promise<number>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.scrollY))),
+          ),
+      );
     expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
       true,
     );
@@ -322,18 +349,26 @@ for (const enlarged of [false, true]) {
       element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
       return element.scrollTop;
     });
-    const pageBeforeWheel = await page.evaluate(() => window.scrollY);
-    await page.mouse.wheel(0, -Math.min(40, middle / 2));
+    if (browserName === "webkit" && isMobile) {
+      await history.focus();
+      await expect(history).toBeFocused();
+    }
+    const pageBeforeWheel = await settledPageScroll();
+    if (browserName === "webkit" && isMobile) {
+      await page.keyboard.press("ArrowUp");
+    } else {
+      await page.mouse.wheel(0, -Math.min(40, middle / 2));
+    }
     await expect.poll(scrollTop).toBeLessThan(middle);
-    expect(await page.evaluate(() => window.scrollY)).toBe(pageBeforeWheel);
+    expect(await settledPageScroll()).toBe(pageBeforeWheel);
 
     async function navigate(name: string, ply: number) {
       const control = page.getByRole("button", { name, exact: true });
       await control.focus();
-      const pageScroll = await page.evaluate(() => window.scrollY);
+      const pageScroll = await settledPageScroll();
       await page.keyboard.press("Enter");
       await expect(control).toBeFocused();
-      expect(await page.evaluate(() => window.scrollY)).toBe(pageScroll);
+      expect(await settledPageScroll()).toBe(pageScroll);
       await expect(page.getByRole("grid")).toHaveAttribute(
         "data-fen",
         ply === 0 ? initialFen : current.moves[ply - 1]!.fen,

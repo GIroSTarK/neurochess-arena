@@ -10,7 +10,7 @@ test("both account browsers recover multiple moves after every tab disconnects w
   newContext,
 }, testInfo) => {
   const { invitation, gameId } = await createRoom(page, "White");
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const opponent = await (
     await newContext({
       hasTouch: touch,

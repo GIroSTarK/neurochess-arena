@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "npm@11.21.0",
   "engines": {
-    "node": ">=24 <25",
+    "node": ">=24.5 <25",
     "npm": ">=11 <12"
   },
   "workspaces": [
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.0",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",

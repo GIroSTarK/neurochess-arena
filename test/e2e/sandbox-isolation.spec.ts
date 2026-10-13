@@ -30,7 +30,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     test(`${mode} and Sandbox retain separate games when ${sandboxFirst ? "Sandbox" : "Arena"} starts first`, async ({
       page,
     }, testInfo) => {
-      const touch = testInfo.project.name === "mobile-touch";
+      const touch = Boolean(testInfo.project.use.hasTouch);
       let sandbox: GameSnapshot | undefined;
       if (sandboxFirst) {
         sandbox = await startSandbox(page, touch);

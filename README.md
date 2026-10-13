@@ -6,7 +6,7 @@ Implementation status and next milestones live in the [MVP roadmap](docs/roadmap
 
 ## Prerequisites
 
-- Node.js 24
+- Node.js 24 (24.5 or newer)
 - npm 11
 - Docker with Docker Compose
 
@@ -48,7 +48,7 @@ The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in yo
 ```text
 npm run infra:test:up
 npm run verify
-npm exec playwright -- install chromium
+npm exec playwright -- install chromium firefox webkit
 npm run test:e2e
 ```
 

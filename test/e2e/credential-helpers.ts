@@ -45,7 +45,7 @@ export async function configureCredential(
   if ("credentialId" in source) {
     await expect(
       seat
-        .getByRole("option")
+        .getByRole("option", { includeHidden: true })
         .filter({ hasText: /Ends in/ })
         .first(),
     ).toBeAttached();

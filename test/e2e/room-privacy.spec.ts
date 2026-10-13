@@ -16,7 +16,7 @@ test("both room participants retain their public slot across AI modes while Sand
   newContext,
 }, testInfo) => {
   const { invitation, gameId } = await createRoom(page, "White");
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const opponent = await (
     await newContext({
       hasTouch: touch,
@@ -42,6 +42,8 @@ test("both room participants retain their public slot across AI modes while Sand
     await player.goto("/");
     await player.getByRole("button", { name: "Return to game", exact: true }).click();
     await expect(player).toHaveURL(WEB_ORIGIN + `/games/${gameId}`);
+    // The URL changes before the socket handshake; finish returning before navigating away.
+    await expect(player.getByTestId("room-connection")).toHaveText("Room connected");
     const sandbox = await startSandbox(player, touch);
     expect(sandbox.gameId).not.toBe(gameId);
     await playMove(player, sandbox, "e2e4", touch);

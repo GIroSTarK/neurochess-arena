@@ -83,7 +83,10 @@ export function AuthScreen({
     window.addEventListener("pagehide", clear);
     return () => {
       window.removeEventListener("pagehide", clear);
-      element?.reset();
+      // An unmount has already detached the form, so scrub the password it may still hold.
+      // StrictMode's dev replay keeps it connected; resetting then would erase typed or
+      // autofilled input.
+      if (!element?.isConnected) element?.reset();
     };
   }, [entry, resetFetcher]);
 

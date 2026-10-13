@@ -338,7 +338,9 @@ test("account switching clears saved selections and raw keys and fences delayed 
     release.resolve();
     await page.unrouteAll({ behavior: "wait" });
     await expect(white.getByLabel("Credential source")).toHaveValue("session");
-    await expect(white.getByRole("option", { name: /Only first account/ })).toHaveCount(0);
+    await expect(
+      white.getByRole("option", { name: /Only first account/, includeHidden: true }),
+    ).toHaveCount(0);
     await expect(white.getByRole("combobox", { name: "Model", exact: true })).toHaveAttribute(
       "aria-disabled",
       "true",

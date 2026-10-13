@@ -7,7 +7,7 @@ import { activate, expect, startSandbox, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
 
 test("shared arena reference: mixed seats, live and replay", async ({ page }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const apiRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
@@ -94,7 +94,7 @@ test("reference geometry keeps human controls aligned and identical long names r
   });
   await page.goto("/dev/arena");
   await page.getByLabel("Test scenario").selectOption("humanHuman");
-  if (testInfo.project.name === "desktop") {
+  if (!testInfo.project.use.isMobile) {
     const flip = await page.getByRole("button", { name: "Flip board" }).boundingBox();
     const board = await page.getByRole("grid").boundingBox();
     expect(flip).not.toBeNull();
@@ -140,7 +140,7 @@ test("reference geometry keeps human controls aligned and identical long names r
 test("reference abortion explains temporary replay and preserves confirmation focus", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const apiRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().startsWith(API_ORIGIN)) apiRequests.push(new URL(request.url()).pathname);
@@ -183,7 +183,7 @@ test("reference data stays out of Sandbox and is unavailable when Sandbox is dis
   await page.goto(DISABLED_WEB_ORIGIN + "/dev/arena");
   await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
   await expect(page.getByRole("grid")).toHaveCount(0);
-  await startSandbox(page, testInfo.project.name === "mobile-touch");
+  await startSandbox(page, Boolean(testInfo.project.use.hasTouch));
   await expect(page.getByRole("tablist")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Test data" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Commentary" })).toHaveCount(0);

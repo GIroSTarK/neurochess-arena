@@ -68,7 +68,7 @@ for (const ownerColor of ["White", "Black"] as const) {
       };
       page.on("request", (request) => inspect(request.url()));
       const { invitation, gameId } = await createRoom(page, ownerColor);
-      const touch = testInfo.project.name === "mobile-touch";
+      const touch = Boolean(testInfo.project.use.hasTouch);
       const guest = await (
         await newContext({
           hasTouch: touch,
@@ -137,7 +137,7 @@ test("two human seats promote explicitly, cancel safely and resign only their ow
   newContext,
 }, testInfo) => {
   const { invitation, gameId } = await createRoom(page, "White");
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const guest = await (
     await newContext({
       hasTouch: touch,
@@ -188,7 +188,7 @@ test("uncertain human moves freeze submissions and explicit retry reuses the com
     } else await route.continue();
   });
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   await activate(square(page, "e2"), touch);
   await activate(square(page, "e4"), touch);
   await expect(page.getByRole("button", { name: "Retry same move", exact: true })).toHaveAttribute(
@@ -252,6 +252,12 @@ test("live guest identity switches clear the old room and cannot take its seat",
   expectedGame404s.set(guest, new Set([API_ORIGIN + `/games/${gameId}/details`]));
   await guest.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(guest.getByRole("grid")).toHaveCount(0);
+  // The grid clears while the new session is checked; the denied read follows it.
+  await expect(
+    guest
+      .getByRole("status")
+      .filter({ hasText: "This private game is unavailable to your session." }),
+  ).toHaveCount(1);
   await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
   expect((await readSnapshot(page, gameId)).state).toBe("active");
 });

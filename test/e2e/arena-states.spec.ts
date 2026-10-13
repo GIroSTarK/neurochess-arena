@@ -8,10 +8,8 @@ import { setPseudoLocalization } from "./text-layout";
 
 const widths = [320, 390, 768, 1024, 1440];
 // Keep the 1024px boundary in both device contexts; interaction still uses each default viewport.
-const compositionWidths: Record<string, readonly number[]> = {
-  desktop: [1024, 1440],
-  "mobile-touch": [320, 390, 768, 1024],
-};
+const desktopWidths = [1024, 1440];
+const mobileWidths = [320, 390, 768, 1024];
 const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 async function bounds(locator: Locator) {
@@ -34,8 +32,8 @@ async function checkLayouts(
   checkComposition?: (width: number) => Promise<void>,
 ) {
   // Replay's scrollable move list has different native gutter geometry in the two contexts.
-  const stateWidths = state === "replay" ? widths : compositionWidths[testInfo.project.name];
-  if (!stateWidths) throw new Error("Assign composition widths for " + testInfo.project.name);
+  const stateWidths =
+    state === "replay" ? widths : testInfo.project.use.isMobile ? mobileWidths : desktopWidths;
   const viewport = page.viewportSize()!;
   const board = page.getByRole("grid");
   const fen = await board.getAttribute("data-fen");
@@ -149,7 +147,7 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   page,
 }, testInfo) => {
   test.setTimeout(90_000);
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   for (const move of ["f2f3", "e7e5", "g2g4"]) current = await playMove(page, current, move, touch);
   await expect(page.getByRole("grid")).toHaveAttribute(
@@ -276,7 +274,7 @@ test("recovery and result retain the arena composition, explicit Resume and fina
 test("PGN export labels wrap between words on narrow screens with increased text spacing", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   for (const move of ["f2f3", "e7e5", "g2g4", "d8h4"]) {
     current = await playMove(page, current, move, touch);

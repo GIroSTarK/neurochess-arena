@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { errorResponse, GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
@@ -164,10 +164,10 @@ describe("credential settings", () => {
       await screen.findByText(/The operation could not be confirmed/);
       if (rejection === "forbidden") await fill();
       await submit();
-      await waitFor(() =>
-        expect(screen.queryByText(/The operation could not be confirmed/)).not.toBeInTheDocument(),
-      );
-      expect(screen.getByRole("alert")).toBeVisible();
+      await waitFor(() => {
+        expect(screen.queryByText(/The operation could not be confirmed/)).not.toBeInTheDocument();
+        expect(screen.getByRole("alert")).toBeVisible();
+      });
       rejectRetry = false;
       await fill();
       await submit();
@@ -494,6 +494,29 @@ describe("credential settings", () => {
     });
     expect(screen.queryByText("Arena key")).not.toBeInTheDocument();
     expect(screen.getByLabelText("API key", { exact: true })).toHaveValue("");
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("scrubs a draft key on unmount without resetting during StrictMode effect replay", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: [] }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const formReset = vi.spyOn(HTMLFormElement.prototype, "reset");
+    onTestFinished(() => formReset.mockRestore());
+    const { unmount } = renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { strict: true, initialEntries: ["/account/credentials"] },
+    );
+    const input = await screen.findByLabelText("API key", { exact: true });
+    await userEvent.type(input, "unmount-canary");
+    expect(input).toHaveValue("unmount-canary");
+    unmount();
+    expect(input).not.toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(formReset).toHaveBeenCalledOnce();
     http.assertNoUnexpectedRequests();
   });
 

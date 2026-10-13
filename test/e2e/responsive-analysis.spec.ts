@@ -8,7 +8,7 @@ import { confirm, createRoom } from "./room-helpers";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
 async function inspectLayouts(page: Page, info: TestInfo, flow: string, action: Locator) {
-  const widths = info.project.name === "desktop" ? [768, 1024, 1440] : [320, 390];
+  const widths = info.project.use.isMobile ? [320, 390] : [768, 1024, 1440];
   for (const width of widths) {
     for (const enlarged of [false, true]) {
       await page.setViewportSize({ width, height: 900 });
@@ -142,6 +142,7 @@ test("account and credential forms retain long labels and focused actions in a s
   await saveCredential(page, "Label".repeat(12) + "Long", "responsive-fixture-1234", "openrouter");
   await inspectLayouts(page, info, "credentials", page.getByRole("button", { name: /^Save key/ }));
   await page.setViewportSize({ width: 390, height: 360 });
+  await page.getByLabel("API key", { exact: true }).click();
   await page.getByLabel("API key", { exact: true }).fill("keyboard-fixture");
   await expect(page.getByLabel("API key", { exact: true })).toBeInViewport();
   const save = page.getByRole("button", { name: "Save key", exact: true });

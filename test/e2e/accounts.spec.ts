@@ -314,7 +314,12 @@ test("unverified sign-in offers resend, a verified profile can be renamed, and c
 for (const provider of ["google", "github"] as const) {
   test(`${provider} OAuth completes real session/profile onboarding and handles canceled consent`, async ({
     page,
+    allowedNativeWarnings,
   }) => {
+    // WebKit announces its built-in compatibility policy on the synthetic Google consent page.
+    allowedNativeWarnings.set(page, [
+      /^https:\/\/accounts\.google\.com\/\S* has active WebKit quirks: (?:MaybeBypassBackForwardCache|ShouldBypassBackForwardCacheWhenElementMatchesQuirk)\. Visit https:\/\/\S+ for more information\.$/,
+    ]);
     const email = emailFor();
     const upstream =
       provider === "google"
@@ -327,7 +332,13 @@ for (const provider of ["google", "github"] as const) {
       });
       expect(response.ok()).toBe(true);
       const callback = (await response.json()) as { url: string };
-      await route.fulfill({ status: 302, headers: { location: callback.url }, body: "" });
+      // WebKit cannot fulfill a routed redirect and Firefox warns on a synthetic 302;
+      // a followed link keeps the real cross-site callback navigation in every engine.
+      const href = callback.url.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+      await route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html lang="en"><title>OAuth fixture</title><body><a href="${href}">Continue authorization fixture</a></body></html>`,
+      });
     });
     await page.context().route("https://*.googleusercontent.com/**", (route) => route.abort());
     await page
@@ -339,6 +350,7 @@ for (const provider of ["google", "github"] as const) {
         name: provider === "google" ? "Continue with Google" : "Continue with GitHub",
       })
       .click();
+    await page.getByRole("link", { name: "Continue authorization fixture", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Choose your username" })).toBeVisible();
     const observer = await page.context().newPage();
     await observer.goto("/");
@@ -359,6 +371,7 @@ for (const provider of ["google", "github"] as const) {
         name: provider === "google" ? "Continue with Google" : "Continue with GitHub",
       })
       .click();
+    await page.getByRole("link", { name: "Continue authorization fixture", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(/cancelled/);
     expect(new URL(page.url()).search).toBe("");
   });

@@ -1,0 +1,38 @@
+name: Cross-browser E2E
+
+on:
+  schedule:
+    # Chromium gates every change in ci.yml; this bounds Firefox/WebKit regressions to one week.
+    - cron: "17 3 * * 4"
+  workflow_dispatch:
+  # Engine revisions ship with @playwright/test, so dependency updates run every engine on the PR.
+  # Advisory: it reports separately from ci.yml's verify check and does not block merging.
+  pull_request:
+    paths:
+      - package-lock.json
+      - playwright.config.ts
+      - .github/workflows/browser-e2e.yml
+      - .github/workflows/cross-browser.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    uses: ./.github/workflows/browser-e2e.yml
+    with:
+      matrix: |
+        {
+          "project": ["firefox-desktop", "webkit-desktop", "webkit-mobile"],
+          "shard": [1, 2, 3, 4],
+          "exclude": [{ "project": "firefox-desktop", "shard": 4 }],
+          "include": [
+            { "project": "firefox-desktop", "browser": "firefox", "shards": 3 },
+            { "project": "webkit-desktop", "browser": "webkit", "shards": 4 },
+            { "project": "webkit-mobile", "browser": "webkit", "shards": 4 }
+          ]
+        }

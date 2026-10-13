@@ -15,7 +15,13 @@ export default defineConfig({
   reporter: "list",
   globalSetup: "./test/performance/global-setup.ts",
   outputDir: join(tmpdir(), "neurochess-performance-results"),
-  use: { baseURL: WEB_ORIGIN, trace: "off", screenshot: "only-on-failure", video: "off" },
+  use: {
+    baseURL: WEB_ORIGIN,
+    ignoreHTTPSErrors: true,
+    trace: "off",
+    screenshot: "only-on-failure",
+    video: "off",
+  },
   projects: [
     {
       name: "desktop",

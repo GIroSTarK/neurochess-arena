@@ -34,8 +34,8 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
     const database = integrationDatabase();
     const device = await newContext({
       viewport: page.viewportSize(),
-      isMobile: testInfo.project.name === "mobile-touch",
-      hasTouch: testInfo.project.name === "mobile-touch",
+      isMobile: Boolean(testInfo.project.use.isMobile),
+      hasTouch: Boolean(testInfo.project.use.hasTouch),
     });
     try {
       const sessions = await database.db

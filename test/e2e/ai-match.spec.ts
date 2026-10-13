@@ -365,7 +365,9 @@ test(
     try {
       await other.goto(page.url());
       await expect(other.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+      await page.bringToFront();
       await expect(page.getByText(/This tab lost control/).first()).toBeVisible();
+      await other.bringToFront();
       await fillRecovery(other);
       await other.getByLabel("Delay between moves").selectOption("5000");
       await other.getByRole("button", { name: "Resume", exact: true }).click();
@@ -474,7 +476,9 @@ test("Stop remains usable during inference and late acknowledgements cannot revi
     if (response) {
       expect(await response.finished()).toBeNull();
     } else {
-      expect(request.failure()?.errorText).toBe("net::ERR_ABORTED");
+      expect(request.failure()?.errorText).toMatch(
+        /^(?:net::ERR_ABORTED|NS_BINDING_ABORTED|cancelled|Load request cancelled)$/,
+      );
     }
 
     // Let response handling and a full playback delay elapse before checking the client.

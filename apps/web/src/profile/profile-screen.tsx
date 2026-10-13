@@ -40,10 +40,9 @@ export function ProfileScreen({
       reset();
     };
     window.addEventListener("pagehide", clear);
-    return () => {
-      window.removeEventListener("pagehide", clear);
-      element?.reset();
-    };
+    // No reset on cleanup: it only precedes unmount, and StrictMode's dev remount would
+    // revert a username edit already in progress.
+    return () => window.removeEventListener("pagehide", clear);
   }, [reset]);
   function save(remove = false) {
     if (busy || pending.current || !form.current || !state.session) return;

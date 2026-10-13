@@ -3,7 +3,7 @@ import { gameInvocationsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN } from "./environment";
-import { expect, square, test } from "./fixtures";
+import { activate, expect, square, test } from "./fixtures";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
 async function start(page: Page, key: string, human?: "white" | "black") {
@@ -151,7 +151,8 @@ test("technical loss retains estimated spend for attempts that never produced a 
 for (const human of [undefined, "white", "black"] as const) {
   test(`details keep their anchors from the first move through refresh and pause (${human ?? "AI vs AI"})`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let releaseTurn: (() => void) | undefined;
     await page.route("**/ai-turn", async (route) => {
       await new Promise<void>((resolve) => {
@@ -246,7 +247,9 @@ for (const human of [undefined, "white", "black"] as const) {
       ),
     ).toBeVisible();
     expect(await geometry()).toEqual(before);
-    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+    const analysis = page.getByRole("tab", { name: "Analysis", exact: true });
+    await activate(analysis, touch);
+    await expect(analysis).toHaveAttribute("aria-selected", "true");
     const totals = page.getByRole("region", { name: "Operational totals" });
     const count = totals
       .getByRole("region", { name: "Game totals", exact: true })
@@ -404,7 +407,7 @@ test("live details stay within the primary controls across tabs and long comment
   await expect(commentary.getByRole("heading", { name: "Black · 1. e5" })).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  const desktop = testInfo.project.name === "desktop";
+  const desktop = !testInfo.project.use.isMobile;
   const widths = desktop ? [1025, 1280, 1440, 1920] : [320, 390, 768, 1024];
   const rail = page.getByRole("complementary", { name: "Game details" });
   const controls = page.getByRole("region", { name: "Game controls" });
@@ -570,7 +573,11 @@ test("live details stay within the primary controls across tabs and long comment
   await expect(read).toBeFocused();
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
   await events.focus();
-  await page.keyboard.press("Control+End");
+  await expect(events).toBeFocused();
+  for (let step = 0; step < 20; step++) {
+    await page.keyboard.press("PageDown");
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
   await expect(events.getByText("Model price unknown", { exact: true }).last()).toBeInViewport();
   expect(await events.evaluate((panel) => panel.scrollTop)).toBeGreaterThan(0);
   expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);

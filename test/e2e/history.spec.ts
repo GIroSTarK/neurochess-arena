@@ -202,8 +202,8 @@ test("history reopens canonical results on another session without controllers, 
 
   const device = await newContext({
     viewport: page.viewportSize(),
-    isMobile: testInfo.project.name === "mobile-touch",
-    hasTouch: testInfo.project.name === "mobile-touch",
+    isMobile: Boolean(testInfo.project.use.isMobile),
+    hasTouch: Boolean(testInfo.project.use.hasTouch),
   });
   try {
     const review = await device.newPage();
@@ -218,8 +218,12 @@ test("history reopens canonical results on another session without controllers, 
     const writes: string[] = [];
     review.on("request", (request) => {
       const url = new URL(request.url());
+      // The account may retain Stockfish samples the earlier API-only session never computed.
+      const analysisUpload =
+        request.method() === "POST" && /^\/games\/[^/]+\/analysis$/.test(url.pathname);
       if (
         url.origin === API_ORIGIN &&
+        !analysisUpload &&
         (request.method() !== "GET" ||
           url.pathname.startsWith("/credentials") ||
           url.pathname.startsWith("/providers"))
@@ -308,7 +312,7 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   await newer.click();
   await expect(rows).toHaveCount(20);
   expect(documentLoads).toBe(1);
-  for (const width of testInfo.project.name === "desktop" ? [1024, 1440] : [320, 390, 768]) {
+  for (const width of !testInfo.project.use.isMobile ? [1024, 1440] : [320, 390, 768]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const enlarged of [false, true]) {
       await setPseudoLocalization(page, enlarged);
@@ -335,7 +339,7 @@ test("history pages remain bounded, recover from load errors, and fit mobile and
   await page.keyboard.press("Escape");
   await expect(clearing).toBeFocused();
   await clearing.click();
-  for (const width of testInfo.project.name === "desktop" ? [1024, 1440] : [320, 390, 768]) {
+  for (const width of !testInfo.project.use.isMobile ? [1024, 1440] : [320, 390, 768]) {
     await page.setViewportSize({ width, height: 1000 });
     await setPseudoLocalization(page, true);
     await page.evaluate(() => {
