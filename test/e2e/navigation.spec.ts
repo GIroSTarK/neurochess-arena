@@ -93,9 +93,9 @@ test("Arena checks unfinished games without bootstrapping and links to Sandbox o
   expect(await page.evaluate(() => Reflect.get(window, "navigationSentinel") as unknown)).toBe(
     "same-document",
   );
-  await activate(sandbox, testInfo.project.name === "mobile-touch");
+  await activate(sandbox, Boolean(testInfo.project.use.hasTouch));
   await expect(page.getByRole("button", { name: "Start sandbox", exact: true })).toBeVisible();
-  await activate(arena, testInfo.project.name === "mobile-touch");
+  await activate(arena, Boolean(testInfo.project.use.hasTouch));
   await expect(page).toHaveTitle("Neurochess Arena");
 });
 
@@ -135,7 +135,7 @@ test("a disabled Sandbox is absent from navigation and direct links make no API 
   expect(apiRequests).toEqual([]);
   await activate(
     page.getByRole("link", { name: "Back to Arena" }),
-    testInfo.project.name === "mobile-touch",
+    Boolean(testInfo.project.use.hasTouch),
   );
   await expect(page).toHaveTitle("Neurochess Arena");
 });
@@ -188,7 +188,7 @@ test("Sandbox loads on demand and keeps navigation visible while its module is p
 test("Arena resolves a Sandbox game URL and links to its authorized recovery", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
   const gameUrl = page.url();
@@ -257,21 +257,20 @@ test("canonical game links open an authorized new tab without navigating the sou
   page,
   context,
 }, testInfo) => {
-  const current = await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const current = await startSandbox(page, Boolean(testInfo.project.use.hasTouch));
   await page.goto("/games/" + current.gameId);
   const link = page.getByRole("link", { name: "Return to Sandbox" });
   await expect(link).toHaveAttribute("href", "/sandbox/games/" + current.gameId);
   await page.evaluate(() => Object.assign(window, { navigationSentinel: "source-document" }));
   const destination = await link.getAttribute("href");
-  const other =
-    testInfo.project.name === "desktop"
-      ? await Promise.all([
-          context.waitForEvent("page"),
-          link.click({ modifiers: ["Control"] }),
-        ]).then(([tab]) => tab)
-      : await context.newPage();
+  const other = !testInfo.project.use.isMobile
+    ? await Promise.all([
+        context.waitForEvent("page"),
+        link.click({ modifiers: ["Control"] }),
+      ]).then(([tab]) => tab)
+    : await context.newPage();
   try {
-    if (testInfo.project.name !== "desktop") await other.goto(destination!);
+    if (testInfo.project.use.isMobile) await other.goto(destination!);
     await expect(other).toHaveURL(WEB_ORIGIN + "/sandbox/games/" + current.gameId);
     await expect(other.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
     await expect(other.getByRole("main")).toHaveCount(1);

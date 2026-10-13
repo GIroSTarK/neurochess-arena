@@ -34,6 +34,15 @@ export interface ChessboardHandle {
 
 const promotionOrder: readonly PromotionKind[] = ["q", "r", "b", "n"];
 
+function focusButton(button: HTMLButtonElement | undefined) {
+  // Like native focus(), leave a focused square in place: pointer activation focuses it first,
+  // and scrolling then would shift the board between a move's taps.
+  if (!button || button === document.activeElement) return;
+  // Native focus scrolling can leave part of a square clipped in Firefox.
+  button.focus({ preventScroll: true });
+  button.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+}
+
 /**
  * The 8x8 grid with one roving tab stop. Presentation comes from the accepted snapshot or the
  * supplied view; only the snapshot's legal moves make squares selectable.
@@ -62,14 +71,14 @@ export function Chessboard({
     onMove,
   });
 
-  useImperativeHandle(ref, () => ({ focus: () => buttons.get(focusedSquare)?.focus() }), [
+  useImperativeHandle(ref, () => ({ focus: () => focusButton(buttons.get(focusedSquare)) }), [
     buttons,
     focusedSquare,
   ]);
 
   function focus(square: Square) {
     setFocusedSquare(square);
-    buttons.get(square)?.focus();
+    focusButton(buttons.get(square));
   }
 
   function navigate(event: KeyboardEvent<HTMLButtonElement>, row: number, column: number) {

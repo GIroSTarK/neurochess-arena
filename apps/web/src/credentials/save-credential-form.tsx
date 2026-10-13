@@ -97,7 +97,9 @@ export function SaveCredentialForm({
     return () => {
       window.removeEventListener("pagehide", clear);
       identity.signal.removeEventListener("abort", clear);
-      element?.reset();
+      // An unmount has already detached the form, so scrub the key it may still hold.
+      // StrictMode's dev replay keeps it connected; resetting then would erase entered input.
+      if (!element?.isConnected) element?.reset();
       reset();
     };
   }, [identity.signal, reset]);

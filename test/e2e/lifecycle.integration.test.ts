@@ -1,14 +1,20 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createConnection, createServer } from "node:net";
+import { getCACertificates, setDefaultCACertificates } from "node:tls";
 
 import { createGameRepository, games, guestSessions } from "@neurochess/database";
 import { eq, inArray } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 
 import { integrationDatabase } from "../database.js";
 
 import { API_ORIGIN, DISABLED_WEB_ORIGIN, WEB_ORIGIN } from "./environment.js";
+import { testTls } from "./https.js";
 import { startBrowserTestServer } from "./lifecycle.js";
+
+const defaultCertificates = getCACertificates("default");
+beforeAll(() => setDefaultCACertificates([...defaultCertificates, testTls.cert.toString()]));
+afterAll(() => setDefaultCACertificates(defaultCertificates));
 
 async function isListening(origin: string): Promise<boolean> {
   const url = new URL(origin);

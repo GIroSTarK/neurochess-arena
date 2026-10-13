@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "npm@11.21.0",
   "engines": {
-    "node": ">=24 <25",
+    "node": ">=24.5 <25",
     "npm": ">=11 <12"
   },
   "workspaces": [

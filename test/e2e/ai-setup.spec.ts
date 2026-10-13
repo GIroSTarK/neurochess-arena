@@ -92,35 +92,53 @@ test("setup selects share arrow spacing and revealing a key preserves field widt
   expect((await input.boundingBox())!.width).toBeCloseTo(inputBefore!.width, 1);
 });
 
-test("model scrollbar dragging keeps the list open and allows selection", async ({ page }) => {
+test("native model-list scrolling keeps the list open and allows selection", async ({
+  page,
+  browserName,
+  isMobile,
+}) => {
   await page.goto("/__test__/setup");
   const white = await configure(page, "White");
   const input = white.getByRole("combobox", { name: "Model", exact: true });
   await input.click();
   const list = white.getByRole("listbox", { name: "Model", exact: true });
   await expect(list).toBeVisible();
-  // Reserve a real scrollbar gutter in touch emulation too, so both projects exercise it.
-  await page.addStyleTag({ content: '[role="listbox"]::-webkit-scrollbar { width: 16px; }' });
+  // Size exposed native scrollbars without reserving an empty gutter on overlay-only ports.
+  await page.addStyleTag({
+    content: '[role="listbox"]::-webkit-scrollbar { width: 16px; }',
+  });
   await list.scrollIntoViewIfNeeded();
   const geometry = await list.evaluate((element) => {
     const box = element.getBoundingClientRect();
+    const gutter = box.width - element.clientWidth;
+    const thumbHeight = Math.max(16, element.clientHeight ** 2 / element.scrollHeight);
     return {
-      x: box.right - 8,
-      y: box.top + 30,
+      x: box.right - gutter / 2,
+      y: box.top + thumbHeight / 2,
       height: element.clientHeight,
       scrollHeight: element.scrollHeight,
-      gutter: box.width - element.clientWidth,
+      gutter,
     };
   });
   expect(geometry.scrollHeight).toBeGreaterThan(geometry.height);
-  expect(geometry.gutter).toBeGreaterThan(2);
-  await page.mouse.move(geometry.x, geometry.y);
-  await page.mouse.down();
-  await page.mouse.move(geometry.x, geometry.y + geometry.height * 0.65, { steps: 8 });
-  await page.mouse.up();
+  // Both Chromium projects expose the sized scrollbar, so they must keep exercising the drag.
+  if (browserName === "chromium") expect(geometry.gutter).toBeGreaterThan(2);
+  if (geometry.gutter > 2) {
+    await page.mouse.move(geometry.x, geometry.y);
+    await page.mouse.down();
+    await page.mouse.move(geometry.x, geometry.y + geometry.height * 0.65, { steps: 8 });
+    await page.mouse.up();
+  } else if (browserName === "webkit" && isMobile) {
+    for (let step = 0; step < 4; step++) await input.press("ArrowDown");
+  } else {
+    // Overlay scrollbars do not expose a reserved gutter to drag.
+    await list.hover();
+    await page.mouse.wheel(0, geometry.height);
+  }
   await expect(input).toHaveAttribute("aria-expanded", "true");
   await expect(list).toBeVisible();
-  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(input).toBeFocused();
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await list.getByRole("option", { name: /Long test model/ }).click();
   await expect(input).toHaveValue(/Long test model/);
   await expect(input).toHaveAttribute("aria-expanded", "false");
@@ -365,9 +383,7 @@ test("setup reflows at all reference widths with expanded text, long names and v
     document.documentElement.style.fontSize = "100%";
   });
   await page.setViewportSize(
-    testInfo.project.name === "desktop"
-      ? { width: 1440, height: 1080 }
-      : { width: 390, height: 844 },
+    !testInfo.project.use.isMobile ? { width: 1440, height: 1080 } : { width: 390, height: 844 },
   );
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("setup-layout.png"), fullPage: true });

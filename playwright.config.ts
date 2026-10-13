@@ -19,6 +19,7 @@ export default defineConfig({
   outputDir: join(tmpdir(), "neurochess-playwright-results"),
   use: {
     baseURL: WEB_ORIGIN,
+    ignoreHTTPSErrors: true,
     // Traces/HARs can retain guest cookie headers. Capture only rendered pixels.
     trace: "off",
     screenshot: "only-on-failure",
@@ -26,14 +27,27 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "desktop",
+      name: "chromium-desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1080 } },
     },
     {
-      name: "mobile-touch",
-      // Lease/protocol coverage runs once in desktop; recovery and touch flows run in both.
+      name: "chromium-mobile",
+      // Desktop projects cover lease timing; both touch projects retain recovery journeys.
       grepInvert: /@controller-protocol/,
       use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
+    },
+    {
+      name: "firefox-desktop",
+      use: { ...devices["Desktop Firefox"], viewport: { width: 1440, height: 1080 } },
+    },
+    {
+      name: "webkit-desktop",
+      use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 1080 } },
+    },
+    {
+      name: "webkit-mobile",
+      grepInvert: /@controller-protocol/,
+      use: { ...devices["iPhone 13"], viewport: { width: 390, height: 844 } },
     },
   ],
 });

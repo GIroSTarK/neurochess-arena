@@ -95,7 +95,7 @@ for (const human of ["white", "black"] as const) {
       if (request.url().endsWith("/ai-turn")) turns++;
     });
     const game = await start(page, human);
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     const url = page.url();
     await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
     expect(turns).toBe(human === "white" ? 0 : 1);
@@ -195,7 +195,7 @@ for (const human of ["white", "black"] as const) {
       page,
       current,
       human === "white" ? "f2f3" : "e7e5",
-      testInfo.project.name === "mobile-touch",
+      Boolean(testInfo.project.use.hasTouch),
     );
     await page.getByRole("button", { name: "Pause", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
@@ -209,7 +209,7 @@ for (const human of ["white", "black"] as const) {
     const game = await start(page, human, "quota-fixture");
     if (human === "white") {
       await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
-      await playMove(page, game, "f2f3", testInfo.project.name === "mobile-touch");
+      await playMove(page, game, "f2f3", Boolean(testInfo.project.use.hasTouch));
     }
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
     await expect(
@@ -243,7 +243,7 @@ for (const human of ["white", "black"] as const) {
     page,
   }, testInfo) => {
     const game = await start(page, human, "promotion-fixture");
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     await page.getByLabel("Delay between moves").selectOption("500");
     const approach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7", "h3g2", "b7a8n"];
     const promotionPly = human === "white" ? 8 : 9;
@@ -370,9 +370,9 @@ test("human mode and color selection work by keyboard with expanded mobile setup
   });
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
     await page.getByRole("combobox", { name: /^Game mode/ }).focus();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("combobox", { name: /^Your color/ })).toBeFocused();
@@ -389,9 +389,9 @@ test("human controls fit mobile and expanded text", async ({ page }, testInfo) =
   });
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
     const resignButton = page.getByRole("button", { name: /^Resign White/ });
     await resignButton.focus();
     await expect(resignButton).toBeInViewport();

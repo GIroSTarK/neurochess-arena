@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { text } from "node:stream/consumers";
 
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
@@ -10,10 +10,24 @@ import { expectRenderedContrast } from "./rendered-contrast";
 import { setPseudoLocalization } from "./text-layout";
 
 async function tabTo(page: Page, target: Locator) {
+  await page.bringToFront();
   await expect(target).toBeVisible();
+  let backwards = false;
   for (let step = 0; step < 100; step++) {
-    if (await target.evaluate((element) => element === document.activeElement)) return;
-    await page.keyboard.press("Tab");
+    const focus = await target.evaluate((element) => {
+      const active = document.activeElement;
+      return {
+        reached: active === element,
+        backwards:
+          !active || active === document.body || active === document.documentElement
+            ? null
+            : Boolean(element.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING),
+      };
+    });
+    if (focus.reached) return;
+    // Body is a transient native traversal boundary; keep the previous direction through it.
+    backwards = focus.backwards ?? backwards;
+    await page.keyboard.press(backwards ? "Shift+Tab" : "Tab");
   }
   await expect(target).toBeFocused();
 }
@@ -155,8 +169,9 @@ test("keyboard account, setup, key recovery, replay, export and history form one
 
   const download = page.waitForEvent("download");
   await enter(page, page.getByRole("button", { name: "Download PGN", exact: true }));
-  const path = await (await download).path();
-  expect(await readFile(path, "utf8")).toContain("1. f3 e5 2. g4 Qh4# 0-1");
+  const stream = await (await download).createReadStream();
+  expect(await text(stream)).toContain("1. f3 e5 2. g4 Qh4# 0-1");
+  await expect(page.getByRole("button", { name: "Download PGN", exact: true })).toBeFocused();
   await enter(page, page.getByRole("link", { name: "History", exact: true }));
   await enter(page, page.getByRole("button", { name: /^Delete game ·/ }));
   const dialog = page.getByRole("dialog", { name: "Delete this game?" });
@@ -267,7 +282,7 @@ test("keyboard credential consent, reveal and revoke keep safe dialog focus", as
 test("keeps keyboard-focused squares in view on short viewports in both orientations", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   await page.setViewportSize(touch ? { width: 390, height: 400 } : { width: 1280, height: 600 });
   await startSandbox(page, touch);
 
@@ -301,6 +316,8 @@ test("keeps keyboard-focused squares in view on short viewports in both orientat
     const last = rightFile + ranks[0];
 
     await activate(square(page, last), touch);
+    // Seed an offscreen destination independently of the engine's native focus alignment.
+    await square(page, last).evaluate((element) => element.scrollIntoView({ block: "start" }));
     await expect(square(page, first)).not.toBeInViewport();
     await navigateTo("Control+Home", first);
     await navigateTo("End", rightFile + ranks[7]);
@@ -314,7 +331,7 @@ test("keeps keyboard-focused squares in view on short viewports in both orientat
 test("supports keyboard inspection in both orientations, reflow, and enlarged localized text", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   await startSandbox(page, touch);
   await square(page, "e2").focus();
   await page.keyboard.press("Enter");

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { text } from "node:stream/consumers";
 
 import { type GameSnapshot, roomViewSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
@@ -98,8 +98,7 @@ export async function expectSharedResult(
     await expect(player.getByRole("grid")).toHaveAttribute("data-fen", snapshot.fen);
     const download = player.waitForEvent("download");
     await player.getByRole("button", { name: "Download PGN", exact: true }).click();
-    const path = await (await download).path();
-    if (!path) throw new Error("Expected a PGN download");
-    expect(await readFile(path, "utf8")).toBe(snapshot.pgn);
+    const stream = await (await download).createReadStream();
+    expect(await text(stream)).toBe(snapshot.pgn);
   }
 }

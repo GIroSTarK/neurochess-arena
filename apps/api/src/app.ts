@@ -34,6 +34,7 @@ export interface ReadinessProbe {
 
 export interface BuildAppOptions {
   readonly logger?: FastifyServerOptions["logger"];
+  readonly serverFactory?: FastifyServerOptions["serverFactory"];
   readonly readiness: ReadinessProbe;
   readonly webOrigin: string;
   readonly gameApi?: Omit<GameApiOptions, "webOrigin" | "auth">;
@@ -47,7 +48,10 @@ export interface BuildAppOptions {
 }
 
 export async function buildApp(options: BuildAppOptions) {
-  const app = Fastify({ logger: options.logger ?? false });
+  const app = Fastify({
+    logger: options.logger ?? false,
+    ...(options.serverFactory ? { serverFactory: options.serverFactory } : {}),
+  });
   const routes = app.withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);

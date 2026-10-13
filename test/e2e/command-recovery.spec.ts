@@ -12,7 +12,7 @@ for (const operation of ["move", "pause", "recovery"] as const) {
   test(`resolves an uncertain ${operation} only through an identical explicit retry`, async ({
     page,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     const initial = await startSandbox(page, touch);
     const current = await playMove(page, initial, "e2e4", touch);
     const commandUrl =
@@ -130,7 +130,7 @@ for (const operation of ["move", "pause", "recovery"] as const) {
 test("adopts an already committed move after a lost acknowledgement without submitting it again", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   const current = await startSandbox(page, touch);
   let submissions = 0;
   await page.route(API_ORIGIN + "/games/" + current.gameId + "/moves", async (route) => {
@@ -158,7 +158,7 @@ test("adopts an already committed move after a lost acknowledgement without subm
 test("replaces a stale board with the complete accepted position without repeating the rejected move", async ({
   page,
 }, testInfo) => {
-  const current = await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const current = await startSandbox(page, Boolean(testInfo.project.use.hasTouch));
   await square(page, "d2").focus();
   await page.keyboard.press("Enter");
   await expect(square(page, "d2")).toHaveAttribute("data-selected", "true");

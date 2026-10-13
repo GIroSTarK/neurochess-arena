@@ -4,7 +4,7 @@ for (const adapter of ["sandbox", "reference"] as const) {
   test(`${adapter} preserves board inspection and keyboard order through live and replay`, async ({
     page,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     if (adapter === "sandbox") {
       await startSandbox(page, touch);
     } else {

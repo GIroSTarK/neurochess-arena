@@ -1,7 +1,7 @@
 import type { ChessColor } from "@neurochess/contracts";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   CASTLING_APPROACH,
@@ -122,6 +122,26 @@ describe("accessible chessboard", () => {
     expect(square("e3")).toHaveAccessibleName(/Legal destination/);
     await user.keyboard("{ArrowUp} ");
     expect(initial.onMove).toHaveBeenCalledExactlyOnceWith("e2e3");
+  });
+
+  it("scrolls a newly focused square into view but leaves an activated focused square in place", async () => {
+    renderLocalized(<Chessboard {...props()} />);
+    const square = squaresOnBoard();
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    onTestFinished(() => scroll.mockRestore());
+    const user = userEvent.setup();
+    await user.click(square("e2"));
+    expect(square("e2")).toHaveFocus();
+    expect(square("e2")).toHaveAttribute("data-selected", "true");
+    expect(scroll).not.toHaveBeenCalled();
+    await user.keyboard("{ArrowUp}");
+    expect(square("e3")).toHaveFocus();
+    expect(scroll).toHaveBeenCalledExactlyOnceWith({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "instant",
+    });
+    expect(scroll.mock.contexts[0]).toBe(square("e3"));
   });
 
   it("cancels selection with Escape and ignores held activation keys", async () => {

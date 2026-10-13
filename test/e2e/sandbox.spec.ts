@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { gameSnapshotSchema } from "@neurochess/contracts";
 
+import { expectClipboardCopy } from "./clipboard";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import {
   acceptedMove,
@@ -21,7 +22,7 @@ const promotionApproach = ["a2a4", "h7h5", "a4a5", "h5h4", "a5a6", "h4h3", "a6b7
 test("preserves lifecycle keyboard focus through pending commands without stealing it back", async ({
   page,
 }, testInfo) => {
-  await startSandbox(page, testInfo.project.name === "mobile-touch");
+  await startSandbox(page, Boolean(testInfo.project.use.hasTouch));
   const secondaryActions = page.getByRole("button", {
     name: /^(Abort game|Resign White|Resign Black)$/,
   });
@@ -87,9 +88,9 @@ test("preserves lifecycle keyboard focus through pending commands without steali
 
 test("creates, recovers, completes, replays and exports a private game", async ({
   page,
-  context,
+  browserName,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   const accessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
@@ -145,13 +146,14 @@ test("creates, recovers, completes, replays and exports a private game", async (
   await expect(square(page, "e1")).not.toHaveAttribute("data-check");
   await activate(page.getByRole("button", { name: "Next", exact: true }), touch);
   await expect(square(page, "e1")).toHaveAttribute("data-check", "true");
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: WEB_ORIGIN });
-  await activate(page.getByRole("button", { name: "Copy PGN", exact: true }), touch);
-  await expect(page.getByText("PGN copied.", { exact: true }).first()).toBeVisible();
-  // Windows normalizes native clipboard newlines; the download below remains byte-exact.
-  expect((await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")).toBe(
+  await expectClipboardCopy(
+    page,
+    page.getByRole("button", { name: "Copy PGN", exact: true }),
     restored.pgn,
+    browserName,
+    touch,
   );
+  await expect(page.getByText("PGN copied.", { exact: true }).first()).toBeVisible();
   const downloading = page.waitForEvent("download");
   await activate(page.getByRole("button", { name: "Download PGN", exact: true }), touch);
   const download = await downloading;
@@ -185,7 +187,7 @@ test("creates, recovers, completes, replays and exports a private game", async (
 test("promotes both colors from the standard position with modal cancellation and underpromotion", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   for (const move of promotionApproach) current = await playMove(page, current, move, touch);
   if (touch) {
@@ -291,7 +293,7 @@ test("promotes both colors from the standard position with modal cancellation an
 test("discovers an unfinished game on reopening and keeps repeated recovery paused", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   let current = await startSandbox(page, touch);
   current = await playMove(page, current, "e2e4", touch);
   await page.goto("/");
@@ -329,7 +331,7 @@ test("discovers an unfinished game on reopening and keeps repeated recovery paus
 test("confirms both resignation colors and abortion with accessible cancellation", async ({
   page,
 }, testInfo) => {
-  const touch = testInfo.project.name === "mobile-touch";
+  const touch = Boolean(testInfo.project.use.hasTouch);
   for (const ending of [
     {
       action: "Resign White",
@@ -407,7 +409,7 @@ test("an isolated browser guest cannot open, replay or export another guest's pr
   allowedIdentity401s,
   expectedGame404s,
 }, testInfo) => {
-  const initial = await startSandbox(page, testInfo.project.name === "mobile-touch");
+  const initial = await startSandbox(page, Boolean(testInfo.project.use.hasTouch));
   const isolated = await newContext();
   try {
     const stranger = await isolated.newPage();

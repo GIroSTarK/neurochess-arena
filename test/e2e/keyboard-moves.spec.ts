@@ -39,7 +39,7 @@ for (const scenario of [
   test(`submits ${scenario.name} by keyboard and renders only the accepted piece changes`, async ({
     page,
   }, testInfo) => {
-    const touch = testInfo.project.name === "mobile-touch";
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let current = await startSandbox(page, touch);
     for (const move of scenario.approach) current = await playMove(page, current, move, touch);
     expect(current.legalMoves).toContain(scenario.move);

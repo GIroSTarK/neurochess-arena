@@ -404,7 +404,7 @@ test("live details stay within the primary controls across tabs and long comment
   await expect(commentary.getByRole("heading", { name: "Black · 1. e5" })).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  const desktop = testInfo.project.name === "desktop";
+  const desktop = !testInfo.project.use.isMobile;
   const widths = desktop ? [1025, 1280, 1440, 1920] : [320, 390, 768, 1024];
   const rail = page.getByRole("complementary", { name: "Game details" });
   const controls = page.getByRole("region", { name: "Game controls" });
@@ -570,7 +570,11 @@ test("live details stay within the primary controls across tabs and long comment
   await expect(read).toBeFocused();
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
   await events.focus();
-  await page.keyboard.press("Control+End");
+  await expect(events).toBeFocused();
+  for (let step = 0; step < 20; step++) {
+    await page.keyboard.press("PageDown");
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
   await expect(events.getByText("Model price unknown", { exact: true }).last()).toBeInViewport();
   expect(await events.evaluate((panel) => panel.scrollTop)).toBeGreaterThan(0);
   expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);

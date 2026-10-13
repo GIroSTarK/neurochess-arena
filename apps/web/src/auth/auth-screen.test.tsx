@@ -1,6 +1,6 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 
 import { errorResponse, jsonResponse } from "../test/fixtures";
 import { createHttpMock } from "../test/http";
@@ -121,3 +121,23 @@ it.each([
     http.assertNoUnexpectedRequests();
   },
 );
+
+it("scrubs the password on navigation without resetting during StrictMode effect replay", async () => {
+  const http = createHttpMock({ "GET /api/auth/get-session": () => jsonResponse(null) });
+  vi.stubGlobal("fetch", http.fetch);
+  const formReset = vi.spyOn(HTMLFormElement.prototype, "reset");
+  onTestFinished(() => formReset.mockRestore());
+  renderApp(
+    { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+    { strict: true, initialEntries: ["/auth/sign-in"] },
+  );
+  const password = await screen.findByLabelText("Password", { exact: true });
+  await userEvent.type(password, "password-fixture");
+  expect(password).toHaveValue("password-fixture");
+  await userEvent.click(screen.getByRole("link", { name: "Forgot password?" }));
+  await screen.findByRole("button", { name: "Request reset link" });
+  expect(password).not.toBeInTheDocument();
+  expect(password).toHaveValue("");
+  expect(formReset).toHaveBeenCalledOnce();
+  http.assertNoUnexpectedRequests();
+});
