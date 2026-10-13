@@ -318,7 +318,7 @@ for (const provider of ["google", "github"] as const) {
   }) => {
     // WebKit announces its built-in compatibility policy on the synthetic Google consent page.
     allowedNativeWarnings.set(page, [
-      /^https:\/\/accounts\.google\.com\/\S* has active WebKit quirks: MaybeBypassBackForwardCache\. Visit https:\/\/\S+ for more information\.$/,
+      /^https:\/\/accounts\.google\.com\/\S* has active WebKit quirks: (?:MaybeBypassBackForwardCache|ShouldBypassBackForwardCacheWhenElementMatchesQuirk)\. Visit https:\/\/\S+ for more information\.$/,
     ]);
     const email = emailFor();
     const upstream =
