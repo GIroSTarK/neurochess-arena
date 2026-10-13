@@ -164,10 +164,10 @@ describe("credential settings", () => {
       await screen.findByText(/The operation could not be confirmed/);
       if (rejection === "forbidden") await fill();
       await submit();
-      await waitFor(() =>
-        expect(screen.queryByText(/The operation could not be confirmed/)).not.toBeInTheDocument(),
-      );
-      expect(screen.getByRole("alert")).toBeVisible();
+      await waitFor(() => {
+        expect(screen.queryByText(/The operation could not be confirmed/)).not.toBeInTheDocument();
+        expect(screen.getByRole("alert")).toBeVisible();
+      });
       rejectRetry = false;
       await fill();
       await submit();
