@@ -252,6 +252,12 @@ test("live guest identity switches clear the old room and cannot take its seat",
   expectedGame404s.set(guest, new Set([API_ORIGIN + `/games/${gameId}/details`]));
   await guest.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(guest.getByRole("grid")).toHaveCount(0);
+  // The grid clears while the new session is checked; the denied read follows it.
+  await expect(
+    guest
+      .getByRole("status")
+      .filter({ hasText: "This private game is unavailable to your session." }),
+  ).toHaveCount(1);
   await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
   expect((await readSnapshot(page, gameId)).state).toBe("active");
 });

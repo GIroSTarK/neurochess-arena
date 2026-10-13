@@ -278,6 +278,11 @@ for (const human of ["white", "black"] as const) {
       touch,
     );
     await acceptedMove(await response, before, move, page);
+    // The AI reply changes the revision, which closes an open confirmation; resign after it.
+    await expect
+      .poll(async () => (await readSnapshot(page, game.gameId)).moves.length)
+      .toBe(before.moves.length + 2);
+    await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
     await resign(page, human);
   });
 }

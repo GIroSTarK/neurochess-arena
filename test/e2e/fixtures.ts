@@ -416,7 +416,10 @@ export async function acceptedMove(
   expect(accepted.gameId).toBe(previous.gameId);
   expect(accepted.version).toBeGreaterThan(previous.version);
   expect(accepted.moves.at(-1)?.uci).toBe(move);
-  await expect(page.getByRole("status")).toContainText(accepted.moves.at(-1)?.san ?? "");
+  // A route-loading status can briefly coexist with the move announcement.
+  await expect(
+    page.getByRole("status").filter({ hasText: accepted.moves.at(-1)!.san }),
+  ).toHaveCount(1);
   return accepted;
 }
 

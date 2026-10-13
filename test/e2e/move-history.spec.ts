@@ -183,7 +183,16 @@ for (const longHistory of [false, true]) {
         expect(layout.scrollHeight).toBeGreaterThan(layout.height);
         await history.focus();
         for (const key of ["Home", "End"]) {
+          // Keyboard scrolling animates, and Chromium can drop a key pressed before it ends.
+          const scrolled = history.evaluate(
+            (element) =>
+              new Promise<void>((resolve) => {
+                element.addEventListener("scrollend", () => resolve(), { once: true });
+                setTimeout(resolve, 2_000);
+              }),
+          );
           await page.keyboard.press(key);
+          await scrolled;
           const rows = history.locator("tbody tr");
           const row = key === "Home" ? rows.first() : rows.last();
           await expect
@@ -324,6 +333,14 @@ for (const enlarged of [false, true]) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const history = page.getByRole("region", { name: "Move history", exact: true });
     const scrollTop = () => history.evaluate((element) => element.scrollTop);
+    // WebKit can apply focus scrolling in the next rendering update, so read settled positions.
+    const settledPageScroll = () =>
+      page.evaluate(
+        () =>
+          new Promise<number>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.scrollY))),
+          ),
+      );
     expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
       true,
     );
@@ -336,22 +353,22 @@ for (const enlarged of [false, true]) {
       await history.focus();
       await expect(history).toBeFocused();
     }
-    const pageBeforeWheel = await page.evaluate(() => window.scrollY);
+    const pageBeforeWheel = await settledPageScroll();
     if (browserName === "webkit" && isMobile) {
       await page.keyboard.press("ArrowUp");
     } else {
       await page.mouse.wheel(0, -Math.min(40, middle / 2));
     }
     await expect.poll(scrollTop).toBeLessThan(middle);
-    expect(await page.evaluate(() => window.scrollY)).toBe(pageBeforeWheel);
+    expect(await settledPageScroll()).toBe(pageBeforeWheel);
 
     async function navigate(name: string, ply: number) {
       const control = page.getByRole("button", { name, exact: true });
       await control.focus();
-      const pageScroll = await page.evaluate(() => window.scrollY);
+      const pageScroll = await settledPageScroll();
       await page.keyboard.press("Enter");
       await expect(control).toBeFocused();
-      expect(await page.evaluate(() => window.scrollY)).toBe(pageScroll);
+      expect(await settledPageScroll()).toBe(pageScroll);
       await expect(page.getByRole("grid")).toHaveAttribute(
         "data-fen",
         ply === 0 ? initialFen : current.moves[ply - 1]!.fen,
