@@ -218,8 +218,12 @@ test("history reopens canonical results on another session without controllers, 
     const writes: string[] = [];
     review.on("request", (request) => {
       const url = new URL(request.url());
+      // The account may retain Stockfish samples the earlier API-only session never computed.
+      const analysisUpload =
+        request.method() === "POST" && /^\/games\/[^/]+\/analysis$/.test(url.pathname);
       if (
         url.origin === API_ORIGIN &&
+        !analysisUpload &&
         (request.method() !== "GET" ||
           url.pathname.startsWith("/credentials") ||
           url.pathname.startsWith("/providers"))

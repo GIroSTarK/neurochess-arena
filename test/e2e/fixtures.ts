@@ -166,6 +166,11 @@ export const test = base.extend<{
           "WASM streaming failed: TypeError: Load failed",
           "Unhandled Promise Rejection: TypeError: Load failed",
           `Fetch API cannot load ${engineUrl.replace(/\.js$/, ".wasm")} due to access control checks.`,
+          // Occasionally WebKit doubles the error prefix, and unwinding the same cancelled
+          // instantiation then overflows the worker's stack.
+          "WASM streaming failed: TypeError: TypeError: Load failed",
+          "Unhandled Promise Rejection: TypeError: TypeError: Load failed",
+          "Unhandled Promise Rejection: RangeError: Maximum call stack size exceeded.",
         ].includes(message.text());
         // WebKit can report cancelled WASM loads from the previous document's worker.
         // Require navigation at message time and worker closure at teardown; live failures still fail.

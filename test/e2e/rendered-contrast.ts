@@ -4,6 +4,20 @@ import { expect } from "./fixtures";
 
 // Axe cannot measure SVG artwork or the board's layered state/focus keylines.
 export async function expectRenderedContrast(page: Page) {
+  // A control that just changed state can still be fading its background while its text
+  // color has already switched; measure the settled colors.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === "running" &&
+            Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
   const checks = await page.evaluate(() => {
     const rgb = (color: string) =>
       color
