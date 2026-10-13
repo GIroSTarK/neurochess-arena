@@ -3,7 +3,7 @@ import { gameInvocationsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { API_ORIGIN } from "./environment";
-import { expect, square, test } from "./fixtures";
+import { activate, expect, square, test } from "./fixtures";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
 async function start(page: Page, key: string, human?: "white" | "black") {
@@ -151,7 +151,8 @@ test("technical loss retains estimated spend for attempts that never produced a 
 for (const human of [undefined, "white", "black"] as const) {
   test(`details keep their anchors from the first move through refresh and pause (${human ?? "AI vs AI"})`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    const touch = Boolean(testInfo.project.use.hasTouch);
     let releaseTurn: (() => void) | undefined;
     await page.route("**/ai-turn", async (route) => {
       await new Promise<void>((resolve) => {
@@ -246,7 +247,9 @@ for (const human of [undefined, "white", "black"] as const) {
       ),
     ).toBeVisible();
     expect(await geometry()).toEqual(before);
-    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+    const analysis = page.getByRole("tab", { name: "Analysis", exact: true });
+    await activate(analysis, touch);
+    await expect(analysis).toHaveAttribute("aria-selected", "true");
     const totals = page.getByRole("region", { name: "Operational totals" });
     const count = totals
       .getByRole("region", { name: "Game totals", exact: true })
