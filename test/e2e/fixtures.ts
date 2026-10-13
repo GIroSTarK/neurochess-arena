@@ -435,6 +435,10 @@ export async function playMove(
   touch: boolean,
 ): Promise<GameSnapshot> {
   expect(previous.legalMoves).toContain(move);
+  await expect(page.getByRole("grid", { name: "Chessboard" })).toHaveAttribute(
+    "aria-readonly",
+    "false",
+  );
   await activate(square(page, move.slice(0, 2)), touch);
   const response = page.waitForResponse(
     (response) =>

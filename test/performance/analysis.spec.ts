@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
 import { createGame } from "@neurochess/chess";
-import { gameSnapshotSchema } from "@neurochess/contracts";
+import { aiControllerRequestSchema, gameSnapshotSchema } from "@neurochess/contracts";
 import { type Page, test as assetFailureTest } from "@playwright/test";
 
 import { createAccount } from "../e2e/account-helpers";
@@ -242,6 +242,14 @@ for (const extension of ["js", "wasm"]) {
     `delayed then failed ${extension} loading preserves moves, replay and explicit analysis recovery`,
     async ({ page, context }, info) => {
       await instrument(page);
+      // Engine loading can begin before the controller grants permission to move.
+      await context.route("**/controller", async (route) => {
+        const command = aiControllerRequestSchema.parse(route.request().postDataJSON());
+        if (command.action === "acquire") {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        await route.continue();
+      });
       const release = Promise.withResolvers<void>();
       let attempted = 0;
       const pattern = `**/stockfish-19-lite-single.${extension}`;
