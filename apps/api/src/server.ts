@@ -23,6 +23,7 @@ import { createOpenAiAdapter } from "./providers/openai.js";
 import { createOpenRouterAdapter } from "./providers/openrouter.js";
 import { createRoomEvents } from "./realtime/room-events.js";
 import { createRoomService } from "./rooms/service.js";
+import { createShutdown } from "./shutdown.js";
 
 async function main(): Promise<void> {
   loadRootEnvironment();
@@ -64,19 +65,19 @@ async function main(): Promise<void> {
     },
   });
 
-  let shutdownPromise: Promise<void> | undefined;
-  const shutdown = (signal: string): Promise<void> => {
-    shutdownPromise ??= (async () => {
-      app.log.info({ signal }, "Shutting down API");
-      await app.close();
-      await database.close();
-    })();
-    return shutdownPromise;
-  };
+  const shutdown = createShutdown({
+    closeServer: () => app.close(),
+    closeDatabase: () => database.close(),
+    onTimeout() {
+      app.log.fatal("API shutdown deadline exceeded");
+      process.exit(1);
+    },
+  });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
-      void shutdown(signal).catch(() => {
+      app.log.info({ signal }, "Shutting down API");
+      void shutdown().catch(() => {
         process.exitCode = 1;
       });
     });
@@ -86,7 +87,7 @@ async function main(): Promise<void> {
     await app.listen({ host: environment.API_HOST, port: environment.API_PORT });
   } catch (error: unknown) {
     app.log.fatal({ err: error }, "API failed to start");
-    await shutdown("startup_failure");
+    await shutdown();
     throw error;
   }
 }

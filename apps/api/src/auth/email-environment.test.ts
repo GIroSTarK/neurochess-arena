@@ -7,7 +7,7 @@ const base = {
   WEB_ORIGIN: "https://arena.example.com",
   BETTER_AUTH_URL: "https://api.example.com",
   BETTER_AUTH_SECRET: "smtp-environment-fixture-secret-only",
-  DATABASE_URL: "postgresql://localhost/neurochess",
+  DATABASE_URL: "postgresql://localhost/neurochess?sslmode=verify-full",
 };
 const smtp = {
   AUTH_EMAIL_TRANSPORT: "smtp",

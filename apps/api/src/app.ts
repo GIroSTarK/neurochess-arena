@@ -50,6 +50,10 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: options.logger ?? false,
+    bodyLimit: 1_048_576,
+    requestTimeout: 30_000,
+    connectionTimeout: 210_000,
+    keepAliveTimeout: 5_000,
     ...(options.serverFactory ? { serverFactory: options.serverFactory } : {}),
   });
   const routes = app.withTypeProvider<ZodTypeProvider>();

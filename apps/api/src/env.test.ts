@@ -7,7 +7,7 @@ const validEnvironment = {
   API_HOST: "127.0.0.1",
   API_PORT: "3001",
   WEB_ORIGIN: "http://localhost:5173",
-  DATABASE_URL: "postgresql://user:password@localhost:5432/neurochess",
+  DATABASE_URL: "postgresql://user:password@localhost:5432/neurochess?sslmode=verify-full",
   LOG_LEVEL: "silent",
   BETTER_AUTH_URL: "http://localhost:3001",
   BETTER_AUTH_SECRET: "fixture-only-auth-secret-with-at-least-32-characters",
@@ -17,6 +17,34 @@ const validEnvironment = {
 };
 
 describe("parseApiEnvironment", () => {
+  it("rejects cross-site production origins including unrelated private suffix tenants", () => {
+    const production = {
+      ...validEnvironment,
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://arena.example.com",
+      BETTER_AUTH_URL: "https://api.example.net",
+    };
+    expect(() => parseApiEnvironment(production)).toThrow("WEB_ORIGIN");
+    expect(() =>
+      parseApiEnvironment({
+        ...production,
+        WEB_ORIGIN: "https://arena.github.io",
+        BETTER_AUTH_URL: "https://api.github.io",
+      }),
+    ).toThrow("WEB_ORIGIN");
+  });
+
+  it("rejects global TLS verification bypass in production", () => {
+    expect(() =>
+      parseApiEnvironment({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        WEB_ORIGIN: "https://arena.example.com",
+        BETTER_AUTH_URL: "https://api.example.com",
+        NODE_TLS_REJECT_UNAUTHORIZED: "0",
+      }),
+    ).toThrow("NODE_TLS_REJECT_UNAUTHORIZED");
+  });
   it.each([undefined, "", "short-secret-canary", " ".repeat(40)])(
     "requires an explicit auth secret without disclosing invalid values",
     (BETTER_AUTH_SECRET) => {

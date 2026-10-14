@@ -583,4 +583,4 @@ The web app can be hosted as static assets. The API hosting environment must sup
 
 Static hosting must support the [browser route and SPA-fallback contract](development.md#browser-routes), including verification on the selected deployment host.
 
-The exact hosting providers, production region, email delivery service, observability service, and backup policy remain open decisions. Custom avatar uploads and their storage are deferred by the [profile policy](product.md#usernames-and-avatars).
+[ADR-0020](decisions/0020-single-host-production-deployment.md) selects Oracle Always Free in Frankfurt with Caddy, one API container and self-managed PostgreSQL, within a $0 hosting budget. The [operations runbook](operations.md) owns the production artifacts, verified database TLS, same-site origins, secret configuration and stop/drain/migrate/restart procedure. Brevo TLS SMTP and OCI monitoring are the prepared service paths; actual live configuration, alerting and tested backup/restore policy remain release gates. Custom avatar uploads and their storage are deferred by the [profile policy](product.md#usernames-and-avatars).

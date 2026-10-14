@@ -25,6 +25,7 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 | [0017](0017-data-router-and-canonical-game-paths.md)            | Accepted   | Data router, canonical private game paths, and navigation lifetime boundaries            |
 | [0018](0018-private-room-lifecycle-and-shared-retention.md)     | Accepted   | Private room lifecycle, participant retention, invitations, and shared write ordering    |
 | [0019](0019-browser-analysis-and-private-samples.md)            | Accepted   | Bounded browser Stockfish analysis, private account samples, and engine distribution     |
+| [0020](0020-single-host-production-deployment.md)               | Accepted   | Oracle Always Free single-host deployment, verified database TLS and stop-first rollout  |
 
 ## Status values
 

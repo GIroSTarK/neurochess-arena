@@ -1,3 +1,5 @@
+import { parseDatabaseUrl } from "@neurochess/database";
+import { getDomain } from "tldts";
 import { z } from "zod";
 
 import {
@@ -40,6 +42,7 @@ const oauthCredentialSchema = z
 const apiEnvironmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    NODE_TLS_REJECT_UNAUTHORIZED: z.string().optional(),
     API_HOST: z.string().min(1).default("127.0.0.1"),
     API_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
     WEB_ORIGIN: originSchema.default("http://localhost:5173"),
@@ -118,6 +121,17 @@ const apiEnvironmentSchema = z
       context.addIssue({ code: "custom", path: ["SANDBOX_ENABLED"] });
     }
     if (environment.NODE_ENV === "production") {
+      if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+        context.addIssue({ code: "custom", path: ["NODE_TLS_REJECT_UNAUTHORIZED"] });
+      }
+      if (!sameSite(environment.WEB_ORIGIN, environment.BETTER_AUTH_URL)) {
+        context.addIssue({ code: "custom", path: ["WEB_ORIGIN"] });
+      }
+      try {
+        parseDatabaseUrl(environment.DATABASE_URL, true);
+      } catch {
+        context.addIssue({ code: "custom", path: ["DATABASE_URL"] });
+      }
       for (const key of ["WEB_ORIGIN", "BETTER_AUTH_URL"] as const) {
         if (!environment[key].startsWith("https://")) {
           context.addIssue({ code: "custom", path: [key] });
@@ -127,6 +141,19 @@ const apiEnvironmentSchema = z
   });
 
 export type ApiEnvironment = z.infer<typeof apiEnvironmentSchema>;
+
+function sameSite(webOrigin: string, apiOrigin: string): boolean {
+  try {
+    const web = new URL(webOrigin).hostname;
+    const api = new URL(apiOrigin).hostname;
+    const domain = getDomain(web, { allowPrivateDomains: true });
+    return (
+      web === api || (domain !== null && domain === getDomain(api, { allowPrivateDomains: true }))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export class EnvironmentValidationError extends Error {
   readonly variables: readonly string[];

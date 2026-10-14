@@ -1,0 +1,130 @@
+name: neurochess
+
+x-api: &api
+  image: ${API_IMAGE:?Set the immutable API image tag or digest}
+  init: true
+  env_file: ${API_ENV_FILE:?Set an absolute external API env file path}
+  environment:
+    NODE_ENV: production
+    API_HOST: 0.0.0.0
+    API_PORT: 3001
+    SANDBOX_ENABLED: "false"
+    WEB_ORIGIN: ${WEB_ORIGIN:?Set the HTTPS web origin}
+    BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set the same-site HTTPS API origin}
+  secrets:
+    - postgres-cert
+  read_only: true
+  tmpfs:
+    - /tmp
+  networks:
+    - edge
+    - database
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
+services:
+  web:
+    image: ${WEB_IMAGE:?Set the immutable web image tag or digest}
+    restart: unless-stopped
+    environment:
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    mem_limit: 256m
+    pids_limit: 128
+    logging: &logging
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  api:
+    <<: *api
+    # A fixed name makes accidental Compose scaling fail instead of adding owners.
+    container_name: ${COMPOSE_PROJECT_NAME:-neurochess}-api
+    restart: unless-stopped
+    stop_grace_period: 220s
+    mem_limit: 1g
+    pids_limit: 256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/ready',{signal:AbortSignal.timeout(10000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 12s
+      start_period: 20s
+      retries: 3
+    logging: *logging
+
+  migrate:
+    <<: *api
+    profiles: [operations]
+    command: [node, packages/database/dist/migrate-cli.js]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  postgres:
+    image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: neurochess
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-admin-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    entrypoint: [/bin/sh, /opt/neurochess/postgres-entrypoint.sh]
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres-entrypoint.sh:/opt/neurochess/postgres-entrypoint.sh:ro
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-neurochess.sh:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    secrets:
+      - postgres-admin-password
+      - postgres-app-password
+      - postgres-cert
+      - postgres-key
+    networks: [database]
+    mem_limit: 2g
+    pids_limit: 256
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d neurochess"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+secrets:
+  postgres-admin-password:
+    file: ${SECRETS_DIR:?Set an absolute external secret directory}/postgres-admin-password
+  postgres-app-password:
+    file: ${SECRETS_DIR}/postgres-app-password
+  postgres-cert:
+    file: ${SECRETS_DIR}/postgres-cert.pem
+  postgres-key:
+    file: ${SECRETS_DIR}/postgres-key.pem
+
+networks:
+  edge:
+  database:
+    internal: true
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

@@ -12,11 +12,23 @@ const databaseUrlSchema = z
     }
   });
 
-export function parseDatabaseUrl(value: unknown): string {
+export function parseDatabaseUrl(value: unknown, production = false): string {
   const result = databaseUrlSchema.safeParse(value);
 
   if (!result.success) {
     throw new Error("Invalid environment variables: DATABASE_URL");
+  }
+
+  if (production) {
+    const url = new URL(result.data);
+    if (
+      url.searchParams.getAll("sslmode").length !== 1 ||
+      url.searchParams.get("sslmode") !== "verify-full" ||
+      url.searchParams.has("ssl") ||
+      url.searchParams.has("uselibpqcompat")
+    ) {
+      throw new Error("Invalid environment variables: DATABASE_URL");
+    }
   }
 
   return result.data;

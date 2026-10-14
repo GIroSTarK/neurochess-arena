@@ -1,4 +1,5 @@
 export { createDatabase, type DatabaseConnection } from "./client.js";
+export { parseDatabaseUrl } from "./database-url.js";
 export { runMigrations } from "./migrations.js";
 export { rooms, roomCreationOperations } from "./schema/rooms.js";
 export { roomHistoryAccess } from "./schema/shared-history.js";

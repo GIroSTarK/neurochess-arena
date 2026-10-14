@@ -65,35 +65,37 @@ Invalid environment errors contain variable names only. Never add server secrets
 
 The web entrypoint validates `VITE_API_BASE_URL` before creating the router or API clients. Invalid origins render the localized configuration error with the variable name only. The HTTP exception is exactly `localhost`, not loopback IPs, LAN addresses, or localhost subdomains; a root trailing slash is allowed.
 
-The API's `BETTER_AUTH_URL` and `WEB_ORIGIN` accept HTTPS, or HTTP `localhost` outside production. Credentials, paths, trailing slashes, wildcards, queries, and fragments are rejected. Production requires HTTPS and a same-site browser/API deployment for the cookie policy; use `localhost` consistently during development. Trusted auth origins and credentialed CORS use the exact `WEB_ORIGIN`, never a request-supplied Host or forwarded header. No proxy is trusted by default; deployments behind one must deliberately define that boundary before relying on client-specific rate limits.
+The API's `BETTER_AUTH_URL` and `WEB_ORIGIN` accept HTTPS, or HTTP `localhost` outside production. Credentials, paths, trailing slashes, wildcards, queries, and fragments are rejected. Production enforces HTTPS and same-site browser/API origins, including private public-suffix entries; use `localhost` consistently during development. Production database URLs require exactly one `sslmode=verify-full`, optionally with a mounted `sslrootcert`, and reject ambiguous TLS overrides. `NODE_TLS_REJECT_UNAUTHORIZED=0` is rejected in production. Trusted auth origins and credentialed CORS use the exact `WEB_ORIGIN`, never a request-supplied Host or forwarded header. No proxy is trusted by default; the [selected deployment](operations.md) establishes the network boundary, while P5-11 owns consistent forwarded client identity.
 
 Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_` variables. Both applications read the same root `.env`; no second Sandbox flag is needed. Restart development services after changing it, or rebuild the web bundle and restart the API when using `npm start`. The web value is fixed at Vite startup/build time; API checks still apply if the configurations differ.
 
 ## Root commands
 
-| Command                      | Purpose                                                          |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `npm run dev`                | Build shared packages, watch them, and run both applications     |
-| `npm run build`              | Build shared packages, the API, and the Vite production bundle   |
-| `npm start`                  | Run the built API and web preview                                |
-| `npm run lint`               | Run ESLint with zero warnings                                    |
-| `npm run typecheck`          | Type-check project references and tests                          |
-| `npm test`                   | Run unit, PostgreSQL integration, and dependency-boundary checks |
-| `npm run test:unit`          | Run database-free unit tests                                     |
-| `npm run test:integration`   | Run required PostgreSQL-backed tests; fail if unavailable        |
-| `npm run test:e2e`           | Run desktop/mobile browser gameplay and accessibility checks     |
-| `npm run test:performance`   | Check production bundle, worker and replay lab budgets           |
-| `npm run format:check`       | Verify Prettier formatting                                       |
-| `npm run verify`             | Run formatting, lint, types, tests, and build                    |
-| `npm run smoke`              | Start and probe both built services                              |
-| `npm run infra:up`           | Start and health-check PostgreSQL                                |
-| `npm run infra:test:up`      | Start the isolated disposable test PostgreSQL service            |
-| `npm run infra:down`         | Stop PostgreSQL while preserving data                            |
-| `npm run db:generate -- ...` | Generate a named Drizzle migration                               |
-| `npm run auth:generate`      | Regenerate Better Auth's Drizzle schema without database access  |
-| `npm run db:check`           | Check migration metadata for consistency                         |
-| `npm run db:migrate`         | Apply pending migrations                                         |
-| `npm run db:studio`          | Open Drizzle Studio                                              |
+| Command                         | Purpose                                                          |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `npm run dev`                   | Build shared packages, watch them, and run both applications     |
+| `npm run build`                 | Build shared packages, the API, and the Vite production bundle   |
+| `npm start`                     | Run the built API and web preview                                |
+| `npm run lint`                  | Run ESLint with zero warnings                                    |
+| `npm run typecheck`             | Type-check project references and tests                          |
+| `npm test`                      | Run unit, PostgreSQL integration, and dependency-boundary checks |
+| `npm run test:unit`             | Run database-free unit tests                                     |
+| `npm run test:integration`      | Run required PostgreSQL-backed tests; fail if unavailable        |
+| `npm run test:e2e`              | Run desktop/mobile browser gameplay and accessibility checks     |
+| `npm run test:performance`      | Check production bundle, worker and replay lab budgets           |
+| `npm run format:check`          | Verify Prettier formatting                                       |
+| `npm run verify`                | Run formatting, lint, types, tests, and build                    |
+| `npm run smoke`                 | Start and probe both built services                              |
+| `npm run build:deployment:test` | Build API/Caddy images for the isolated production rehearsal     |
+| `npm run test:deployment`       | Rehearse actual production containers and all browser engines    |
+| `npm run infra:up`              | Start and health-check PostgreSQL                                |
+| `npm run infra:test:up`         | Start the isolated disposable test PostgreSQL service            |
+| `npm run infra:down`            | Stop PostgreSQL while preserving data                            |
+| `npm run db:generate -- ...`    | Generate a named Drizzle migration                               |
+| `npm run auth:generate`         | Regenerate Better Auth's Drizzle schema without database access  |
+| `npm run db:check`              | Check migration metadata for consistency                         |
+| `npm run db:migrate`            | Apply pending migrations                                         |
+| `npm run db:studio`             | Open Drizzle Studio                                              |
 
 ## Dependency direction
 
@@ -136,7 +138,7 @@ Static hosting must return the web HTML for these document paths while preservin
 
 After building, `npm run smoke` starts the built API and Vite preview. It checks that canonical Arena/Sandbox game paths, account/auth/History and unknown paths return the same SPA HTML without redirects; emitted scripts/styles retain their asset types and missing assets requested with a non-HTML Accept header return 404. Overlapping private paths on the API origin must still return JSON authorization/not-found responses even with an HTML Accept header. Use a running, migrated local database; an environment override may point the smoke API at the disposable test database after integration/browser suites stop.
 
-Vite preview's generic fallback also returns HTML for missing asset URLs when Accept permits HTML or `*/*`. The selected host must exclude static asset paths from its SPA fallback regardless of Accept and verify document routes, assets and the separate JSON API origin. Preview checks do not select a hosting provider or satisfy this actual-host deployment requirement.
+Vite preview's generic fallback also returns HTML for missing asset URLs when Accept permits HTML or `*/*`. The [production Caddy artifact and rehearsal](operations.md#probes-and-acceptance) exclude static asset paths from fallback regardless of Accept and verify document routes, MIME/cache behavior and the separate JSON API origin. `npm run smoke` remains the local preview check; it does not establish live-host deployment behavior.
 
 ### Extending routes
 
@@ -829,7 +831,7 @@ Screenshots and failure context default to `neurochess-playwright-results` in th
 
 The duration reporter writes `durations.json` in the same output directory. It records the run status/start/duration and each attempt's project, source location, static test title, repeat/retry index, status and duration in milliseconds. Its field allowlist excludes errors, console output, steps, attachments and configuration metadata. Keep credentials and runtime values out of test titles. Collection-only runs do not replace duration evidence.
 
-CI runs on pull requests and pushes to `master`. The `checks` job runs Compose and migration checks, `npm run verify`, and the built-service startup check `npm run smoke`. In parallel, the `e2e` matrix splits `chromium-desktop` and `chromium-mobile` into two shards each, while the independent `performance` matrix runs each project once without sharding. The final `verify` check runs even when a dependency fails, is cancelled, or is skipped, and passes only when `checks`, the entire E2E matrix, and the entire performance matrix succeed.
+CI runs on pull requests and pushes to `master`. The `checks` job runs Compose and migration checks, `npm run verify`, and the built-service startup check `npm run smoke`. In parallel, the `e2e` matrix splits `chromium-desktop` and `chromium-mobile` into two shards each, while the independent `performance` matrix runs each project once without sharding. The `deployment` matrix builds and rehearses production containers on AMD64 and ARM64, including Chromium/Firefox/WebKit checks through Caddy. The final `verify` check runs even when a dependency fails, is cancelled, or is skipped, and passes only when `checks`, the entire E2E matrix, the entire performance matrix and both deployment jobs succeed.
 
 The separate Cross-browser E2E workflow runs `firefox-desktop` in three shards and both WebKit projects in four. To keep their runner minutes off ordinary changes, it runs weekly, on manual dispatch, and on pull requests that change `package-lock.json`, `playwright.config.ts` or either browser workflow, so dependency and Playwright updates exercise every engine on the pull request. Other Firefox/WebKit regressions can surface up to a week later; dispatch it for changes to focus, scrolling, clipboard, cookies, sockets or workers, and before a release. The run is advisory: it reports separately from `verify` and does not block merging, so check its result before merging a dependency or Playwright update.
 
@@ -863,7 +865,7 @@ The cross-device acceptance cases sign in through independent browser contexts, 
 
 For a fresh-install check, run `npm ci`, provision a new empty database in the disposable PostgreSQL test service, and point both `TEST_DATABASE_URL` and the migration command's `DATABASE_URL` at that database. Verify it is empty before running `npm run db:migrate` twice, then run `npm run db:check`, `npm run verify`, `npm run test:e2e` and `npm run smoke`. Do not repoint or reset a development/shared database. The populated-schema integration test separately applies the committed SQL in an isolated schema, verifies retained rows and encrypted credentials through migration `0018`, and removes its own schema. Do not run integration and browser suites concurrently: both exercise the browser-server lifecycle on ports 3101, 5174 and 5175. See [CI](#browser-tests) for the checks split across independent runners.
 
-All default acceptance tests use real application/auth/database services with injected email, OAuth and inference transports; SMTP protocol tests use a loopback mailbox. They do not verify live consent screens, external inbox delivery, live provider availability or production infrastructure. Before deployment, configure and manually verify Google/GitHub clients and callback URLs, SMTP sender/TLS/deliverability, same-site HTTPS origins and proxy trust, stable auth/encryption secrets, and separate encryption-key backup/recovery. Hosting, monitoring, database/backup retention, inactive guest retention and key rotation still require the decisions/procedures in [deployment constraints](architecture.md#deployment-constraints) and [credential operations](#saved-credential-api). Physical-browser and operational release gates remain tracked in the [roadmap](roadmap.md).
+All default acceptance tests use real application/auth/database services with injected email, OAuth and inference transports; SMTP protocol tests use a loopback mailbox. They do not verify live consent screens, external inbox delivery, live provider availability or production infrastructure. Before deployment, configure and manually verify Google/GitHub clients and callback URLs, SMTP sender/TLS/deliverability, same-site HTTPS origins and proxy trust, stable auth/encryption secrets, and separate encryption-key backup/recovery. Follow the selected [hosting and rollout procedure](operations.md); monitoring alerts, database/backup retention, inactive guest retention and key rotation still require the decisions/procedures in [deployment constraints](architecture.md#deployment-constraints) and [credential operations](#saved-credential-api). Physical-browser and operational release gates remain tracked in the [roadmap](roadmap.md).
 
 ## Migrations
 
@@ -913,6 +915,6 @@ Migration `0005_ai_invocation_policy.sql` adds logical AI turns and normalized i
 
 The API logger omits request bodies, retains only method/path/request ID for requests, strips URL queries, masks unknown auth paths that may contain protocol tokens, and recursively redacts credential-like object fields. Raw exceptions are reduced to a safe name and non-secret code before serialization; the error serializer preserves only those diagnostic fields when it receives an already-sanitized record. Better Auth's console logger and telemetry are disabled; auth errors emit fixed application diagnostics without raw library errors.
 
-Idle PostgreSQL pool errors write a fixed, credential-free diagnostic to stderr without terminating the API. The pool remains available for new connections, and `/ready` checks current database availability on every request, returning `503` when its query fails.
+Idle PostgreSQL pool errors write a fixed, credential-free diagnostic to stderr without terminating the API. The pool remains available for new connections, and `/ready` checks current database availability on every request, returning `503` when its query fails. Pool acquisition/connections and readiness queries each have a five-second deadline. The [operations runbook](operations.md) defines the container shutdown, network and rollout boundaries.
 
 System errors retain `code`, `message`, and `requestId`. Structured game errors use the same envelope with enumerated codes; only `GAME_CONFLICT` additionally requires an already-authorized `currentSnapshot`. Messages come from the API's English error catalog, never domain/engine exceptions. Domain failures expose codes and, for an invalid history entry, its one-based ply only. No error accepts arbitrary details or raw exception payloads. Guest/game responses are `no-store`, and the raw guest token appears only in its cookie. Corrupted persisted history or projections yield a safe `500` and leave game data unchanged. Add logging and error tests whenever a new boundary accepts credentials or provider payloads.

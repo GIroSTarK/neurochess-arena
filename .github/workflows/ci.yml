@@ -71,7 +71,7 @@ jobs:
 
   e2e:
     uses: ./.github/workflows/browser-e2e.yml
-    # Firefox and WebKit run in cross-browser.yml to keep their runner minutes off ordinary changes.
+    # Full Firefox/WebKit suites run in cross-browser.yml; deployment probes below cover each engine.
     with:
       matrix: |
         {
@@ -141,9 +141,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  deployment:
+    name: deployment-${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install acceptance browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Build immutable deployment artifacts locally
+        run: npm run build:deployment:test
+      - name: Rehearse production deployment in isolation
+        run: npm run test:deployment
+
   verify:
     if: ${{ always() }}
-    needs: [checks, e2e, performance]
+    needs: [checks, e2e, performance, deployment]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -152,7 +177,9 @@ jobs:
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
+          DEPLOYMENT_RESULT: ${{ needs.deployment.result }}
         run: |
           test "$CHECKS_RESULT" = success
           test "$E2E_RESULT" = success
           test "$PERFORMANCE_RESULT" = success
+          test "$DEPLOYMENT_RESULT" = success
