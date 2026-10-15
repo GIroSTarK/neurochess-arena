@@ -692,6 +692,8 @@ CI uses its own ephemeral `neurochess_test` database and runs integration tests 
 
 ## Browser tests
 
+For a release candidate, use the [MVP release acceptance checklist](operations.md#mvp-release-acceptance) to combine this browser matrix with migrations, production artifacts, recovery, live-service and manual evidence. A green development harness alone does not establish release readiness.
+
 ### Supported browsers and version policy
 
 Release targets are the current stable Chrome, Edge and Firefox on vendor-supported
@@ -792,7 +794,7 @@ matching Linux browser server while keeping tests, services and output in the cu
 checkout. In a separate terminal, start:
 
 ```text
-docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.0-noble npx -y playwright@1.64.0 run-server --port 3000 --host 0.0.0.0
+docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.0-noble npx -y playwright@1.64.0 run-server --port 3000 --host 0.0.0.0 --unsafe
 ```
 
 Then run from PowerShell:
@@ -807,6 +809,11 @@ Remove-Item Env:PW_TEST_CONNECT_EXPOSE_NETWORK
 
 Stop the temporary server with `docker stop neurochess-playwright`. Keep its published
 port bound to loopback and use the same pinned Playwright version on both ends. The
+`--unsafe` flag lets trusted local tests pass their browser launch options: without it,
+the server discards `ignoreDefaultArgs`, leaving Chromium's native scrollbars hidden
+and invalidating the model-list drag regression. Use this flag only for this disposable,
+loopback-only server with trusted test clients; do not expose it to a shared network or
+mount host credentials or the Docker socket into its container. The
 loopback tunnel preserves localhost HTTPS origins and Secure cookie behavior. Downloads
 are read through streams so assertions also work with a remote browser. This uses
 [Playwright's supported remote-server workflow](https://playwright.dev/docs/docker#remote-connection).

@@ -167,7 +167,9 @@ Deliverables:
 - [x] encrypted backups, separate secret recovery, isolated restoration, privacy reconciliation and production cutover verification;
 - [x] deployment selection, reproducible API/web artifacts, production configuration and isolated rollout rehearsal;
 - [x] private operational metrics, actionable alerts, dashboard and isolated failure/recovery drills;
-- [ ] live release acceptance checklist.
+- [x] map all eight product acceptance criteria to automated evidence and explicit live/manual gates in the [release checklist](operations.md#mvp-release-acceptance);
+- [x] verify available local release acceptance across the complete browser matrix, migrations, production artifacts, performance, restart/rollback and encrypted recovery; correct the readiness-test race and remote-browser launch instructions found during acceptance;
+- [ ] complete release acceptance, including physical browsers/accessibility, live services, licensing and operational verification.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
 

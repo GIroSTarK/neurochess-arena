@@ -114,7 +114,9 @@ describe("committed Sandbox route data", () => {
     vi.stubGlobal("fetch", http.fetch);
     const { router } = renderApp(options, { initialEntries: ["/sandbox"] });
     await screen.findByRole("button", { name: "Start sandbox" });
-    expect(screen.getByRole("status")).toHaveTextContent("Service unavailable");
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("Service unavailable"),
+    );
     expect(screen.getByRole("button", { name: "Start sandbox" })).toHaveAttribute(
       "aria-disabled",
       "true",
