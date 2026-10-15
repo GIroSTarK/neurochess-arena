@@ -54,6 +54,7 @@ export {
 } from "./game-repository.js";
 export {
   createAuthDatabaseAdapter,
+  pruneAuthRateLimits,
   withAuthUserLock,
   AuthAccountUnavailableError,
   AccountDeletionSessionError,

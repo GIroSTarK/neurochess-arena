@@ -1,4 +1,4 @@
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import { isTerminal } from "../gameplay/snapshot";
 
 import type { MatchContext } from "./context";
@@ -33,6 +33,7 @@ export class InvocationFeed {
       store.get().details?.snapshot.gameId === snapshot.gameId &&
       store.get().details?.snapshot.version === snapshot.version;
     store.setInvocations({ ...store.getInvocations(), phase: "loading" });
+    let nextPollMs = 3000;
     try {
       const records = await api.invocations(snapshot.gameId, signal);
       if (!current()) return;
@@ -64,6 +65,9 @@ export class InvocationFeed {
         store.setFlow({ ...flow, issue: { kind: "provider", color: turn.color, error } });
       }
     } catch (error) {
+      if (error instanceof RequestRateLimitFailure) {
+        nextPollMs = Math.max(nextPollMs, error.retryAfterSeconds * 1000);
+      }
       if (current() && !accessLost(error)) {
         store.setInvocations({ ...store.getInvocations(), phase: "error" });
       }
@@ -76,7 +80,7 @@ export class InvocationFeed {
         if (!isTerminal(snapshot)) {
           this.timer = setTimeout(() => {
             void this.load();
-          }, 3000);
+          }, nextPollMs);
         }
       }
     }

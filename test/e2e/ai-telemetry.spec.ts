@@ -528,7 +528,9 @@ test("live details stay within the primary controls across tabs and long comment
     }
   }
   const read = commentary.getByRole("button", { name: "Read full commentary: Black · 1. e5" });
-  await read.click();
+  // WebKit pointer clicks do not focus buttons; exercise keyboard focus restoration explicitly.
+  await read.focus();
+  await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Commentary · Black · 1. e5" });
   await expect(dialog.getByText(longCommentary, { exact: true })).toBeVisible();
   const close = dialog.getByRole("button", { name: "Close commentary" });
@@ -567,7 +569,7 @@ test("live details stay within the primary controls across tabs and long comment
   await close.click();
   await expect(dialog).toHaveCount(0);
   await expect(read).toBeFocused();
-  await read.click();
+  await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(read).toBeFocused();

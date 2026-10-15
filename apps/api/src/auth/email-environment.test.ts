@@ -4,6 +4,7 @@ import { parseApiEnvironment } from "../env.js";
 
 const base = {
   NODE_ENV: "production",
+  TRUSTED_PROXY_IP: "172.30.0.2",
   WEB_ORIGIN: "https://arena.example.com",
   BETTER_AUTH_URL: "https://api.example.com",
   BETTER_AUTH_SECRET: "smtp-environment-fixture-secret-only",

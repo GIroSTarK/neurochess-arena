@@ -45,6 +45,7 @@ const apiEnvironmentSchema = z
     NODE_TLS_REJECT_UNAUTHORIZED: z.string().optional(),
     API_HOST: z.string().min(1).default("127.0.0.1"),
     API_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
+    TRUSTED_PROXY_IP: z.union([z.ipv4(), z.ipv6()]).optional(),
     WEB_ORIGIN: originSchema.default("http://localhost:5173"),
     BETTER_AUTH_URL: originSchema,
     BETTER_AUTH_SECRET: z
@@ -121,6 +122,9 @@ const apiEnvironmentSchema = z
       context.addIssue({ code: "custom", path: ["SANDBOX_ENABLED"] });
     }
     if (environment.NODE_ENV === "production") {
+      if (!environment.TRUSTED_PROXY_IP) {
+        context.addIssue({ code: "custom", path: ["TRUSTED_PROXY_IP"] });
+      }
       if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
         context.addIssue({ code: "custom", path: ["NODE_TLS_REJECT_UNAUTHORIZED"] });
       }

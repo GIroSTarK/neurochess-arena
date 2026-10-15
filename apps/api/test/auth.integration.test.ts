@@ -364,6 +364,22 @@ describe("PostgreSQL Better Auth foundation", () => {
     expect(preflight.headers["access-control-allow-credentials"]).toBe("true");
   });
 
+  it("reclaims expired auth counters even when every request uses a new IP", async () => {
+    const oldKey = `${ip}|/old-fixture`;
+    const liveKey = `${ip}|/live-fixture`;
+    await database.db.insert(authRateLimits).values([
+      { key: oldKey, count: 3, lastRequest: Date.now() - 120_000 },
+      { key: liveKey, count: 3, lastRequest: Date.now() },
+    ]);
+    expect((await session()).statusCode).toBe(200);
+    expect(
+      await database.db.select().from(authRateLimits).where(eq(authRateLimits.key, oldKey)),
+    ).toHaveLength(0);
+    expect(
+      await database.db.select().from(authRateLimits).where(eq(authRateLimits.key, liveKey)),
+    ).toHaveLength(1);
+  });
+
   it("enforces the database-backed rate limit across instances despite spoofed forwarding headers", async () => {
     const now = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(now);

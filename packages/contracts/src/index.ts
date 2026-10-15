@@ -177,6 +177,7 @@ export {
   type ProfileErrorCode,
 } from "./profile.js";
 export * from "./credential.js";
+export { rateLimitResponseSchema } from "./system.js";
 export * from "./pricing.js";
 export {
   billingUsageSchema,

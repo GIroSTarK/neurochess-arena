@@ -1,6 +1,7 @@
 import type { GameDetails, ModelDiscoveryResult } from "@neurochess/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { RequestRateLimitFailure } from "../api/failures";
 import { ApiFailure } from "../api/sandbox-client";
 import { createSessionCredentials } from "../api/session-credentials";
 import { deferred, setupModels } from "../test/ai-setup";
@@ -53,6 +54,14 @@ async function fixture() {
 }
 
 describe("independent AI setup", () => {
+  it("keeps application throttling distinct from provider quota during discovery", async () => {
+    const { api, controller } = await fixture();
+    controller.setKey("white", "white-sentinel-key");
+    api.discover.mockRejectedValueOnce(new RequestRateLimitFailure(60));
+    await controller.discover("white");
+    expect(controller.getSnapshot().seats.white.issue).toEqual({ code: "rate_limited" });
+    expect(api.discover).toHaveBeenCalledOnce();
+  });
   it.each(["discover", "create", "unfinished"] as const)(
     "clears both seat credentials and blocks setup on PROFILE_REQUIRED from %s",
     async (source) => {

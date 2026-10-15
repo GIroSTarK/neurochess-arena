@@ -73,6 +73,7 @@ export const en = {
       stopped: "Room connection stopped",
     },
     playErrors: {
+      rateLimited: "Too many requests. Wait before retrying this action.",
       uncertain:
         "The acknowledgement was lost. Wait for synchronization or explicitly retry the same move. A close or resignation needs a fresh decision after reconnecting.",
       synchronize:
@@ -141,7 +142,7 @@ export const en = {
         "Your session is no longer available. Sign in again. A new guest cannot reclaim an expired guest seat.",
       unverified: "Verify your email before creating or joining a room.",
       self: "You cannot join your own room. Share the invitation with another player.",
-      limited: "Too many invitation requests. Wait a moment, then try again.",
+      limited: "Too many requests. Wait a minute, then try again.",
       operation:
         "The previous creation request can no longer be recovered. Check your unfinished game before creating a new room.",
       uncertain:
@@ -249,6 +250,7 @@ export const en = {
         "This save may already exist. Refresh your saved keys before saving again.",
       CREDENTIAL_LIMIT_REACHED:
         "Your account has 100 saved keys. Revoke a key before saving another.",
+      RATE_LIMITED: "Too many requests. Wait a minute, then try again.",
       CREDENTIAL_UNAVAILABLE:
         "The operation could not be confirmed. Refresh your saved keys before trying again. If saving remains unavailable, use a key for this tab.",
     },
@@ -484,6 +486,8 @@ export const en = {
       "The last operation could not be confirmed. No new moves will be requested until you synchronize and pause.",
     recover: "Synchronize and pause",
     retryControl: "Retry control",
+    rateLimited:
+      "Too many requests. Wait before retrying this action. No new AI moves will be requested until you recover.",
     controllerLost: "This tab lost control. Synchronize and pause before continuing.",
     controllerBusy: "Another tab controls this game. Synchronize and pause to take control here.",
     unavailable: "The game could not be loaded. Check your connection and try again.",
@@ -779,6 +783,7 @@ export const en = {
     network: "The service could not be reached. Check your connection and try again.",
     timeout: "The request took too long. Please try again.",
     malformed: "The service returned an unreadable response. Please try again.",
+    rateLimited: "Too many requests. Wait a minute, then retry this action.",
     uncertain:
       "Your command could not be confirmed. Check the game status or retry the same command.",
     syncRequired:

@@ -20,6 +20,12 @@ import type { AccountAuth } from "./auth/service.js";
 import { registerCredentialRoutes } from "./credentials/routes.js";
 import type { CredentialService } from "./credentials/service.js";
 import { type GameApiOptions, registerGameRoutes } from "./games/routes.js";
+import {
+  handleRateLimitError,
+  registerRequestLimits,
+  type RequestLimitOptions,
+} from "./limits/http.js";
+import { proxyTrust, registerProxyBoundary } from "./limits/proxy.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
 import type { RoomConnectionLimits } from "./realtime/connections.js";
@@ -37,6 +43,8 @@ export interface BuildAppOptions {
   readonly serverFactory?: FastifyServerOptions["serverFactory"];
   readonly readiness: ReadinessProbe;
   readonly webOrigin: string;
+  readonly trustedProxyIp?: string;
+  readonly requestLimits?: RequestLimitOptions;
   readonly gameApi?: Omit<GameApiOptions, "webOrigin" | "auth">;
   readonly auth?: AccountAuth;
   readonly profiles?: ProfileService;
@@ -54,6 +62,7 @@ export async function buildApp(options: BuildAppOptions) {
     requestTimeout: 30_000,
     connectionTimeout: 210_000,
     keepAliveTimeout: 5_000,
+    trustProxy: proxyTrust(options.trustedProxyIp),
     ...(options.serverFactory ? { serverFactory: options.serverFactory } : {}),
   });
   const routes = app.withTypeProvider<ZodTypeProvider>();
@@ -61,15 +70,20 @@ export async function buildApp(options: BuildAppOptions) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  registerProxyBoundary(app, options.trustedProxyIp);
+
   await app.register(cookie);
 
   await app.register(cors, {
     methods: ["GET", "HEAD", "OPTIONS", "POST"],
     credentials: true,
+    exposedHeaders: ["Retry-After"],
     origin(origin, callback) {
       callback(null, origin === options.webOrigin);
     },
   });
+
+  registerRequestLimits(app, options.requestLimits);
 
   if (options.rooms && options.gameApi && options.roomEvents) {
     await app.register(registerRoomRealtime, {
@@ -166,6 +180,7 @@ export async function buildApp(options: BuildAppOptions) {
   });
 
   app.setErrorHandler((error, request, reply) => {
+    if (handleRateLimitError(error, request, reply)) return;
     request.log.error({ err: error }, "Request failed");
 
     const statusCode = errorStatusCode(error);

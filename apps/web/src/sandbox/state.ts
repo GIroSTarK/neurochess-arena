@@ -24,6 +24,7 @@ export type SandboxNotice =
   | "network"
   | "timeout"
   | "malformed"
+  | "rate_limited"
   | "uncertain"
   | "sync-required"
   | "synchronized"

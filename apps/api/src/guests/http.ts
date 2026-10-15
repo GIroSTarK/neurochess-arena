@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { GuestPrincipal } from "../identity/principal.js";
+import { enforcePrincipalLimit } from "../limits/http.js";
 
 import { GUEST_COOKIE_NAME, type GuestIdentity, type GuestService } from "./service.js";
 
@@ -24,6 +25,7 @@ export async function authenticateGuestRequest(
   reply: FastifyReply,
 ): Promise<GuestPrincipal> {
   const identity = await guests.authenticate(request.cookies[GUEST_COOKIE_NAME]);
+  enforcePrincipalLimit(request, identity.principal);
   setGuestCookie(reply, identity, guests.ttlSeconds);
   return identity.principal;
 }

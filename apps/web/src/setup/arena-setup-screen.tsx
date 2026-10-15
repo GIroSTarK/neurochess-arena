@@ -53,6 +53,8 @@ export function ArenaSetupScreen({
 
   function issueMessage(issue: SetupIssue): string {
     switch (issue.code) {
+      case "rate_limited":
+        return t("notices.rateLimited");
       case "unavailable":
         return t("setup.unavailable");
       case "access":

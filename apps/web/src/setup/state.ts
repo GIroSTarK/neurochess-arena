@@ -17,7 +17,8 @@ export const emptyParameters = (): ParameterDraft => ({
 });
 
 export type SetupIssue =
-  ProviderFailure | { code: "unavailable" | "access" | "key_format" | "creation_uncertain" };
+  | ProviderFailure
+  | { code: "unavailable" | "access" | "key_format" | "creation_uncertain" | "rate_limited" };
 
 export interface SeatSetupState {
   readonly provider: AiProvider;

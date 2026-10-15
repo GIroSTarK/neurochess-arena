@@ -22,6 +22,7 @@ const noticeKeys = {
   network: "notices.network",
   timeout: "notices.timeout",
   malformed: "notices.malformed",
+  rate_limited: "notices.rateLimited",
   uncertain: "notices.uncertain",
   "sync-required": "notices.syncRequired",
   synchronized: "notices.synchronized",

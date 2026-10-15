@@ -2,6 +2,7 @@ import { chessColorSchema, gameIdSchema, type RoomView } from "@neurochess/contr
 import { replace } from "react-router";
 import { z } from "zod";
 
+import { RequestRateLimitFailure } from "../api/failures";
 import { createRoomApi, RoomFailure } from "../api/room-client";
 import type { AppRouteContext } from "../routing/route-context";
 import {
@@ -49,6 +50,7 @@ type Pending =
   | { kind: "owner" };
 
 function issueFor(error: unknown, owner = false): RoomIssue {
+  if (error instanceof RequestRateLimitFailure) return "limited";
   if (!(error instanceof RoomFailure) || error.kind !== "api") return "uncertain";
   switch (error.code) {
     case "GAME_CONFLICT":
@@ -337,7 +339,7 @@ export function roomRouteData(
       if (
         issue !== "uncertain" &&
         issue !== "synchronize" &&
-        !(pending?.kind === "join" && issue === "limited")
+        !((pending?.kind === "join" || pending?.kind === "create") && issue === "limited")
       ) {
         pending = null;
         memory.update({ pending: null });

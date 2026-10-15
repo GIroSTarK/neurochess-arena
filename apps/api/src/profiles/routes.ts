@@ -11,6 +11,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import type { AccountAuth } from "../auth/service.js";
+import { enforcePrincipalLimit, handleRateLimitError } from "../limits/http.js";
 import { profileErrorMessages } from "../locales/en.js";
 
 import { ProfileRequestError, type ProfileService } from "./service.js";
@@ -39,6 +40,7 @@ export async function registerProfileRoutes(
     }
   });
   app.setErrorHandler((error, request, reply) => {
+    if (handleRateLimitError(error, request, reply)) return;
     const code: ProfileErrorCode =
       error instanceof ProfileRequestError
         ? error.code
@@ -70,6 +72,7 @@ export async function registerProfileRoutes(
     if (!value || (expected.data !== undefined && expected.data !== value.userId)) {
       throw new ProfileRequestError("PROFILE_UNAUTHORIZED");
     }
+    enforcePrincipalLimit(request, value);
     return value;
   }
   const response = {

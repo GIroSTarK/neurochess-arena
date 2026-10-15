@@ -9,6 +9,7 @@ x-api: &api
     API_HOST: 0.0.0.0
     API_PORT: 3001
     SANDBOX_ENABLED: "false"
+    TRUSTED_PROXY_IP: ${PROXY_IP:-172.30.0.2}
     WEB_ORIGIN: ${WEB_ORIGIN:?Set the HTTPS web origin}
     BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set the same-site HTTPS API origin}
   secrets:
@@ -36,7 +37,9 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
-    networks: [edge]
+    networks:
+      edge:
+        ipv4_address: ${PROXY_IP:-172.30.0.2}
     mem_limit: 256m
     pids_limit: 128
     logging: &logging
@@ -121,6 +124,10 @@ secrets:
 
 networks:
   edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-172.30.0.0/24}
+          ip_range: ${EDGE_DYNAMIC_RANGE:-172.30.0.128/25}
   database:
     internal: true
 

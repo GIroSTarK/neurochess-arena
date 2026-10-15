@@ -5,6 +5,8 @@ import type {
   RoomErrorCode,
 } from "@neurochess/contracts";
 
+export const requestLimitMessage = "Too many requests. Wait before trying again.";
+
 export const roomErrorMessages: Readonly<Record<RoomErrorCode, string>> = {
   ROOM_OPERATION_UNAVAILABLE:
     "This room creation request is unavailable. Start a new creation action.",

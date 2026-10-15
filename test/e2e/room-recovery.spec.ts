@@ -8,7 +8,10 @@ import { confirm, createRoom, expectSharedResult, joinRoom, playRoomLine } from 
 test("both account browsers recover multiple moves after every tab disconnects without changing the game", async ({
   page,
   newContext,
+  browserName,
 }, testInfo) => {
+  // Six full document loads across three pages exceed a single-flow budget in Firefox.
+  if (browserName === "firefox") test.setTimeout(90_000);
   const { invitation, gameId } = await createRoom(page, "White");
   const touch = Boolean(testInfo.project.use.hasTouch);
   const opponent = await (

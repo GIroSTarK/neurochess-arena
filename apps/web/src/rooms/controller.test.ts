@@ -5,7 +5,7 @@ import {
 } from "@neurochess/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import type { RoomGameApi } from "../api/room-game-client";
 import type { RoomRealtime } from "../api/room-realtime-client";
 import { FOOLS_MATE, GAME_ID, snapshot } from "../test/fixtures";
@@ -112,25 +112,28 @@ describe("room controller", () => {
     h.controller.endLifetime();
   });
 
-  it("freezes an uncertain move and retries the identical command only on explicit action", async () => {
-    const h = harness();
-    h.sync();
-    h.api.move.mockRejectedValueOnce(new ApiFailure("network"));
-    await h.controller.move("e2e4");
-    const sent = h.api.move.mock.calls[0]![0];
-    expect(h.controller.getSnapshot()).toMatchObject({
-      canMove: false,
-      pendingMove: sent,
-      issue: "uncertain",
-    });
-    await h.controller.move("d2d4");
-    expect(h.api.move).toHaveBeenCalledTimes(1);
-    h.api.move.mockResolvedValue(snapshot(["e2e4"], { version: 2 }));
-    await h.controller.retryMove();
-    expect(h.api.move.mock.calls[1]![0]).toEqual(sent);
-    expect(h.controller.getSnapshot().pendingMove).toBeNull();
-    h.controller.endLifetime();
-  });
+  it.each([new ApiFailure("network"), new RequestRateLimitFailure(60)])(
+    "retains the command and retries only on explicit action after a transport rejection",
+    async (failure) => {
+      const h = harness();
+      h.sync();
+      h.api.move.mockRejectedValueOnce(failure);
+      await h.controller.move("e2e4");
+      const sent = h.api.move.mock.calls[0]![0];
+      expect(h.controller.getSnapshot()).toMatchObject({
+        canMove: false,
+        pendingMove: sent,
+        issue: failure instanceof RequestRateLimitFailure ? "rateLimited" : "uncertain",
+      });
+      await h.controller.move("d2d4");
+      expect(h.api.move).toHaveBeenCalledTimes(1);
+      h.api.move.mockResolvedValue(snapshot(["e2e4"], { version: 2 }));
+      await h.controller.retryMove();
+      expect(h.api.move.mock.calls[1]![0]).toEqual(sent);
+      expect(h.controller.getSnapshot().pendingMove).toBeNull();
+      h.controller.endLifetime();
+    },
+  );
 
   it("a full view proves a lost move outcome without replaying it", async () => {
     const h = harness();

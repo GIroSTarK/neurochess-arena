@@ -25,12 +25,16 @@ export const roomConnectionLimits = {
   reconciliationMs: 15_000,
   maxConnections: 1024,
   maxConnectionsPerIdentity: 8,
+  maxConnectionsPerIp: 96,
+  controlWindowMs: 10_000,
+  maxControlFramesPerWindow: 60,
   maxBufferedBytes: 1024 * 1024,
 };
 export type RoomConnectionLimits = typeof roomConnectionLimits;
 
 interface Connection {
   readonly transport: Duplex;
+  readonly ip: string;
   timer: ReturnType<typeof setTimeout> | undefined;
   identity?: string;
   refresh?: (gameId?: string) => void;
@@ -61,14 +65,20 @@ export function createRoomConnections(
   }
 
   return {
-    reserve(transport: Duplex) {
+    reserve(transport: Duplex, ip: string) {
       if (closed || connections.size >= limits.maxConnections) return false;
+      if (
+        [...connections.values()].filter((connection) => connection.ip === ip).length >=
+        limits.maxConnectionsPerIp
+      ) {
+        return false;
+      }
       const timer = setTimeout(() => {
         release(transport);
         transport.destroy();
       }, limits.handshakeMs);
       timer.unref();
-      connections.set(transport, { transport, timer });
+      connections.set(transport, { transport, timer, ip });
       transport.once("close", () => release(transport));
       return true;
     },
@@ -97,6 +107,27 @@ export function createRoomConnections(
       }
       clearTimeout(connection.timer);
       let stopped = false;
+      let controlFrames = 0;
+      let controlWindow = Date.now();
+      function controlFrame() {
+        if (stopped) return false;
+        const now = Date.now();
+        if (now - controlWindow >= limits.controlWindowMs) {
+          controlWindow = now;
+          controlFrames = 0;
+        }
+        if (++controlFrames <= limits.maxControlFramesPerWindow) return true;
+        close(1008);
+        return false;
+      }
+      socket.on("ping", (data) => {
+        if (controlFrame()) {
+          socket.pong(data, false, (error: Error | undefined) => {
+            if (error) socket.terminate();
+          });
+        }
+      });
+      socket.on("pong", controlFrame);
       let gameId: string | undefined;
       let synchronization: ReturnType<typeof createRoomSynchronization> | undefined;
       const reconciliation = setInterval(

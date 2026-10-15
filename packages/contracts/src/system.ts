@@ -15,5 +15,8 @@ export const safeErrorResponseSchema = z.strictObject({
 });
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export const rateLimitResponseSchema = safeErrorResponseSchema.extend({
+  code: z.literal("RATE_LIMITED"),
+});
 export type ReadinessResponse = z.infer<typeof readinessResponseSchema>;
 export type SafeErrorResponse = z.infer<typeof safeErrorResponseSchema>;

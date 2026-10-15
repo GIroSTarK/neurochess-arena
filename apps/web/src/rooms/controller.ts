@@ -1,6 +1,6 @@
 import type { GameSnapshot, MoveCommand, RoomServerMessage, RoomView } from "@neurochess/contracts";
 
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import type { RoomGameApi } from "../api/room-game-client";
 import type { RoomRealtime } from "../api/room-realtime-client";
 import { ArchiveController } from "../gameplay/archive";
@@ -287,7 +287,11 @@ export class RoomController {
         error.kind === "api" &&
         error.code !== "INTERNAL_SERVER_ERROR";
       if (rejected) this.store.update({ pendingMove: null, issue: "synchronize" });
-      else this.store.update({ issue: move && !this.store.get().pendingMove ? null : "uncertain" });
+      else if (error instanceof RequestRateLimitFailure) {
+        this.store.update({ issue: "rateLimited" });
+      } else {
+        this.store.update({ issue: move && !this.store.get().pendingMove ? null : "uncertain" });
+      }
       if (!move || rejected) this.reconnect();
     } finally {
       if (!lifetime.signal.aborted) this.store.update({ busy: false });

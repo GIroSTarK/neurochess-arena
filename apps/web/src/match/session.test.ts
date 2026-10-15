@@ -1,6 +1,7 @@
 import type { GameSnapshot } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RequestRateLimitFailure } from "../api/failures";
 import { FOOLS_MATE, GAME_ID, OTHER_GAME_ID, snapshot } from "../test/fixtures";
 import { cleanupMatches, matchDetails, matchHarness } from "../test/match-session";
 
@@ -11,6 +12,19 @@ afterEach(() => {
 });
 
 describe("MatchSession", () => {
+  it("shows application throttling separately from provider quota and waits for explicit recovery", async () => {
+    const h = matchHarness(matchDetails());
+    await h.enter();
+    h.api.lifecycle.mockClear();
+    h.session.fail(new RequestRateLimitFailure(60));
+    expect(h.store.get()).toMatchObject({
+      phase: "uncertain",
+      issue: { kind: "notice", code: "rateLimited" },
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
   it.each(["enter", "created"] as const)(
     "rejects room details on %s before AI recovery, telemetry or controller work",
     async (entry) => {

@@ -66,6 +66,7 @@ function setup(path = "/rooms", routes: HttpRoutes = {}, account = true) {
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup());
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   sessionStorage.clear();
   window.history.replaceState(null, "", "/");
 });
@@ -73,7 +74,44 @@ const ready = async (router: ReturnType<typeof setup>["router"]) =>
   vi.waitFor(() => expect(router.state.initialized).toBe(true));
 
 describe("room entry route data", () => {
+  it("keeps the creation operation and color through a lost reply, throttling and client recreation", async () => {
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const operationId = crypto.randomUUID();
+    let attempt = 0;
+    const { router, feature, http, submit } = setup("/rooms", {
+      "POST /rooms/creation-operation": () =>
+        jsonResponse({ operationId, expiresAt: new Date(now + 600_000).toISOString() }),
+      "POST /rooms": () => {
+        attempt++;
+        if (attempt === 1) throw new Error("lost acknowledgement");
+        if (attempt === 2) {
+          return new Response(null, { status: 429, headers: { "Retry-After": "2" } });
+        }
+        return jsonResponse({ room: waitingRoom(), invitation: INVITATION });
+      },
+    });
+    await ready(router);
+    await submit("create", { ownerColor: "black" });
+    await submit("retry-create");
+    expect(feature.memory.getSnapshot()).toMatchObject({ issue: "limited", pending: "create" });
+    await submit("retry-create");
+    expect(attempt).toBe(2);
+    now += 2001;
+    await submit("retry-create");
+    expect(router.state.location.pathname).toBe(`/games/${GAME_ID}`);
+    const requests = http.fetch.mock.calls
+      .filter(([url]) => requestPath(url) === "/rooms")
+      .map(([, init]) => JSON.parse(requestBody(init)) as unknown);
+    expect(requests).toEqual(Array(3).fill({ operationId, ownerColor: "black" }));
+    expect(
+      http.fetch.mock.calls.filter(([url]) => requestPath(url) === "/rooms/creation-operation"),
+    ).toHaveLength(1);
+  });
+
   it("retains an accepted join command through rate-limited acknowledgement recovery", async () => {
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
     let attempt = 0;
     const { router, feature, http, submit } = setup(
       `/rooms/join#invite=${INVITATION}`,
@@ -94,6 +132,9 @@ describe("room entry route data", () => {
     await submit("join");
     await submit("retry-join");
     expect(feature.memory.getSnapshot()).toMatchObject({ issue: "limited", pending: "join" });
+    await submit("retry-join");
+    expect(attempt).toBe(2);
+    now += 60_001;
     await submit("retry-join");
     expect(router.state.location.pathname).toBe(`/games/${GAME_ID}`);
     const requests = http.fetch.mock.calls

@@ -14,9 +14,34 @@ const validEnvironment = {
   AUTH_EMAIL_TRANSPORT: "smtp",
   AUTH_EMAIL_FROM: "accounts@example.com",
   SMTP_HOST: "smtp.example.com",
+  TRUSTED_PROXY_IP: "172.30.0.2",
 };
 
 describe("parseApiEnvironment", () => {
+  it("requires one exact proxy IP in production and rejects wildcard trust", () => {
+    const production = {
+      ...validEnvironment,
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://arena.example.com",
+      BETTER_AUTH_URL: "https://api.example.com",
+    };
+    for (const value of [
+      undefined,
+      "",
+      "true",
+      "172.30.0.0/24",
+      "172.30.0.2,172.30.0.3",
+      "fe80::1%eth0",
+    ]) {
+      expect(() => parseApiEnvironment({ ...production, TRUSTED_PROXY_IP: value })).toThrow(
+        "TRUSTED_PROXY_IP",
+      );
+    }
+    expect(parseApiEnvironment(production).TRUSTED_PROXY_IP).toBe("172.30.0.2");
+    expect(
+      parseApiEnvironment({ ...validEnvironment, TRUSTED_PROXY_IP: undefined }).TRUSTED_PROXY_IP,
+    ).toBeUndefined();
+  });
   it("rejects cross-site production origins including unrelated private suffix tenants", () => {
     const production = {
       ...validEnvironment,

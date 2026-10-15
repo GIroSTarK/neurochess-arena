@@ -1,7 +1,7 @@
 import type { GameDetails, GameSnapshot } from "@neurochess/contracts";
 
 import { AiRequestFailure } from "../api/ai-client";
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import type { ArchiveController } from "../gameplay/archive";
 import { isAccessFailure } from "../gameplay/failures";
 import { isTerminal } from "../gameplay/snapshot";
@@ -192,7 +192,10 @@ export class MatchSession {
     const issue =
       error instanceof AiRequestFailure
         ? ({ kind: "request", code: error.code } as const)
-        : ({ kind: "notice", code: phase } as const);
+        : ({
+            kind: "notice",
+            code: error instanceof RequestRateLimitFailure ? "rateLimited" : phase,
+          } as const);
     this.store.setFlow(
       flow.details && phase === "uncertain"
         ? { ...flow, phase, issue }

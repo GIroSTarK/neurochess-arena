@@ -13,6 +13,7 @@ import {
   cleanupSharedRooms,
   createAuthDatabaseAdapter,
   type DatabaseConnection,
+  pruneAuthRateLimits,
   withAuthUserLock,
 } from "@neurochess/database";
 import { betterAuth } from "better-auth/minimal";
@@ -59,6 +60,25 @@ export function createAccountAuth(
       }
     : undefined;
   const options = authOptions(environment, bufferedSender);
+  const longestRateWindowMs =
+    Math.max(
+      options.rateLimit.window,
+      ...Object.values(options.rateLimit.customRules).map((rule) => rule.window),
+    ) * 1000;
+  let pruneAfter = 0;
+  let pruning: Promise<void> | undefined;
+  async function pruneCounters() {
+    if (Date.now() < pruneAfter) return;
+    // The library prunes on reused windows; new-IP churn must also reclaim old rows.
+    pruning ??= pruneAuthRateLimits(database, Date.now() - longestRateWindowMs)
+      .then(() => {
+        pruneAfter = Date.now() + 60_000;
+      })
+      .finally(() => {
+        pruning = undefined;
+      });
+    await pruning;
+  }
   const createAuth = (
     adapter: ReturnType<typeof createAuthDatabaseAdapter>,
     actions?: AuthAccountActions,
@@ -182,6 +202,7 @@ export function createAccountAuth(
     emailEnabled: Boolean(sender),
     oauthProviders: Object.keys(options.socialProviders) as AuthOAuthProvider[],
     async handle(request, onEmailDeliveryFailure, onCleanupFailure) {
+      await pruneCounters();
       const pending: AuthEmail[] = [];
       const response = await delivery.run(pending, () => handleRequest(request, onCleanupFailure));
       // Dispatch only after commit. Neither SMTP outcomes nor SMTP delays may

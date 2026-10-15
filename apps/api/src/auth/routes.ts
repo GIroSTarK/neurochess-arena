@@ -20,6 +20,7 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 
+import { clientIp } from "../limits/proxy.js";
 import { authEmailAcceptedMessage, authErrorMessages } from "../locales/en.js";
 
 import { oauthAuthorizationEndpoints } from "./oauth.js";
@@ -162,9 +163,8 @@ export async function registerAuthRoutes(
         const value = request.headers[name];
         if (typeof value === "string") headers.set(name, value);
       }
-      // Fastify does not trust proxies. Client-provided forwarding headers cannot
-      // select the auth origin or escape the library's IP-based rate limits.
-      headers.set(AUTH_IP_HEADER, request.ip);
+      // Only the verified direct proxy may supply a client address.
+      headers.set(AUTH_IP_HEADER, clientIp(request));
       // Email flows do not inherit another account's cookie. Only explicit sign-in
       // creates a session; verification and password recovery never auto-sign in.
       if (

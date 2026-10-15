@@ -60,6 +60,8 @@ export class ApiHarness {
       providerTimeouts?: { discoveryMs?: number; turnMs?: number };
       auth?: (database: DatabaseConnection, roomEvents: RoomEvents) => AccountAuth;
       roomRealtimeLimits?: BuildAppOptions["roomRealtimeLimits"];
+      requestLimits?: BuildAppOptions["requestLimits"];
+      trustedProxyIp?: string;
       credentials?: (database: DatabaseConnection) => NonNullable<BuildAppOptions["credentials"]>;
       credentialCipher?: CredentialCipher | null;
     } = {},
@@ -80,6 +82,8 @@ export class ApiHarness {
       readiness: database,
       analysis: createAnalysisService(repository),
       webOrigin: WEB_ORIGIN,
+      ...(options.requestLimits ? { requestLimits: options.requestLimits } : {}),
+      ...(options.trustedProxyIp ? { trustedProxyIp: options.trustedProxyIp } : {}),
       rooms: createRoomService(repository, roomEvents),
       roomEvents,
       ...(options.roomRealtimeLimits ? { roomRealtimeLimits: options.roomRealtimeLimits } : {}),

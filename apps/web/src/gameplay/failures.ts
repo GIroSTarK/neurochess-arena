@@ -20,7 +20,7 @@ const rejectionCodes = [
 
 export type AccessCode = (typeof accessCodes)[number];
 export type RejectionCode = (typeof rejectionCodes)[number];
-export type FailureNotice = GameErrorCode | "network" | "timeout" | "malformed";
+export type FailureNotice = GameErrorCode | "network" | "timeout" | "malformed" | "rate_limited";
 
 export function isAccessCode(code: unknown): code is AccessCode {
   return accessCodes.some((candidate) => candidate === code);

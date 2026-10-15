@@ -8,7 +8,7 @@ import {
 } from "@neurochess/contracts";
 
 import type { AiApi } from "../api/ai-client";
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import type { createSessionCredentials } from "../api/session-credentials";
 import { isAccessFailure } from "../gameplay/failures";
 
@@ -288,7 +288,14 @@ export class SetupController {
     } catch (error: unknown) {
       if (isCancelled()) return;
       if (isAccessFailure(error) && error.code !== "NOT_FOUND") this.loseAccess();
-      else this.seat(color, { discovery: "error", issue: { code: "unavailable" } });
+      else {
+        this.seat(color, {
+          discovery: "error",
+          issue: {
+            code: error instanceof RequestRateLimitFailure ? "rate_limited" : "unavailable",
+          },
+        });
+      }
     }
   }
 
@@ -328,7 +335,15 @@ export class SetupController {
         this.clearKeys();
         this.publish({ ...this.state, phase: "editing", existingGameId: null });
       } else if (isAccessFailure(error) && error.code !== "NOT_FOUND") this.loseAccess();
-      else this.publish({ ...this.state, phase: "unavailable", issue: { code: "unavailable" } });
+      else {
+        this.publish({
+          ...this.state,
+          phase: "unavailable",
+          issue: {
+            code: error instanceof RequestRateLimitFailure ? "rate_limited" : "unavailable",
+          },
+        });
+      }
     }
   }
 
@@ -366,7 +381,9 @@ export class SetupController {
         });
       } else {
         // Creation has no receipt ID. Require a read and another explicit action after a lost reply.
-        const issue: SetupIssue = { code: "creation_uncertain" };
+        const issue: SetupIssue = {
+          code: error instanceof RequestRateLimitFailure ? "rate_limited" : "creation_uncertain",
+        };
         this.publish({ ...this.state, phase: "unavailable", issue });
       }
       return null;

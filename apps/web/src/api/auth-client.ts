@@ -21,6 +21,7 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
+import { RequestRateLimitFailure } from "./failures";
 import { createHttpRequest, validated } from "./http";
 
 export type AccountErrorCode = AuthErrorCode | ProfileErrorCode | "cancelled";
@@ -33,6 +34,7 @@ export class AccountFailure extends Error {
 }
 
 export function accountError(error: unknown): AccountErrorCode {
+  if (error instanceof RequestRateLimitFailure) return "AUTH_RATE_LIMITED";
   return error instanceof AccountFailure ? error.code : "AUTH_UNAVAILABLE";
 }
 

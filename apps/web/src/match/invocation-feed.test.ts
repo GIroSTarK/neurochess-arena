@@ -1,7 +1,7 @@
 import type { GameInvocations } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiFailure } from "../api/failures";
+import { ApiFailure, RequestRateLimitFailure } from "../api/failures";
 import {
   estimatedCost,
   invocationRecords,
@@ -18,6 +18,20 @@ afterEach(() => {
 });
 
 describe("InvocationFeed", () => {
+  it("defers polling for Retry-After without pausing play or dispatching another turn", async () => {
+    const h = matchHarness(matchDetails("white"));
+    await h.enter();
+    h.api.lifecycle.mockClear();
+    h.api.invocations.mockRejectedValueOnce(new RequestRateLimitFailure(30));
+    await h.invocations.load();
+    h.api.invocations.mockClear();
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(h.api.invocations).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.api.invocations).toHaveBeenCalledOnce();
+    expect(h.api.turn).not.toHaveBeenCalled();
+    expect(h.api.lifecycle).not.toHaveBeenCalled();
+  });
   it("refreshes a late discarded estimate at the same terminal revision without dispatching a turn", async () => {
     const details = {
       ...telemetryDetails,

@@ -14,6 +14,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import type { AccountAuth } from "../auth/service.js";
+import { enforcePrincipalLimit, handleRateLimitError } from "../limits/http.js";
 import { credentialErrorMessages } from "../locales/en.js";
 
 import { CredentialRequestError, type CredentialService } from "./service.js";
@@ -43,6 +44,7 @@ export async function registerCredentialRoutes(
     }
   });
   app.setErrorHandler((error, request, reply) => {
+    if (handleRateLimitError(error, request, reply)) return;
     const code: CredentialErrorCode =
       error instanceof CredentialRequestError
         ? error.code
@@ -74,6 +76,7 @@ export async function registerCredentialRoutes(
     if (!value || (expected.data !== undefined && expected.data !== value.userId)) {
       throw new CredentialRequestError("CREDENTIAL_UNAUTHORIZED");
     }
+    enforcePrincipalLimit(request, value);
     return value;
   }
   const errors = {

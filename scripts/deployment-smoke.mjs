@@ -200,6 +200,9 @@ try {
       `BETTER_AUTH_URL=${api}`,
       `API_ENV_FILE=${join(directory, "api.env").replaceAll("\\", "/")}`,
       `SECRETS_DIR=${directory.replaceAll("\\", "/")}`,
+      "EDGE_SUBNET=172.31.242.0/24",
+      "EDGE_DYNAMIC_RANGE=172.31.242.128/25",
+      "PROXY_IP=172.31.242.2",
     ].join("\n"),
   );
   const caddy = (await readFile("deploy/Caddyfile", "utf8")).replaceAll(
@@ -482,6 +485,46 @@ try {
       "Previous API image rollback and return to the new image preserved populated state and sessions.",
     );
   }
+  step("Checking real proxy enforcement against forged client addresses.");
+  let authLimited = false;
+  for (let attempt = 0; attempt < 65; attempt++) {
+    const response = await request(api + "/api/auth/get-session", {
+      headers: {
+        "x-forwarded-for": `192.0.2.${attempt + 1}`,
+        "x-neurochess-client-ip": `198.51.100.${attempt + 1}`,
+        forwarded: `for=192.0.2.${attempt + 1}`,
+      },
+    });
+    if (response.status === 429) {
+      assert.equal(response.json().code, "AUTH_RATE_LIMITED");
+      assert(Number(response.headers["retry-after"]) > 0);
+      authLimited = true;
+      break;
+    }
+    assert.equal(response.status, 200);
+  }
+  assert(authLimited, "Forged headers bypassed the auth IP limit through Caddy");
+  const invitation = randomBytes(32).toString("base64url");
+  let invitationLimited = false;
+  for (let attempt = 0; attempt < 35; attempt++) {
+    const response = await request(api + "/rooms/invitations/resolve", {
+      method: "POST",
+      data: { invitation },
+      headers: { "x-forwarded-for": `203.0.113.${attempt + 1}` },
+    });
+    if (response.status === 429) {
+      assert.equal(response.json().code, "RATE_LIMITED");
+      assert.equal(response.headers["cache-control"], "no-store");
+      assert(Number(response.headers["retry-after"]) > 0);
+      assert.match(response.headers["access-control-expose-headers"], /Retry-After/i);
+      invitationLimited = true;
+      break;
+    }
+    assert.equal(response.status, 200);
+  }
+  assert(invitationLimited, "Forged headers bypassed the HTTP IP limit through Caddy");
+  assert.equal((await socketSnapshot()).snapshot.state, "active");
+  assert.equal((await request(api + `/rooms/${gameId}`, { cookie: guestCookie })).status, 200);
   step("Production rehearsal passed; no live infrastructure was provisioned.");
 } finally {
   for (const socket of sockets) socket.terminate();

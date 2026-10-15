@@ -43,6 +43,7 @@ async function main(): Promise<void> {
     readiness: database,
     analysis: createAnalysisService(repository),
     webOrigin: environment.WEB_ORIGIN,
+    ...(environment.TRUSTED_PROXY_IP ? { trustedProxyIp: environment.TRUSTED_PROXY_IP } : {}),
     auth: createAccountAuth(database, environment, createAuthEmailSender(environment), roomEvents),
     profiles: createProfileService(createProfileRepository(database)),
     credentials: createCredentialService(createCredentialRepository(database), credentialCipher),

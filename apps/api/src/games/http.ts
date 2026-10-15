@@ -5,6 +5,7 @@ import {
 } from "@neurochess/contracts";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import { handleRateLimitError } from "../limits/http.js";
 import { gameErrorMessages } from "../locales/en.js";
 
 import { AiTurnError, GameConflictError, GameRequestError } from "./errors.js";
@@ -33,6 +34,7 @@ export const gameErrorResponses = {
 };
 
 export function handleGameError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (handleRateLimitError(error, request, reply)) return;
   if (error instanceof AiTurnError) {
     return reply
       .code(error.code === "AI_PARAMETERS_INVALID" ? 422 : 409)

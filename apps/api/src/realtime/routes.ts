@@ -7,6 +7,8 @@ import type { AccountAuth } from "../auth/service.js";
 import { GameRequestError } from "../games/errors.js";
 import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
 import type { Principal } from "../identity/principal.js";
+import { enforcePrincipalLimit, handleRateLimitError, sendRateLimit } from "../limits/http.js";
+import { clientIp, ipBudgetKey } from "../limits/proxy.js";
 import { RoomRequestError } from "../rooms/errors.js";
 import type { RoomService } from "../rooms/service.js";
 
@@ -33,6 +35,9 @@ export async function registerRoomRealtime(app: FastifyInstance, options: RoomRe
   const socketOptions = {
     maxPayload: ROOM_MESSAGE_BYTES,
     perMessageDeflate: false,
+    autoPong: false,
+    maxFragments: 32,
+    maxBufferedChunks: 32,
     closeTimeout: 1000,
   };
   await app.register(websocket, {
@@ -63,7 +68,9 @@ export async function registerRoomRealtime(app: FastifyInstance, options: RoomRe
           return reply.code(400).send();
         }
         if (!request.ws) return reply.code(404).send();
-        if (!connections.reserve(request.raw.socket)) return reply.code(429).send();
+        if (!connections.reserve(request.raw.socket, ipBudgetKey(clientIp(request)))) {
+          return sendRateLimit(request, reply, 1);
+        }
       },
       preValidation: async (request, reply) => {
         try {
@@ -79,14 +86,16 @@ export async function registerRoomRealtime(app: FastifyInstance, options: RoomRe
           const principal =
             account ??
             (await options.guests.authenticate(request.cookies[GUEST_COOKIE_NAME])).principal;
+          enforcePrincipalLimit(request, principal);
           await options.rooms.authorize(principal);
           if (!connections.bind(request.raw.socket, principal)) {
             connections.release(request.raw.socket);
-            return await reply.code(429).send();
+            return await sendRateLimit(request, reply, 1);
           }
           principals.set(request, principal);
         } catch (error) {
           connections.release(request.raw.socket);
+          if (handleRateLimitError(error, request, reply)) return;
           const status =
             error instanceof GameRequestError
               ? error.code === "UNAUTHORIZED"

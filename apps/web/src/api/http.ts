@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import { RequestRateLimitFailure } from "./failures";
+
 export type HttpFailureKind = "network" | "timeout" | "malformed" | "cancelled";
 
 interface HttpErrorAdapter<Payload, Context> {
@@ -27,6 +29,8 @@ interface RequestOptions<Context> {
   readonly expectedAccount?: string | undefined;
   readonly acceptStatus?: number;
 }
+
+const cooldownScopes = new WeakMap<object, Map<string, number>>();
 
 export function validated<T>(schema: z.ZodType<T>, value: unknown, failure: () => Error): T {
   const result = schema.safeParse(value);
@@ -57,6 +61,17 @@ export function createHttpRequest<Payload, Context = never>(
 ) {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   const { errors } = options;
+  // Route actions recreate clients. Cooldowns belong to their identity lifetime,
+  // or to the page's fetch implementation for anonymous/public requests.
+  const scope = options.signal ?? options.fetch ?? globalThis.fetch;
+  let cooldowns = cooldownScopes.get(scope);
+  if (!cooldowns) {
+    cooldowns = new Map<string, number>();
+    cooldownScopes.set(scope, cooldowns);
+    const owned = cooldowns;
+    options.signal?.addEventListener("abort", () => owned.clear(), { once: true });
+  }
+  const waits = cooldowns;
 
   return async function request<T>(
     path: string,
@@ -67,6 +82,25 @@ export function createHttpRequest<Payload, Context = never>(
   ): Promise<T> {
     const cancelled = () => signal.aborted || Boolean(options.signal?.aborted);
     if (cancelled()) throw errors.failure("cancelled");
+    for (const [key, until] of waits) if (until <= Date.now()) waits.delete(key);
+    let endpoint: URL;
+    try {
+      endpoint = new URL(path, options.baseUrl);
+    } catch {
+      throw errors.failure("malformed");
+    }
+    const expectation =
+      requestOptions.expectedAccount ?? options.headers?.["x-neurochess-expected-account"] ?? "";
+    const cooldownKey = JSON.stringify([
+      endpoint.origin,
+      body === undefined ? "GET" : "POST",
+      endpoint.pathname,
+      expectation,
+    ]);
+    const until = waits.get(cooldownKey);
+    if (until !== undefined) {
+      throw new RequestRateLimitFailure(Math.max(1, Math.ceil((until - Date.now()) / 1000)));
+    }
     const abort = new AbortController();
     const aborted = () => abort.signal.aborted;
     const cancel = () => abort.abort();
@@ -80,7 +114,7 @@ export function createHttpRequest<Payload, Context = never>(
       if (cancelled()) throw errors.failure("cancelled");
       // Credential verification has its own deadlines; its transport budget starts afterwards.
       if (options.timeoutAfterPreparation) timer = startTimeout();
-      const response = await fetcher(new URL(path, options.baseUrl), {
+      const response = await fetcher(endpoint, {
         method: body === undefined ? "GET" : "POST",
         credentials: "include",
         cache: "no-store",
@@ -97,6 +131,18 @@ export function createHttpRequest<Payload, Context = never>(
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: abort.signal,
       });
+      if (aborted()) throw errors.failure("timeout");
+      if (response.status === 429) {
+        const header = response.headers.get("retry-after");
+        const seconds = header && /^\d{1,4}$/.test(header) ? Number(header) : NaN;
+        const retryAfter =
+          Number.isInteger(seconds) && seconds >= 1 && seconds <= 3600 ? seconds : 60;
+        const oldest = waits.keys().next().value;
+        if (waits.size >= 64 && oldest !== undefined) waits.delete(oldest);
+        waits.set(cooldownKey, Date.now() + retryAfter * 1000);
+        await response.body?.cancel();
+        throw new RequestRateLimitFailure(retryAfter);
+      }
       let payload: unknown;
       try {
         payload = await response.json();
@@ -116,7 +162,7 @@ export function createHttpRequest<Payload, Context = never>(
     } catch (error: unknown) {
       if (cancelled()) throw errors.failure("cancelled");
       if (aborted()) throw errors.failure("timeout");
-      if (errors.isFailure(error)) throw error;
+      if (error instanceof RequestRateLimitFailure || errors.isFailure(error)) throw error;
       // Retain neither exception text nor unvalidated server data at the transport boundary.
       throw errors.failure("network");
     } finally {

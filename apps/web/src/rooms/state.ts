@@ -10,7 +10,7 @@ export interface RoomFlow {
   readonly online: Readonly<Record<ChessColor, boolean>> | null;
   readonly busy: boolean;
   readonly pendingMove: MoveCommand | null;
-  readonly issue: "uncertain" | "synchronize" | "unavailable" | null;
+  readonly issue: "uncertain" | "synchronize" | "unavailable" | "rateLimited" | null;
   readonly invitation: string | null;
   readonly interactionRevision: number;
 }

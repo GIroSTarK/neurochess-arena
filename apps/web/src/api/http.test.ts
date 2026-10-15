@@ -24,6 +24,101 @@ const signal = () => new AbortController().signal;
 afterEach(() => vi.useRealTimers());
 
 describe("shared HTTP transport", () => {
+  it("does not install a cooldown from an obsolete response after request cancellation", async () => {
+    const late = Promise.withResolvers<Response>();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockReturnValueOnce(late.promise)
+      .mockImplementation(async () => jsonResponse({ status: "ready" }));
+    const request = createHttpRequest({ baseUrl: "https://api.example.test", fetch, errors });
+    const old = new AbortController();
+    const pending = request("/example", schema, old.signal);
+    old.abort();
+    late.resolve(new Response(null, { status: 429, headers: { "Retry-After": "60" } }));
+    await expect(pending).rejects.toMatchObject({ code: "cancelled" });
+    await expect(request("/example", schema, signal())).resolves.toEqual({ status: "ready" });
+  });
+  it("contains invalid URL errors at the safe transport boundary", async () => {
+    const request = createHttpRequest({ baseUrl: "private-canary", errors });
+    await expect(request("/example", schema, signal())).rejects.toMatchObject({
+      code: "malformed",
+    });
+  });
+  it("shares bounded cooldowns across clients in one identity lifetime and isolates a replacement identity", async () => {
+    const owner = new AbortController();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "Retry-After": "60" } }))
+      .mockImplementation(async () => jsonResponse({ status: "ready" }));
+    const options = { baseUrl: "https://api.example.test", fetch, errors, signal: owner.signal };
+    await expect(
+      createHttpRequest(options)("/example", schema, signal(), {}),
+    ).rejects.toMatchObject({ kind: "rate_limited" });
+    await expect(
+      createHttpRequest(options)("/example", schema, signal(), {}),
+    ).rejects.toMatchObject({ kind: "rate_limited" });
+    expect(fetch).toHaveBeenCalledOnce();
+    owner.abort();
+    await expect(
+      createHttpRequest({ ...options, signal: new AbortController().signal })(
+        "/example",
+        schema,
+        signal(),
+        {},
+      ),
+    ).resolves.toEqual({ status: "ready" });
+  });
+  it("keeps rate limits distinct, honors Retry-After without automatic writes, and discards bodies", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response("private-key", { status: 429, headers: { "Retry-After": "17" } }),
+      );
+    const request = createHttpRequest({ baseUrl: "https://api.example.test", fetch, errors });
+    const failure = await request("/example", schema, signal(), { confirm: true }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toMatchObject({ kind: "rate_limited", retryAfterSeconds: 17 });
+    expect(JSON.stringify(failure)).not.toContain("private-key");
+    expect(fetch).toHaveBeenCalledOnce();
+    await expect(request("/example", schema, signal(), { confirm: true })).rejects.toMatchObject({
+      kind: "rate_limited",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([null, "0", "-1", "999999999999", "private-key"])(
+    "uses a bounded wait for invalid Retry-After",
+    async (value) => {
+      const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        new Response(null, {
+          status: 429,
+          headers: value === null ? {} : { "Retry-After": value },
+        }),
+      );
+      const request = createHttpRequest({ baseUrl: "https://api.example.test", fetch, errors });
+      await expect(request("/example", schema, signal())).rejects.toMatchObject({
+        kind: "rate_limited",
+        retryAfterSeconds: 60,
+      });
+    },
+  );
+
+  it("allows an explicit retry after cooldown and keeps other endpoints usable", async () => {
+    vi.useFakeTimers();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "Retry-After": "2" } }))
+      .mockImplementation(async () => jsonResponse({ status: "ready" }));
+    const request = createHttpRequest({ baseUrl: "https://api.example.test", fetch, errors });
+    await expect(request("/limited", schema, signal(), {})).rejects.toMatchObject({
+      kind: "rate_limited",
+    });
+    await expect(request("/control", schema, signal(), {})).resolves.toEqual({ status: "ready" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await expect(request("/limited", schema, signal(), {})).resolves.toEqual({ status: "ready" });
+  });
   it("validates responses and sends private JSON requests with per-request headers", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

@@ -532,6 +532,8 @@ Run `npm run test:unit -- apps/api/test/pricing.test.ts apps/api/test/providers/
 
 ## Private analysis API
 
+All HTTP clients must handle application 429 responses using the [production request policy](operations.md#request-and-socket-limits): honor the exposed integer `Retry-After`, retain command IDs, and require explicit retries for writes. Provider quota failures are separate provider results. Read polling backs off; analysis upload failure retains unsaved samples for explicit Retry. The same limits apply in development and tests; only the API composition test seam can inject budgets/time. Leave `TRUSTED_PROXY_IP` unset for direct local requests; production Compose supplies the exact Caddy address. Test proxy behavior with the production rehearsal, not client-supplied forwarding headers in a direct development request.
+
 `GET /games/:gameId/analysis` and `POST /games/:gameId/analysis` use the current profile-complete account session and the existing expected-account/identity headers. Writes require the exact web Origin. Responses are private `no-store`; guests and Sandbox cannot persist analysis. Each account reads only its own samples, including in shared rooms. The [analysis contract](architecture.md#private-persistence-and-replacement) owns authorization, score limits, replacement and deletion semantics.
 
 - GET accepts `limit` (1–128, default 128) and an optional returned `cursor`. It returns `{ gameId, samples, nextCursor }` in ascending ply order. Cursors are bound to the requesting account and game; every page rechecks access.

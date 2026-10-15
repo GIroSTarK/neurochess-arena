@@ -24,7 +24,6 @@ import { publicPrincipalFor } from "../identity/http.js";
 import { roomErrorMessages } from "../locales/en.js";
 
 import { RoomRequestError } from "./errors.js";
-import { createInvitationRateLimit } from "./rate-limit.js";
 import type { RoomService } from "./service.js";
 
 export interface RoomApiOptions {
@@ -54,7 +53,6 @@ const errors = {
 
 export async function registerRoomRoutes(app: FastifyInstance, options: RoomApiOptions) {
   const routes = app.withTypeProvider<ZodTypeProvider>();
-  const rateLimit = createInvitationRateLimit();
   const principal = (request: FastifyRequest, reply: FastifyReply, accountOnly = false) =>
     publicPrincipalFor(options, request, reply, accountOnly);
   app.addHook("onRequest", async (request, reply) => {
@@ -107,7 +105,6 @@ export async function registerRoomRoutes(app: FastifyInstance, options: RoomApiO
     "/rooms/invitations/resolve",
     {
       bodyLimit: 1024,
-      onRequest: async (request) => rateLimit(request.ip),
       schema: {
         body: roomResolutionRequestSchema,
         querystring: emptyQuerySchema,
@@ -121,7 +118,6 @@ export async function registerRoomRoutes(app: FastifyInstance, options: RoomApiO
     "/rooms/join",
     {
       bodyLimit: 1024,
-      onRequest: async (request) => rateLimit(request.ip),
       schema: {
         body: roomJoinRequestSchema,
         querystring: emptyQuerySchema,

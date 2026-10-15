@@ -12,7 +12,7 @@ import type {
 import type { AiRequestFailure } from "../api/ai-client";
 
 export type MatchIssue =
-  | { kind: "notice"; code: "recovered" | "uncertain" | "unavailable" | "access" }
+  | { kind: "notice"; code: "recovered" | "uncertain" | "unavailable" | "access" | "rateLimited" }
   | { kind: "request"; code: AiRequestFailure["code"] }
   | { kind: "provider"; color: ChessColor; error: ProviderFailure };
 

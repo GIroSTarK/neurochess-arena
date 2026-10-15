@@ -11,15 +11,17 @@ import {
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
+import { RequestRateLimitFailure } from "./failures";
 import { apiOrigin, createHttpRequest, validated } from "./http";
 import type { AiIdentity } from "./identity";
 
 export class CredentialFailure extends Error {
-  constructor(readonly code: CredentialErrorCode | "cancelled") {
+  constructor(readonly code: CredentialErrorCode | "cancelled" | "RATE_LIMITED") {
     super(code);
   }
 }
 export function credentialError(error: unknown): CredentialFailure["code"] {
+  if (error instanceof RequestRateLimitFailure) return "RATE_LIMITED";
   return error instanceof CredentialFailure ? error.code : "CREDENTIAL_UNAVAILABLE";
 }
 

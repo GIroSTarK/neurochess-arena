@@ -29,6 +29,7 @@ export { expect } from "@playwright/test";
 
 export const test = base.extend<{
   expectedGame404s: Map<Page, Set<string>>;
+  expectedRateLimits: Map<Page, Set<string>>;
   allowedIdentity401s: Map<Page, Set<string>>;
   expectedModuleFailures: Map<Page, Set<string>>;
   expectedRouteErrors: Map<Page, Set<string>>;
@@ -38,6 +39,10 @@ export const test = base.extend<{
 }>({
   // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
   expectedGame404s: async ({}, use) => {
+    await use(new Map<Page, Set<string>>());
+  },
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
+  expectedRateLimits: async ({}, use) => {
     await use(new Map<Page, Set<string>>());
   },
   // eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring for fixture dependency discovery.
@@ -60,6 +65,7 @@ export const test = base.extend<{
   instrumentContext: async (
     {
       expectedGame404s,
+      expectedRateLimits,
       allowedIdentity401s,
       expectedModuleFailures,
       expectedRouteErrors,
@@ -127,6 +133,9 @@ export const test = base.extend<{
             )) ||
           (url.startsWith(API_ORIGIN + "/api/auth/") && [400, 401, 403, 429].includes(status)) ||
           (page !== null && status === 404 && (expectedGame404s.get(page)?.delete(url) ?? false)) ||
+          (page !== null &&
+            status === 429 &&
+            (expectedRateLimits.get(page)?.delete(url) ?? false)) ||
           (page !== null && status === 401 && (allowedIdentity401s.get(page)?.has(url) ?? false));
         if (!expected) errors.push("Unexpected HTTP response " + status);
       }

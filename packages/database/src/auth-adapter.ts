@@ -1,5 +1,5 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import type { DatabaseConnection } from "./client.js";
 import * as schema from "./schema/auth.js";
@@ -23,6 +23,10 @@ export interface AuthAccountActions {
 
 export function createAuthDatabaseAdapter(database: DatabaseConnection) {
   return drizzleAdapter(database.db, { provider: "pg", schema, transaction: true });
+}
+
+export async function pruneAuthRateLimits(database: DatabaseConnection, cutoff: number) {
+  await database.db.delete(schema.rateLimit).where(lt(schema.rateLimit.lastRequest, cutoff));
 }
 
 export async function withAuthUserLock<T>(
