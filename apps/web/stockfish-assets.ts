@@ -124,7 +124,7 @@ export function loadStockfishDistribution(): { fileName: string; source: Buffer 
     fileName: "manifest.json",
     source: readFileSync(join(vendorDirectory, "manifest.json")),
   });
-  for (const fileName of ["index.html", "REBUILD.md"]) {
+  for (const fileName of ["index.html", "REBUILD.md", "SOURCE-NOTICES.txt"]) {
     files.push({ fileName, source: readFileSync(join(vendorDirectory, fileName)) });
   }
   return files;

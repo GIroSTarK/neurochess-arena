@@ -9,6 +9,7 @@ Implementation status and next milestones live in the [MVP roadmap](docs/roadmap
 - Node.js 24 (24.5 or newer)
 - npm 11
 - Docker with Docker Compose
+- `tar` on PATH for source distribution archives (included with current Windows and the deployment image)
 
 The repository is an npm workspaces monorepo. Dependency versions are locked in `package-lock.json` and the database runs locally through Docker Compose.
 
@@ -113,4 +114,14 @@ Raw provider keys must never be committed, logged, included in analytics, or sto
 
 ## License
 
-No license has been selected yet.
+Copyright (C) 2026 Illya Katynskyi.
+
+Neurochess Arena's original code, configuration and documentation are licensed
+under the GNU General Public License, **version 3 only** (`GPL-3.0-only`). You may
+redistribute and modify the program under those terms. It comes without any
+warranty; see [LICENSE](LICENSE) for the full terms.
+
+[Third-party components](THIRD_PARTY_NOTICES.md) retain their own licenses.
+Production builds include a **Licenses and source** page with the matching
+application source download, dependency/font notices and Stockfish materials.
+See the [licensing and distribution policy](docs/licensing.md) before publishing.

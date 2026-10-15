@@ -1,4 +1,18 @@
 export const en = {
+  licensing: {
+    title: "Neurochess Arena licenses and source",
+    link: "Licenses and source",
+    terms:
+      "Neurochess Arena is free software. You may redistribute and modify its original code under the GNU General Public License, version 3 only (GPL-3.0-only). Third-party components retain their own licenses.",
+    warranty:
+      "This program comes without any warranty, including merchantability or fitness for a particular purpose. See the license for details.",
+    license: "GNU General Public License, version 3",
+    source: "Download the source for this application build",
+    dependencies: "Bundled dependency and font licenses",
+    thirdParty: "Third-party component information",
+    engine: "Stockfish license, exact source and build instructions",
+    repository: "Project repository",
+  },
   analysis: {
     title: "Stockfish evaluation",
     graph: "Evaluation graph",

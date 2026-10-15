@@ -380,7 +380,12 @@ try {
   }
   const engineRoot = web + "/engines/sf19-lite-single-v1/";
   const manifest = (await request(engineRoot + "manifest.json")).json();
-  for (const path of [...Object.keys(manifest.files), "index.html", "REBUILD.md"]) {
+  for (const path of [
+    ...Object.keys(manifest.files),
+    "index.html",
+    "REBUILD.md",
+    "SOURCE-NOTICES.txt",
+  ]) {
     const response = await request(engineRoot + path);
     assert.equal(response.status, 200, `Engine distribution ${path}`);
     if (path.endsWith(".wasm")) assert.match(response.headers["content-type"], /application\/wasm/);
@@ -403,6 +408,18 @@ try {
     assert(notices.body.toString().includes(notice));
   }
   securityHeaders(notices, "web");
+  for (const path of ["/licensing.html", "/LICENSE.txt", "/THIRD_PARTY_NOTICES.md"]) {
+    const response = await request(web + path);
+    assert.equal(response.status, 200, `Application licensing ${path}`);
+    securityHeaders(response, "web");
+    if (path.endsWith(".html")) {
+      assert.match(response.body.toString(), /href="neurochess-arena-source\.tar\.gz"/);
+    }
+  }
+  const applicationSource = await request(web + "/neurochess-arena-source.tar.gz");
+  assert.equal(applicationSource.status, 200);
+  assert.deepEqual([...applicationSource.body.subarray(0, 2)], [0x1f, 0x8b]);
+  securityHeaders(applicationSource, "web");
   for (const path of ["/games/" + randomUUID(), "/__test__/mail", "/arena-reference", "/sandbox"]) {
     const response = await request(api + path, { headers: { accept: "text/html" } });
     assert([401, 403, 404].includes(response.status));

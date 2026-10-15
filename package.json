@@ -2,6 +2,7 @@
   "name": "neurochess-arena",
   "version": "0.0.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "type": "module",
   "packageManager": "npm@11.21.0",
   "engines": {

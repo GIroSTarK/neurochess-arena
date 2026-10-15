@@ -354,6 +354,9 @@ The MVP is ready when:
 
 - Physical retention and automatic purging of expired solo guest records
 - Exact supported parameter matrix for each provider and model
-- Repository license
 
 The deployment platform and region are selected in [ADR-0020](decisions/0020-single-host-production-deployment.md); live provisioning and release verification remain separate gates.
+
+The repository uses GPL-3.0-only for original project material, selected in
+[ADR-0021](decisions/0021-project-license-and-source-distribution.md). The
+[licensing policy](licensing.md) covers third-party terms and public source access.

@@ -586,8 +586,10 @@ source archive, embedded network, notices and rebuild instructions from
 `apps/web/vendor/stockfish`. Ordinary application entry does not fetch the engine.
 The unnecessary npm postinstall is disabled; builds consume the versioned files
 directly. Keep corresponding source materials with every distributed version.
-Public release still requires the owner's repository-license decision and the
-[ADR-0019 compatibility review](decisions/0019-browser-analysis-and-private-samples.md#distribution-and-licensing).
+The application license and compatibility policy are selected in
+[ADR-0021](decisions/0021-project-license-and-source-distribution.md). Web builds
+also package the application build sources and GPL text using `tar` on PATH;
+the [licensing policy](licensing.md) covers rebuilds and public source/notice checks.
 
 Run `npm run test:unit -- apps/web/src/analysis apps/web/stockfish-assets.test.ts`
 for protocol, scheduler, lifetime and distribution checks. Run

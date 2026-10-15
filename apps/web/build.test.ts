@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
@@ -60,6 +62,29 @@ it.each(["development", "test"])(
     expect(licenseText).toContain("The Inter Project Authors");
     expect(licenseText).toContain("The Orbitron Project Authors");
     expect(licenseText).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    const asset = (name: string) => {
+      const item = output.output.find((entry) => entry.fileName === name);
+      expect(item?.type, name).toBe("asset");
+      if (item?.type !== "asset") throw new Error(`Missing distribution asset: ${name}`);
+      return Buffer.from(item.source);
+    };
+    expect(asset("LICENSE.txt").toString()).toContain("GNU GENERAL PUBLIC LICENSE");
+    const licensing = asset("licensing.html").toString();
+    expect(licensing).toContain('href="neurochess-arena-source.tar.gz"');
+    expect(licensing).toContain('href="LICENSE.txt"');
+    expect(licensing).toContain('href="THIRD-PARTY-NOTICES.md"');
+    const archive = asset("neurochess-arena-source.tar.gz");
+    const names = execFileSync("tar", ["-tzf", "-"], { input: archive, encoding: "utf8" });
+    expect(names).toContain("apps/web/src/shell/app-shell.tsx");
+    expect(names).toContain("apps/web/vite.config.ts");
+    expect(names).toContain("packages/config/tsconfig/react.json");
+    expect(names).toContain("package-lock.json");
+    expect(names).toContain("docs/licensing.md");
+    expect(names).not.toMatch(/(?:^|\/)(?:node_modules|dist|\.git|\.env)(?:\/|\r?$)/m);
+    const source = execFileSync("tar", ["-xOzf", "-", "apps/web/src/shell/app-shell.tsx"], {
+      input: archive,
+    });
+    expect(source).toEqual(readFileSync(new URL("./src/shell/app-shell.tsx", import.meta.url)));
   },
   15_000,
 );

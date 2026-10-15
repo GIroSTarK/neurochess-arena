@@ -22,6 +22,7 @@ describe("pinned Stockfish distribution", () => {
         "Copying.txt",
         "AUTHORS",
         "REBUILD.md",
+        "SOURCE-NOTICES.txt",
       ]),
     );
     expect(assets.filter((asset) => /\.(?:wasm|js)$/.test(asset.fileName))).toHaveLength(2);

@@ -19,6 +19,11 @@ The [analysis architecture](../architecture.md#stockfish-worker) owns the profil
 
 ### Distribution and licensing
 
+**Follow-up (2026-10-15):** [ADR-0021](0021-project-license-and-source-distribution.md)
+resolves the license selection and distribution policy described as open below.
+The original decision context is retained; public source/notice availability is
+verified at deployment under the [licensing policy](../licensing.md).
+
 Repository review finds no selected license: [README](../../README.md#license) and [open product decisions](../product.md#open-product-decisions) leave that choice to the project owner. This ADR does not select it or assume that a worker boundary settles application-license compatibility.
 
 Stockfish requires corresponding source for the exact distributed engine and GPL terms for engine modifications. Ship the engine's license, copyright/author notices, matching source including networks and build inputs, and reproducible build instructions alongside its assets. Provide a visible engine/source/license link and retain source availability for each distributed version; an unversioned upstream link is insufficient. [Stockfish distribution guidance](https://stockfishchess.org/about/#about-the-gpl)

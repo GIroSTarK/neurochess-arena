@@ -61,7 +61,19 @@ export function AppShell({
       <main id={mainId} tabIndex={-1}>
         {children}
       </main>
-      <footer className="pt-8 text-center text-caption text-text-muted">{footer}</footer>
+      <footer className="pt-8 text-center text-caption text-text-muted">
+        {footer}
+        <p className="mt-2">
+          <a
+            className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-text"
+            href={`${import.meta.env.BASE_URL}licensing.html`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("licensing.link")}
+          </a>
+        </p>
+      </footer>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>

@@ -43,7 +43,12 @@ Stockfish: Tord Romstad, Marco Costalba, Joona Kiiski, Gary Linscott and the
 contributors listed in `AUTHORS` and `Top CPU Contributors.txt`.
 The embedded lite network is by Chris Bao (sscg13).
 The unmodified loader retains its upstream notices. See `Copying.txt` for GPLv3.
+`SOURCE-NOTICES.txt` supplements the unchanged source archive with the licenses
+and attribution for its upstream example dependencies, artwork and build tools.
+The engine profile manifest is immutable because saved analysis records its hash;
+its historical release-gate text is resolved by the subsequent policy below.
 
-Neurochess Arena's owner has not selected a repository license. Public distribution
-requires that decision and an application/engine license compatibility review,
-as recorded in ADR-0019. This engine package does not select an application license.
+Neurochess Arena's original code is licensed under GPL-3.0-only, selected in
+ADR-0021. The engine and its third-party materials retain their existing terms.
+Before public distribution, verify that this directory's license, exact source,
+network and notices remain publicly downloadable alongside the deployed engine.

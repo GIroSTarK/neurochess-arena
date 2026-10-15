@@ -15,6 +15,8 @@ RUN npm ci
 COPY packages packages
 COPY apps apps
 COPY tsconfig.json ./
+COPY LICENSE README.md THIRD_PARTY_NOTICES.md .env.example .nvmrc ./
+COPY docs/licensing.md docs/development.md ./docs/
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV SANDBOX_ENABLED=false
@@ -28,6 +30,7 @@ WORKDIR /app
 ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3001 SANDBOX_ENABLED=false
 COPY --from=runtime-dependencies /app/node_modules ./node_modules
 COPY --from=runtime-dependencies /app/package.json ./package.json
+COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
 COPY --from=runtime-dependencies /app/apps/api/package.json ./apps/api/package.json
 COPY --from=runtime-dependencies /app/packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=runtime-dependencies /app/packages/chess/package.json ./packages/chess/package.json

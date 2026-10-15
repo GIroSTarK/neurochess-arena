@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+import { applicationDistribution } from "./application-assets.ts";
 import { parseSandboxFlag } from "./src/app/env.ts";
 import { en } from "./src/i18n/en.ts";
 import { stockfishAssets } from "./stockfish-assets.ts";
@@ -54,7 +55,8 @@ export default defineConfig(({ mode, command }) => ({
     license: { fileName: "THIRD-PARTY-NOTICES.md" },
     rolldownOptions: {
       output: {
-        postBanner: "/* Bundled dependency and font licenses: /THIRD-PARTY-NOTICES.md */",
+        postBanner:
+          "/* Neurochess Arena: GPL-3.0-only. License, matching source and third-party notices: /licensing.html */",
         codeSplitting: { groups: vendorChunks },
       },
     },
@@ -62,6 +64,7 @@ export default defineConfig(({ mode, command }) => ({
   clearScreen: false,
   envDir: "../..",
   plugins: [
+    applicationDistribution(),
     stockfishAssets(),
     react(),
     tailwindcss(),
