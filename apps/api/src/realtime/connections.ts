@@ -8,6 +8,7 @@ import {
 import type WebSocket from "ws";
 
 import type { Principal } from "../identity/principal.js";
+import { observe, type Operations } from "../monitoring/operations.js";
 import type { RoomService } from "../rooms/service.js";
 
 import { watchRoomLiveness } from "./liveness.js";
@@ -45,6 +46,7 @@ export function createRoomConnections(
   rooms: RoomService,
   events: RoomEvents,
   overrides: Partial<RoomConnectionLimits> = {},
+  operations?: Operations,
 ) {
   const limits = { ...roomConnectionLimits, ...overrides };
   const connections = new Map<Duplex, Connection>();
@@ -60,25 +62,35 @@ export function createRoomConnections(
     const connection = connections.get(transport);
     if (!connection) return;
     connections.delete(transport);
+    observe(operations, (sink) => {
+      sink.gauge("roomConnections", connections.size);
+      sink.increment("roomClosed");
+    });
     clearTimeout(connection.timer);
     connection.stop?.();
   }
 
   return {
     reserve(transport: Duplex, ip: string) {
-      if (closed || connections.size >= limits.maxConnections) return false;
+      if (closed || connections.size >= limits.maxConnections) {
+        observe(operations, (sink) => sink.increment("roomRejected"));
+        return false;
+      }
       if (
         [...connections.values()].filter((connection) => connection.ip === ip).length >=
         limits.maxConnectionsPerIp
       ) {
+        observe(operations, (sink) => sink.increment("roomRejected"));
         return false;
       }
       const timer = setTimeout(() => {
+        observe(operations, (sink) => sink.increment("roomTimeouts"));
         release(transport);
         transport.destroy();
       }, limits.handshakeMs);
       timer.unref();
       connections.set(transport, { transport, timer, ip });
+      observe(operations, (sink) => sink.gauge("roomConnections", connections.size));
       transport.once("close", () => release(transport));
       return true;
     },
@@ -106,7 +118,9 @@ export function createRoomConnections(
         return;
       }
       clearTimeout(connection.timer);
+      observe(operations, (sink) => sink.increment("roomAccepted"));
       let stopped = false;
+      let synchronized = false;
       let controlFrames = 0;
       let controlWindow = Date.now();
       function controlFrame() {
@@ -140,6 +154,7 @@ export function createRoomConnections(
         limits.heartbeatMs,
         limits.pongTimeoutMs,
         () => {
+          observe(operations, (sink) => sink.increment("roomTimeouts"));
           stop();
           socket.terminate();
         },
@@ -156,6 +171,10 @@ export function createRoomConnections(
 
       function close(code: number, message?: RoomServerMessage) {
         if (stopped) return;
+        observe(operations, (sink) => {
+          if (code === 1011 || code === 1013) sink.increment("roomFailures");
+          else if (code === 1008) sink.increment("roomRejected");
+        });
         if (message && socket.readyState === socket.OPEN) send(message);
         stop();
         socket.close(code);
@@ -170,6 +189,7 @@ export function createRoomConnections(
         }
         socket.send(data, (error) => {
           if (error) {
+            observe(operations, (sink) => sink.increment("roomFailures"));
             stop();
             socket.terminate();
           }
@@ -181,10 +201,10 @@ export function createRoomConnections(
         if (!gameId || (changedGameId !== undefined && changedGameId !== gameId) || stopped) return;
         synchronization?.refresh();
       };
-      connection.timer = setTimeout(
-        () => close(1008, { protocol: 1, type: "error", code: "INVALID_MESSAGE" }),
-        limits.subscriptionMs,
-      );
+      connection.timer = setTimeout(() => {
+        observe(operations, (sink) => sink.increment("roomTimeouts"));
+        close(1008, { protocol: 1, type: "error", code: "INVALID_MESSAGE" });
+      }, limits.subscriptionMs);
       connection.timer.unref();
       socket.on("message", (data, binary) => {
         if (stopped) return;
@@ -206,7 +226,11 @@ export function createRoomConnections(
             send,
             close,
             deliveryMs: limits.deliveryMs,
-            synchronized: () => clearTimeout(connection.timer),
+            synchronized: () => {
+              clearTimeout(connection.timer);
+              if (!synchronized) observe(operations, (sink) => sink.increment("roomSynchronized"));
+              synchronized = true;
+            },
           });
           connection.refresh?.(gameId);
         } catch {
@@ -215,6 +239,7 @@ export function createRoomConnections(
       });
       socket.once("close", () => release(transport));
       socket.on("error", () => {
+        if (!stopped) observe(operations, (sink) => sink.increment("roomFailures"));
         stop();
         socket.terminate();
       });

@@ -16,6 +16,7 @@ import { createGameService } from "./games/service.js";
 import { createGuestService } from "./guests/service.js";
 import { loadRootEnvironment } from "./load-root-environment.js";
 import { createLoggerOptions } from "./logger.js";
+import { createOperations } from "./monitoring/operations.js";
 import { createProfileService } from "./profiles/service.js";
 import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
   const database = createDatabase(environment.DATABASE_URL);
   const repository = createGameRepository(database);
   const roomEvents = createRoomEvents();
+  const operations = createOperations();
   const credentialCipher =
     environment.CREDENTIAL_ENCRYPTION_KEY_ID && environment.CREDENTIAL_ENCRYPTION_KEY
       ? createCredentialCipher({
@@ -39,6 +41,7 @@ async function main(): Promise<void> {
         })
       : undefined;
   const app = await buildApp({
+    operations,
     logger: createLoggerOptions(environment.LOG_LEVEL),
     readiness: database,
     analysis: createAnalysisService(repository),
@@ -51,6 +54,7 @@ async function main(): Promise<void> {
     roomEvents,
     gameApi: {
       games: createGameService(repository, {
+        operations,
         roomEvents,
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,

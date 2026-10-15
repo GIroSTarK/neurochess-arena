@@ -34,6 +34,7 @@ import {
 } from "../credentials/provider-access.js";
 import type { GameIdentity, Principal } from "../identity/principal.js";
 import { lockIdentity, lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
+import type { Operations } from "../monitoring/operations.js";
 import { discoverModels } from "../providers/discovery.js";
 import type { RoomEvents } from "../realtime/room-events.js";
 
@@ -96,6 +97,7 @@ export function createGameService(
     readonly controllerLeaseMs?: number;
     readonly credentialCipher?: Pick<CredentialCipher, "decrypt">;
     readonly roomEvents?: RoomEvents;
+    readonly operations?: Operations;
   },
 ): GameService {
   const sandboxEnabled = options.sandboxEnabled && options.nodeEnv !== "production";
@@ -402,7 +404,11 @@ export function createGameService(
         if (!(await lockPrincipal(tx, principal))) throw new GameRequestError("UNAUTHORIZED");
       };
       const result = await useCredential(principal, provider, access, authorize, (resolved) =>
-        discoverModels(adapter?.provider === provider ? adapter : undefined, resolved),
+        discoverModels(
+          adapter?.provider === provider ? adapter : undefined,
+          resolved,
+          options.operations,
+        ),
       );
       await repository.write(authorize);
       return result ?? credentialFailure;
@@ -439,6 +445,7 @@ export function createGameService(
       }),
     move: mutate,
     aiTurn: createAiTurnExecutor({
+      ...(options.operations ? { operations: options.operations } : {}),
       repository,
       adapters,
       prepareCommand,

@@ -11,6 +11,7 @@
     "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
+    "scripts/monitoring/**/*.ts",
     "apps/**/*.test.ts",
     "apps/**/*.test.tsx",
     "apps/api/test/providers/orphaned-turn.ts",

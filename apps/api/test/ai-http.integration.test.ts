@@ -10,6 +10,7 @@ import {
   gameReplayResponseSchema,
   gameSnapshotSchema,
   type ModelDiscoveryResult,
+  operationsSnapshotSchema,
 } from "@neurochess/contracts";
 import {
   aiTurnReservations,
@@ -249,6 +250,14 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
         attempts: [{ error: { code: "provider_timeout" } }],
       });
       expect(adapter.moveCalls).toBe(stage === "discovery" ? 0 : 1);
+      const telemetry = await api.app.inject("/internal/operations");
+      expect(operationsSnapshotSchema.parse(telemetry.json()).counters).toMatchObject({
+        providerTimeouts: 1,
+        modelInvalid: 0,
+        httpServerFailures: 0,
+      });
+      expect(telemetry.body).not.toContain(apiKey);
+      expect(telemetry.body).not.toContain(snapshot.gameId);
     },
   );
 

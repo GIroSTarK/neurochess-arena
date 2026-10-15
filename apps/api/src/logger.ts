@@ -2,7 +2,31 @@ import type { LoggerOptions } from "pino";
 
 const redactedValue = "[Redacted]";
 const secretKeyPattern =
-  /api[-_]?key|authorization|cookie|credential|database[-_]?url|password|secret|session|token|invitation|invite/i;
+  /api[-_]?key|authorization|cookie|credential|database[-_]?url|password|secret|session|token|invitation|invite|gameId|userId|username|email|prompt|commentary|(^|_)(fen|pgn)($|_)/i;
+const errorNames = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "AbortError",
+  "TimeoutError",
+  "ZodError",
+]);
+const errorCodes = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "23505",
+  "23503",
+  "40001",
+  "40P01",
+  "53300",
+  "57P01",
+  "08006",
+]);
 
 export function createLoggerOptions(level: string): LoggerOptions {
   return {
@@ -94,21 +118,23 @@ function sanitizeValue(value: unknown, seen: WeakSet<object>): unknown {
 function serializeError(error: unknown): Record<string, unknown> {
   // Pino runs the log formatter first, so the error may already be a sanitized record.
   const record = asRecord(error);
+  const name = stringValue(record.name);
+  const code = stringValue(record.code);
   return {
-    code: stringValue(record.code),
-    name: stringValue(record.name) ?? "UnknownError",
+    code: code && errorCodes.has(code) ? code : undefined,
+    name: name && errorNames.has(name) ? name : "UnknownError",
   };
 }
 
 function stripQuery(value: string): string {
   // Email/auth protocols may put bearer tokens in path segments as well as queries.
   const authPath = value.split("?")[0]?.split("#")[0];
+  if (authPath?.startsWith("/games/") || authPath?.startsWith("/sandbox/games/")) {
+    return "/games/[Redacted]";
+  }
   if (authPath?.startsWith("/rooms/")) {
     if (
-      ["/rooms/creation-operation", "/rooms/invitations/resolve", "/rooms/join"].includes(
-        authPath,
-      ) ||
-      /^\/rooms\/[0-9a-f-]{36}(?:\/invitation)?$/i.test(authPath)
+      ["/rooms/creation-operation", "/rooms/invitations/resolve", "/rooms/join"].includes(authPath)
     ) {
       return authPath;
     }
@@ -142,6 +168,8 @@ function stripQuery(value: string): string {
       }
       url.hash = "";
       url.search = "";
+      url.username = "";
+      url.password = "";
       return url.toString();
     }
   } catch {

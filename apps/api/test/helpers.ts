@@ -23,6 +23,7 @@ import type { AiAdapters } from "../src/games/ai-turn.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 import type { GuestPrincipal } from "../src/identity/principal.js";
+import { createOperations } from "../src/monitoring/operations.js";
 import { createProfileService } from "../src/profiles/service.js";
 import { createRoomEvents, type RoomEvents } from "../src/realtime/room-events.js";
 import { createRoomService } from "../src/rooms/service.js";
@@ -70,6 +71,7 @@ export class ApiHarness {
     const original = createGameRepository(database);
     const repository = options.repository?.(original) ?? original;
     const roomEvents = createRoomEvents();
+    const operations = createOperations();
     const credentialCipher =
       options.credentialCipher === undefined
         ? createCredentialCipher({
@@ -78,6 +80,7 @@ export class ApiHarness {
           })
         : options.credentialCipher;
     const app = await buildApp({
+      operations,
       logger: options.logger ?? false,
       readiness: database,
       analysis: createAnalysisService(repository),
@@ -101,6 +104,7 @@ export class ApiHarness {
         : {}),
       gameApi: {
         games: createGameService(repository, {
+          operations,
           roomEvents,
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,

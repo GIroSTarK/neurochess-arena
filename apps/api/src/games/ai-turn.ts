@@ -27,6 +27,7 @@ import {
 } from "../credentials/provider-access.js";
 import type { Principal } from "../identity/principal.js";
 import { lockIdentity } from "../identity/validity.js";
+import { observe, type Operations } from "../monitoring/operations.js";
 import { calculateCost, pinPricing } from "../pricing/calculator.js";
 import { pricingColumns, readBilling, storedPricing } from "../pricing/persistence.js";
 import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapter.js";
@@ -95,6 +96,7 @@ function invocationResult(
 }
 
 export function createAiTurnExecutor(options: {
+  readonly operations?: Operations;
   readonly repository: GameRepository;
   readonly adapters: AiAdapters;
   readonly useCredential: ProviderCredentialAccess;
@@ -205,7 +207,7 @@ export function createAiTurnExecutor(options: {
           reserved.selected.seat.provider,
           access,
           recheck,
-          (resolved) => discoverModels(reserved.adapter, resolved),
+          (resolved) => discoverModels(reserved.adapter, resolved, options.operations),
         )) ?? credentialFailure;
       const discoveryDurationMs = Math.max(0, Math.round(performance.now() - discoveryStarted));
       const model = discovery.ok
@@ -255,14 +257,18 @@ export function createAiTurnExecutor(options: {
               access,
               recheck,
               (resolved) =>
-                invokeMove(reserved.adapter, {
-                  ...resolved,
-                  instructions: AI_MOVE_INSTRUCTIONS,
-                  modelId: reserved.selected.seat.modelId,
-                  parameters: { ...invocation.effectiveParameters },
-                  ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
-                  context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
-                }),
+                invokeMove(
+                  reserved.adapter,
+                  {
+                    ...resolved,
+                    instructions: AI_MOVE_INSTRUCTIONS,
+                    modelId: reserved.selected.seat.modelId,
+                    parameters: { ...invocation.effectiveParameters },
+                    ...(model ? { capabilities: structuredClone(model.capabilities) } : {}),
+                    context: { ...reserved.context, legalMoves: [...reserved.context.legalMoves] },
+                  },
+                  options.operations,
+                ),
             )) ?? { ...credentialFailure, durationMs: 0, usage: null, providerRequestId: null });
         const currentAttempt = attempt;
         const received = response;
@@ -278,6 +284,7 @@ export function createAiTurnExecutor(options: {
               ok: false,
               error: { code: "model_invalid", reason: "illegal_move" },
             };
+            observe(options.operations, (sink) => sink.increment("modelInvalid"));
           }
           if (classified.ok && access.signal.aborted) {
             classified = { ...classified, ok: false, error: cancellationFailure(access.signal) };

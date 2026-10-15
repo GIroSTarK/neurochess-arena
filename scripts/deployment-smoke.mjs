@@ -12,6 +12,11 @@ import { chromium, firefox, webkit } from "@playwright/test";
 import WebSocket from "ws";
 
 import { checkBrowserPolicy, observePolicy } from "../test/deployment/browser-security.mjs";
+import {
+  operationsSnapshot,
+  providerTimeoutDrill,
+  verifyAlertDrill,
+} from "../test/deployment/monitoring.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "neurochess-deployment-"));
 const project = "nc-rehearsal-" + randomBytes(4).toString("hex");
@@ -522,6 +527,16 @@ try {
     );
   }
   step("Stopping the sole API owner, migrating populated state, and restarting.");
+  const operationsBefore = await operationsSnapshot(compose);
+  assert(operationsBefore.gauges.databaseReady === 1);
+  assert(operationsBefore.counters.roomClosed > 0);
+  assert.equal((await request(api + "/internal/operations")).status, 404);
+  assert.equal(
+    (await request(api + "/internal/operations", { headers: { "x-forwarded-for": "127.0.0.1" } }))
+      .status,
+    404,
+  );
+  await providerTimeoutDrill(compose, operationsBefore);
   await compose("stop", "api");
   const offline = await request(api + "/ready?code=callback-log-canary");
   assert.equal(offline.status, 502);
@@ -531,6 +546,19 @@ try {
   assert.equal(stopped[0].State.ExitCode, 0);
   await compose("run", "--rm", "migrate");
   await compose("up", "-d", "--wait", "api");
+  const dashboardHtml = verifyAlertDrill("ApiUnavailable", null, await operationsSnapshot(compose));
+  const dashboardContext = await browsers[0].newContext();
+  const dashboardPage = await dashboardContext.newPage();
+  const dashboardRequests = [];
+  dashboardPage.on("request", (request) => dashboardRequests.push(request.url()));
+  await dashboardPage.setContent(dashboardHtml);
+  assert(
+    await dashboardPage.getByRole("heading", { name: "Private arena operations" }).isVisible(),
+  );
+  assert(await dashboardPage.getByText("ApiUnavailable: FIRING", { exact: false }).isVisible());
+  assert((await dashboardPage.getByRole("row").count()) >= 20);
+  assert.equal(dashboardRequests.length, 0);
+  await dashboardContext.close();
   const recovered = (await socketSnapshot()).snapshot;
   assert.equal(recovered.state, "active");
   assert.equal(recovered.moves[0].uci, "e2e4");
@@ -544,10 +572,16 @@ try {
     "Database failure was not reported",
   );
   assert.equal((await request(api + "/health")).status, 200);
+  const operationsFailure = await operationsSnapshot(compose);
+  assert.equal(operationsFailure.gauges.databaseReady, 0);
   await compose("up", "-d", "--wait", "postgres");
   await until(
     async () => (await request(api + "/ready")).status === 200,
     "Database recovery was not reported",
+  );
+  verifyAlertDrill("DatabaseUnavailable", operationsFailure, await operationsSnapshot(compose));
+  step(
+    "Private monitoring: compiled provider timeout, API/database outage, dashboard/alert generation and recovery passed (policy clock accelerated).",
   );
   if (process.env.DEPLOY_ROLLBACK_API_IMAGE) {
     await compose("stop", "api");

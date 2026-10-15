@@ -5,10 +5,20 @@ import {
   modelDiscoveryResultSchema,
 } from "@neurochess/contracts";
 
+import { observeProvider, type Operations } from "../monitoring/operations.js";
+
 import type { AiProviderAdapter, ListModelsInput } from "./adapter.js";
 import { cancellationFailure } from "./invoke-move.js";
 
-export async function discoverModels(
+export function discoverModels(
+  adapter: AiProviderAdapter | undefined,
+  input: ListModelsInput,
+  operations?: Operations,
+): Promise<ModelDiscoveryResult> {
+  return observeProvider(operations, () => discoverModelsResult(adapter, input));
+}
+
+async function discoverModelsResult(
   adapter: AiProviderAdapter | undefined,
   input: ListModelsInput,
 ): Promise<ModelDiscoveryResult> {

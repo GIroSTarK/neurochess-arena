@@ -1,6 +1,7 @@
 import type { NormalizedMoveResponse } from "@neurochess/contracts";
 import { describe, expect, it } from "vitest";
 
+import { createOperations } from "../../src/monitoring/operations.js";
 import type { MoveRequest } from "../../src/providers/adapter.js";
 import { invokeMove } from "../../src/providers/invoke-move.js";
 import { access, output } from "../ai-turn-helpers.js";
@@ -16,6 +17,76 @@ const request: MoveRequest = {
 };
 
 describe("safe move invocation boundary", () => {
+  it("keeps an unsupported model selection outside infrastructure-failure alerts", async () => {
+    const operations = createOperations();
+    const adapter = createScriptedAdapter({
+      provider: "openai",
+      moves: [
+        async () => ({
+          ok: false,
+          error: { code: "provider_unavailable", reason: "unsupported_model" },
+          usage: null,
+          durationMs: 0,
+          providerRequestId: null,
+        }),
+      ],
+    });
+    expect(await invokeMove(adapter, request, operations)).toMatchObject({
+      ok: false,
+      error: { reason: "unsupported_model" },
+    });
+    expect(operations.snapshot().counters).toMatchObject({
+      providerUnavailable: 0,
+      providerUnsupported: 1,
+    });
+  });
+  it("counts timeouts separately from invalid output and cancellation without retaining provider content", async () => {
+    const operations = createOperations();
+    const timeout = new AbortController();
+    timeout.abort(new DOMException("private-timeout-canary", "TimeoutError"));
+    await invokeMove(
+      createScriptedAdapter({ provider: "openai" }),
+      { ...request, signal: timeout.signal },
+      operations,
+    );
+    const invalid = createScriptedAdapter({
+      provider: "openai",
+      moves: [
+        async () => ({
+          ok: false,
+          error: { code: "model_invalid", reason: "malformed_output" },
+          durationMs: 0,
+          usage: null,
+          providerRequestId: null,
+        }),
+      ],
+    });
+    await invokeMove(invalid, request, operations);
+    const cancelled = new AbortController();
+    cancelled.abort("private-cancel-canary");
+    await invokeMove(invalid, { ...request, signal: cancelled.signal }, operations);
+    expect(operations.snapshot().counters).toMatchObject({
+      providerCalls: 3,
+      providerTimeouts: 1,
+      modelInvalid: 1,
+      providerCancelled: 1,
+      providerUnavailable: 0,
+    });
+    expect(JSON.stringify(operations.snapshot())).not.toContain("canary");
+    const broken = {
+      ...operations,
+      increment() {
+        throw new Error("private-sink-canary");
+      },
+    };
+    expect(
+      await invokeMove(
+        createScriptedAdapter({ provider: "openai", moves: [async () => output("e2e4")] }),
+        request,
+        broken,
+      ),
+    ).toMatchObject({ ok: true, output: { move: "e2e4" } });
+  });
   it.each([
     {
       name: "missing move",

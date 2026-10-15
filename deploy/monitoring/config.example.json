@@ -1,0 +1,10 @@
+{
+  "compartmentId": "ocid1.compartment.oc1..REPLACE",
+  "topicId": "ocid1.onstopic.oc1.eu-frankfurt-1.REPLACE",
+  "containerName": "neurochess-api",
+  "apiOrigin": "https://api.example.com",
+  "webOrigin": "https://arena.example.com",
+  "directory": "/var/lib/neurochess-monitor",
+  "diskPath": "/var/lib/docker",
+  "backupStatusFile": "/var/lib/neurochess-backup/status.json"
+}

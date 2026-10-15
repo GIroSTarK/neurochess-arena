@@ -6,7 +6,7 @@ import {
   type SafeErrorResponse,
   safeErrorResponseSchema,
 } from "@neurochess/contracts";
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyServerOptions, LogController } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -26,6 +26,8 @@ import {
   type RequestLimitOptions,
 } from "./limits/http.js";
 import { proxyTrust, registerProxyBoundary } from "./limits/proxy.js";
+import { type ReadinessProbe, registerOperations } from "./monitoring/http.js";
+import { createOperations, type Operations } from "./monitoring/operations.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
 import type { RoomConnectionLimits } from "./realtime/connections.js";
@@ -35,11 +37,10 @@ import { registerRoomRoutes } from "./rooms/routes.js";
 import type { RoomService } from "./rooms/service.js";
 import { registerSecurityHeaders } from "./security.js";
 
-export interface ReadinessProbe {
-  check(): Promise<void>;
-}
+export type { ReadinessProbe } from "./monitoring/http.js";
 
 export interface BuildAppOptions {
+  readonly operations?: Operations;
   readonly logger?: FastifyServerOptions["logger"];
   readonly serverFactory?: FastifyServerOptions["serverFactory"];
   readonly readiness: ReadinessProbe;
@@ -59,6 +60,7 @@ export interface BuildAppOptions {
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: options.logger ?? false,
+    logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 1_048_576,
     requestTimeout: 30_000,
     connectionTimeout: 210_000,
@@ -73,6 +75,8 @@ export async function buildApp(options: BuildAppOptions) {
 
   registerSecurityHeaders(app);
   registerProxyBoundary(app, options.trustedProxyIp);
+  const operations = options.operations ?? createOperations();
+  const checkReadiness = registerOperations(app, operations, options.readiness);
 
   await app.register(cookie);
 
@@ -93,6 +97,7 @@ export async function buildApp(options: BuildAppOptions) {
       guests: options.gameApi.guests,
       webOrigin: options.webOrigin,
       events: options.roomEvents,
+      operations,
       ...(options.auth ? { auth: options.auth } : {}),
       ...(options.roomRealtimeLimits ? { limits: options.roomRealtimeLimits } : {}),
     });
@@ -118,15 +123,10 @@ export async function buildApp(options: BuildAppOptions) {
         },
       },
     },
-    async (request, reply) => {
-      try {
-        await options.readiness.check();
-        return { status: "ready" as const };
-      } catch (error: unknown) {
-        request.log.warn({ err: error }, "Database readiness check failed");
-        return reply.code(503).send({ status: "not_ready" as const });
-      }
-    },
+    async (_request, reply) =>
+      (await checkReadiness())
+        ? { status: "ready" as const }
+        : reply.code(503).send({ status: "not_ready" as const }),
   );
 
   if (options.gameApi) {

@@ -1,0 +1,27 @@
+[Unit]
+Description=Private Neurochess operational monitoring
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/neurochess
+ExecStart=/usr/bin/node /opt/neurochess/scripts/monitoring/run.ts collect /etc/neurochess/monitor.json
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/neurochess-monitor
+MemoryMax=256M
+TasksMax=64
+LogRateLimitIntervalSec=60
+LogRateLimitBurst=20
+LogNamespace=neurochess-monitor
+
+[Install]
+WantedBy=multi-user.target

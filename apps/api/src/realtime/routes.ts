@@ -9,6 +9,7 @@ import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
 import type { Principal } from "../identity/principal.js";
 import { enforcePrincipalLimit, handleRateLimitError, sendRateLimit } from "../limits/http.js";
 import { clientIp, ipBudgetKey } from "../limits/proxy.js";
+import { observe, type Operations } from "../monitoring/operations.js";
 import { RoomRequestError } from "../rooms/errors.js";
 import type { RoomService } from "../rooms/service.js";
 
@@ -26,10 +27,16 @@ export interface RoomRealtimeOptions {
   webOrigin: string;
   events: RoomEvents;
   limits?: Partial<RoomConnectionLimits>;
+  operations?: Operations;
 }
 
 export async function registerRoomRealtime(app: FastifyInstance, options: RoomRealtimeOptions) {
-  const connections = createRoomConnections(options.rooms, options.events, options.limits);
+  const connections = createRoomConnections(
+    options.rooms,
+    options.events,
+    options.limits,
+    options.operations,
+  );
   const principals = new WeakMap<FastifyRequest, Principal>();
   // ws supports closeTimeout; its separately published type declarations lag it.
   const socketOptions = {
@@ -104,6 +111,9 @@ export async function registerRoomRealtime(app: FastifyInstance, options: RoomRe
               : error instanceof RoomRequestError
                 ? 403
                 : 503;
+          observe(options.operations, (sink) =>
+            sink.increment(status === 503 ? "roomFailures" : "roomRejected"),
+          );
           return reply.code(status).send();
         }
       },

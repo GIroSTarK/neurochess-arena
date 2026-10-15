@@ -6,6 +6,7 @@ import * as schema from "./schema/index.js";
 export interface DatabaseConnection {
   readonly db: NodePgDatabase<typeof schema>;
   check(): Promise<void>;
+  poolStats(): { total: number; waiting: number };
   close(): Promise<void>;
 }
 
@@ -20,6 +21,7 @@ export function createDatabase(connectionString: string): DatabaseConnection {
 
   return {
     db,
+    poolStats: () => ({ total: pool.totalCount, waiting: pool.waitingCount }),
     async check() {
       // pg supports per-query deadlines; @types/pg currently omits this option.
       const probe = { text: "select 1", query_timeout: 5_000 };

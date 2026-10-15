@@ -179,6 +179,7 @@ export {
 export * from "./credential.js";
 export { rateLimitResponseSchema } from "./system.js";
 export * from "./pricing.js";
+export * from "./operations.js";
 export {
   billingUsageSchema,
   billingDimensionsSchema,

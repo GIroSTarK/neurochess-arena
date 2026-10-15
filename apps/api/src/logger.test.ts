@@ -4,6 +4,31 @@ import { describe, expect, it } from "vitest";
 import { createLoggerOptions } from "./logger.js";
 
 describe("secret-safe logging", () => {
+  it("drops private operational content, dynamic paths and untrusted error diagnostics", () => {
+    const chunks: string[] = [];
+    const logger = pino(createLoggerOptions("info"), {
+      write: (chunk: string) => chunks.push(chunk),
+    });
+    const canary = "private-monitoring-canary";
+    logger.error(
+      {
+        err: { name: canary, code: canary },
+        req: { method: "GET", url: `/games/${canary}/analysis` },
+        nested: {
+          gameId: canary,
+          username: canary,
+          email: canary,
+          fen: canary,
+          pgn: canary,
+          prompt: canary,
+          commentary: canary,
+        },
+      },
+      "Request failed",
+    );
+    expect(chunks.join("")).not.toContain(canary);
+    expect(JSON.parse(chunks.join(""))).toHaveProperty("err.name", "UnknownError");
+  });
   it("redacts invitation fields and unexpected room URL segments, queries and fragments", () => {
     const chunks: string[] = [];
     const invitation = "invitation-canary-secret";

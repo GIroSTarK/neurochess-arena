@@ -9,6 +9,8 @@ import {
 } from "@neurochess/contracts";
 import { z } from "zod";
 
+import { observeProvider, type Operations } from "../monitoring/operations.js";
+
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
 
 const outputEnvelopeSchema = normalizedMoveResponseSchema.options[0].extend({
@@ -21,7 +23,15 @@ export function cancellationFailure(signal: AbortSignal): ProviderFailure {
     : { code: "provider_unavailable", reason: "cancelled" };
 }
 
-export async function invokeMove(
+export function invokeMove(
+  adapter: AiProviderAdapter,
+  input: MoveRequest,
+  operations?: Operations,
+): Promise<NormalizedMoveResponse> {
+  return observeProvider(operations, () => invokeMoveResult(adapter, input));
+}
+
+async function invokeMoveResult(
   adapter: AiProviderAdapter,
   input: MoveRequest,
 ): Promise<NormalizedMoveResponse> {
