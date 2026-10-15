@@ -7,8 +7,6 @@ import { games } from "@neurochess/database";
 import { inArray } from "drizzle-orm";
 import { expect } from "vitest";
 
-import { integrationDatabase } from "../../../test/database.js";
-
 import { AccountGameHarness } from "./account-game-helpers.js";
 import type { TestApi } from "./helpers.js";
 
@@ -24,7 +22,7 @@ export class RoomApiHarness extends AccountGameHarness {
   }
 
   override async dispose() {
-    const database = integrationDatabase();
+    const database = this.openDatabase();
     try {
       if (this.roomIds.size) {
         await database.db.delete(games).where(inArray(games.id, [...this.roomIds]));

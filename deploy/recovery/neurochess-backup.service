@@ -1,0 +1,20 @@
+[Unit]
+Description=Encrypted Neurochess database backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/neurochess
+ExecStart=/usr/bin/node /opt/neurochess/scripts/recovery/run.ts backup /etc/neurochess/backup.json
+TimeoutStartSec=35min
+UMask=0077
+StateDirectory=neurochess-backup
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/neurochess-backup
+LogNamespace=neurochess-monitor

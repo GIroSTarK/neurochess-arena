@@ -1,14 +1,10 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 
+import { removeAccountData } from "./account-removal.js";
 import type { DatabaseConnection } from "./client.js";
 import * as schema from "./schema/auth.js";
-import { games } from "./schema/index.js";
-import {
-  type AbortSharedGame,
-  deleteAccountRooms,
-  lockSharedRooms,
-} from "./shared-history-repository.js";
+import { type AbortSharedGame, lockSharedRooms } from "./shared-history-repository.js";
 
 export class AuthAccountUnavailableError extends Error {}
 export class AccountDeletionSessionError extends Error {
@@ -76,21 +72,12 @@ export async function withAuthUserLock<T>(
             return session;
           };
           await requireSession();
-          await deleteAccountRooms(deletion, userId, accountDeletion.abortSharedGame);
-          await deletion
-            .delete(games)
-            .where(
-              and(
-                eq(games.ownerUserId, userId),
-                or(isNull(games.mode), ne(games.mode, "human_vs_human")),
-              ),
-            );
-          // Recovery records have no user foreign key. OAuth state is unassociated
-          // until callback, and email verification uses account-bound signed tokens.
-          await deletion.delete(schema.verification).where(eq(schema.verification.value, userId));
-          // Cascades may wait on other writers; expiry must roll back all removals.
-          const proof = await requireSession();
-          await deletion.delete(schema.user).where(eq(schema.user.id, userId));
+          const proof = await removeAccountData(
+            deletion,
+            userId,
+            accountDeletion.abortSharedGame,
+            requireSession,
+          );
           // User cascades can wait too. The session is now deleted, so check its
           // last authoritative deadlines before permitting this transaction to commit.
           const deadline = new Date(proof.createdAt.getTime() + freshAgeSeconds * 1000);

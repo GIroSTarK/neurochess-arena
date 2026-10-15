@@ -1,0 +1,12 @@
+services:
+  postgres:
+    volumes: !override
+      - recovered-data:/var/lib/postgresql
+      - ./postgres-entrypoint.sh:/opt/neurochess/postgres-entrypoint.sh:ro
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-neurochess.sh:ro
+      - ./recovery/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+
+volumes:
+  recovered-data:
+    external: true
+    name: ${RECOVERED_VOLUME:?Set the verified isolated recovery volume name}

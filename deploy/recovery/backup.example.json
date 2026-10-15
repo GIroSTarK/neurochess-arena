@@ -1,0 +1,9 @@
+{
+  "container": "neurochess-postgres-1",
+  "database": "neurochess",
+  "role": "neurochess",
+  "directory": "/var/lib/neurochess-backup",
+  "recipientFile": "/etc/neurochess/backup-recipients.txt",
+  "namespace": "REPLACE",
+  "bucket": "neurochess-backups"
+}

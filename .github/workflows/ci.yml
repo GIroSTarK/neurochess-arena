@@ -168,6 +168,8 @@ jobs:
         run: npm run build:deployment:test
       - name: Rehearse production deployment in isolation
         run: npm run test:deployment
+      - name: Restore encrypted synthetic backups in isolation
+        run: npm run test:recovery
 
   verify:
     if: ${{ always() }}

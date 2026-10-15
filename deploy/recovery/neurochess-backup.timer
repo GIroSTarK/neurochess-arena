@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Neurochess recovery point
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+AccuracySec=1s
+Persistent=true
+Unit=neurochess-backup.service
+
+[Install]
+WantedBy=timers.target

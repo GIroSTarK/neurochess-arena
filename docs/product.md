@@ -213,7 +213,7 @@ In-app links and Back/Forward keep the document open. Leaving a game stops its c
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.
 - Completed and aborted games show the result and reason, read-only replay starting at the final position, and private PGN copy/download. New game does not delete the previous record; its URL remains accessible only to the owning guest session until access expires. There is no guest history list.
 
-The [sandbox walkthrough](development.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production retention and automated cleanup remain separate decisions. Implementation progress belongs in the [roadmap](roadmap.md).
+The [sandbox walkthrough](development.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production guest access uses a 24-hour sliding expiry. Existing shared-room cleanup remains unchanged; physical retention and automated purging of expired solo guest records remain separate decisions. The [recovery policy](recovery.md#retention-and-ownership) defines backup retention and its deletion limitations. Implementation progress belongs in the [roadmap](roadmap.md).
 
 ## Chess and AI behavior
 
@@ -352,7 +352,7 @@ The MVP is ready when:
 
 ## Open product decisions
 
-- Exact retention period for an inactive guest game
+- Physical retention and automatic purging of expired solo guest records
 - Exact supported parameter matrix for each provider and model
 - Final deployment platform and production region
 - Repository license

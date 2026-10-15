@@ -1,0 +1,9 @@
+{
+  "confirm": "reconcile-isolated-restore-v1",
+  "accounts": [],
+  "history": [],
+  "credentials": [],
+  "guests": [],
+  "invitations": [],
+  "invalidateSessions": true
+}

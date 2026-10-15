@@ -123,6 +123,8 @@ Build natively on ARM64 or use `docker buildx build --platform linux/arm64 --loa
 
 Use the same Compose project name, configuration revision and secret directory for every release. Run these commands from the release checkout, after setting the desired image tags in the external deployment environment:
 
+After [promoting a recovered volume](recovery.md#promote-the-recovered-volume), append `-f deploy/recovery/promote.override.yml` after `-f deploy/compose.yml` on every command below. Preserve the selected `RECOVERED_VOLUME`, recovered database URL and backup target together; the base configuration alone targets the original production volume.
+
 ```sh
 docker compose --env-file /etc/neurochess/deploy.env -f deploy/compose.yml config --quiet
 docker compose --env-file /etc/neurochess/deploy.env -f deploy/compose.yml stop api
@@ -155,7 +157,11 @@ npm run test:deployment
 
 The rehearsal creates its own project, generated TLS/secrets, PostgreSQL volume and TLS mailbox, and removes them afterward. It exercises real compiled services, static routing/MIME/cache rules, SMTP registration, secure sessions, private rooms and sockets through Caddy, worker/WASM loading in Chromium/Firefox/WebKit, populated migrations, graceful restart and database failure/recovery. Set `DEPLOY_ROLLBACK_API_IMAGE` to a locally retained prior-release image to additionally verify that the prior binary can read the populated schema and sessions, then return to the new binary. Only test a release whose compatibility has been reviewed; passing an identical new image does not establish backward compatibility. Its local browser certificate exception and mailbox are test-only mounts; they are absent from production images/configuration. No outbound mail or inference is required. CI repeats the current-image rehearsal on AMD64 and ARM64 without publishing images or private artifacts.
 
-Before public release, still verify actual Oracle capacity/networking, domain ownership and public TLS, both OAuth consents, SMTP inbox delivery, provider calls, and same-site cookies/sockets on the live host. Activate and verify the monitoring configuration below, and agree/test database backup retention, separate secret recovery and restoration in P5-14. OCI volume backups/object storage are available within quotas, but no successful backup or restore is claimed here. Complete the physical-browser/accessibility and licensing gates in P5-15.
+Before public release, still verify actual Oracle capacity/networking, domain ownership and public TLS, both OAuth consents, SMTP inbox delivery, provider calls, and same-site cookies/sockets on the live host. Activate and verify the monitoring configuration below and the [backup and recovery procedure](recovery.md), including actual cloud and independent secret-store retrieval. Complete the physical-browser/accessibility and licensing gates in P5-15.
+
+## Backups and recovery
+
+The canonical [recovery runbook](recovery.md) defines the owner-selected daily backups, 24-hour RPO, two-hour RTO, seven-day expiry, separate secret recovery and isolated restore/reconciliation procedure. It also preserves the existing shared-room cleanup and formalizes 24-hour sliding guest access without adding solo-guest purging. Use `npm run test:recovery` for a real encrypted populated restore drill. Local evidence does not establish live cloud activation or full-size disaster recovery.
 
 ## Operational monitoring
 
@@ -187,7 +193,7 @@ Install the pinned project Node 24 baseline at `/usr/bin/node` and the supported
 
 In OCI, create a dynamic group containing only this VM and grant `use metrics` in the selected compartment, restricted to `target.metrics.namespace='neurochess_ops'`. Give the human operator metric-read, alarm-management and Notifications-topic permissions; do not grant the VM alarm-management privileges. Create a private Notifications topic and confirm the deployment owner's subscription. Verify actual free quotas before activation; publishing/notification delivery is a live operator action. [Metric access example](https://docs.oracle.com/en-us/iaas/Content/Compute/Tasks/transitioning-to-hpc-plugin.htm#required-policies-for-rdma-gpu-monitoring).
 
-Copy `deploy/monitoring/config.example.json` to `/etc/neurochess/monitor.json`, mode 0600. Set the real compartment/topic OCIDs, container name, exact HTTPS origins and paths. The example deliberately omits `backupMaxAgeSeconds`: P5-14 must agree that target. Its future backup job must atomically replace the operator-only status file with `{"status":"success"|"failure","completedAt":"ISO-8601 UTC timestamp"}` after completion, with no paths, command output or secrets. Until both a successful status and agreed maximum age exist, backup readiness stays unknown. This interface does not schedule a backup or establish recoverability.
+Copy `deploy/monitoring/config.example.json` to `/etc/neurochess/monitor.json`, mode 0600. Set the real compartment/topic OCIDs, container name, exact HTTPS origins and paths. The agreed `backupMaxAgeSeconds` is 86400. The [backup job](recovery.md#configure-and-run-backups) atomically replaces the operator-only status file with `status` (`success` or `failure`) and UTC `startedAt`/`completedAt` timestamps, without paths, command output or secrets. Age is measured from snapshot start; older evidence without `startedAt` uses completion time. Missing, invalid or future-dated evidence remains unknown. This interface does not by itself schedule a backup or establish recoverability.
 
 Prepare local alarm definitions and install the service:
 

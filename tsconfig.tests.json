@@ -12,6 +12,8 @@
   },
   "include": [
     "scripts/monitoring/**/*.ts",
+    "scripts/recovery/**/*.ts",
+    "vitest.recovery.config.ts",
     "apps/**/*.test.ts",
     "apps/**/*.test.tsx",
     "apps/api/test/providers/orphaned-turn.ts",

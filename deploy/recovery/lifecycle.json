@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "name": "expire-database-backups",
+      "action": "DELETE",
+      "isEnabled": true,
+      "target": "objects",
+      "timeAmount": 7,
+      "timeUnit": "DAYS",
+      "objectNameFilter": { "inclusionPrefixes": ["database/"] }
+    }
+  ]
+}

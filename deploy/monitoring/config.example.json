@@ -6,5 +6,6 @@
   "webOrigin": "https://arena.example.com",
   "directory": "/var/lib/neurochess-monitor",
   "diskPath": "/var/lib/docker",
-  "backupStatusFile": "/var/lib/neurochess-backup/status.json"
+  "backupStatusFile": "/var/lib/neurochess-backup/status.json",
+  "backupMaxAgeSeconds": 86400
 }

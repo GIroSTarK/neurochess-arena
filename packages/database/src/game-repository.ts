@@ -1,6 +1,7 @@
 import { and, asc, eq, exists, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { removeAccountHistory } from "./account-removal.js";
 import {
   type AnalysisReader,
   analysisReaderFor,
@@ -34,11 +35,7 @@ import {
 import { profiles } from "./schema/profiles.js";
 import { rooms } from "./schema/rooms.js";
 import { roomHistoryAccess } from "./schema/shared-history.js";
-import {
-  cleanupSharedRooms,
-  removeRoomHistory,
-  retainedRoomAccess,
-} from "./shared-history-repository.js";
+import { cleanupSharedRooms, retainedRoomAccess } from "./shared-history-repository.js";
 
 export type StoredGuestSession = typeof guestSessions.$inferSelect;
 export type { GamePositionUpdate, StoredGame, StoredMove } from "./game-records.js";
@@ -455,18 +452,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
             reserveGameSlot,
             releaseGameSlots,
             async deleteAccountHistory(userId, gameId) {
-              await removeRoomHistory(tx, userId, gameId);
-              await tx
-                .delete(games)
-                .where(
-                  and(
-                    eq(games.ownerUserId, userId),
-                    eq(games.isSandbox, false),
-                    inArray(games.mode, ["ai_vs_ai", "ai_vs_human"]),
-                    inArray(games.state, ["completed", "aborted"]),
-                    gameId === undefined ? undefined : eq(games.id, gameId),
-                  ),
-                );
+              await removeAccountHistory(tx, userId, gameId);
             },
             async getAiController(gameId) {
               const [lease] = await tx

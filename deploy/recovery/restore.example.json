@@ -1,0 +1,7 @@
+{
+  "container": "neurochess-restore-postgres",
+  "role": "neurochess",
+  "directory": "/var/lib/neurochess-restore",
+  "archiveFile": "/var/lib/neurochess-restore/selected.dump.age",
+  "identityFile": "/run/neurochess-recovery/backup-identity.txt"
+}

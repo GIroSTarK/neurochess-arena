@@ -36,6 +36,7 @@
     "smoke": "node scripts/smoke.mjs",
     "build:deployment:test": "docker build -f deploy/Dockerfile --target api --build-arg VITE_API_BASE_URL=https://localhost:8444 -t neurochess-api:p5-10 . && docker build -f deploy/Dockerfile --target web --build-arg VITE_API_BASE_URL=https://localhost:8444 -t neurochess-web:p5-10 .",
     "test:deployment": "node scripts/deployment-smoke.mjs",
+    "test:recovery": "node test/recovery/run.mjs",
     "infra:up": "docker compose up -d --wait postgres",
     "infra:down": "docker compose down",
     "infra:test:up": "docker compose --profile test up -d --wait postgres-test",

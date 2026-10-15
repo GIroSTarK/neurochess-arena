@@ -47,6 +47,7 @@ export interface TestGuest {
 }
 
 export class ApiHarness {
+  constructor(protected readonly openDatabase = integrationDatabase) {}
   private readonly instances = new Set<TestApi>();
   private readonly guestIds = new Set<string>();
 
@@ -67,7 +68,7 @@ export class ApiHarness {
       credentialCipher?: CredentialCipher | null;
     } = {},
   ): Promise<TestApi> {
-    const database = integrationDatabase();
+    const database = this.openDatabase();
     const original = createGameRepository(database);
     const repository = options.repository?.(original) ?? original;
     const roomEvents = createRoomEvents();
@@ -156,7 +157,7 @@ export class ApiHarness {
     await Promise.all([...this.instances].map((api) => this.close(api)));
     // Delete only this harness's fixtures, never truncate a configured database.
     if (this.guestIds.size === 0) return;
-    const database = integrationDatabase();
+    const database = this.openDatabase();
     try {
       await database.db.transaction(async (tx) => {
         await tx.delete(games).where(inArray(games.ownerGuestSessionId, [...this.guestIds]));

@@ -86,15 +86,23 @@ export function deriveSignals(current: unknown, previous: unknown, context: Cont
       : 0;
   const backup = record(context.backup);
   const completed = typeof backup.completedAt === "string" ? Date.parse(backup.completedAt) : NaN;
+  const started =
+    backup.startedAt === undefined
+      ? completed
+      : typeof backup.startedAt === "string"
+        ? Date.parse(backup.startedAt)
+        : NaN;
   const validBackup =
     ["success", "failure"].includes(String(backup.status)) &&
     Number.isFinite(completed) &&
+    Number.isFinite(started) &&
+    started <= completed &&
     completed <= context.now;
   const cadence = finite(context.backupMaxAgeSeconds) && context.backupMaxAgeSeconds > 0;
   const backupFailure =
     validBackup &&
     (backup.status === "failure" ||
-      (cadence && context.now - completed > (context.backupMaxAgeSeconds ?? 0) * 1000));
+      (cadence && context.now - started > (context.backupMaxAgeSeconds ?? 0) * 1000));
   return {
     apiAvailable: Number(Boolean(sample)),
     counterWindowAvailable: Number(counterWindowAvailable),

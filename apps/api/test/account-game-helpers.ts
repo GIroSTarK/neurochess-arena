@@ -7,7 +7,6 @@ import { eq, inArray, like } from "drizzle-orm";
 import { expect } from "vitest";
 import { z } from "zod";
 
-import { integrationDatabase } from "../../../test/database.js";
 import { authOptions } from "../src/auth/options.js";
 import { createAccountAuth } from "../src/auth/service.js";
 
@@ -68,6 +67,8 @@ export class AccountGameHarness extends ApiHarness {
     return {
       cookie,
       principal,
+      email,
+      password,
       async anotherSession() {
         const signedIn = await fixture.api.signInEmail({
           body: { email, password },
@@ -102,7 +103,7 @@ export class AccountGameHarness extends ApiHarness {
 
   override async dispose() {
     await super.dispose();
-    const database = integrationDatabase();
+    const database = this.openDatabase();
     try {
       await database.db.delete(authRateLimits).where(like(authRateLimits.key, `${this.ip}|%`));
       if (this.userIds.length) {
