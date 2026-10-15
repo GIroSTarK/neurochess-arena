@@ -54,6 +54,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production and development dependencies
+        run: npm audit --omit=dev && npm audit
+
       - name: Validate Docker Compose
         run: docker compose config --quiet
 

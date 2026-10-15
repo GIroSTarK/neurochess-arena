@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
@@ -10,6 +10,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { chromium, firefox, webkit } from "@playwright/test";
 import WebSocket from "ws";
+
+import { checkBrowserPolicy, observePolicy } from "../test/deployment/browser-security.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "neurochess-deployment-"));
 const project = "nc-rehearsal-" + randomBytes(4).toString("hex");
@@ -111,6 +113,28 @@ async function post(path, data, cookie) {
 const cookieFrom = (response) =>
   response.headers["set-cookie"].map((value) => value.split(";")[0]).join("; ");
 
+function securityHeaders(response, surface) {
+  const headers = response.headers;
+  assert.equal(headers["x-content-type-options"], "nosniff");
+  assert.equal(headers["x-frame-options"], "DENY");
+  assert.equal(headers["referrer-policy"], "no-referrer");
+  assert.equal(headers["strict-transport-security"], "max-age=31536000");
+  assert.equal(
+    headers["permissions-policy"],
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  );
+  assert.equal(headers["cross-origin-opener-policy"], "same-origin");
+  assert.equal(headers["cross-origin-embedder-policy"], undefined);
+  assert.equal(
+    headers["cross-origin-resource-policy"],
+    surface === "web" ? "same-origin" : "same-site",
+  );
+  assert.match(headers["content-security-policy"], /default-src 'none'/);
+  assert.match(headers["content-security-policy"], /frame-ancestors 'none'/);
+  assert.match(headers["content-security-policy"], /base-uri 'none'/);
+  if (surface === "api") assert.equal(headers["cache-control"], "no-store");
+}
+
 try {
   for (const origin of ["http://localhost:3001", "https://fixture:build-canary@invalid.example"]) {
     await assert.rejects(
@@ -181,7 +205,11 @@ try {
       "SMTP_PORT=1025",
       "SMTP_SECURITY=tls",
       "NODE_EXTRA_CA_CERTS=/run/secrets/postgres-cert",
-      "LOG_LEVEL=warn",
+      "GOOGLE_CLIENT_ID=rehearsal-google",
+      `GOOGLE_CLIENT_SECRET=${randomBytes(32).toString("hex")}`,
+      "GITHUB_CLIENT_ID=rehearsal-github",
+      `GITHUB_CLIENT_SECRET=${randomBytes(32).toString("hex")}`,
+      "LOG_LEVEL=info",
     ].join("\n"),
   );
   redactions.push(
@@ -206,8 +234,8 @@ try {
     ].join("\n"),
   );
   const caddy = (await readFile("deploy/Caddyfile", "utf8")).replaceAll(
-    "} {",
-    "} {\n\ttls /fixture/postgres-cert.pem /fixture/postgres-key.pem",
+    /^(\{\$(?:WEB_ORIGIN|BETTER_AUTH_URL)\} \{)\r?$/gm,
+    "$1\n\ttls /fixture/postgres-cert.pem /fixture/postgres-key.pem",
   );
   await writeFile(join(directory, "Caddyfile"), caddy);
   // Reset production port publishing; every rehearsal listener is loopback-only.
@@ -244,6 +272,16 @@ try {
   composeArgs.push("-f", join(directory, "ports.yml"));
   await compose("config", "--quiet");
   configured = true;
+  await compose(
+    "run",
+    "--rm",
+    "--no-deps",
+    "web",
+    "caddy",
+    "validate",
+    "--config",
+    "/etc/caddy/Caddyfile",
+  );
   step("Starting isolated PostgreSQL with verified TLS; applying migrations twice.");
   await compose("up", "-d", "--wait", "postgres", "mail");
   const canary = "private-token-" + randomUUID();
@@ -262,6 +300,7 @@ try {
   await compose("run", "--rm", "migrate");
   await compose("up", "-d", "--wait", "api", "web");
   await until(async () => (await request(api + "/ready")).status === 200, "API never became ready");
+  securityHeaders(await request(api + "/ready"), "api");
   for (const mode of ["plaintext", "untrusted-certificate"]) {
     await compose(
       "exec",
@@ -300,10 +339,24 @@ try {
     assert.equal(response.status, 200);
     assert.equal(response.body.toString(), html);
     assert.equal(response.headers["cache-control"], "no-cache");
+    securityHeaders(response, "web");
+    assert.match(
+      response.headers["content-security-policy"],
+      /script-src 'self' 'wasm-unsafe-eval'/,
+    );
+    assert(
+      response.headers["content-security-policy"].includes(
+        `connect-src 'self' ${api} ${api.replace("https:", "wss:")}`,
+      ),
+    );
+    assert(!response.headers["content-security-policy"].includes("'unsafe-eval'"));
   }
   for (const path of ["/assets/missing.js", "/engines/missing.wasm"]) {
     for (const accept of ["text/html", "*/*"]) {
-      assert.equal((await request(web + path, { headers: { accept } })).status, 404);
+      const response = await request(web + path, { headers: { accept } });
+      assert.equal(response.status, 404);
+      securityHeaders(response, "web");
+      assert.equal(response.headers["cache-control"], "no-store");
     }
   }
   const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+\.(?:js|css))"/g)].map(
@@ -318,6 +371,7 @@ try {
       path.endsWith("js") ? /javascript/ : /text\/css/,
     );
     assert.match(response.headers["cache-control"], /immutable/);
+    securityHeaders(response, "web");
   }
   const engineRoot = web + "/engines/sf19-lite-single-v1/";
   const manifest = (await request(engineRoot + "manifest.json")).json();
@@ -325,11 +379,30 @@ try {
     const response = await request(engineRoot + path);
     assert.equal(response.status, 200, `Engine distribution ${path}`);
     if (path.endsWith(".wasm")) assert.match(response.headers["content-type"], /application\/wasm/);
+    securityHeaders(response, "web");
+    if (manifest.files[path]) {
+      assert.equal(
+        createHash("sha256").update(response.body).digest("hex"),
+        manifest.files[path].sha256,
+      );
+    }
   }
+  const notices = await request(web + "/THIRD-PARTY-NOTICES.md");
+  assert.equal(notices.status, 200);
+  for (const notice of [
+    "Permission is hereby granted",
+    "SIL OPEN FONT LICENSE Version 1.1",
+    "The Inter Project Authors",
+    "The Orbitron Project Authors",
+  ]) {
+    assert(notices.body.toString().includes(notice));
+  }
+  securityHeaders(notices, "web");
   for (const path of ["/games/" + randomUUID(), "/__test__/mail", "/arena-reference", "/sandbox"]) {
     const response = await request(api + path, { headers: { accept: "text/html" } });
     assert([401, 403, 404].includes(response.status));
     assert.match(response.headers["content-type"], /application\/json/);
+    securityHeaders(response, "api");
   }
   step(
     "Static routes, MIME types, cache policy, engine/source distribution and API separation passed.",
@@ -349,8 +422,10 @@ try {
   const verified = await request(verification);
   assert.equal(verified.status, 303);
   assert(verified.headers.location.startsWith(web + "/"));
+  securityHeaders(verified, "api");
   const signIn = await post("/api/auth/sign-in/email", { email, password });
   const accountCookie = cookieFrom(signIn);
+  securityHeaders(signIn, "api");
   assert(
     signIn.headers["set-cookie"].some(
       (value) => /Secure/i.test(value) && /HttpOnly/i.test(value) && /SameSite=Lax/i.test(value),
@@ -371,6 +446,12 @@ try {
     )
   ).json();
   const gameId = joined.snapshot.gameId;
+  const privateRead = await request(api + `/rooms/${gameId}`, { cookie: accountCookie });
+  assert.equal(privateRead.status, 200);
+  securityHeaders(privateRead, "api");
+  const anonymousRead = await request(api + `/rooms/${gameId}`);
+  assert.notEqual(anonymousRead.status, 200);
+  securityHeaders(anonymousRead, "api");
 
   async function socketSnapshot() {
     const socket = new WebSocket(api.replace("https:", "wss:") + "/rooms/realtime", {
@@ -421,6 +502,7 @@ try {
       }),
     );
     const page = await context.newPage();
+    await observePolicy(page);
     const wasm = page.waitForResponse(
       (response) => response.url().endsWith(".wasm") && response.status() === 200,
     );
@@ -433,11 +515,17 @@ try {
       async () => (await request(api + `/rooms/${gameId}`, { cookie: guestCookie })).status === 200,
       "Private room lost",
     );
+    await checkBrowserPolicy(page, web, api);
     await context.close();
-    step(`Production room, cookie, socket and worker loading: ${name}.`);
+    step(
+      `Production room, cookie, socket, worker, CSP, avatar and OAuth navigation checks: ${name}.`,
+    );
   }
   step("Stopping the sole API owner, migrating populated state, and restarting.");
   await compose("stop", "api");
+  const offline = await request(api + "/ready?code=callback-log-canary");
+  assert.equal(offline.status, 502);
+  securityHeaders(offline, "api");
   const stopped = JSON.parse(await command("docker", ["inspect", project + "-api"]));
   assert.equal(stopped[0].State.Running, false);
   assert.equal(stopped[0].State.ExitCode, 0);
@@ -497,6 +585,7 @@ try {
     });
     if (response.status === 429) {
       assert.equal(response.json().code, "AUTH_RATE_LIMITED");
+      securityHeaders(response, "api");
       assert(Number(response.headers["retry-after"]) > 0);
       authLimited = true;
       break;
@@ -514,6 +603,7 @@ try {
     });
     if (response.status === 429) {
       assert.equal(response.json().code, "RATE_LIMITED");
+      securityHeaders(response, "api");
       assert.equal(response.headers["cache-control"], "no-store");
       assert(Number(response.headers["retry-after"]) > 0);
       assert.match(response.headers["access-control-expose-headers"], /Retry-After/i);
@@ -525,6 +615,19 @@ try {
   assert(invitationLimited, "Forged headers bypassed the HTTP IP limit through Caddy");
   assert.equal((await socketSnapshot()).snapshot.state, "active");
   assert.equal((await request(api + `/rooms/${gameId}`, { cookie: guestCookie })).status, 200);
+  await request(api + "/api/auth/callback/google?code=callback-log-canary&state=state-log-canary");
+  await request(web + "/rooms/join?invite=invitation-log-canary");
+  const logs = await compose("logs", "--no-color", "api", "web");
+  for (const secret of [
+    "callback-log-canary",
+    "state-log-canary",
+    "invitation-log-canary",
+    "private-callback-description-canary",
+    issued.invitation,
+    ...redactions,
+  ]) {
+    assert(!logs.includes(secret), "Production logs leaked private request data");
+  }
   step("Production rehearsal passed; no live infrastructure was provisioned.");
 } finally {
   for (const socket of sockets) socket.terminate();

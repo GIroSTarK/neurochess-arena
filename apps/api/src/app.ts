@@ -33,6 +33,7 @@ import type { RoomEvents } from "./realtime/room-events.js";
 import { registerRoomRealtime } from "./realtime/routes.js";
 import { registerRoomRoutes } from "./rooms/routes.js";
 import type { RoomService } from "./rooms/service.js";
+import { registerSecurityHeaders } from "./security.js";
 
 export interface ReadinessProbe {
   check(): Promise<void>;
@@ -70,6 +71,7 @@ export async function buildApp(options: BuildAppOptions) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  registerSecurityHeaders(app);
   registerProxyBoundary(app, options.trustedProxyIp);
 
   await app.register(cookie);

@@ -10,7 +10,43 @@
 	}
 }
 
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+		defer
+	}
+}
+
+(web_policy) {
+	import security_headers
+	map {$BETTER_AUTH_URL} {api_websocket_origin} {
+		~^https://([^/]+)$ wss://${1}
+	}
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' https://googleusercontent.com https://*.googleusercontent.com https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self' {$BETTER_AUTH_URL} {api_websocket_origin}; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		Cross-Origin-Resource-Policy same-origin
+		defer
+	}
+}
+
+(api_policy) {
+	import security_headers
+	header {
+		Content-Security-Policy "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+		Cross-Origin-Resource-Policy same-site
+		Cache-Control no-store
+		defer
+	}
+}
+
 {$WEB_ORIGIN} {
+	import web_policy
 	root * /srv
 	encode zstd gzip
 	@assets path /assets/*
@@ -33,9 +69,15 @@
 		try_files {path} /index.html
 		file_server
 	}
+	handle_errors {
+		import web_policy
+		header >Cache-Control no-store
+		respond "Resource unavailable" {err.status_code}
+	}
 }
 
 {$BETTER_AUTH_URL} {
+	import api_policy
 	request_body {
 		max_size 1MB
 	}
@@ -47,5 +89,9 @@
 			dial_timeout 5s
 			response_header_timeout 210s
 		}
+	}
+	handle_errors {
+		import api_policy
+		respond "Service unavailable" {err.status_code}
 	}
 }

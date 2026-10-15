@@ -51,8 +51,10 @@ export default defineConfig(({ mode, command }) => ({
     ),
   },
   build: {
+    license: { fileName: "THIRD-PARTY-NOTICES.md" },
     rolldownOptions: {
       output: {
+        postBanner: "/* Bundled dependency and font licenses: /THIRD-PARTY-NOTICES.md */",
         codeSplitting: { groups: vendorChunks },
       },
     },
