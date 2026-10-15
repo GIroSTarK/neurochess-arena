@@ -2,6 +2,8 @@
 set -eu
 install -m 600 -o postgres -g postgres /run/secrets/postgres-key /tmp/postgres-key.pem
 install -m 644 -o postgres -g postgres /run/secrets/postgres-cert /tmp/postgres-cert.pem
+# The init hook runs as postgres and cannot read a host-owned 0600 secret mount.
+install -m 600 -o postgres -g postgres /run/secrets/postgres-app-password /tmp/postgres-app-password
 exec docker-entrypoint.sh postgres \
   -c ssl=on \
   -c ssl_cert_file=/tmp/postgres-cert.pem \

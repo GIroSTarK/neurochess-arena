@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-APP_PASSWORD="$(cat /run/secrets/postgres-app-password)"
+APP_PASSWORD="$(cat /tmp/postgres-app-password)"
 export APP_PASSWORD
 psql --username postgres --dbname neurochess --set ON_ERROR_STOP=1 <<'SQL'
 \getenv app_password APP_PASSWORD
