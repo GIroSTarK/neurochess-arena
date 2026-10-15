@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { join, resolve } from "node:path";
 
@@ -40,11 +40,12 @@ export async function runReconciliation(
   apiEnv: string,
   manifestFile: string,
 ) {
+  const { uid, gid } = await stat(manifestFile);
   return command("docker", [
     "run",
     "--rm",
     "--user",
-    "0:0",
+    `${uid}:${gid}`,
     "--read-only",
     "--cap-drop",
     "ALL",

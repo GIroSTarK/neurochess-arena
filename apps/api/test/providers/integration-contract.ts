@@ -15,7 +15,7 @@ import {
   moves,
 } from "@neurochess/database";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AI_MOVE_INSTRUCTIONS } from "../../src/providers/adapter.js";
 import { control, turnCommand } from "../ai-turn-helpers.js";
@@ -328,6 +328,7 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
     });
 
     it("propagates the operational deadline and records a provider pause", async () => {
+      const entered = Promise.withResolvers<void>();
       let signal: AbortSignal | undefined;
       await withProviderApi(
         wire,
@@ -339,30 +340,46 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
               signal.addEventListener("abort", () => reject(new Error(PROVIDER_KEY)), {
                 once: true,
               });
+              entered.resolve();
             }),
         ],
         async ({ api, guest, http, logs }) => {
           const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
-          const response = await turn(api, guest, initial);
-          expect(response.statusCode, response.body).toBe(200);
-          expect(gameSnapshotSchema.parse(response.json())).toMatchObject({
-            state: "paused",
-            result: "*",
-            moves: [],
-          });
-          expect(signal?.aborted).toBe(true);
-          const log = await records(api, guest, initial.gameId);
-          expect(log.turns).toMatchObject([
-            {
-              invalidOutputCount: 0,
-              acceptedMovePly: null,
-              attempts: [{ outcome: "provider_error", error: { code: "provider_timeout" } }],
-            },
-          ]);
-          expect(JSON.stringify({ log, logs, response: response.body })).not.toContain(
-            PROVIDER_KEY,
-          );
-          expect(http.transport).toHaveBeenCalledTimes(2);
+          // Database preparation and discovery must finish before the deadline is advanced.
+          vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+          try {
+            const pending = turn(api, guest, initial);
+            await Promise.race([
+              entered.promise,
+              pending.then(() => expect.fail("Turn completed before inference transport entry")),
+            ]);
+            expect(signal?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(149);
+            expect(signal?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            const response = await pending;
+            expect(response.statusCode, response.body).toBe(200);
+            expect(gameSnapshotSchema.parse(response.json())).toMatchObject({
+              state: "paused",
+              result: "*",
+              moves: [],
+            });
+            expect(signal?.aborted).toBe(true);
+            const log = await records(api, guest, initial.gameId);
+            expect(log.turns).toMatchObject([
+              {
+                invalidOutputCount: 0,
+                acceptedMovePly: null,
+                attempts: [{ outcome: "provider_error", error: { code: "provider_timeout" } }],
+              },
+            ]);
+            expect(JSON.stringify({ log, logs, response: response.body })).not.toContain(
+              PROVIDER_KEY,
+            );
+            expect(http.transport).toHaveBeenCalledTimes(2);
+          } finally {
+            vi.useRealTimers();
+          }
         },
         { turnMs: 150 },
       );

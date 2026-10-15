@@ -97,7 +97,7 @@ Copy `deploy/recovery/reconcile.example.json` to a protected `/etc/neurochess/re
 Stop all APIs and close operator SQL clients connected to the recovered database. Prepare `/etc/neurochess/recovered-api.env` with the new auth secret, recovered credential key pair and other API settings. Its `DATABASE_URL` must use the generated `nc_restore_*` database, the recovered app password, host `postgres`, `sslmode=verify-full` and `sslrootcert=/run/secrets/postgres-cert`. Run the reviewed API image as a one-shot operator process on the isolated network, using the actual public-certificate path:
 
 ```sh
-docker run --rm --user 0:0 --read-only --cap-drop ALL \
+docker run --rm --user "$(stat -c '%u:%g' /etc/neurochess/reconcile.json)" --read-only --cap-drop ALL \
   --security-opt no-new-privileges:true --network neurochess-restore_database \
   --env-file /etc/neurochess/recovered-api.env -e RECOVERY_ISOLATED=true \
   -v /etc/neurochess/recovery-secrets/postgres-cert.pem:/run/secrets/postgres-cert:ro \
@@ -105,6 +105,8 @@ docker run --rm --user 0:0 --read-only --cap-drop ALL \
   neurochess-api:REVIEWED_RELEASE \
   node apps/api/dist/operations/reconcile-cli.js /recovery-manifest.json
 ```
+
+The process uses the manifest's numeric owner UID/GID so it can read the mode-0600 file with all capabilities dropped. A different UID, including root without permission-bypass capabilities, cannot read that mount. Keep the mounted public certificate readable as described in the deployment runbook.
 
 This command exposes no HTTP endpoint and never creates or impersonates a user session. It refuses ordinary database names or another client connection, validates a bounded strict manifest, and applies removals plus session/token invalidation atomically. It can be repeated after an uncertain acknowledgement. Account deletion aborts/anonymizes shared rooms through the canonical deterministic implementation. A history-deletion entry whose restored game is still unfinished fails the transaction: recover a later authoritative point or resolve its lifecycle explicitly while isolated, rather than fabricating post-snapshot moves/results. Unknown later changes still block public reopening.
 
