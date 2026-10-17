@@ -47,6 +47,8 @@ describe("OpenRouter discovery", () => {
       "vendor/new-model",
       "vendor/new-model:free",
       "vendor/new-model:thinking",
+      "~anthropic/claude-sonnet-latest",
+      "~vendor/new-model:free",
       "openrouter/auto",
       "future-text-model",
     ];
@@ -114,6 +116,9 @@ describe("OpenRouter discovery", () => {
     ...[
       { name: "absolute URL model ID", fields: { id: "https://evil.example/model" } },
       { name: "parent traversal model ID", fields: { id: "vendor/../model" } },
+      { name: "alias parent traversal model ID", fields: { id: "~vendor/../model" } },
+      { name: "repeated alias prefix", fields: { id: "~~vendor/model" } },
+      { name: "misplaced alias prefix", fields: { id: "vendor/~model" } },
       { name: "query in model ID", fields: { id: "vendor/a?key=value" } },
       { name: "newline in model ID", fields: { id: "vendor/model\n" } },
       { name: "oversized model ID", fields: { id: "x".repeat(257) } },
@@ -194,31 +199,34 @@ describe("OpenRouter discovery", () => {
 });
 
 describe("OpenRouter move requests and responses", () => {
-  it("sends exactly the fair context and selected parameters while disabling retries and compression", async () => {
-    const http = mockHttp([Response.json(openRouterResponse())]);
-    const request = { ...input(), modelId: "vendor/new-model:free" };
-    expect(await createOpenRouterAdapter(http.transport).requestMove(request)).toMatchObject({
-      ok: true,
-    });
-    expect(http.requests[0]!.url).toBe("https://openrouter.ai/api/v1/chat/completions");
-    const body = (await http.requests[0]!.json()) as { messages: { content: string }[] };
-    expect(JSON.parse(body.messages[1]!.content)).toEqual(request.context);
-    expect(body).toEqual({
-      model: request.modelId,
-      messages: [
-        { role: "system", content: request.instructions },
-        { role: "user", content: body.messages[1]!.content },
-      ],
-      stream: false,
-      provider: { allow_fallbacks: false, require_parameters: true },
-      plugins: [{ id: "context-compression", enabled: false }],
-      temperature: 0.5,
-      max_tokens: 256,
-      reasoning: { effort: "low" },
-    });
-    expect(http.requests[0]!.redirect).toBe("error");
-    expect(http.requests[0]!.credentials).toBe("omit");
-  });
+  it.each(["vendor/new-model:free", "~anthropic/claude-sonnet-latest"])(
+    "sends the unchanged model ID %s with the fair context and selected parameters",
+    async (modelId) => {
+      const http = mockHttp([Response.json(openRouterResponse())]);
+      const request = { ...input(), modelId };
+      expect(await createOpenRouterAdapter(http.transport).requestMove(request)).toMatchObject({
+        ok: true,
+      });
+      expect(http.requests[0]!.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+      const body = (await http.requests[0]!.json()) as { messages: { content: string }[] };
+      expect(JSON.parse(body.messages[1]!.content)).toEqual(request.context);
+      expect(body).toEqual({
+        model: request.modelId,
+        messages: [
+          { role: "system", content: request.instructions },
+          { role: "user", content: body.messages[1]!.content },
+        ],
+        stream: false,
+        provider: { allow_fallbacks: false, require_parameters: true },
+        plugins: [{ id: "context-compression", enabled: false }],
+        temperature: 0.5,
+        max_tokens: 256,
+        reasoning: { effort: "low" },
+      });
+      expect(http.requests[0]!.redirect).toBe("error");
+      expect(http.requests[0]!.credentials).toBe("omit");
+    },
+  );
 
   it.each([
     { name: "absent capabilities", capabilities: undefined },

@@ -178,7 +178,7 @@ export const gameParticipants = pgTable(
     check(
       "game_participants_model_id_check",
       sql`${table.modelId} is null or (length(${table.modelId}) between 1 and 256
-        and ${table.modelId} ~ '^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$')`,
+        and ${table.modelId} ~ '^~?[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$')`,
     ),
     check(
       "game_participants_parameters_check",
@@ -468,7 +468,7 @@ export const modelInvocations = pgTable(
     ),
     check(
       "model_invocations_model_id_check",
-      sql`length(${table.modelId}) between 1 and 256 and ${table.modelId} ~ '^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$'`,
+      sql`length(${table.modelId}) between 1 and 256 and ${table.modelId} ~ '^~?[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$'`,
     ),
     check(
       "model_invocations_parameters_check",

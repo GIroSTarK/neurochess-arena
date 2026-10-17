@@ -880,6 +880,8 @@ All default acceptance tests use real application/auth/database services with in
 
 ## Migrations
 
+Migration `0022_model_alias_prefix.sql` permits one leading `~` in model IDs for game participants and invocation records, matching OpenRouter aliases and the shared transport contract. It replaces only the two ID checks, preserves existing rows, and retains the 256-character limit. Stop API writers, apply the forward migration, and restart the updated API together: older readers reject alias IDs. Apply it before creating games with alias models.
+
 Migration `0020_private_analysis_samples.sql` adds normalized account/game/ply samples, bounded scalar/score checks and account/game deletion cascades without rewriting existing records or backfilling evaluations. Stop old API writers, apply the reviewed forward migration, and restart the updated API together. Room history removal now deletes the requester's samples in the same retained-access transaction; account and physical game deletion cascade the rest. The test suite verifies a populated upgrade, schema constraints, rollback and deletion races on disposable databases.
 
 Migration `0019_room_http_commands.sql` adds identity-free accepted-join receipt fields to rooms and command kinds for join and invitation changes. Existing room metadata, creation operations, history, slots, moves and solo command receipts are preserved. Stop old API writers, apply the reviewed forward migration, commit it before using the new enum values, and start the updated API. Only the consumed invitation digest and command UUID are stored for join recovery; current seat/access checks still authorize every retry. No data backfill or personal development database migration is required for the test suite.

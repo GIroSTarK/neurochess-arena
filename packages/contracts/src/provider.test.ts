@@ -5,6 +5,7 @@ import {
   modelCapabilitiesSchema,
   modelDescriptorSchema,
   modelDiscoveryResultSchema,
+  modelIdSchema,
   normalizedMoveResponseSchema,
   providerFailureSchema,
   tokenUsageSchema,
@@ -16,6 +17,36 @@ const unknownCapabilities = {
 };
 
 describe("normalized provider contracts", () => {
+  it("preserves routed model aliases with a single leading tilde", () => {
+    for (const id of ["~anthropic/claude-sonnet-latest", "~vendor/model:free"]) {
+      const model = {
+        provider: "openrouter",
+        id,
+        name: "Alias model",
+        capabilities: unknownCapabilities,
+      };
+      expect(modelDiscoveryResultSchema.parse({ ok: true, models: [model] })).toEqual({
+        ok: true,
+        models: [model],
+      });
+    }
+    expect(modelIdSchema.parse(`~${"x".repeat(255)}`)).toHaveLength(256);
+  });
+
+  it("rejects misplaced or repeated tilde prefixes and retains model ID bounds", () => {
+    for (const id of [
+      "~",
+      "~~vendor/model",
+      "vendor/~model",
+      "vendor/model~",
+      "~vendor/model?key=value",
+      "~vendor/model\n",
+      `~${"x".repeat(256)}`,
+    ]) {
+      expect(modelIdSchema.safeParse(id).success, id).toBe(false);
+    }
+  });
+
   it("represents unknown support explicitly and bounds known capability metadata", () => {
     expect(modelCapabilitiesSchema.parse(unknownCapabilities)).toEqual(unknownCapabilities);
     expect(

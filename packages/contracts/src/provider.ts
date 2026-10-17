@@ -7,7 +7,7 @@ export const modelIdSchema = z
   .string()
   .min(1)
   .max(256)
-  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*(?![\s\S])/);
+  .regex(/^~?[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*(?![\s\S])/);
 export const reasoningEffortSchema = z
   .string()
   .min(1)

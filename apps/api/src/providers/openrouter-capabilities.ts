@@ -6,7 +6,7 @@ import {
 import { z } from "zod";
 
 export const openRouterModelIdSchema = modelIdSchema.regex(
-  /^[a-zA-Z0-9][a-zA-Z0-9._+-]*(?:[/:][a-zA-Z0-9][a-zA-Z0-9._+-]*)*(?![\s\S])/,
+  /^~?[a-zA-Z0-9][a-zA-Z0-9._+-]*(?:[/:][a-zA-Z0-9][a-zA-Z0-9._+-]*)*(?![\s\S])/,
 );
 const modalities = z.array(z.string().min(1).max(64)).max(32).nullish();
 export const openRouterModelSchema = z.object({

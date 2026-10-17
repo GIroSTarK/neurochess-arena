@@ -5,6 +5,7 @@ import { PROVIDER_KEY } from "./providers/adapter-contract.js";
 import { runProviderIntegrationContract } from "./providers/integration-contract.js";
 import {
   createProviderGame,
+  post,
   records,
   turn,
   withProviderApi,
@@ -53,6 +54,36 @@ runProviderIntegrationContract({
 });
 
 describe("openrouter provider-specific live capabilities", () => {
+  it("discovers aliases and persists their IDs through game creation and an accepted turn", async () => {
+    const modelId = "~anthropic/claude-sonnet-latest";
+    const catalog = () => Response.json(openRouterCatalog([openRouterFixture.modelId, modelId]));
+    await withProviderApi(
+      openRouterFixture,
+      [catalog(), catalog(), Response.json(openRouterResponse('{"move":"e2e4"}'))],
+      async ({ api, guest, http }) => {
+        const discovery = await post(api, guest, "/providers/models", {
+          provider: "openrouter",
+          apiKey: PROVIDER_KEY,
+        });
+        expect(discovery.statusCode).toBe(200);
+        expect(discovery.json()).toMatchObject({
+          ok: true,
+          models: [{ id: "anthropic/claude-sonnet-4" }, { id: modelId }],
+        });
+        const initial = await createProviderGame(api, guest, openRouterFixture, {}, modelId);
+        const response = await turn(api, guest, initial);
+        expect(response.statusCode, response.body).toBe(200);
+        expect((await snapshot(api, guest, initial.gameId)).moves.map(({ uci }) => uci)).toEqual([
+          "e2e4",
+        ]);
+        expect((await openRouterFixture.readMove(http.requests[2]!)).modelId).toBe(modelId);
+        expect((await records(api, guest, initial.gameId)).turns[0]!.attempts).toMatchObject([
+          { modelId, outcome: "accepted" },
+        ]);
+      },
+    );
+  });
+
   it("rejects settings invalidated by fresh discovery before inference or invocation insertion", async () => {
     await withProviderApi(
       openRouterFixture,
