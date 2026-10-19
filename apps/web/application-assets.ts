@@ -108,8 +108,24 @@ ${bundled ? `<li><a href="THIRD-PARTY-NOTICES.md">${copy.dependencies}</a></li>`
 export function applicationDistribution(): Plugin {
   return {
     name: "application-distribution",
-    generateBundle() {
-      for (const asset of applicationAssets(true)) this.emitFile({ type: "asset", ...asset });
+    generateBundle: {
+      order: "post",
+      handler(_options, bundle) {
+        for (const asset of applicationAssets(true)) this.emitFile({ type: "asset", ...asset });
+        const notices = bundle["THIRD-PARTY-NOTICES.md"];
+        if (notices?.type !== "asset") throw new Error("Missing bundled dependency notices");
+        let text = Buffer.from(notices.source).toString();
+        // Vite collects licenses from JavaScript chunks, which omit CSS-only font imports.
+        for (const name of ["@fontsource-variable/inter", "@fontsource-variable/orbitron"]) {
+          if (text.includes(`## ${name} -`)) continue;
+          const license = readFileSync(
+            fileURLToPath(import.meta.resolve(`${name}/LICENSE`)),
+            "utf8",
+          );
+          text += `\n## ${name}\n\n${license.trim()}\n`;
+        }
+        notices.source = text;
+      },
     },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {

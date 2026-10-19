@@ -142,6 +142,14 @@ Vite preview's generic fallback also returns HTML for missing asset URLs when Ac
 
 ### Extending routes
 
+Public legal documents are separate Vite HTML entries at `/privacy.html` and
+`/terms.html`, rendered at build time by `apps/web/legal-pages.ts` from
+`src/i18n/legal-en.ts`. They use the shared theme and need neither JavaScript,
+an account, nor the API. The common footer opens them in a separate tab to retain
+the current game's page lifetime; the homepage also exposes them without JavaScript.
+Keep their copy aligned with actual data practices, operator/contact details,
+and provider arrangements. These static documents are not React Router routes.
+
 1. Register a case-sensitive leaf in `app/routes.tsx` with page metadata, a feature-owned route component, and a `route-data.ts` loader/action. Preserve literal build gates and lazy module boundaries for development features.
 2. Validate URL parameters and action intents before requests. Resolve identity inside each protected leaf, pass cancellation through the validated clients, and return generation-scoped, bounded values. Keep secrets and return destinations out of router results/history state.
 3. Pass committed loader data to screen adapters. Require loader revalidation for entry retries; retain controller reads only for explicit command reconciliation, provider discovery, telemetry, replay and PGN. A canceled request never proves a write failed.

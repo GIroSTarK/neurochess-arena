@@ -159,6 +159,15 @@ The rehearsal creates its own project, generated TLS/secrets, PostgreSQL volume 
 
 Before public release, complete the [MVP release acceptance](#mvp-release-acceptance) below. Local fixtures do not establish live-service or physical-device readiness.
 
+For Google OAuth branding, publish `/privacy.html` and `/terms.html` with the
+same web release, then verify that both return their document text without
+authentication or JavaScript and that homepage links reach them. Use their full
+HTTPS URLs on the public web origin in Google Console, not `licensing.html` or
+an SPA fallback. Confirm the operator/contact address, hosting/email providers,
+and retention statements match the live deployment before publishing. The public
+pages are generated from `apps/web/src/i18n/legal-en.ts`; updating them does not
+itself deploy the site or complete Google's branding verification.
+
 ## MVP release acceptance
 
 Use this checklist for one identified release candidate. The [eight product criteria](product.md#mvp-acceptance-criteria) are the exit condition; the [roadmap](roadmap.md#phase-5--analysis-polish-and-release-hardening) records current completion. A pending check blocks release even when local tests pass. Keep dated results, commands, exact revision, dirty-diff identity (if any), OS/Node/npm/browser versions, image IDs and evidence links in the reviewed change or private release record, not this runbook. After a candidate changes, rerun affected checks; before approval, establish evidence for the final immutable revision and images.

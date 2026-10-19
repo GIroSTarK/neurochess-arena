@@ -1,4 +1,6 @@
 @import "tailwindcss" source("../");
+@import "@fontsource-variable/orbitron";
+@import "@fontsource-variable/inter/wght.css";
 
 /*
  * Design tokens from docs/design-system.md. The default palette, type scale, and

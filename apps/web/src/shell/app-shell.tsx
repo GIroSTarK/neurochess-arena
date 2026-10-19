@@ -63,7 +63,21 @@ export function AppShell({
       </main>
       <footer className="pt-8 text-center text-caption text-text-muted">
         {footer}
-        <p className="mt-2">
+        <nav
+          className="mt-2 flex flex-wrap justify-center gap-x-6"
+          aria-label={t("legal.navigation")}
+        >
+          {(["privacy", "terms"] as const).map((page) => (
+            <a
+              key={page}
+              className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-text"
+              href={`${import.meta.env.BASE_URL}${page}.html`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t(`legal.${page}`)}
+            </a>
+          ))}
           <a
             className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-text"
             href={`${import.meta.env.BASE_URL}licensing.html`}
@@ -72,7 +86,7 @@ export function AppShell({
           >
             {t("licensing.link")}
           </a>
-        </p>
+        </nav>
       </footer>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}

@@ -1,6 +1,4 @@
 import "./app/browser-validation";
-import "@fontsource-variable/orbitron";
-import "@fontsource-variable/inter/wght.css";
 import "./styles.css";
 
 import { StrictMode } from "react";

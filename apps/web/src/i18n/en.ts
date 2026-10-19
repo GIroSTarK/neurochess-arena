@@ -1,4 +1,10 @@
 export const en = {
+  legal: {
+    privacy: "Privacy Policy",
+    terms: "Terms of Service",
+    navigation: "Legal information",
+    noScript: "JavaScript is required to play. You can read our policies without enabling it.",
+  },
   licensing: {
     title: "Neurochess Arena licenses and source",
     link: "Licenses and source",

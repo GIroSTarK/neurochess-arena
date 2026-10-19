@@ -73,10 +73,34 @@ it.each(["development", "test"])(
     expect(licensing).toContain('href="neurochess-arena-source.tar.gz"');
     expect(licensing).toContain('href="LICENSE.txt"');
     expect(licensing).toContain('href="THIRD-PARTY-NOTICES.md"');
+    for (const [file, title] of [
+      ["privacy.html", "Privacy Policy"],
+      ["terms.html", "Terms of Service"],
+    ] as const) {
+      const legal = asset(file).toString();
+      expect(legal).toContain(`<title>${title} · Neurochess Arena</title>`);
+      expect(legal).toContain('href="mailto:support@neurochess-arena.com"');
+      expect(legal).toContain('href="/privacy.html"');
+      expect(legal).toContain('href="/terms.html"');
+      expect(legal).toMatch(/<h1[^>]*>/);
+      expect(legal).toMatch(/<h2[^>]*>/);
+      expect(legal).toMatch(/<link[^>]*href="\/assets\/[^"]+\.css"/);
+      expect(legal).not.toMatch(/<script|%NC_|id="root"/);
+    }
+    expect(asset("privacy.html").toString()).toContain("Google sign-in");
+    expect(asset("terms.html").toString()).toContain("Provider charges");
+    const home = asset("index.html").toString();
+    expect(home).toContain('href="/privacy.html"');
+    expect(home).toContain('href="/terms.html"');
+    expect(home).not.toContain("%NC_");
     const archive = asset("neurochess-arena-source.tar.gz");
     const names = execFileSync("tar", ["-tzf", "-"], { input: archive, encoding: "utf8" });
     expect(names).toContain("apps/web/src/shell/app-shell.tsx");
     expect(names).toContain("apps/web/vite.config.ts");
+    expect(names).toContain("apps/web/legal-pages.ts");
+    expect(names).toContain("apps/web/src/i18n/legal-en.ts");
+    expect(names).toContain("apps/web/privacy.html");
+    expect(names).toContain("apps/web/terms.html");
     expect(names).toContain("packages/config/tsconfig/react.json");
     expect(names).toContain("package-lock.json");
     expect(names).toContain("docs/licensing.md");

@@ -6,17 +6,10 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
 import { applicationDistribution } from "./application-assets.ts";
+import { escapeHtml, legalPage } from "./legal-pages.ts";
 import { parseSandboxFlag } from "./src/app/env.ts";
 import { en } from "./src/i18n/en.ts";
 import { stockfishAssets } from "./stockfish-assets.ts";
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 /** The canvas token also colors the browser chrome; index.html reads it instead of repeating it. */
 function canvasColor(): string {
@@ -54,6 +47,11 @@ export default defineConfig(({ mode, command }) => ({
   build: {
     license: { fileName: "THIRD-PARTY-NOTICES.md" },
     rolldownOptions: {
+      input: {
+        index: fileURLToPath(new URL("./index.html", import.meta.url)),
+        privacy: fileURLToPath(new URL("./privacy.html", import.meta.url)),
+        terms: fileURLToPath(new URL("./terms.html", import.meta.url)),
+      },
       output: {
         postBanner:
           "/* Neurochess Arena: GPL-3.0-only. License, matching source and third-party notices: /licensing.html */",
@@ -72,11 +70,19 @@ export default defineConfig(({ mode, command }) => ({
       name: "document-metadata",
       transformIndexHtml: {
         order: "pre",
-        handler: (html) =>
-          html
-            .replace("%NC_TITLE%", escapeHtml(en.app.title))
-            .replace("%NC_DESCRIPTION%", escapeHtml(en.app.description))
-            .replace("%NC_THEME_COLOR%", canvasColor()),
+        handler: (html, context) => {
+          const page = /[/\\](privacy|terms)\.html$/.exec(context.filename)?.[1];
+          const legal = page === "privacy" || page === "terms" ? legalPage(page) : null;
+          return html
+            .replace("%NC_TITLE%", escapeHtml(legal?.title ?? en.app.title))
+            .replace("%NC_DESCRIPTION%", escapeHtml(legal?.description ?? en.app.description))
+            .replace("%NC_THEME_COLOR%", canvasColor())
+            .replace("%NC_LEGAL_BODY%", legal?.body ?? "")
+            .replace(
+              "%NC_NO_SCRIPT%",
+              `<main><h1>${escapeHtml(en.app.title)}</h1><p>${escapeHtml(en.app.description)}</p><p>${escapeHtml(en.legal.noScript)}</p><nav aria-label="${escapeHtml(en.legal.navigation)}"><a href="/privacy.html">${escapeHtml(en.legal.privacy)}</a> · <a href="/terms.html">${escapeHtml(en.legal.terms)}</a> · <a href="/licensing.html">${escapeHtml(en.licensing.link)}</a></nav></main>`,
+            );
+        },
       },
     },
   ],
