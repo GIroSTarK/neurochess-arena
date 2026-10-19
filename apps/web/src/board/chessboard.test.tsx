@@ -73,6 +73,23 @@ describe("accessible chessboard", () => {
   );
 
   it.each(["white", "black"] as const)(
+    "keeps mobile rank annotations outside square button labels with %s at the bottom",
+    (orientation) => {
+      renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);
+      const grid = screen.getByRole("grid", { name: "Chessboard" });
+      const ranks = within(grid).getAllByText(/^[1-8]$/);
+      expect(ranks).toHaveLength(8);
+      for (const rank of ranks) {
+        expect(rank.closest("button")).toBeNull();
+        expect(rank).toHaveAttribute("aria-hidden", "true");
+      }
+      expect(squaresOnBoard()(orientation === "white" ? "a1" : "h1")).toHaveAccessibleName(
+        orientation === "white" ? "a1: White rook." : "h1: White rook.",
+      );
+    },
+  );
+
+  it.each(["white", "black"] as const)(
     "follows visible directions, row ends and corners with %s at the bottom",
     async (orientation) => {
       renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);

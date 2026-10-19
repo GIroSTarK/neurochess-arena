@@ -75,14 +75,6 @@ export function BoardSquare({
         onClick={onActivate}
         onKeyDown={onKeyDown}
       >
-        {showRank ? (
-          <span
-            className={cx(coordinateClassName, "top-[3px] left-[3px] lg:hidden")}
-            aria-hidden="true"
-          >
-            {square[1]}
-          </span>
-        ) : null}
         {state.lastMove ? (
           <span
             className="pointer-events-none absolute inset-[5%] corner-marks"
@@ -111,6 +103,19 @@ export function BoardSquare({
           />
         ) : null}
       </button>
+      {/* Rank ticks label the board axis, separately from each button's algebraic name. */}
+      {showRank ? (
+        <span
+          className={cx(
+            coordinateClassName,
+            "top-[3px] left-[3px] z-3 lg:hidden",
+            state.dark ? "text-board-ink-light" : "text-board-ink-dark",
+          )}
+          aria-hidden="true"
+        >
+          {square[1]}
+        </span>
+      ) : null}
     </div>
   );
 }
