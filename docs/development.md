@@ -804,7 +804,7 @@ matching Linux browser server while keeping tests, services and output in the cu
 checkout. In a separate terminal, start:
 
 ```text
-docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.0-noble npx -y playwright@1.64.0 run-server --port 3000 --host 0.0.0.0 --unsafe
+docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.1-noble npx -y playwright@1.64.1 run-server --port 3000 --host 0.0.0.0 --unsafe
 ```
 
 Then run from PowerShell:
