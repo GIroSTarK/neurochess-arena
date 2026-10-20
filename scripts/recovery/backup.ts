@@ -80,10 +80,20 @@ async function requireDestination(cloud: string[], bytes: number, execute: Comma
   const objects = JSON.parse(
     await execute("oci", ["os", "object", "list", ...cloud, "--all", "--fields", "name,size"]),
   ) as {
-    data: { size: number }[];
+    data?: { size: number }[];
+    prefixes?: unknown;
   };
+  // OCI CLI omits data for an empty bucket and emits only { "prefixes": [] }.
+  const entries =
+    objects.data === undefined &&
+    Object.keys(objects).length === 1 &&
+    Array.isArray(objects.prefixes) &&
+    objects.prefixes.length === 0
+      ? []
+      : objects.data;
+  if (!Array.isArray(entries)) throw new Error();
   let total = bytes;
-  for (const object of objects.data) {
+  for (const object of entries) {
     if (!Number.isSafeInteger(object.size) || object.size < 0) throw new Error();
     total += object.size;
     if (!Number.isSafeInteger(total) || total > 8_589_934_592) throw new Error();

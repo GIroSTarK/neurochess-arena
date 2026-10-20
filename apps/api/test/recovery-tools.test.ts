@@ -131,6 +131,16 @@ describe("isolated restoration admission", () => {
 });
 
 describe("backup publication", () => {
+  const listings: Record<string, unknown> = {
+    "empty-bucket": { prefixes: [] },
+    "empty-data": { data: [], prefixes: [] },
+    "missing-list-data": {},
+    "null-list-data": { data: null, prefixes: [] },
+    "invalid-list-data": { data: {}, prefixes: [] },
+    "invalid-prefixes": { prefixes: "" },
+    "filtered-list": { prefixes: ["database/"] },
+    "incomplete-list": { prefixes: [], "next-start-with": "database/next.dump.age" },
+  };
   it("measures data age from the snapshot start instead of a delayed upload completion", () => {
     const now = Date.parse("2026-10-15T12:00:00Z");
     const signals = deriveSignals(null, null, {
@@ -147,6 +157,7 @@ describe("backup publication", () => {
   it.each([
     "string-retention",
     "success",
+    ...Object.keys(listings),
     "dump",
     "encrypt",
     "put",
@@ -159,6 +170,7 @@ describe("backup publication", () => {
   ])(
     "records %s evidence only after encrypted off-host readback and removes work files",
     async (failure) => {
+      const succeeds = ["success", "empty-bucket", "empty-data"].includes(failure);
       const directory = await mkdtemp(join(tmpdir(), "nc-backup-unit-"));
       let remote = Buffer.alloc(0);
       try {
@@ -201,6 +213,7 @@ describe("backup publication", () => {
             });
           }
           if (args[2] === "list") {
+            if (failure in listings) return JSON.stringify(listings[failure]);
             return JSON.stringify({
               data: [
                 { name: "database/old.dump.age", size: failure === "quota" ? 8_589_934_592 : 100 },
@@ -220,18 +233,21 @@ describe("backup publication", () => {
           }
           return "{}";
         };
-        if (failure === "success") await backup(config, execute);
+        if (succeeds) await backup(config, execute);
         else await expect(backup(config, execute)).rejects.toThrow(/^BACKUP_FAILED$/);
         const status = await readFile(join(directory, "status.json"), "utf8");
         expect(JSON.parse(status)).toEqual({
-          status: failure === "success" ? "success" : "failure",
+          status: succeeds ? "success" : "failure",
           startedAt: expect.any(String) as unknown,
           completedAt: expect.any(String) as unknown,
         });
         expect(status).not.toContain("canary");
         expect(await readdir(directory)).toEqual(["status.json"]);
-        if (failure === "success") expect(remote.toString()).toBe("encrypted-fixture");
-        if (["public", "versioned", "retention", "quota"].includes(failure)) {
+        if (succeeds) expect(remote.toString()).toBe("encrypted-fixture");
+        if (
+          !succeeds &&
+          (failure in listings || ["public", "versioned", "retention", "quota"].includes(failure))
+        ) {
           expect(remote.length).toBe(0);
         }
       } finally {

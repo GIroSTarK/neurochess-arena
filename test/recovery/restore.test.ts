@@ -117,7 +117,7 @@ it("recovers a private populated database and separate secrets, then reconciles 
           },
         });
       }
-      if (args[2] === "list") return '{"data":[]}';
+      if (args[2] === "list") return '{"prefixes":[]}';
       if (args[2] === "put") await copyFile(args[args.indexOf("--file") + 1]!, archiveFile);
       else if (args[2] === "get") await copyFile(archiveFile, options!.outputFile!);
       else throw new Error("UNEXPECTED_CLOUD_OPERATION");

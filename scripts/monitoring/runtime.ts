@@ -67,7 +67,10 @@ export function parseConfig(value: unknown): MonitorConfig {
     throw new Error("INVALID_MONITOR_CONFIG");
   }
   return {
-    compartmentId: text("compartmentId", /^ocid1\.compartment\.oc1\.\.[a-zA-Z0-9]{1,256}$/),
+    compartmentId: text(
+      "compartmentId",
+      /^ocid1\.(?:compartment|tenancy)\.oc1\.\.[a-zA-Z0-9]{1,256}$/,
+    ),
     topicId: text("topicId", /^ocid1\.onstopic\.oc1\.eu-frankfurt-1\.[a-zA-Z0-9.]{1,256}$/),
     containerName: text("containerName", /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/),
     directory: path("directory"),
