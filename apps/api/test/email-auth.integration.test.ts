@@ -8,7 +8,7 @@ import {
   authVerifications,
   createProfileRepository,
 } from "@neurochess/database";
-import { eq, inArray, like } from "drizzle-orm";
+import { eq, inArray, like, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
@@ -545,23 +545,31 @@ describe("verified email/password lifecycle", () => {
     await verify();
     const cookie = await signIn();
     const token = await requestReset();
-    const transaction = database.db.transaction.bind(database.db);
-    const failure = vi.spyOn(database.db, "transaction").mockImplementation((operation, options) =>
-      transaction(async (tx) => {
-        const originalDelete = tx.delete.bind(tx);
-        vi.spyOn(tx, "delete").mockImplementation((table) => {
-          if (table === authSessions) throw new Error("session-deletion-secret-canary");
-          return originalDelete(table);
-        });
-        return operation(tx);
-      }, options),
-    );
-    const response = await post("reset-password", { token, newPassword });
-    failure.mockRestore();
-    expect(response.statusCode).toBe(500);
-    expect(response.json()).toMatchObject({ code: "AUTH_UNAVAILABLE" });
-    expect(response.body).not.toContain("canary");
-    expect(logs.join("")).not.toContain("session-deletion-secret-canary");
+    const failureTableName = `session_deletion_canary_${randomUUID().replaceAll("-", "")}`;
+    const failureTable = sql.identifier(failureTableName);
+    // A database constraint also intercepts deletion inside nested adapter transactions.
+    await database.db.execute(sql`
+      create table ${failureTable} (session_id uuid references ${authSessions} (id))
+    `);
+    try {
+      await database.db.execute(sql`
+        insert into ${failureTable} (session_id)
+        select ${authSessions.id} from ${authSessions}
+        where ${authSessions.userId} in (
+          select ${authUsers.id} from ${authUsers} where ${authUsers.email} = ${email}
+        )
+      `);
+      const response = await post("reset-password", { token, newPassword });
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ code: "AUTH_UNAVAILABLE" });
+      expect(response.body).not.toContain("canary");
+      expect(logs.join("")).not.toContain(failureTableName);
+      const retainedSession = await session(cookie);
+      expect(retainedSession.statusCode).toBe(200);
+      expect(retainedSession.json()).toMatchObject({ user: { email } });
+    } finally {
+      await database.db.execute(sql`drop table ${failureTable}`);
+    }
     await signIn();
     expect((await post("reset-password", { token, newPassword })).statusCode).toBe(200);
     expect((await session(cookie)).json()).toBeNull();

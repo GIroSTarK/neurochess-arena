@@ -215,7 +215,7 @@ The reference adapter and data live in `apps/web/src/reference`; reusable compos
 
 The [email lifecycle endpoints](#emailpassword-api) below are available when an email sender is configured, and the [OAuth endpoints](#google-and-github-oauth) when the selected provider is configured. Other auth paths remain unavailable. The server account resolver supplies account authority to the [game API](#ai-provider-and-game-api); Sandbox retains guest authority. Cookie caching and account linking are disabled; built-in deletion stays disabled in favor of the application-owned [account deletion](#account-deletion) path. Session lifetime, cookie policy, and endpoint protections are described in [authentication architecture](architecture.md#authentication-and-guest-sessions).
 
-The pinned Better Auth runtime, Drizzle adapter, and `auth` schema generator are 1.7.7, compatible with stable Drizzle ORM 0.45.3 and Kit 0.31.11. Use `npm run auth:generate`, review `packages/database/src/schema/auth.ts`, preserve Arena's `account_provider_subject_unique` index, then `npm run db:generate -- --name <change>` and inspect the generated SQL. The generation-only config shares runtime options but uses non-deployment placeholders and never connects to a database. Do not run Better Auth's migrate command or Drizzle schema push. Runtime/adapter/generator upgrades must be reviewed together, including the OAuth policy plugin's use of provider methods and server-controlled state.
+The pinned Better Auth runtime, Drizzle adapter, and `auth` schema generator are 1.7.12, compatible with stable Drizzle ORM 0.45.4 and Kit 0.31.11. Use `npm run auth:generate`, review `packages/database/src/schema/auth.ts`, preserve Arena's `account_provider_subject_unique` index, then `npm run db:generate -- --name <change>` and inspect the generated SQL. The generation-only config shares runtime options but uses non-deployment placeholders and never connects to a database. Do not run Better Auth's migrate command or Drizzle schema push. Runtime/adapter/generator upgrades must be reviewed together, including the OAuth policy plugin's use of provider methods and server-controlled state.
 
 Focused verification: `npm exec vitest -- run --config vitest.integration.config.ts apps/api/test/auth.integration.test.ts apps/api/test/email-auth.integration.test.ts apps/api/test/auth-password-race.integration.test.ts packages/database/test/persistence.integration.test.ts`. Fixtures exercise the real auth service and disposable PostgreSQL, with an injected mailbox instead of outbound mail. Coverage includes cross-instance sign-in/reset races, reset rollback, and mail dispatch after successful registration commit. SMTP unit tests use a loopback test server, including rejected recipients and required STARTTLS. No real email credentials, paid providers, or OAuth calls are required.
 
@@ -804,7 +804,7 @@ matching Linux browser server while keeping tests, services and output in the cu
 checkout. In a separate terminal, start:
 
 ```text
-docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.0-noble npx -y playwright@1.64.0 run-server --port 3000 --host 0.0.0.0 --unsafe
+docker run --rm --init --ipc=host --name neurochess-playwright -p 127.0.0.1:39099:3000 -w /home/pwuser mcr.microsoft.com/playwright:v1.64.1-noble npx -y playwright@1.64.1 run-server --port 3000 --host 0.0.0.0 --unsafe
 ```
 
 Then run from PowerShell:

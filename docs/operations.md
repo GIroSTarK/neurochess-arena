@@ -107,7 +107,7 @@ Before the PostgreSQL certificate expires, schedule a maintenance stop, replace 
 
 ## Artifacts and rollout
 
-Use a clean, reviewed release checkout. The Docker build ignores local environments, tests, credentials and prior build output; npm installs from the lockfile. It validates the public API URL before generating web assets, rejecting HTTP and credential-bearing URLs. `deploy/Dockerfile` pins Node 24.19.0, npm 11.21.0 and base manifest digests. Its API runs as an unprivileged user with production dependencies and compiled code. Caddy serves the web artifact directly; `npm start` and Vite preview remain local tools.
+Use a clean, reviewed release checkout. The Docker build ignores local environments, tests, credentials and prior build output; npm installs from the lockfile. It validates the public API URL before generating web assets, rejecting HTTP and credential-bearing URLs. `deploy/Dockerfile` pins Node 24.19.0, npm 11.21.1 and base manifest digests. Its API runs as an unprivileged user with production dependencies and compiled code. Caddy serves the web artifact directly; `npm start` and Vite preview remain local tools.
 
 Copy `deploy/.env.example` to `/etc/neurochess/deploy.env` and set real origins, external file paths and unique immutable release image tags. In the release checkout, build both images with the same API origin that Compose uses:
 

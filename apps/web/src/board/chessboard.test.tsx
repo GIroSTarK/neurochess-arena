@@ -73,6 +73,23 @@ describe("accessible chessboard", () => {
   );
 
   it.each(["white", "black"] as const)(
+    "keeps mobile rank guides outside named square controls with %s at the bottom",
+    (orientation) => {
+      renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);
+      const grid = screen.getByRole("grid", { name: "Chessboard" });
+      const ranks = within(grid).getAllByText(/^[1-8]$/);
+      expect(ranks.map((label) => label.textContent).join("")).toBe(
+        orientation === "white" ? "87654321" : "12345678",
+      );
+      for (const label of ranks) {
+        expect(label.closest("button")).toBeNull();
+        expect(label.parentElement).toHaveAttribute("role", "gridcell");
+        expect(label).toHaveAttribute("aria-hidden", "true");
+      }
+    },
+  );
+
+  it.each(["white", "black"] as const)(
     "follows visible directions, row ends and corners with %s at the bottom",
     async (orientation) => {
       renderLocalized(<Chessboard {...props(snapshot(), orientation)} />);
