@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-23
 
 ## Architectural drivers
 
@@ -103,19 +103,24 @@ New pages extend this route tree and its feature-owned loader/action modules; th
 
 ### Fastify API
 
-Recommended modules:
+Current implementation paths (relative to the repository root):
 
-```text
-auth          Better Auth integration and profile lifecycle
-users         usernames, avatars, deletion, and history ownership
-credentials   session credential handling and encrypted saved credentials
-providers     OpenAI, Anthropic, Google, and OpenRouter adapters
-games         game commands, reads, lifecycle, replay, and PGN
-chess         server-side legality and result evaluation
-rooms         invitation codes, membership, reconnection, and abort
-realtime      WebSocket authentication, events, and connection registry
-analysis      persisted Stockfish samples and post-game aggregates
-```
+| Path | Responsibility |
+| --- | --- |
+| `apps/api/src/app.ts`, `apps/api/src/server.ts` | API composition, startup, and service lifetimes |
+| `apps/api/src/auth/` | Better Auth integration, email/OAuth flows, and account-deletion entry point |
+| `apps/api/src/profiles/` | Usernames, avatar metadata, and profile settings |
+| `apps/api/src/identity/`, `apps/api/src/guests/` | Server-derived principals, validity/locking, and guest sessions |
+| `apps/api/src/credentials/` | Request-scoped provider access and encrypted saved credentials |
+| `apps/api/src/providers/` | Provider adapters, discovery, normalization, and request cancellation |
+| `apps/api/src/games/` | Game commands/reads, AI execution and controller presence, history ownership/deletion, account game cleanup, replay, and PGN |
+| `apps/api/src/rooms/` | Invitations, admission, membership, and room lifecycle |
+| `apps/api/src/realtime/` | Human-room WebSocket authentication, presence, synchronization, events, and connection registry |
+| `apps/api/src/analysis/`, `apps/api/src/pricing/` | Private Stockfish samples and provider cost estimates, respectively |
+| `apps/api/src/limits/`, `apps/api/src/monitoring/`, `apps/api/src/operations/` | Request budgets, operational health/metrics, and reconciliation CLI |
+| `packages/chess/src/` | Deterministic position, legality, and result authority used by the API |
+
+Profile and account/game lifecycle responsibilities are split across these modules; there is no `users` or `chess` directory inside the API.
 
 Fastify route schemas validate external input and serialize explicit response shapes. Domain services do not depend on Fastify request objects.
 
@@ -308,7 +313,9 @@ The browser requests one AI turn at a time. The API:
 5. validates and normalizes the response;
 6. retries model-invalid output at most twice;
 7. commits the legal move only if the game version is still current;
-8. returns the new state and normalized telemetry.
+8. returns the committed game snapshot over HTTP; the client reads normalized invocation telemetry separately.
+
+`POST /games/:gameId/ai-turn` returns a `GameSnapshot`. `GET /games/:gameId/invocations` supplies private telemetry independently, including updates that do not advance the game revision. AI play uses HTTP commands and reads; WebSocket at `/rooms/realtime` synchronizes private human-versus-human rooms, not AI turns or their telemetry.
 
 The reservation must be idempotent so multiple clicks, retries, or network duplicates cannot cause multiple moves. If the controlling tab disconnects, automatic turn requests stop and the game becomes paused.
 
@@ -316,7 +323,9 @@ The game service's `aiTurn` accepts a game ID, expected revision, command ID, co
 
 AI HTTP requests cancel provider work when the response connection closes. Discovery has a 30-second operational deadline; a turn, including discovery and automatic invalid-output retries, has a 180-second deadline. A dispatched turn's cancellation or timeout follows the provider-pause policy, never a chess loss. The AI client allows 35/190 seconds respectively so the API can persist and acknowledge an operational failure, propagates its owner's cancellation, and never retries transport failures automatically. An uncertain response still requires authorized synchronization and explicit recovery; a lost response cannot prove that no move committed. These deadlines are transport safeguards, not chess clocks.
 
-Failed or interrupted executions retain a blocked reservation. A process crash can leave an apparently in-flight reservation; it never expires into automatic redispatch. Explicit owner-authorized Pause advances the revision and invalidates the reservation before Resume and another turn can authorize a new call. Accepted ordinary-game commands clear reservations atomically; reads do not. Expired controller presence also authorizes a server pause, never another provider call. See [ADR-0009](decisions/0009-ai-turn-reservations.md) for receipt identity, cancellation, rollback, crash recovery, and the limits of provider billing guarantees. Failure-policy and public-flow implementation status remains in the [roadmap](roadmap.md#phase-2--ai-arena-core).
+Under [ADR-0010](decisions/0010-ai-failure-policy-and-invocations.md), a normalized provider failure (including a provider exception, network/authentication/quota failure, or timeout/cancellation after dispatch) commits the safe invocation outcome and an ordinary `pause` receipt under the AI command ID in one transaction. That commit clears the reservation and returns the paused snapshot without consuming invalid-output budget. Explicit Resume or Next move and a fresh versioned turn command authorize another attempt. The logical turn and its invalid-output count survive reservation invalidation.
+
+Uncertain execution is different: if the outcome transaction rolls back or execution fails without a committed outcome, cleanup marks the matching surviving reservation `blocked`; a process crash or failed cleanup can leave it `in_flight`. Neither state expires into automatic redispatch. Explicit owner-authorized Pause advances the revision and invalidates the reservation before explicit continuation can authorize a new call. Accepted ordinary-game commands clear reservations atomically; reads do not. A committed outcome with a lost acknowledgement remains deduplicated by its command receipt. Expired controller presence also authorizes a server pause, never another provider call. ADR-0010 replaces the interim failure policy in [ADR-0009](decisions/0009-ai-turn-reservations.md) while retaining reservation fencing and explicit recovery; neither unresolved dispatch nor rollback guarantees that the provider call was unbilled. Failure-policy and public-flow implementation status remains in the [roadmap](roadmap.md#phase-2--ai-arena-core).
 
 ### AI controller presence and recovery
 
