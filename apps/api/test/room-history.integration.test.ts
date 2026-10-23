@@ -118,7 +118,10 @@ it("paginates mixed solo/shared ties without duplicates or restoring full histor
   const seats = await api.repository.read((r) => r.getParticipants(snapshot.gameId));
   const ids = [snapshot.gameId];
   const solo = await service.createAi(opponent.principal, aiMatch);
-  await service.lifecycle(opponent.principal, control(solo.snapshot, "abort"));
+  await service.lifecycle(
+    opponent.principal,
+    control(solo.snapshot, "abort", solo.snapshot.gameId),
+  );
   ids.push(solo.snapshot.gameId);
   for (let index = 0; index < 4; index++) {
     const id = randomUUID();

@@ -14,12 +14,20 @@ import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 
 import { snapshot, type TestApi } from "./helpers.js";
-import { createProviderGame, turn, withProviderApi } from "./providers/integration-helpers.js";
+import {
+  createControlledProviderGame,
+  turn,
+  withProviderApi,
+} from "./providers/integration-helpers.js";
 import { openAiFixture } from "./providers/openai-fixtures.js";
 
 it("cleans a failed provider case, including pending HTTP work, without deleting another case's fixtures", async () => {
   await withProviderApi(openAiFixture, [], async (survivor) => {
-    const survivingGame = await createProviderGame(survivor.api, survivor.guest, openAiFixture);
+    const survivingGame = await createControlledProviderGame(
+      survivor.api,
+      survivor.guest,
+      openAiFixture,
+    );
     let failed: { api: TestApi; guestId: string; gameId: string; turnIds: string[] } | undefined;
     const entered = Promise.withResolvers<void>();
     const response = Promise.withResolvers<Response>();
@@ -36,7 +44,7 @@ it("cleans a failed provider case, including pending HTTP work, without deleting
           },
         ],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, openAiFixture);
+          const initial = await createControlledProviderGame(api, guest, openAiFixture);
           const first = await turn(api, guest, initial);
           expect(first.statusCode, first.body).toBe(200);
           const pending = turn(api, guest, gameSnapshotSchema.parse(first.json()));

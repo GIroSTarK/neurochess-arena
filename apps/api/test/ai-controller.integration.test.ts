@@ -4,15 +4,14 @@ import { aiControllers, aiTurnReservations, gameCommands, games } from "@neuroch
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createGameService } from "../src/games/service.js";
-
 import {
   access,
   aiMatch,
   control,
+  createControlledAiGame,
+  createTestGameService,
   gatedAdapter,
   output,
-  service,
   turnCommand,
 } from "./ai-turn-helpers.js";
 import { ApiHarness, createSandbox, FOOLS_MATE } from "./helpers.js";
@@ -28,11 +27,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const stranger = await harness.guest(api);
     const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
-    const gamesService = createGameService(api.repository, {
-      nodeEnv: "test",
-      sandboxEnabled: true,
-      aiAdapters: { openai: adapter },
-    });
+    const gamesService = createTestGameService(api, { openai: adapter });
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     const claim = {
       gameId: snapshot.gameId,
@@ -41,12 +36,9 @@ describe("database-backed AI controllers and paused single steps", () => {
       action: "acquire",
     };
     await expect(
-      gamesService.aiTurn(
-        principal,
-        { ...turnCommand(snapshot), controllerId: claim.controllerId },
-        access(),
-      ),
+      gamesService.aiTurn(principal, turnCommand(snapshot, snapshot.gameId), access()),
     ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
+    expect(adapter.moveCalls).toBe(0);
     await expect(gamesService.controller(stranger.principal, claim)).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
@@ -54,19 +46,57 @@ describe("database-backed AI controllers and paused single steps", () => {
     await expect(
       gamesService.controller(principal, { ...claim, controllerId: randomUUID() }),
     ).rejects.toMatchObject({ code: "AI_CONTROLLER_BUSY" });
+    await expect(
+      gamesService.aiTurn(principal, turnCommand(snapshot, randomUUID()), access()),
+    ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
+    expect(adapter.moveCalls).toBe(0);
+    const moved = await gamesService.aiTurn(
+      principal,
+      turnCommand(snapshot, claim.controllerId),
+      access(),
+    );
+    expect(moved).toMatchObject({ version: 1, moves: [{ uci: "e2e4" }] });
     const paused = await gamesService.lifecycle(principal, {
       gameId: snapshot.gameId,
-      expectedVersion: 0,
+      expectedVersion: moved.version,
       commandId: randomUUID(),
       action: "pause",
     });
     await expect(
-      gamesService.lifecycle(principal, {
-        ...control(paused, "resume"),
-        controllerId: claim.controllerId,
-      }),
+      gamesService.lifecycle(principal, control(paused, "resume", claim.controllerId)),
+    ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
+    expect(adapter.moveCalls).toBe(1);
+    expect(
+      await api.database.db.$count(
+        aiTurnReservations,
+        eq(aiTurnReservations.gameId, snapshot.gameId),
+      ),
+    ).toBe(0);
+  });
+
+  it("rejects inference with an expired claim before any provider call", async () => {
+    const api = await harness.createApi();
+    const { principal } = await harness.guest(api);
+    const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
+    const gamesService = createTestGameService(api, { openai: adapter });
+    const { snapshot } = await gamesService.createAi(principal, aiMatch);
+    const controllerId = randomUUID();
+    await gamesService.controller(principal, {
+      gameId: snapshot.gameId,
+      expectedVersion: snapshot.version,
+      controllerId,
+      action: "acquire",
+    });
+    await api.database.db
+      .update(aiControllers)
+      .set({ expiresAt: sql`clock_timestamp() - interval '1 second'` })
+      .where(eq(aiControllers.gameId, snapshot.gameId));
+
+    await expect(
+      gamesService.aiTurn(principal, turnCommand(snapshot, controllerId), access()),
     ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
     expect(adapter.moveCalls).toBe(0);
+    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
     expect(
       await api.database.db.$count(
         aiTurnReservations,
@@ -81,12 +111,19 @@ describe("database-backed AI controllers and paused single steps", () => {
       const first = await harness.createApi();
       const owner = await harness.guest(first);
       const principal = owner.principal;
-      const original = unclaimed
-        ? createGameService(first.repository, { nodeEnv: "test", sandboxEnabled: true })
-        : service(first);
+      const original = createTestGameService(first);
       const { snapshot } = await original.createAi(principal, aiMatch);
+      const controllerId = randomUUID();
+      if (!unclaimed) {
+        await original.controller(principal, {
+          gameId: snapshot.gameId,
+          expectedVersion: snapshot.version,
+          controllerId,
+          action: "acquire",
+        });
+      }
       const restarted = await harness.createApi();
-      const restored = service(restarted);
+      const restored = createTestGameService(restarted);
       await first.database.db
         .update(aiControllers)
         .set({ expiresAt: sql`clock_timestamp() - interval '1 second'` })
@@ -96,7 +133,7 @@ describe("database-backed AI controllers and paused single steps", () => {
       await expect(
         restored.controller(principal, {
           gameId: snapshot.gameId,
-          controllerId: snapshot.gameId,
+          controllerId,
           action: "heartbeat",
         }),
       ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
@@ -122,7 +159,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const sandboxOwner = await harness.guest(api);
     const sandbox = await createSandbox(api, sandboxOwner);
     const principal = owner.principal;
-    const gamesService = service(api);
+    const gamesService = createTestGameService(api);
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     await api.database.db.delete(aiControllers).where(eq(aiControllers.gameId, snapshot.gameId));
     await gamesService.expireControllers();
@@ -140,10 +177,22 @@ describe("database-backed AI controllers and paused single steps", () => {
       const owner = await harness.guest(api);
       const principal = owner.principal;
       const gate = gatedAdapter();
-      const first = service(api, { openai: gate.adapter });
-      let { snapshot } = await first.createAi(principal, aiMatch);
-      if (step) snapshot = await first.lifecycle(principal, control(snapshot, "pause"));
-      const pending = first.aiTurn(principal, { ...turnCommand(snapshot), step }, access());
+      const first = createTestGameService(api, { openai: gate.adapter });
+      const { details, controllerId } = await createControlledAiGame(
+        first,
+        principal,
+        aiMatch,
+        randomUUID(),
+      );
+      let { snapshot } = details;
+      if (step) {
+        snapshot = await first.lifecycle(principal, control(snapshot, "pause", controllerId));
+      }
+      const pending = first.aiTurn(
+        principal,
+        { ...turnCommand(snapshot, controllerId), step },
+        access(),
+      );
       const rejected = expect(pending).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
       await gate.entered;
       await api.database.db
@@ -152,7 +201,7 @@ describe("database-backed AI controllers and paused single steps", () => {
         .where(eq(aiControllers.gameId, snapshot.gameId));
       gate.resolve(output("e2e4"));
       await rejected;
-      await service(await harness.createApi()).expireControllers();
+      await createTestGameService(await harness.createApi()).expireControllers();
       expect(await first.snapshot(principal, snapshot.gameId)).toMatchObject({
         state: "paused",
         version: snapshot.version + 1,
@@ -173,16 +222,19 @@ describe("database-backed AI controllers and paused single steps", () => {
     const owner = await harness.guest(api);
     const principal = owner.principal;
     const gate = gatedAdapter();
-    const first = service(api, { openai: gate.adapter });
-    const second = service(other);
-    const { snapshot } = await first.createAi(principal, aiMatch);
-    const pending = first.aiTurn(principal, turnCommand(snapshot), access());
+    const first = createTestGameService(api, { openai: gate.adapter });
+    const second = createTestGameService(other);
+    const {
+      details: { snapshot },
+      controllerId,
+    } = await createControlledAiGame(first, principal, aiMatch, randomUUID());
+    const pending = first.aiTurn(principal, turnCommand(snapshot, controllerId), access());
     const rejected = expect(pending).rejects.toMatchObject({ code: "GAME_CONFLICT" });
     await gate.entered;
     expect(
       await second.controller(principal, {
         gameId: snapshot.gameId,
-        controllerId: snapshot.gameId,
+        controllerId,
         action: "heartbeat",
       }),
     ).toEqual(snapshot);
@@ -202,7 +254,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     await expect(
       first.controller(principal, {
         gameId: snapshot.gameId,
-        controllerId: snapshot.gameId,
+        controllerId,
         action: "heartbeat",
       }),
     ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
@@ -223,7 +275,7 @@ describe("database-backed AI controllers and paused single steps", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const principal = owner.principal;
-    const gamesService = service(api, {
+    const gamesService = createTestGameService(api, {
       openai: createScriptedAdapter({
         provider: "openai",
         moves: [output(FOOLS_MATE[0]!), output(FOOLS_MATE[2]!)],
@@ -233,10 +285,16 @@ describe("database-backed AI controllers and paused single steps", () => {
         moves: [output(FOOLS_MATE[1]!), output(FOOLS_MATE[3]!)],
       }),
     });
-    let { snapshot } = await gamesService.createAi(principal, aiMatch);
-    snapshot = await gamesService.lifecycle(principal, control(snapshot, "pause"));
+    const { details, controllerId } = await createControlledAiGame(
+      gamesService,
+      principal,
+      aiMatch,
+      randomUUID(),
+    );
+    let { snapshot } = details;
+    snapshot = await gamesService.lifecycle(principal, control(snapshot, "pause", controllerId));
     for (let index = 0; index < 4; index++) {
-      const command = { ...turnCommand(snapshot), step: true };
+      const command = { ...turnCommand(snapshot, controllerId), step: true };
       const previous = snapshot;
       snapshot = await gamesService.aiTurn(principal, command, access());
       expect(snapshot).toMatchObject({
@@ -275,10 +333,16 @@ describe("database-backed AI controllers and paused single steps", () => {
       const owner = await harness.guest(api);
       const principal = owner.principal;
       const gate = gatedAdapter();
-      const gamesService = service(api, { openai: gate.adapter });
-      const initial = (await gamesService.createAi(principal, aiMatch)).snapshot;
-      const paused = await gamesService.lifecycle(principal, control(initial, "pause"));
-      const command = { ...turnCommand(paused), step: true };
+      const gamesService = createTestGameService(api, { openai: gate.adapter });
+      const {
+        details: { snapshot: initial },
+        controllerId,
+      } = await createControlledAiGame(gamesService, principal, aiMatch, randomUUID());
+      const paused = await gamesService.lifecycle(
+        principal,
+        control(initial, "pause", controllerId),
+      );
+      const command = { ...turnCommand(paused, controllerId), step: true };
       const pending = gamesService.aiTurn(principal, command, access());
       const rejected = expect(pending).rejects.toMatchObject({ code: "GAME_CONFLICT" });
       await gate.entered;
@@ -286,7 +350,7 @@ describe("database-backed AI controllers and paused single steps", () => {
       await expect(gamesService.aiTurn(principal, command, access())).rejects.toMatchObject({
         code: "AI_TURN_IN_PROGRESS",
       });
-      const final = await gamesService.lifecycle(principal, control(paused, action));
+      const final = await gamesService.lifecycle(principal, control(paused, action, controllerId));
       gate.resolve(output("e2e4"));
       await rejected;
       expect(await gamesService.snapshot(principal, paused.gameId)).toEqual(final);

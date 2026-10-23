@@ -21,7 +21,7 @@ afterEach(() => harness.dispose());
 async function terminal(api: TestApi, cookie: string, completed = false) {
   const { snapshot } = await harness.createGame(api, cookie, humanMatch);
   const response = await harness.post(api, cookie, `/games/${snapshot.gameId}/lifecycle`, {
-    ...control(snapshot, "abort"),
+    ...control(snapshot, "abort", snapshot.gameId),
     ...(completed ? { action: "resign", losingColor: "black", controllerId: undefined } : {}),
   });
   expect(response.statusCode, response.body).toBe(200);
@@ -47,7 +47,7 @@ describe("private account history", () => {
       api,
       guest.cookie,
       `/games/${sandbox.gameId}/lifecycle`,
-      control(sandbox, "abort"),
+      control(sandbox, "abort", sandbox.gameId),
     );
     await terminal(api, other.cookie);
     const second = await owner.anotherSession();

@@ -203,13 +203,18 @@ export async function createSandbox(api: TestApi, guest: TestGuest): Promise<Gam
   return gameSnapshotSchema.parse(response.json());
 }
 
-export async function claimController(api: TestApi, guest: TestGuest, snapshot: GameSnapshot) {
+export async function claimController(
+  api: TestApi,
+  guest: TestGuest,
+  snapshot: GameSnapshot,
+  controllerId: string,
+) {
   const response = await api.app.inject({
     method: "POST",
     url: `/games/${snapshot.gameId}/controller`,
     payload: {
       gameId: snapshot.gameId,
-      controllerId: snapshot.gameId,
+      controllerId,
       expectedVersion: snapshot.version,
       action: "acquire",
     },

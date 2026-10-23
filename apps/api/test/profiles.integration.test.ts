@@ -281,7 +281,7 @@ describe("private account profiles", () => {
     }
     for (const [suffix, payload] of [
       ["/moves", command(snapshot, "e2e4")],
-      ["/lifecycle", control(snapshot, "pause")],
+      ["/lifecycle", control(snapshot, "pause", snapshot.gameId)],
       [
         "/controller",
         {
@@ -291,7 +291,7 @@ describe("private account profiles", () => {
           action: "acquire",
         },
       ],
-      ["/ai-turn", { ...turnCommand(snapshot), apiKey: "fixture-key" }],
+      ["/ai-turn", { ...turnCommand(snapshot, snapshot.gameId), apiKey: "fixture-key" }],
     ] as const) {
       const response = await harness.post(
         api,

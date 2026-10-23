@@ -10,7 +10,7 @@ import {
 } from "./providers/google-fixtures.js";
 import { runProviderIntegrationContract } from "./providers/integration-contract.js";
 import {
-  createProviderGame,
+  createControlledProviderGame,
   records,
   turn,
   withProviderApi,
@@ -57,7 +57,7 @@ describe("google provider-specific live capabilities", () => {
         }),
       ],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(api, guest, googleFixture, {
+        const initial = await createControlledProviderGame(api, guest, googleFixture, {
           maxOutputTokens: 256,
         });
         const response = await turn(api, guest, initial);
@@ -78,7 +78,7 @@ describe("google provider-specific live capabilities", () => {
         Response.json(googleResponse('{"move":"e2e4"}')),
       ],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(
+        const initial = await createControlledProviderGame(
           api,
           guest,
           googleFixture,
@@ -104,7 +104,7 @@ describe("google provider-specific live capabilities", () => {
         googleFixture,
         [Response.json(catalog)],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, googleFixture);
+          const initial = await createControlledProviderGame(api, guest, googleFixture);
           const response = await turn(api, guest, initial);
           expect(response.statusCode, response.body).toBe(200);
           expect(response.json()).toMatchObject({ state: "paused", moves: [], result: "*" });

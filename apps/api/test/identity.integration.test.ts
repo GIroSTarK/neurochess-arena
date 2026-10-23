@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService } from "../src/guests/service.js";
 
-import { aiMatch, control, service, turnCommand } from "./ai-turn-helpers.js";
+import { aiMatch, control, createTestGameService, turnCommand } from "./ai-turn-helpers.js";
 import { ApiHarness, WEB_ORIGIN } from "./helpers.js";
 
 const harness = new ApiHarness();
@@ -20,15 +20,15 @@ describe("server-derived game identity", () => {
     const guests = createGuestService(api.repository, 86_400);
     const { principal } = await guests.authenticate(owner.token);
     expect(principal).toEqual({ kind: "guest", guestSessionId: owner.id });
-    const { snapshot } = await service(api).createAi(principal, aiMatch);
-    expect(await service(api).snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+    const { snapshot } = await createTestGameService(api).createAi(principal, aiMatch);
+    expect(await createTestGameService(api).snapshot(principal, snapshot.gameId)).toEqual(snapshot);
     await expect(guests.authenticate(owner.id)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejects an unsupported principal kind even when it carries a valid guest ID", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
-    const gamesService = service(api);
+    const gamesService = createTestGameService(api);
     const principal = { kind: "guest" as const, guestSessionId: owner.id };
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     const unsupported = { ...principal, kind: "account" } as unknown as typeof principal;
@@ -36,7 +36,7 @@ describe("server-derived game identity", () => {
       code: "UNAUTHORIZED",
     });
     await expect(
-      gamesService.lifecycle(unsupported, control(snapshot, "pause")),
+      gamesService.lifecycle(unsupported, control(snapshot, "pause", snapshot.gameId)),
     ).rejects.toMatchObject({
       code: "UNAUTHORIZED",
     });
@@ -47,11 +47,11 @@ describe("server-derived game identity", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const { snapshot } = await service(api).createAi(
+    const { snapshot } = await createTestGameService(api).createAi(
       { kind: "guest", guestSessionId: owner.id },
       aiMatch,
     );
-    const command = turnCommand(snapshot);
+    const command = turnCommand(snapshot, snapshot.gameId);
     const requests = [
       { url: "/guest-session", payload: {} },
       { url: "/sandbox/games", payload: {} },
@@ -61,7 +61,10 @@ describe("server-derived game identity", () => {
         url: `/games/${snapshot.gameId}/moves`,
         payload: { ...command, move: "e2e4", controllerId: undefined },
       },
-      { url: `/games/${snapshot.gameId}/lifecycle`, payload: control(snapshot, "pause") },
+      {
+        url: `/games/${snapshot.gameId}/lifecycle`,
+        payload: control(snapshot, "pause", snapshot.gameId),
+      },
       { url: `/games/${snapshot.gameId}/ai-turn`, payload: { ...command, apiKey: "fixture-key" } },
       {
         url: `/games/${snapshot.gameId}/controller`,
@@ -140,7 +143,7 @@ describe("server-derived game identity", () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
     const principal = { kind: "guest" as const, guestSessionId: owner.id };
-    const gamesService = service(api);
+    const gamesService = createTestGameService(api);
     const { snapshot } = await gamesService.createAi(principal, aiMatch);
     await api.database.db
       .update(guestSessions)

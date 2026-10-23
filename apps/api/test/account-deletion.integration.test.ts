@@ -16,9 +16,10 @@ import {
   access,
   aiMatch,
   control,
+  createControlledAiGame,
+  createTestGameService,
   gatedAdapter,
   output,
-  service,
   turnCommand,
 } from "./ai-turn-helpers.js";
 import { createSandbox, type TestApi, WEB_ORIGIN } from "./helpers.js";
@@ -227,9 +228,12 @@ describe("account deletion", () => {
       const gate = gatedAdapter("openai", () => {
         calls++;
       });
-      const gameService = service(api, { openai: gate.adapter });
-      const { snapshot } = await gameService.createAi(owner.principal, aiMatch);
-      const command = turnCommand(snapshot);
+      const gameService = createTestGameService(api, { openai: gate.adapter });
+      const {
+        details: { snapshot },
+        controllerId,
+      } = await createControlledAiGame(gameService, owner.principal, aiMatch, randomUUID());
+      const command = turnCommand(snapshot, controllerId);
       const pending = gameService
         .aiTurn(owner.principal, command, access())
         .catch((error: unknown) => error);
@@ -251,7 +255,7 @@ describe("account deletion", () => {
         ).every((rows) => rows.length === 0),
       ).toBe(true);
       await expect(
-        gameService.lifecycle(second.principal, control(snapshot, "pause")),
+        gameService.lifecycle(second.principal, control(snapshot, "pause", controllerId)),
       ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
       await expect(gameService.aiTurn(owner.principal, command, access())).rejects.toMatchObject({
         code: "UNAUTHORIZED",

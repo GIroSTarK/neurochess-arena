@@ -71,7 +71,7 @@ describe("AI versus human HTTP authority", () => {
         const created = await post(api, guest, "/games", configuration);
         expect(created.statusCode).toBe(201);
         let { snapshot } = gameDetailsSchema.parse(created.json());
-        await claimController(api, guest, snapshot);
+        await claimController(api, guest, snapshot, snapshot.gameId);
         const participants = await api.repository.read((reader) =>
           reader.getParticipants(snapshot.gameId),
         );
@@ -99,7 +99,7 @@ describe("AI versus human HTTP authority", () => {
             expect(
               (
                 await post(api, guest, path + "/ai-turn", {
-                  ...turnCommand(snapshot),
+                  ...turnCommand(snapshot, snapshot.gameId),
                   apiKey: "human-test-key",
                 })
               ).statusCode,
@@ -118,7 +118,7 @@ describe("AI versus human HTTP authority", () => {
               (await post(api, guest, path + "/moves", command(snapshot, uci))).statusCode,
             ).toBe(403);
             const result = await post(api, guest, path + "/ai-turn", {
-              ...turnCommand(snapshot),
+              ...turnCommand(snapshot, snapshot.gameId),
               apiKey: "human-test-key",
             });
             expect(result.statusCode).toBe(200);

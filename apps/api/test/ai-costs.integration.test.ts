@@ -61,7 +61,7 @@ describe("durable private invocation estimates", () => {
       Response.json(billed('{"move":"e2e5"}')),
       Response.json(billed()),
     ]);
-    const command = turnCommand(snapshot);
+    const command = turnCommand(snapshot, snapshot.gameId);
     const accepted = await service.aiTurn(principal, command, access());
     expect(accepted.moves).toHaveLength(1);
     const read = await service.invocations(principal, snapshot.gameId);
@@ -78,7 +78,10 @@ describe("durable private invocation estimates", () => {
     });
     expect(await service.invocations(principal, snapshot.gameId)).toEqual(read);
     expect(http.requests).toHaveLength(3);
-    const terminal = await service.lifecycle(principal, control(accepted, "abort"));
+    const terminal = await service.lifecycle(
+      principal,
+      control(accepted, "abort", accepted.gameId),
+    );
     expect((await service.replay(principal, snapshot.gameId)).snapshot).toEqual(terminal);
     expect((await service.invocations(principal, snapshot.gameId)).turns).toEqual(read.turns);
     expect(http.requests).toHaveLength(3);
@@ -97,7 +100,11 @@ describe("durable private invocation estimates", () => {
     const { service, principal, snapshot } = await setup([
       Response.json({ ...billed(), status: "failed", error: { code: "server_error" } }),
     ]);
-    const paused = await service.aiTurn(principal, turnCommand(snapshot), access());
+    const paused = await service.aiTurn(
+      principal,
+      turnCommand(snapshot, snapshot.gameId),
+      access(),
+    );
     expect(paused.state).toBe("paused");
     expect(await service.invocations(principal, snapshot.gameId)).toMatchObject({
       turns: [
@@ -120,7 +127,7 @@ describe("durable private invocation estimates", () => {
         return reply.promise;
       },
     ]);
-    const pending = service.aiTurn(principal, turnCommand(snapshot), access());
+    const pending = service.aiTurn(principal, turnCommand(snapshot, snapshot.gameId), access());
     const settled = pending.catch((error: unknown) => error);
     await entered.promise;
     const [inFlight] = await api.repository.read((reader) =>
@@ -131,7 +138,7 @@ describe("durable private invocation estimates", () => {
       pricingRates: { inputTokens: "0.40" },
       costAmount: null,
     });
-    const paused = await service.lifecycle(principal, control(snapshot, "pause"));
+    const paused = await service.lifecycle(principal, control(snapshot, "pause", snapshot.gameId));
     expect(await service.invocations(principal, snapshot.gameId)).toMatchObject({
       turns: [
         {
@@ -189,7 +196,11 @@ describe("durable private invocation estimates", () => {
     const { api, service, principal, snapshot } = await setup([
       Response.json({ ...response, usage: { input_tokens: 100, output_tokens: 40 } }),
     ]);
-    const accepted = await service.aiTurn(principal, turnCommand(snapshot), access());
+    const accepted = await service.aiTurn(
+      principal,
+      turnCommand(snapshot, snapshot.gameId),
+      access(),
+    );
     expect(accepted.moves).toHaveLength(1);
     expect(await service.invocations(principal, snapshot.gameId)).toMatchObject({
       turns: [
@@ -239,7 +250,7 @@ describe("durable private invocation estimates", () => {
       },
     ]);
     const pending = service
-      .aiTurn(principal, turnCommand(snapshot), access())
+      .aiTurn(principal, turnCommand(snapshot, snapshot.gameId), access())
       .catch((error: unknown) => error);
     await entered.promise;
     const [attempt] = await api.repository.read((reader) =>

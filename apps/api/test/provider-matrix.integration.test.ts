@@ -63,12 +63,16 @@ function post(api: TestApi, guest: TestGuest, url: string, payload: object) {
 function get(api: TestApi, guest: TestGuest, url: string) {
   return api.app.inject({ method: "GET", url, headers: { cookie: guest.cookie } });
 }
-async function create(api: TestApi, guest: TestGuest, configuration: AiGameConfiguration) {
+async function createControlledGame(
+  api: TestApi,
+  guest: TestGuest,
+  configuration: AiGameConfiguration,
+) {
   const response = await post(api, guest, "/games", configuration);
   expect(response.statusCode, response.body).toBe(201);
   const details = gameDetailsSchema.parse(response.json());
   expect(details.configuration).toEqual(configuration);
-  await claimController(api, guest, details.snapshot);
+  await claimController(api, guest, details.snapshot, details.snapshot.gameId);
   return details.snapshot;
 }
 async function terminalReplay(api: TestApi, owner: TestGuest, snapshot: GameSnapshot) {
@@ -112,7 +116,7 @@ async function complete(configuration: AiGameConfiguration) {
   }
   const api = await harness.createApi({ aiAdapters: adapters, sandboxEnabled: false });
   const guest = await harness.guest(api);
-  let snapshot = await create(api, guest, configuration);
+  let snapshot = await createControlledGame(api, guest, configuration);
   const initial = snapshot;
   const blocked = await post(api, guest, "/games", configuration);
   expect(blocked.statusCode).toBe(409);
@@ -128,7 +132,7 @@ async function complete(configuration: AiGameConfiguration) {
             move,
           })
         : await post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
-            ...turnCommand(snapshot),
+            ...turnCommand(snapshot, snapshot.gameId),
             apiKey: PROVIDER_KEY,
           });
     expect(response.statusCode, response.body).toBe(200);

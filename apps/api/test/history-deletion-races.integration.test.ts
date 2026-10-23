@@ -11,9 +11,10 @@ import {
   access,
   aiMatch,
   control,
+  createControlledAiGame,
+  createTestGameService,
   gatedAdapter,
   output,
-  service,
   turnCommand,
 } from "./ai-turn-helpers.js";
 import type { TestApi } from "./helpers.js";
@@ -172,12 +173,12 @@ describe("history deletion transactions and concurrency", () => {
         initial = (
           order === "clear-first"
             ? first.clearHistory(owner.principal, deletionBody())
-            : first.lifecycle(owner.principal, control(active, "abort"))
+            : first.lifecycle(owner.principal, control(active, "abort", active.gameId))
         ).catch((error: unknown) => error);
         await waitForBlockedOperations(tx, blocker.rows[0]!.pid);
         next = (
           order === "clear-first"
-            ? second.lifecycle(owner.principal, control(active, "abort"))
+            ? second.lifecycle(owner.principal, control(active, "abort", active.gameId))
             : second.clearHistory(owner.principal, deletionBody())
         ).catch((error: unknown) => error);
         await waitForBlockedOperations(tx, blocker.rows[0]!.pid, 2);
@@ -272,15 +273,18 @@ describe("history deletion transactions and concurrency", () => {
     const api = await harness.createAuthenticatedApi();
     const owner = await harness.account(api);
     const gate = gatedAdapter();
-    const executor = service(api, { openai: gate.adapter });
-    const { snapshot } = await executor.createAi(owner.principal, aiMatch);
+    const executor = createTestGameService(api, { openai: gate.adapter });
+    const {
+      details: { snapshot },
+      controllerId,
+    } = await createControlledAiGame(executor, owner.principal, aiMatch, randomUUID());
     const pending = executor
-      .aiTurn(owner.principal, turnCommand(snapshot), access())
+      .aiTurn(owner.principal, turnCommand(snapshot, controllerId), access())
       .catch((error: unknown) => error);
     await gate.entered;
     const before = await gameRecords(api, snapshot.gameId);
     try {
-      await executor.lifecycle(owner.principal, control(snapshot, "abort"));
+      await executor.lifecycle(owner.principal, control(snapshot, "abort", controllerId));
       await executor.deleteGame(owner.principal, deletionBody(snapshot.gameId));
     } finally {
       gate.resolve(output("e2e4"));

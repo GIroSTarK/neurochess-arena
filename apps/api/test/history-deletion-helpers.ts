@@ -15,7 +15,15 @@ import { eq, inArray } from "drizzle-orm";
 import { expect } from "vitest";
 
 import type { AccountGameHarness } from "./account-game-helpers.js";
-import { access, control, humanMatch, output, service, turnCommand } from "./ai-turn-helpers.js";
+import {
+  access,
+  control,
+  createControlledAiGame,
+  createTestGameService,
+  humanMatch,
+  output,
+  turnCommand,
+} from "./ai-turn-helpers.js";
 import type { TestApi } from "./helpers.js";
 import { createScriptedAdapter } from "./providers/scripted-adapter.js";
 
@@ -25,16 +33,23 @@ export async function terminalGame(
   owner: Awaited<ReturnType<AccountGameHarness["account"]>>,
   completed = false,
 ) {
-  const gameService = service(api, {
+  const gameService = createTestGameService(api, {
     openai: createScriptedAdapter({
       provider: "openai",
       moves: [output("e2e4", "A center move.")],
     }),
   });
-  const { snapshot } = await gameService.createAi(owner.principal, humanMatch);
-  const moved = await gameService.aiTurn(owner.principal, turnCommand(snapshot), access());
+  const {
+    details: { snapshot },
+    controllerId,
+  } = await createControlledAiGame(gameService, owner.principal, humanMatch, randomUUID());
+  const moved = await gameService.aiTurn(
+    owner.principal,
+    turnCommand(snapshot, controllerId),
+    access(),
+  );
   const response = await harness.post(api, owner.cookie, `/games/${snapshot.gameId}/lifecycle`, {
-    ...control(moved, "abort"),
+    ...control(moved, "abort", controllerId),
     ...(completed ? { action: "resign", losingColor: "black", controllerId: undefined } : {}),
   });
   expect(response.statusCode, response.body).toBe(200);

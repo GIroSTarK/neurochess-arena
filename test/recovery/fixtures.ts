@@ -45,7 +45,7 @@ export async function fixtures(harness: RoomSocketHarness, api: TestApi) {
   ).toBe(200);
   for (let ply = 0; ply < 4; ply++) {
     const response = await harness.post(api, owner.cookie, `/games/${solo.gameId}/ai-turn`, {
-      ...turnCommand(solo),
+      ...turnCommand(solo, solo.gameId),
       ...(ply % 2 === 0 ? { credentialId } : { apiKey: providerKey }),
     });
     expect(response.statusCode).toBe(200);
@@ -67,7 +67,7 @@ export async function fixtures(harness: RoomSocketHarness, api: TestApi) {
     api,
     guest.cookie,
     `/games/${guestInitial.gameId}/lifecycle`,
-    control(guestInitial, "abort"),
+    control(guestInitial, "abort", guestInitial.gameId),
   );
   expect(guestAborted.statusCode).toBe(200);
   const guestSolo = gameSnapshotSchema.parse(guestAborted.json());

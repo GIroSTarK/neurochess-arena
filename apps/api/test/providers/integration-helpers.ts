@@ -62,7 +62,7 @@ export function post(api: TestApi, guest: TestGuest, url: string, payload: objec
   });
 }
 
-export async function createProviderGame(
+export async function createControlledProviderGame(
   api: TestApi,
   guest: TestGuest,
   fixture: AdapterContractFixture,
@@ -80,13 +80,13 @@ export async function createProviderGame(
   });
   expect(response.statusCode, response.body).toBe(201);
   const snapshot = gameDetailsSchema.parse(response.json()).snapshot;
-  await claimController(api, guest, snapshot);
+  await claimController(api, guest, snapshot, snapshot.gameId);
   return snapshot;
 }
 
 export function turn(api: TestApi, guest: TestGuest, snapshot: GameSnapshot) {
   return post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
-    ...turnCommand(snapshot),
+    ...turnCommand(snapshot, snapshot.gameId),
     apiKey: PROVIDER_KEY,
   });
 }

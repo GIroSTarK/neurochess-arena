@@ -135,7 +135,7 @@ describe("account session dispatch and revocation races", () => {
       controllerId: snapshot.gameId,
     });
     const pending = service
-      .aiTurn(account.principal, turnCommand(snapshot), access())
+      .aiTurn(account.principal, turnCommand(snapshot, snapshot.gameId), access())
       .catch((error: unknown) => error);
     await entered.promise;
     try {
@@ -203,7 +203,7 @@ describe("account session dispatch and revocation races", () => {
       controllerId: snapshot.gameId,
     });
     const pending = service
-      .aiTurn(account.principal, turnCommand(snapshot), access())
+      .aiTurn(account.principal, turnCommand(snapshot, snapshot.gameId), access())
       .catch((error: unknown) => error);
     await observed.promise;
     try {

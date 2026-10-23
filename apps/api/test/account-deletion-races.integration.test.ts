@@ -3,7 +3,12 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { AccountGameHarness } from "./account-game-helpers.js";
-import { aiMatch, control, service } from "./ai-turn-helpers.js";
+import {
+  aiMatch,
+  control,
+  createControlledAiGame,
+  createTestGameService,
+} from "./ai-turn-helpers.js";
 import type { TestApi } from "./helpers.js";
 import { gameRecords, residualExecution, terminalGame } from "./history-deletion-helpers.js";
 
@@ -135,10 +140,20 @@ it("serializes deletion with another instance's commands, controller renewal and
   const other = await harness.createAuthenticatedApi();
   const owner = await harness.account(api);
   const otherDevice = await owner.anotherSession();
-  const first = service(api);
-  const second = service(other);
-  const { snapshot } = await first.createAi(owner.principal, aiMatch);
-  const paused = await first.lifecycle(owner.principal, control(snapshot, "pause"));
+  const first = createTestGameService(api);
+  const second = createTestGameService(other);
+  const {
+    details: { snapshot },
+    controllerId,
+  } = await createControlledAiGame(first, owner.principal, aiMatch, crypto.randomUUID());
+  const paused = await first.lifecycle(owner.principal, control(snapshot, "pause", controllerId));
+  expect(
+    await second.controller(otherDevice.principal, {
+      gameId: paused.gameId,
+      controllerId,
+      action: "heartbeat",
+    }),
+  ).toEqual(paused);
   let deletion: ReturnType<typeof harness.post> | undefined;
   const commands: Promise<unknown>[] = [];
   await api.database.db.transaction(async (tx) => {
@@ -148,7 +163,7 @@ it("serializes deletion with another instance's commands, controller renewal and
     await blocked(tx, result.rows[0]!.pid);
     commands.push(
       second
-        .lifecycle(otherDevice.principal, control(paused, "resume"))
+        .lifecycle(otherDevice.principal, control(paused, "resume", controllerId))
         .catch((error: unknown) => error),
     );
     await blocked(tx, result.rows[0]!.pid, 2);
@@ -156,7 +171,7 @@ it("serializes deletion with another instance's commands, controller renewal and
       second
         .controller(owner.principal, {
           gameId: paused.gameId,
-          controllerId: paused.gameId,
+          controllerId,
           action: "heartbeat",
         })
         .catch((error: unknown) => error),

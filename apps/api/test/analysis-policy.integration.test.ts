@@ -12,7 +12,14 @@ import { createAnalysisService } from "../src/analysis/service.js";
 import { positionOf, transportSnapshot } from "../src/games/command-persistence.js";
 import { createLoggerOptions } from "../src/logger.js";
 
-import { access, aiMatch, output, service, turnCommand } from "./ai-turn-helpers.js";
+import {
+  access,
+  aiMatch,
+  createControlledAiGame,
+  createTestGameService,
+  output,
+  turnCommand,
+} from "./ai-turn-helpers.js";
 import { analysisSample } from "./analysis-helpers.js";
 import { gameRecords } from "./history-deletion-helpers.js";
 import { createScriptedAdapter } from "./providers/scripted-adapter.js";
@@ -24,12 +31,19 @@ afterEach(() => harness.dispose());
 it("accepts earlier history after new moves without touching execution, slots or game projections", async () => {
   const api = await harness.createAuthenticatedApi();
   const owner = await harness.account(api);
-  const executor = service(api, {
+  const executor = createTestGameService(api, {
     openai: createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] }),
   });
-  const { snapshot } = await executor.createAi(owner.principal, aiMatch);
+  const {
+    details: { snapshot },
+    controllerId,
+  } = await createControlledAiGame(executor, owner.principal, aiMatch, randomUUID());
   const delayed = analysisSample(snapshot);
-  const advanced = await executor.aiTurn(owner.principal, turnCommand(snapshot), access());
+  const advanced = await executor.aiTurn(
+    owner.principal,
+    turnCommand(snapshot, controllerId),
+    access(),
+  );
   expect(advanced.version).toBeGreaterThan(snapshot.version);
   const records = await gameRecords(api, snapshot.gameId);
   const slots = await api.database.db

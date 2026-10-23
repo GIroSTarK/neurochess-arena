@@ -60,11 +60,11 @@ function post(api: TestApi, guest: TestGuest, url: string, payload: unknown) {
 function get(api: TestApi, guest: TestGuest, url: string) {
   return api.app.inject({ method: "GET", url, headers: { cookie: guest.cookie } });
 }
-async function create(api: TestApi, guest: TestGuest, config = configuration) {
+async function createControlledGame(api: TestApi, guest: TestGuest, config = configuration) {
   const response = await post(api, guest, "/games", config);
   expect(response.statusCode, response.body).toBe(201);
   const details = gameDetailsSchema.parse(response.json());
-  await claimController(api, guest, details.snapshot);
+  await claimController(api, guest, details.snapshot, details.snapshot.gameId);
   return details;
 }
 
@@ -152,13 +152,13 @@ describe("private terminal AI HTTP reads", () => {
       });
       const owner = await harness.guest(api);
       const stranger = await harness.guest(api);
-      let { snapshot } = await create(api, owner, config);
+      let { snapshot } = await createControlledGame(api, owner, config);
       for (const move of history) {
         const response =
           config.seats[snapshot.turn].type === "human"
             ? await post(api, owner, `/games/${snapshot.gameId}/moves`, command(snapshot, move))
             : await post(api, owner, `/games/${snapshot.gameId}/ai-turn`, {
-                ...turnCommand(snapshot),
+                ...turnCommand(snapshot, snapshot.gameId),
                 apiKey,
               });
         expect(response.statusCode, response.body).toBe(200);
@@ -169,7 +169,7 @@ describe("private terminal AI HTTP reads", () => {
           api,
           owner,
           `/games/${snapshot.gameId}/lifecycle`,
-          control(snapshot, "abort"),
+          control(snapshot, "abort", snapshot.gameId),
         );
         expect(response.statusCode, response.body).toBe(200);
         snapshot = gameSnapshotSchema.parse(response.json());
@@ -196,7 +196,7 @@ describe("private terminal AI HTTP reads", () => {
         /Viewer note|commentary|openai|anthropic|google|openrouter|gpt-|claude|gemini/i,
       );
 
-      const next = await create(api, owner, config);
+      const next = await createControlledGame(api, owner, config);
       expect(next.snapshot.state).toBe("active");
       expect(next.snapshot.gameId).not.toBe(snapshot.gameId);
       const occupied = await post(api, owner, "/games", config);
@@ -231,9 +231,9 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
         providerTimeouts: { turnMs: 150 },
       });
       const guest = await harness.guest(api);
-      const { snapshot } = await create(api, guest);
+      const { snapshot } = await createControlledGame(api, guest);
       const response = await post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(snapshot),
+        ...turnCommand(snapshot, snapshot.gameId),
         apiKey,
       });
       expect(response.statusCode).toBe(200);
@@ -297,13 +297,13 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
       }),
     });
     const guest = await harness.guest(api);
-    const { snapshot } = await create(api, guest);
+    const { snapshot } = await createControlledGame(api, guest);
     const address = await api.app.listen({ host: "127.0.0.1", port: 0 });
     const controller = new AbortController();
     const pending = fetch(`${address}/games/${snapshot.gameId}/ai-turn`, {
       method: "POST",
       headers: { origin: WEB_ORIGIN, cookie: guest.cookie, "content-type": "application/json" },
-      body: JSON.stringify({ ...turnCommand(snapshot), apiKey }),
+      body: JSON.stringify({ ...turnCommand(snapshot, snapshot.gameId), apiKey }),
       signal: controller.signal,
     }).catch(() => undefined);
     await entered.promise;
@@ -368,10 +368,10 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     const discovery = await post(api, guest, "/providers/models", { provider: "openai", apiKey });
     expect(discovery.json()).toEqual(catalog());
     expect(discovery.headers["cache-control"]).toBe("no-store");
-    const details = await create(api, guest);
+    const details = await createControlledGame(api, guest);
     expect(adapter.discoveryCalls).toBe(1);
     expect(details.configuration).toEqual(configuration);
-    const command = turnCommand(details.snapshot);
+    const command = turnCommand(details.snapshot, details.snapshot.gameId);
     const moved = await post(api, guest, `/games/${command.gameId}/ai-turn`, {
       ...command,
       apiKey,
@@ -388,7 +388,7 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     expect(adapter.discoveryCalls).toBe(2);
     expect(adapter.moveCalls).toBe(1);
     const failed = await post(api, guest, `/games/${command.gameId}/ai-turn`, {
-      ...turnCommand(snapshot),
+      ...turnCommand(snapshot, snapshot.gameId),
       apiKey,
     });
     expect(failed.statusCode).toBe(200);
@@ -470,8 +470,8 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     });
     const guest = await harness.guest(api);
     const stranger = await harness.guest(api);
-    const { snapshot } = await create(api, guest);
-    const command = turnCommand(snapshot);
+    const { snapshot } = await createControlledGame(api, guest);
+    const command = turnCommand(snapshot, snapshot.gameId);
     const turnUrl = `/games/${snapshot.gameId}/ai-turn`;
     const cases = [
       {
@@ -619,9 +619,9 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
       const adapter = createScriptedAdapter({ provider: "openai", models: [discovery] });
       const api = await harness.createApi({ aiAdapters: { openai: adapter } });
       const guest = await harness.guest(api);
-      const { snapshot } = await create(api, guest);
+      const { snapshot } = await createControlledGame(api, guest);
       const response = await post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(snapshot),
+        ...turnCommand(snapshot, snapshot.gameId),
         apiKey,
       });
       expect(response.statusCode, response.body).toBe(200);
@@ -662,11 +662,11 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     });
     const api = await harness.createApi({ aiAdapters: { openai: adapter } });
     const guest = await harness.guest(api);
-    const { snapshot } = await create(api, guest);
+    const { snapshot } = await createControlledGame(api, guest);
     expect(
       (
         await post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
-          ...turnCommand(snapshot),
+          ...turnCommand(snapshot, snapshot.gameId),
           apiKey,
         })
       ).statusCode,
@@ -678,14 +678,14 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     const adapter = createScriptedAdapter({ provider: "openai", models: [catalog()] });
     const api = await harness.createApi({ aiAdapters: { openai: adapter } });
     const guest = await harness.guest(api);
-    const { snapshot } = await create(api, guest, {
+    const { snapshot } = await createControlledGame(api, guest, {
       mode: "ai_vs_human",
       seats: {
         white: { ...aiMatch.seats.white, parameters: { temperature: 3 } },
         black: { type: "human" },
       },
     });
-    const command = turnCommand(snapshot);
+    const command = turnCommand(snapshot, snapshot.gameId);
     const response = await post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
       ...command,
       apiKey,
@@ -723,8 +723,8 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     const api = await harness.createApi({ aiAdapters: { openai: adapter } });
     const second = await harness.createApi({ aiAdapters: { openai: other } });
     const guest = await harness.guest(api);
-    const { snapshot } = await create(api, guest);
-    const command = turnCommand(snapshot);
+    const { snapshot } = await createControlledGame(api, guest);
+    const command = turnCommand(snapshot, snapshot.gameId);
     const pending = post(api, guest, `/games/${snapshot.gameId}/ai-turn`, {
       ...command,
       apiKey,
@@ -740,7 +740,7 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
       second,
       guest,
       `/games/${snapshot.gameId}/lifecycle`,
-      control(snapshot, "abort"),
+      control(snapshot, "abort", snapshot.gameId),
     );
     expect(stopped.statusCode).toBe(200);
     release.resolve(catalog());
@@ -759,12 +759,12 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     expect(
       (
         await post(api, guest, `/games/${sandbox.gameId}/ai-turn`, {
-          ...turnCommand(sandbox),
+          ...turnCommand(sandbox, sandbox.gameId),
           apiKey,
         })
       ).statusCode,
     ).toBe(403);
-    const game = await create(api, guest, {
+    const game = await createControlledGame(api, guest, {
       mode: "ai_vs_human",
       seats: { white: { type: "human" }, black: aiMatch.seats.black },
     });
@@ -792,7 +792,10 @@ describe("protected discovery and ordinary AI HTTP operations", () => {
     ).toBe(403);
     expect(
       (
-        await post(api, guest, `/games/${next.gameId}/ai-turn`, { ...turnCommand(next), apiKey })
+        await post(api, guest, `/games/${next.gameId}/ai-turn`, {
+          ...turnCommand(next, next.gameId),
+          apiKey,
+        })
       ).json(),
     ).toMatchObject({ code: "AI_ADAPTER_UNAVAILABLE" });
     const sandboxConflict = await post(api, guest, "/sandbox/games", {});

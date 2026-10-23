@@ -22,7 +22,13 @@ import { control, turnCommand } from "../ai-turn-helpers.js";
 import { snapshot, WEB_ORIGIN } from "../helpers.js";
 
 import { type AdapterContractFixture, PROVIDER_KEY } from "./adapter-contract.js";
-import { createProviderGame, post, records, turn, withProviderApi } from "./integration-helpers.js";
+import {
+  createControlledProviderGame,
+  post,
+  records,
+  turn,
+  withProviderApi,
+} from "./integration-helpers.js";
 import type { HttpStep } from "./mock-http.js";
 
 interface IntegrationFixture {
@@ -73,7 +79,7 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
           expect(discovery.statusCode).toBe(200);
           expect(discovery.json()).toMatchObject({ ok: true });
           expect(discovery.headers["cache-control"]).toBe("no-store");
-          const initial = await createProviderGame(
+          const initial = await createControlledProviderGame(
             api,
             guest,
             wire,
@@ -84,7 +90,7 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
           const deniedTurn = await turn(api, stranger, initial);
           expect(deniedTurn.statusCode).toBe(404);
           expect(http.transport).toHaveBeenCalledTimes(1);
-          const command = { ...turnCommand(initial), apiKey: PROVIDER_KEY };
+          const command = { ...turnCommand(initial, initial.gameId), apiKey: PROVIDER_KEY };
           const first = await post(api, guest, `/games/${initial.gameId}/ai-turn`, command);
           expect(first.statusCode, first.body).toBe(200);
           const afterWhite = gameSnapshotSchema.parse(first.json());
@@ -190,7 +196,12 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
           wire.completion('{"move":"e2e4"}'),
         ],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
+          const initial = await createControlledProviderGame(
+            api,
+            guest,
+            wire,
+            fixture.defaultParameters,
+          );
           const response = await turn(api, guest, initial);
           expect(response.statusCode, response.body).toBe(200);
           const accepted = gameSnapshotSchema.parse(response.json());
@@ -233,7 +244,12 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
         wire,
         [catalog(), ...fixture.technicalLoss.responses()],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
+          const initial = await createControlledProviderGame(
+            api,
+            guest,
+            wire,
+            fixture.defaultParameters,
+          );
           const response = await turn(api, guest, initial);
           expect(response.statusCode, response.body).toBe(200);
           expect(gameSnapshotSchema.parse(response.json())).toMatchObject({
@@ -273,7 +289,12 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
           wire.completion('{"move":"e2e4"}'),
         ],
         async ({ api, guest, http, logs }) => {
-          const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
+          const initial = await createControlledProviderGame(
+            api,
+            guest,
+            wire,
+            fixture.defaultParameters,
+          );
           const response = await turn(api, guest, initial);
           expect(response.statusCode, response.body).toBe(200);
           const paused = gameSnapshotSchema.parse(response.json());
@@ -296,7 +317,7 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
             api,
             guest,
             `/games/${initial.gameId}/lifecycle`,
-            control(paused, "resume"),
+            control(paused, "resume", paused.gameId),
           );
           expect(resume.statusCode, resume.body).toBe(200);
           expect(http.transport).toHaveBeenCalledTimes(3);
@@ -344,7 +365,12 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
             }),
         ],
         async ({ api, guest, http, logs }) => {
-          const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
+          const initial = await createControlledProviderGame(
+            api,
+            guest,
+            wire,
+            fixture.defaultParameters,
+          );
           // Database preparation and discovery must finish before the deadline is advanced.
           vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
           try {
@@ -398,7 +424,12 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
           },
         ],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, wire, fixture.defaultParameters);
+          const initial = await createControlledProviderGame(
+            api,
+            guest,
+            wire,
+            fixture.defaultParameters,
+          );
           const pending = turn(api, guest, initial);
           try {
             await entered.promise;
@@ -406,7 +437,7 @@ export function runProviderIntegrationContract(fixture: IntegrationFixture) {
               api,
               guest,
               `/games/${initial.gameId}/lifecycle`,
-              control(initial, "abort"),
+              control(initial, "abort", initial.gameId),
             );
             expect(stopped.statusCode, stopped.body).toBe(200);
             expect((await records(api, guest, initial.gameId)).turns[0]!.attempts[0]).toMatchObject(

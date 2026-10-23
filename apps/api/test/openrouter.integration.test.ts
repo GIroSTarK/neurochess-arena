@@ -4,7 +4,7 @@ import { snapshot } from "./helpers.js";
 import { PROVIDER_KEY } from "./providers/adapter-contract.js";
 import { runProviderIntegrationContract } from "./providers/integration-contract.js";
 import {
-  createProviderGame,
+  createControlledProviderGame,
   post,
   records,
   turn,
@@ -70,7 +70,13 @@ describe("openrouter provider-specific live capabilities", () => {
           ok: true,
           models: [{ id: "anthropic/claude-sonnet-4" }, { id: modelId }],
         });
-        const initial = await createProviderGame(api, guest, openRouterFixture, {}, modelId);
+        const initial = await createControlledProviderGame(
+          api,
+          guest,
+          openRouterFixture,
+          {},
+          modelId,
+        );
         const response = await turn(api, guest, initial);
         expect(response.statusCode, response.body).toBe(200);
         expect((await snapshot(api, guest, initial.gameId)).moves.map(({ uci }) => uci)).toEqual([
@@ -94,7 +100,7 @@ describe("openrouter provider-specific live capabilities", () => {
         }),
       ],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(api, guest, openRouterFixture, {
+        const initial = await createControlledProviderGame(api, guest, openRouterFixture, {
           maxOutputTokens: 256,
         });
         const response = await turn(api, guest, initial);
@@ -115,7 +121,7 @@ describe("openrouter provider-specific live capabilities", () => {
         Response.json(openRouterResponse('{"move":"e2e4"}')),
       ],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(
+        const initial = await createControlledProviderGame(
           api,
           guest,
           openRouterFixture,
@@ -148,7 +154,7 @@ describe("openrouter provider-specific live capabilities", () => {
         openRouterFixture,
         [Response.json(catalog)],
         async ({ api, guest, http }) => {
-          const initial = await createProviderGame(api, guest, openRouterFixture);
+          const initial = await createControlledProviderGame(api, guest, openRouterFixture);
           const response = await turn(api, guest, initial);
           expect(response.statusCode, response.body).toBe(200);
           expect(response.json()).toMatchObject({ state: "paused", moves: [], result: "*" });

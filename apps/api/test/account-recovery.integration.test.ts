@@ -47,10 +47,16 @@ async function lifecycle(
   action: "pause" | "resume" | "abort",
   controllerId?: string,
 ) {
-  const response = await harness.post(api, cookie, `/games/${snapshot.gameId}/lifecycle`, {
-    ...control(snapshot, action),
-    controllerId,
-  });
+  const command =
+    controllerId === undefined
+      ? {
+          gameId: snapshot.gameId,
+          expectedVersion: snapshot.version,
+          commandId: randomUUID(),
+          action,
+        }
+      : control(snapshot, action, controllerId);
+  const response = await harness.post(api, cookie, `/games/${snapshot.gameId}/lifecycle`, command);
   expect(response.statusCode, response.body).toBe(200);
   return gameSnapshotSchema.parse(response.json());
 }
@@ -67,7 +73,7 @@ describe("account recovery and session fences", () => {
     const { snapshot } = await harness.createGame(api, owner.cookie);
     await claim(api, owner.cookie, snapshot);
     const pending = harness.post(api, owner.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-      ...turnCommand(snapshot),
+      ...turnCommand(snapshot, snapshot.gameId),
       apiKey: "fixture-key",
     });
     await gate.entered;
@@ -92,7 +98,7 @@ describe("account recovery and session fences", () => {
         other,
         second.cookie,
         `/games/${snapshot.gameId}/lifecycle`,
-        control(paused, "resume"),
+        control(paused, "resume", paused.gameId),
       );
       expect(missingController.json()).toMatchObject({ code: "AI_CONTROLLER_LOST" });
       const controller = await claim(other, second.cookie, paused, randomUUID());
@@ -124,7 +130,7 @@ describe("account recovery and session fences", () => {
       const { snapshot } = await harness.createGame(api, owner.cookie);
       await claim(api, owner.cookie, snapshot);
       const pending = harness.post(api, owner.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(snapshot),
+        ...turnCommand(snapshot, snapshot.gameId),
         apiKey: "fixture-key",
       });
       await gate.entered;
@@ -203,7 +209,7 @@ describe("account recovery and session fences", () => {
             .for("update");
         } else await tx.select().from(games).where(eq(games.id, snapshot.gameId)).for("update");
         pending = service
-          .lifecycle(account.principal, control(snapshot, "pause"))
+          .lifecycle(account.principal, control(snapshot, "pause", snapshot.gameId))
           .catch((error: unknown) => error);
         await locking.promise;
         await tx
@@ -280,7 +286,7 @@ describe("account recovery and session fences", () => {
         controllerId = await claim(api, cookie, snapshot, randomUUID());
         snapshot = await lifecycle(api, cookie, snapshot, "resume", controllerId);
       }
-      const move = { ...turnCommand(snapshot), controllerId, apiKey: "fixture-key" };
+      const move = { ...turnCommand(snapshot, controllerId), apiKey: "fixture-key" };
       const response = await harness.post(api, cookie, `/games/${id}/ai-turn`, move);
       expect(response.statusCode, response.body).toBe(200);
       snapshot = gameSnapshotSchema.parse(response.json());
@@ -328,7 +334,7 @@ describe("account recovery and session fences", () => {
           api,
           account.cookie,
           `/games/${snapshot.gameId}/ai-turn`,
-          { ...turnCommand(snapshot), apiKey: "fixture-key" },
+          { ...turnCommand(snapshot, snapshot.gameId), apiKey: "fixture-key" },
         );
         expect(response.statusCode, response.body).toBe(200);
         snapshot = gameSnapshotSchema.parse(response.json());

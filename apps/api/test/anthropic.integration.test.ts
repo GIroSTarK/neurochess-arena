@@ -10,7 +10,7 @@ import {
 } from "./providers/anthropic-fixtures.js";
 import { runProviderIntegrationContract } from "./providers/integration-contract.js";
 import {
-  createProviderGame,
+  createControlledProviderGame,
   records,
   turn,
   withProviderApi,
@@ -56,7 +56,7 @@ describe("anthropic provider-specific live capabilities", () => {
       anthropicFixture,
       [Response.json({ ...anthropicCatalog(), data: [{ ...anthropicModel(), max_tokens: 100 }] })],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(api, guest, anthropicFixture, {
+        const initial = await createControlledProviderGame(api, guest, anthropicFixture, {
           maxOutputTokens: 256,
         });
         const response = await turn(api, guest, initial);
@@ -77,7 +77,7 @@ describe("anthropic provider-specific live capabilities", () => {
         Response.json(anthropicResponse('{"move":"e2e4"}')),
       ],
       async ({ api, guest, http }) => {
-        const initial = await createProviderGame(
+        const initial = await createControlledProviderGame(
           api,
           guest,
           anthropicFixture,

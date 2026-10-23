@@ -89,13 +89,13 @@ describe("scoped terminal history deletion", () => {
       api,
       guest.cookie,
       `/games/${guestGame.gameId}/lifecycle`,
-      control(guestGame, "abort"),
+      control(guestGame, "abort", guestGame.gameId),
     );
     await harness.post(
       api,
       guest.cookie,
       `/games/${sandbox.gameId}/lifecycle`,
-      control(sandbox, "abort"),
+      control(sandbox, "abort", sandbox.gameId),
     );
     const { snapshot: unfinished } = await harness.createGame(api, owner.cookie);
     const credential = await harness.post(api, owner.cookie, "/credentials", {
@@ -172,8 +172,10 @@ describe("scoped terminal history deletion", () => {
       const { snapshot } = await harness.createGame(api, owner.cookie);
       if (state === "paused") {
         await harness.post(api, owner.cookie, `/games/${snapshot.gameId}/lifecycle`, {
-          ...control(snapshot, "pause"),
-          controllerId: undefined,
+          gameId: snapshot.gameId,
+          expectedVersion: snapshot.version,
+          commandId: randomUUID(),
+          action: "pause",
         });
       }
       const before = await gameRecords(api, snapshot.gameId);

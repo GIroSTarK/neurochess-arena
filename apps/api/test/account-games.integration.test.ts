@@ -191,8 +191,8 @@ describe("account-owned game HTTP authority", () => {
     }
     for (const [suffix, payload] of [
       ["moves", command(snapshot, "e2e4")],
-      ["lifecycle", control(snapshot, "abort")],
-      ["ai-turn", { ...turnCommand(snapshot), apiKey: "fixture-key" }],
+      ["lifecycle", control(snapshot, "abort", snapshot.gameId)],
+      ["ai-turn", { ...turnCommand(snapshot, snapshot.gameId), apiKey: "fixture-key" }],
       [
         "controller",
         {

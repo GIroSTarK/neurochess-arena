@@ -290,7 +290,7 @@ it("recovers a private populated database and separate secrets, then reconciles 
     );
     const paused = await service.lifecycle(
       fixture.recovering.principal,
-      control(beforeRecovery, "pause"),
+      control(beforeRecovery, "pause", beforeRecovery.gameId),
     );
     expect(paused.state).toBe("paused");
     expect(paused.moves).toEqual([]);
@@ -302,7 +302,7 @@ it("recovers a private populated database and separate secrets, then reconciles 
     });
     const resumed = await service.lifecycle(
       fixture.recovering.principal,
-      control(paused, "resume"),
+      control(paused, "resume", paused.gameId),
     );
     expect(resumed.state).toBe("active");
     expect(resumed.moves).toEqual([]);
@@ -376,7 +376,7 @@ it("recovers a private populated database and separate secrets, then reconciles 
     );
     const aborted = await service.lifecycle(
       fixture.roomOwner.principal,
-      control(fixture.active, "abort"),
+      control(fixture.active, "abort", fixture.active.gameId),
     );
     expect(aborted.state).toBe("aborted");
     await service.deleteGame(fixture.roomOwner.principal, {

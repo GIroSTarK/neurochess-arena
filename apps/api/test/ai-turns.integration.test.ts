@@ -19,10 +19,11 @@ import {
   aiMatch,
   blackAi,
   control,
+  createControlledAiGame,
+  createTestGameService,
   gatedAdapter,
   humanMatch,
   output,
-  service,
   turnCommand,
 } from "./ai-turn-helpers.js";
 import {
@@ -47,10 +48,13 @@ describe("authoritative AI turns through injected adapters", () => {
     const principal = owner.principal;
     const gate = gatedAdapter();
     const otherAdapter = createScriptedAdapter({ provider: "openai", moves: [output("d2d4")] });
-    const first = service(api, { openai: gate.adapter });
-    const second = service(otherApi, { openai: otherAdapter });
-    const { snapshot } = await first.createAi(principal, aiMatch);
-    const cmd = turnCommand(snapshot);
+    const first = createTestGameService(api, { openai: gate.adapter });
+    const second = createTestGameService(otherApi, { openai: otherAdapter });
+    const {
+      details: { snapshot },
+      controllerId,
+    } = await createControlledAiGame(first, principal, aiMatch, randomUUID());
+    const cmd = turnCommand(snapshot, controllerId);
     const pending = first.aiTurn(principal, cmd, access());
     await gate.entered;
     expect(await second.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
@@ -60,7 +64,7 @@ describe("authoritative AI turns through injected adapters", () => {
     const attempts = await Promise.allSettled([
       second.aiTurn(principal, cmd, access()),
       second.aiTurn(principal, { ...cmd, commandId: cmd.commandId.toUpperCase() }, access()),
-      second.aiTurn(principal, turnCommand(snapshot), access()),
+      second.aiTurn(principal, turnCommand(snapshot, controllerId), access()),
     ]);
     for (const attempt of attempts) {
       expect(attempt).toMatchObject({
@@ -126,11 +130,21 @@ describe("authoritative AI turns through injected adapters", () => {
     }
     const white = adapter("openai");
     const black = adapter("anthropic");
-    const gamesService = service(api, { openai: white, anthropic: black });
-    snapshots.push((await gamesService.createAi(principal, aiMatch)).snapshot);
+    const gamesService = createTestGameService(api, { openai: white, anthropic: black });
+    const { details, controllerId } = await createControlledAiGame(
+      gamesService,
+      principal,
+      aiMatch,
+      randomUUID(),
+    );
+    snapshots.push(details.snapshot);
     for (let index = 0; index < 4; index++) {
       snapshots.push(
-        await gamesService.aiTurn(principal, turnCommand(snapshots.at(-1)!), access()),
+        await gamesService.aiTurn(
+          principal,
+          turnCommand(snapshots.at(-1)!, controllerId),
+          access(),
+        ),
       );
     }
     const final = snapshots.at(-1)!;
@@ -146,7 +160,7 @@ describe("authoritative AI turns through injected adapters", () => {
     expect((await gamesService.pgn(principal, final.gameId)).pgn).toBe(final.pgn);
     expect(await gamesService.unfinishedGame(principal)).toEqual({ game: null });
     await expect(
-      gamesService.aiTurn(principal, turnCommand(final), access()),
+      gamesService.aiTurn(principal, turnCommand(final, controllerId), access()),
     ).rejects.toMatchObject({ code: "INVALID_GAME_STATE" });
     expect([white.moveCalls, black.moveCalls]).toEqual([2, 2]);
     expect((await gamesService.createSandbox(principal)).gameId).not.toBe(final.gameId);
@@ -161,13 +175,23 @@ describe("authoritative AI turns through injected adapters", () => {
       provider: "openai",
       moves: history.slice(0, 7).map((move) => output(move)),
     });
-    let gamesService = service(api, { openai: adapter });
-    let { snapshot } = await gamesService.createAi(principal, {
-      ...aiMatch,
-      seats: { white: aiMatch.seats.white, black: aiMatch.seats.white },
-    });
+    let gamesService = createTestGameService(api, { openai: adapter });
+    const { details, controllerId } = await createControlledAiGame(
+      gamesService,
+      principal,
+      {
+        ...aiMatch,
+        seats: { white: aiMatch.seats.white, black: aiMatch.seats.white },
+      },
+      randomUUID(),
+    );
+    let { snapshot } = details;
     for (let index = 0; index < 7; index++) {
-      snapshot = await gamesService.aiTurn(principal, turnCommand(snapshot), access());
+      snapshot = await gamesService.aiTurn(
+        principal,
+        turnCommand(snapshot, controllerId),
+        access(),
+      );
     }
     await harness.close(api);
     api = await harness.createApi();
@@ -175,11 +199,11 @@ describe("authoritative AI turns through injected adapters", () => {
       provider: "openai",
       moves: [output(history[7]!)],
     });
-    gamesService = service(api, { openai: finalAdapter });
+    gamesService = createTestGameService(api, { openai: finalAdapter });
     expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
-    snapshot = await gamesService.lifecycle(principal, control(snapshot, "pause"));
-    snapshot = await gamesService.lifecycle(principal, control(snapshot, "resume"));
-    snapshot = await gamesService.aiTurn(principal, turnCommand(snapshot), access());
+    snapshot = await gamesService.lifecycle(principal, control(snapshot, "pause", controllerId));
+    snapshot = await gamesService.lifecycle(principal, control(snapshot, "resume", controllerId));
+    snapshot = await gamesService.aiTurn(principal, turnCommand(snapshot, controllerId), access());
     expect(snapshot).toMatchObject({
       state: "completed",
       result: "1/2-1/2",
@@ -196,9 +220,12 @@ describe("authoritative AI turns through injected adapters", () => {
     const stranger = await harness.guest(api);
     const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [] });
-    const gamesService = service(api, { openai: adapter });
-    const { snapshot } = await gamesService.createAi(principal, aiMatch);
-    const cmd = turnCommand(snapshot);
+    const gamesService = createTestGameService(api, { openai: adapter });
+    const {
+      details: { snapshot },
+      controllerId,
+    } = await createControlledAiGame(gamesService, principal, aiMatch, randomUUID());
+    const cmd = turnCommand(snapshot, controllerId);
     for (const extra of [
       { context: {} },
       { fen: snapshot.fen },
@@ -223,15 +250,24 @@ describe("authoritative AI turns through injected adapters", () => {
     await expect(
       gamesService.aiTurn(principal, { ...cmd, expectedVersion: 1 }, access()),
     ).rejects.toMatchObject({ code: "GAME_CONFLICT", currentSnapshot: snapshot });
-    await expect(service(api).aiTurn(principal, cmd, access())).rejects.toMatchObject({
-      code: "AI_ADAPTER_UNAVAILABLE",
-    });
+    await expect(createTestGameService(api).aiTurn(principal, cmd, access())).rejects.toMatchObject(
+      {
+        code: "AI_ADAPTER_UNAVAILABLE",
+      },
+    );
     await expect(
-      service(api, { openai: { ...adapter, provider: "google" } }).aiTurn(principal, cmd, access()),
+      createTestGameService(api, { openai: { ...adapter, provider: "google" } }).aiTurn(
+        principal,
+        cmd,
+        access(),
+      ),
     ).rejects.toMatchObject({ code: "AI_ADAPTER_UNAVAILABLE" });
-    const paused = await gamesService.lifecycle(principal, control(snapshot, "pause"));
+    const paused = await gamesService.lifecycle(
+      principal,
+      control(snapshot, "pause", controllerId),
+    );
     await expect(
-      gamesService.aiTurn(principal, turnCommand(paused), access()),
+      gamesService.aiTurn(principal, turnCommand(paused, controllerId), access()),
     ).rejects.toMatchObject({ code: "INVALID_GAME_STATE" });
     await api.database.db
       .update(guestSessions)
@@ -241,7 +277,7 @@ describe("authoritative AI turns through injected adapters", () => {
       })
       .where(eq(guestSessions.id, owner.id));
     await expect(
-      gamesService.aiTurn(principal, turnCommand(paused), access()),
+      gamesService.aiTurn(principal, turnCommand(paused, controllerId), access()),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(adapter.moveCalls).toBe(0);
     expect(
@@ -269,17 +305,23 @@ describe("authoritative AI turns through injected adapters", () => {
     const owner = await harness.guest(api);
     const principal = owner.principal;
     const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
-    const gamesService = service(api, { openai: adapter });
+    const gamesService = createTestGameService(api, { openai: adapter });
     const sandbox = await createSandbox(api, owner);
     await expect(
-      gamesService.aiTurn(principal, turnCommand(sandbox), access()),
+      gamesService.aiTurn(principal, turnCommand(sandbox, sandbox.gameId), access()),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await gamesService.lifecycle(principal, control(sandbox, "abort"));
-    let { snapshot } = await gamesService.createAi(principal, humanMatch);
-    const aiCommand = turnCommand(snapshot);
+    await gamesService.lifecycle(principal, control(sandbox, "abort", sandbox.gameId));
+    const { details, controllerId } = await createControlledAiGame(
+      gamesService,
+      principal,
+      humanMatch,
+      randomUUID(),
+    );
+    let { snapshot } = details;
+    const aiCommand = turnCommand(snapshot, controllerId);
     snapshot = await gamesService.aiTurn(principal, aiCommand, access());
     await expect(
-      gamesService.aiTurn(principal, turnCommand(snapshot), access()),
+      gamesService.aiTurn(principal, turnCommand(snapshot, controllerId), access()),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     for (const operation of [
       () =>
@@ -289,7 +331,7 @@ describe("authoritative AI turns through injected adapters", () => {
         }),
       () =>
         gamesService.lifecycle(principal, {
-          ...control(snapshot, "pause"),
+          ...control(snapshot, "pause", controllerId),
           commandId: aiCommand.commandId,
         }),
     ]) {
@@ -303,17 +345,17 @@ describe("authoritative AI turns through injected adapters", () => {
     await expect(
       gamesService.aiTurn(
         principal,
-        { ...turnCommand(snapshot), commandId: humanCommand.commandId },
+        { ...turnCommand(snapshot, controllerId), commandId: humanCommand.commandId },
         access(),
       ),
     ).rejects.toMatchObject({ code: "GAME_CONFLICT" });
-    const pauseCommand = control(snapshot, "pause");
+    const pauseCommand = control(snapshot, "pause", controllerId);
     snapshot = await gamesService.lifecycle(principal, pauseCommand);
-    snapshot = await gamesService.lifecycle(principal, control(snapshot, "resume"));
+    snapshot = await gamesService.lifecycle(principal, control(snapshot, "resume", controllerId));
     await expect(
       gamesService.aiTurn(
         principal,
-        { ...turnCommand(snapshot), commandId: pauseCommand.commandId },
+        { ...turnCommand(snapshot, controllerId), commandId: pauseCommand.commandId },
         access(),
       ),
     ).rejects.toMatchObject({ code: "GAME_CONFLICT" });
@@ -328,9 +370,12 @@ describe("authoritative AI turns through injected adapters", () => {
       const stranger = await harness.guest(api);
       const principal = owner.principal;
       const gate = gatedAdapter();
-      const gamesService = service(api, { openai: gate.adapter });
-      const { snapshot } = await gamesService.createAi(principal, aiMatch);
-      const pending = gamesService.aiTurn(principal, turnCommand(snapshot), access());
+      const gamesService = createTestGameService(api, { openai: gate.adapter });
+      const {
+        details: { snapshot },
+        controllerId,
+      } = await createControlledAiGame(gamesService, principal, aiMatch, randomUUID());
+      const pending = gamesService.aiTurn(principal, turnCommand(snapshot, controllerId), access());
       await gate.entered;
       if (changed === "expiry") {
         await api.database.db
@@ -392,9 +437,12 @@ describe("authoritative AI turns through injected adapters", () => {
         ...createScriptedAdapter({ provider: "openai" }),
         requestMove: async () => response as NormalizedMoveResponse,
       };
-      const gamesService = service(api, { openai: adapter });
-      const { snapshot } = await gamesService.createAi(principal, aiMatch);
-      const cmd = turnCommand(snapshot);
+      const gamesService = createTestGameService(api, { openai: adapter });
+      const {
+        details: { snapshot },
+        controllerId,
+      } = await createControlledAiGame(gamesService, principal, aiMatch, randomUUID());
+      const cmd = turnCommand(snapshot, controllerId);
       const accepted = await gamesService.aiTurn(principal, cmd, access());
       expect(accepted).toMatchObject({
         version: 1,

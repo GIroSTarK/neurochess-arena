@@ -36,7 +36,7 @@ async function save(api: TestApi, cookie: string, provider: AiProvider, changes:
   return credentialId;
 }
 
-async function start(
+async function createControlledGame(
   api: TestApi,
   cookie: string,
   fixture: AdapterContractFixture = openAiFixture,
@@ -90,14 +90,14 @@ describe("saved credentials in authorized provider operations", () => {
       });
       const account = await harness.account(api);
       const credentialId = await save(api, account.cookie, "openai");
-      const snapshot = await start(api, account.cookie);
+      const snapshot = await createControlledGame(api, account.cookie);
       const pending = harness.post(
         api,
         account.cookie,
         operation === "discovery" ? "/providers/models" : `/games/${snapshot.gameId}/ai-turn`,
         operation === "discovery"
           ? { provider: "openai", credentialId }
-          : { ...turnCommand(snapshot), credentialId },
+          : { ...turnCommand(snapshot, snapshot.gameId), credentialId },
       );
       await entered.promise;
       try {
@@ -140,8 +140,8 @@ describe("saved credentials in authorized provider operations", () => {
       });
       expect(discovery.statusCode, discovery.body).toBe(200);
       expect(discovery.json()).toMatchObject({ ok: true, models: [{ id: fixture.modelId }] });
-      const snapshot = await start(api, account.cookie, fixture);
-      const body = { ...turnCommand(snapshot), credentialId };
+      const snapshot = await createControlledGame(api, account.cookie, fixture);
+      const body = { ...turnCommand(snapshot, snapshot.gameId), credentialId };
       const result = await harness.post(
         api,
         account.cookie,
@@ -224,9 +224,9 @@ describe("saved credentials in authorized provider operations", () => {
         credentialId,
       });
       expect(discovery.json()).toEqual({ ok: false, error: { code: "provider_auth" } });
-      const snapshot = await start(api, account.cookie);
+      const snapshot = await createControlledGame(api, account.cookie);
       const result = await harness.post(api, account.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(snapshot),
+        ...turnCommand(snapshot, snapshot.gameId),
         credentialId,
       });
       expect(result.statusCode, result.body).toBe(200);
@@ -263,8 +263,8 @@ describe("saved credentials in authorized provider operations", () => {
       const otherApi = await harness.createAuthenticatedApi();
       const account = await harness.account(api);
       const credentialId = await save(api, account.cookie, "openai");
-      const snapshot = await start(api, account.cookie);
-      const body = { ...turnCommand(snapshot), credentialId };
+      const snapshot = await createControlledGame(api, account.cookie);
+      const body = { ...turnCommand(snapshot, snapshot.gameId), credentialId };
       const pending = harness.post(api, account.cookie, `/games/${snapshot.gameId}/ai-turn`, body);
       await entered.promise;
       try {
@@ -298,7 +298,7 @@ describe("saved credentials in authorized provider operations", () => {
       expect(http.requests).toHaveLength(stage === "discovery" ? 1 : 2);
       if (stage === "valid") {
         const next = await harness.post(api, account.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-          ...turnCommand(current),
+          ...turnCommand(current, current.gameId),
           credentialId,
         });
         expect(next.json()).toMatchObject({ state: "paused" });
@@ -323,9 +323,9 @@ describe("saved credentials in authorized provider operations", () => {
     });
     const account = await harness.account(api);
     const credentialId = await save(api, account.cookie, "openai");
-    const snapshot = await start(api, account.cookie);
+    const snapshot = await createControlledGame(api, account.cookie);
     const pending = harness.post(api, account.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-      ...turnCommand(snapshot),
+      ...turnCommand(snapshot, snapshot.gameId),
       credentialId,
     });
     await entered.promise;
@@ -336,7 +336,7 @@ describe("saved credentials in authorized provider operations", () => {
             api,
             account.cookie,
             `/games/${snapshot.gameId}/lifecycle`,
-            control(snapshot, "pause"),
+            control(snapshot, "pause", snapshot.gameId),
           )
         ).statusCode,
       ).toBe(200);
@@ -363,12 +363,12 @@ describe("saved credentials in authorized provider operations", () => {
       });
       const account = await harness.account(api);
       const credentialId = await save(api, account.cookie, fixture.provider);
-      const snapshot = await start(api, account.cookie, fixture);
+      const snapshot = await createControlledGame(api, account.cookie, fixture);
       const pausedResponse = await harness.post(
         api,
         account.cookie,
         `/games/${snapshot.gameId}/ai-turn`,
-        { ...turnCommand(snapshot), credentialId },
+        { ...turnCommand(snapshot, snapshot.gameId), credentialId },
       );
       const paused = gameSnapshotSchema.parse(pausedResponse.json());
       expect(paused).toMatchObject({ state: "paused", result: "*", moves: [] });
@@ -382,12 +382,12 @@ describe("saved credentials in authorized provider operations", () => {
             api,
             account.cookie,
             `/games/${snapshot.gameId}/lifecycle`,
-            control(paused, "resume"),
+            control(paused, "resume", paused.gameId),
           )
         ).json(),
       );
       const result = await harness.post(api, account.cookie, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(resumed),
+        ...turnCommand(resumed, resumed.gameId),
         apiKey: "replacement-session-key",
       });
       expect(result.json()).toMatchObject({ state: "active", moves: [{ uci: "e2e4" }] });
@@ -513,7 +513,7 @@ describe("saved credentials in authorized provider operations", () => {
     const incomplete = await harness.account(api, false);
     const guest = await harness.guest(api);
     const credentialId = await save(api, account.cookie, "openai");
-    const snapshot = await start(api, account.cookie);
+    const snapshot = await createControlledGame(api, account.cookie);
     for (const [cookie, changes, status] of [
       [other.cookie, {}, 404],
       [incomplete.cookie, {}, 403],
@@ -523,7 +523,7 @@ describe("saved credentials in authorized provider operations", () => {
       [account.cookie, { apiKey: PROVIDER_KEY }, 400],
     ] as const) {
       const response = await harness.post(api, cookie, `/games/${snapshot.gameId}/ai-turn`, {
-        ...turnCommand(snapshot),
+        ...turnCommand(snapshot, snapshot.gameId),
         credentialId,
         ...changes,
       });
@@ -555,7 +555,7 @@ describe("saved credentials in authorized provider operations", () => {
     expect(
       (
         await harness.post(api, other.cookie, `/games/${human.snapshot.gameId}/ai-turn`, {
-          ...turnCommand(human.snapshot),
+          ...turnCommand(human.snapshot, human.snapshot.gameId),
           credentialId,
         })
       ).statusCode,
