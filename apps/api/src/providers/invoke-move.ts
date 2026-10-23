@@ -12,6 +12,7 @@ import { z } from "zod";
 import { observeProvider, type Operations } from "../monitoring/operations.js";
 
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
+import { sanitizeMoveOutput } from "./move-output.js";
 
 const outputEnvelopeSchema = normalizedMoveResponseSchema.options[0].extend({
   output: z.unknown(),
@@ -66,20 +67,12 @@ async function invokeMoveResult(
     if (parsed.success) {
       const response = parsed.data;
       if (response.ok) {
-        const commentary = response.output.commentary;
-        if (
-          commentary !== undefined &&
-          (commentary.includes("\0") ||
-            (input.apiKey.length > 0 && commentary.includes(input.apiKey)))
-        ) {
-          // Optional viewer text must not persist a credential echo or a PostgreSQL-incompatible NUL.
-          return {
-            ...response,
-            output: { move: response.output.move },
-            durationMs: duration(),
-            providerRequestId: null,
-          };
-        }
+        return {
+          ...response,
+          output: sanitizeMoveOutput(response.output, input.apiKey),
+          durationMs: duration(),
+          providerRequestId: null,
+        };
       }
       return { ...response, durationMs: duration(), providerRequestId: null };
     }

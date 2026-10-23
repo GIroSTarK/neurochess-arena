@@ -1,7 +1,6 @@
 import { performance } from "node:perf_hooks";
 
 import {
-  aiMoveOutputSchema,
   type ModelDiscoveryResult,
   modelDiscoveryResultSchema,
   modelIdSchema,
@@ -14,6 +13,7 @@ import { z } from "zod";
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
 import { normalizeBilling } from "./billing.js";
 import { effectiveParameters } from "./discovery.js";
+import { parseMoveOutput, sanitizeMoveOutput } from "./move-output.js";
 import { openAiCapabilities } from "./openai-capabilities.js";
 import { openAiFailure, openAiRequest } from "./openai-http.js";
 
@@ -127,22 +127,11 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
       text.push(content.text);
     }
   }
-  let value: unknown;
-  try {
-    value = JSON.parse(text.join("")) as unknown;
-  } catch {
-    return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
-  }
-  const output = aiMoveOutputSchema.safeParse(value);
-  if (!output.success) return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
-  const commentary = output.data.commentary;
+  const output = parseMoveOutput(text.join(""));
+  if (output === null) return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
   return {
     ok: true,
-    output:
-      commentary !== undefined &&
-      (commentary.includes("\0") || (input.apiKey.length > 0 && commentary.includes(input.apiKey)))
-        ? { move: output.data.move }
-        : output.data,
+    output: sanitizeMoveOutput(output, input.apiKey),
     usage,
     durationMs,
     billing,

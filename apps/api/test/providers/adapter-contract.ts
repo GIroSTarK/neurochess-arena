@@ -160,24 +160,33 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       expect(http.transport).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
-      { name: "undefined usage", usage: undefined },
-      { name: "null usage", usage: null },
+    describe.each([
+      { name: "valid move", text: '{"move":"e7e5"}', outcome: { ok: true } },
       {
-        name: "reported zero input tokens",
-        usage: { inputTokens: 0, outputTokens: null, totalTokens: null },
+        name: "malformed output",
+        text: '{"move":',
+        outcome: { ok: false, error: { code: "model_invalid", reason: "malformed_output" } },
       },
-      {
-        name: "all token counts null",
-        usage: { inputTokens: null, outputTokens: null, totalTokens: null },
-      },
-    ])("preserves usage: $name", async ({ usage }) => {
-      const http = mockHttp([fixture.completion('{"move":"e7e5"}', usage)]);
-      expect(
-        await fixture.createAdapter(http.transport).requestMove(contractInput(fixture)),
-      ).toMatchObject({
-        ok: true,
-        usage: usage ?? null,
+    ])("usage on $name", ({ text, outcome }) => {
+      it.each([
+        { name: "undefined usage", usage: undefined },
+        { name: "null usage", usage: null },
+        {
+          name: "reported zero input tokens",
+          usage: { inputTokens: 0, outputTokens: null, totalTokens: null },
+        },
+        {
+          name: "all token counts null",
+          usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+        },
+      ])("preserves usage: $name", async ({ usage }) => {
+        const http = mockHttp([fixture.completion(text, usage)]);
+        expect(
+          await fixture.createAdapter(http.transport).requestMove(contractInput(fixture)),
+        ).toMatchObject({
+          ...outcome,
+          usage: usage ?? null,
+        });
       });
     });
 
@@ -195,12 +204,18 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
     );
 
     it.each([
+      { name: "null JSON", text: "null" },
+      { name: "array JSON", text: '[{"move":"e7e5"}]' },
       { name: "SAN move", text: '{"move":"e5"}' },
       { name: "extra field", text: '{"move":"e7e5","extra":true}' },
       { name: "null commentary", text: '{"move":"e7e5","commentary":null}' },
       { name: "Markdown fence", text: '```json\n{"move":"e7e5"}\n```' },
       { name: "incomplete JSON", text: '{"move":' },
       { name: "empty text", text: "" },
+      {
+        name: "unsafe commentary with an extra field",
+        text: JSON.stringify({ move: "e7e5", commentary: PROVIDER_KEY, extra: true }),
+      },
       {
         name: "oversized commentary",
         text: JSON.stringify({ move: "e7e5", commentary: "x".repeat(2001) }),
@@ -407,14 +422,21 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
     });
 
     it.each([
-      { name: "credential echo", commentary: PROVIDER_KEY },
+      { name: "credential echo", commentary: `echo ${PROVIDER_KEY} in viewer text` },
       { name: "NUL character", commentary: "unsafe\0text" },
     ])("omits unsafe optional commentary: $name", async ({ commentary }) => {
-      const http = mockHttp([fixture.completion(JSON.stringify({ move: "e7e5", commentary }))]);
+      const http = mockHttp([
+        fixture.completion(JSON.stringify({ move: "e7e5", commentary }), fixture.reportedUsage),
+      ]);
       const result = await fixture
         .createAdapter(http.transport)
         .requestMove(contractInput(fixture));
-      expect(result).toMatchObject({ ok: true, output: { move: "e7e5" } });
+      expect(result).toMatchObject({
+        ok: true,
+        output: { move: "e7e5" },
+        usage: fixture.reportedUsage,
+        providerRequestId: null,
+      });
       if (result.ok) expect(result.output).not.toHaveProperty("commentary");
     });
   });

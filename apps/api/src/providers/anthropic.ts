@@ -1,7 +1,6 @@
 import { performance } from "node:perf_hooks";
 
 import {
-  aiMoveOutputSchema,
   type ModelDescriptor,
   type ModelDiscoveryResult,
   modelDiscoveryResultSchema,
@@ -21,6 +20,7 @@ import {
 } from "./anthropic-capabilities.js";
 import { anthropicRequest } from "./anthropic-http.js";
 import { normalizeBilling } from "./billing.js";
+import { parseMoveOutput, sanitizeMoveOutput } from "./move-output.js";
 
 const modelsSchema = z.object({
   data: z.array(anthropicModelSchema).max(1000),
@@ -104,22 +104,11 @@ function extractMove(raw: unknown, input: MoveRequest, durationMs: number): Norm
   const text = response.content
     .flatMap((block) => (block.type === "text" ? [block.text] : []))
     .join("");
-  let value: unknown;
-  try {
-    value = JSON.parse(text) as unknown;
-  } catch {
-    return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
-  }
-  const output = aiMoveOutputSchema.safeParse(value);
-  if (!output.success) return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
-  const commentary = output.data.commentary;
+  const output = parseMoveOutput(text);
+  if (output === null) return failure({ code: "model_invalid", reason: "malformed_output" }, usage);
   return {
     ok: true,
-    output:
-      commentary !== undefined &&
-      (commentary.includes("\0") || (input.apiKey.length > 0 && commentary.includes(input.apiKey)))
-        ? { move: output.data.move }
-        : output.data,
+    output: sanitizeMoveOutput(output, input.apiKey),
     usage,
     durationMs,
     billing,

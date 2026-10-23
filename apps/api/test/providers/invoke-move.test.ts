@@ -17,6 +17,55 @@ const request: MoveRequest = {
 };
 
 describe("safe move invocation boundary", () => {
+  it.each([
+    { name: "absent commentary", commentary: undefined, expected: { move: "e2e4" } },
+    { name: "empty commentary", commentary: "", expected: { move: "e2e4", commentary: "" } },
+    {
+      name: "safe commentary",
+      commentary: "Controls the center.",
+      expected: { move: "e2e4", commentary: "Controls the center." },
+    },
+    {
+      name: "credential echo",
+      commentary: `echo ${request.apiKey} in viewer text`,
+      expected: { move: "e2e4" },
+    },
+    { name: "NUL", commentary: "unsafe\0text", expected: { move: "e2e4" } },
+  ])("independently sanitizes adapter commentary: $name", async ({ commentary, expected }) => {
+    const usage = { inputTokens: 0, outputTokens: null, totalTokens: null };
+    const billing = { status: "unavailable", reason: "usage_missing" } as const;
+    const response = {
+      ...output("e2e4", commentary),
+      usage,
+      billing,
+      providerRequestId: "upstream-id",
+    };
+    const adapter = createScriptedAdapter({ provider: "openai", moves: [async () => response] });
+
+    const result = await invokeMove(adapter, request);
+
+    expect(result).toMatchObject({ ok: true, usage, billing, providerRequestId: null });
+    if (!result.ok) throw new Error("Expected a valid move");
+    expect(result.output).toEqual(expected);
+    expect(response).toEqual({
+      ...output("e2e4", commentary),
+      usage,
+      billing,
+      providerRequestId: "upstream-id",
+    });
+  });
+
+  it("preserves safe commentary when the request key is empty", async () => {
+    const adapter = createScriptedAdapter({
+      provider: "openai",
+      moves: [async () => output("e2e4", "Controls the center.")],
+    });
+    expect(await invokeMove(adapter, { ...request, apiKey: "" })).toMatchObject({
+      ok: true,
+      output: { move: "e2e4", commentary: "Controls the center." },
+    });
+  });
+
   it("keeps an unsupported model selection outside infrastructure-failure alerts", async () => {
     const operations = createOperations();
     const adapter = createScriptedAdapter({
