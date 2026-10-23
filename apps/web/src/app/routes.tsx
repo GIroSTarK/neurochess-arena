@@ -7,10 +7,10 @@ import { CredentialsRoute } from "../credentials/credentials-route";
 import { credentialRouteData } from "../credentials/route-data";
 import { HistoryRoute } from "../history/history-route";
 import { historyRouteData } from "../history/route-data";
-import { ArenaRoute } from "../match/arena-route";
-import { arenaGameLoader, arenaSetupLoader } from "../match/route-data";
 import { ProfileRoute } from "../profile/profile-route";
 import { accountAction, profileLoader } from "../profile/route-data";
+import { PublicGameRoute } from "../public-game/public-game-route";
+import { publicGameLoader, publicGameSetupLoader } from "../public-game/route-data";
 import { RoomEntryRoute } from "../rooms/room-entry-route";
 import type { RoomEntryFeature } from "../rooms/route-data";
 import { type AppRouteContext, RouteContext } from "../routing/route-context";
@@ -102,20 +102,20 @@ export function createAppRoutes(context: AppRouteContext, rooms?: RoomEntryFeatu
           children: [
             {
               id: "arena",
-              element: <ArenaRoute rooms={rooms} />,
+              element: <PublicGameRoute rooms={rooms} />,
               handle: { page: "arena" },
               children: [
                 {
                   id: "arena-entry",
                   index: true,
-                  ...arenaSetupLoader(context),
+                  ...publicGameSetupLoader(context),
                   element: <></>,
                 },
                 {
                   id: "arena-game",
                   path: "games/:gameId",
                   caseSensitive: true,
-                  ...arenaGameLoader(context, rooms),
+                  ...publicGameLoader(context, rooms),
                   element: <></>,
                 },
               ],

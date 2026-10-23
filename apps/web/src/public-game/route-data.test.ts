@@ -88,7 +88,7 @@ function harness(routes: HttpRoutes = {}) {
   return { runtime, navigation, http, read };
 }
 
-describe("Arena entry loaders", () => {
+describe("public game entry loaders", () => {
   it("does not load credentials or mount the AI entry for a human room", async () => {
     const { read, http } = harness({
       "GET /api/auth/get-session": () => jsonResponse(account),

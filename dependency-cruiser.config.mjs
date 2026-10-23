@@ -1,5 +1,5 @@
 // Only declared feature entrypoints may cross these boundaries. App owns
-// route-tree composition.
+// route-tree composition; public-game selects the AI or room route entrypoint.
 const webFeatureImports = {
   auth: [],
   profile: [
@@ -20,17 +20,23 @@ const webFeatureImports = {
   ],
   history: ["auth/account-frame", "auth/context"],
   rooms: ["auth/account-access", "auth/account-field", "auth/context"],
-  match: [
-    "auth/account-access",
+  "public-game": [
     "auth/auth-route",
     "auth/context",
     "auth/use-route-auth-entry",
     "credentials/catalog",
+    "match/match-route",
+    "match/route-data",
+    "rooms/room-route",
+    "rooms/route-data",
+  ],
+  match: [
+    "auth/account-access",
+    "auth/context",
+    "credentials/catalog",
     "credentials/use-credentials",
     "setup/arena-setup-screen",
     "setup/controller",
-    "rooms/room-route",
-    "rooms/route-data",
   ],
   setup: ["auth/account-access"],
   sandbox: [],
@@ -59,10 +65,11 @@ export default {
     },
     {
       name: "web-routing-no-composition",
-      comment: "Routing services cannot depend on application wiring or shell presentation.",
+      comment:
+        "Routing services cannot depend on application wiring, public-game selection or shell presentation.",
       severity: "error",
       from: { path: "(^|/)apps/web/src/routing/", pathNot: "\\.test\\.tsx?$" },
-      to: { path: "(^|/)apps/web/src/(app|shell)/" },
+      to: { path: "(^|/)apps/web/src/(app|shell|public-game)/" },
     },
     {
       name: "web-shell-no-features",

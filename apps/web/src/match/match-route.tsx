@@ -1,5 +1,5 @@
 import { useLayoutEffect } from "react";
-import { useRevalidator, useRouteLoaderData } from "react-router";
+import { useRevalidator } from "react-router";
 
 import { createAiApi } from "../api/ai-client";
 import type { PublicIdentity } from "../api/identity";
@@ -7,18 +7,17 @@ import { useGameRouteController } from "../routing/use-game-route-controller";
 
 import { MatchController } from "./controller";
 import { MatchScreen } from "./match-screen";
-import type { ArenaRouteData } from "./route-data";
+import type { MatchRouteData } from "./route-data";
 
 export function MatchRoute({
   apiBaseUrl,
   identity,
+  result,
 }: {
   readonly apiBaseUrl: string;
   readonly identity: PublicIdentity;
+  readonly result: MatchRouteData | null;
 }) {
-  const gameData = useRouteLoaderData<ArenaRouteData>("arena-game");
-  const setupData = useRouteLoaderData<ArenaRouteData>("arena-entry");
-  const result = gameData ?? setupData;
   const revalidator = useRevalidator();
   const { controller, stopped, departing, retry } = useGameRouteController(
     "arena",
@@ -26,7 +25,7 @@ export function MatchRoute({
       new MatchController(createAiApi(apiBaseUrl, { identity }), undefined, navigation),
     (controller) => {
       const entry = result?.data?.entry;
-      if (entry && entry.kind !== "handoff" && entry.kind !== "room") void controller.enter(entry);
+      if (entry && entry.kind !== "handoff") void controller.enter(entry);
     },
     identity.signal,
     {

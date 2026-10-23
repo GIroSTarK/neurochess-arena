@@ -26,7 +26,7 @@ import { MatchBoard } from "./panels/match-board";
 import { MatchDetails } from "./panels/match-details";
 import { MatchHeader } from "./panels/match-header";
 import { matchPresentation } from "./presentation";
-import type { ArenaRouteData } from "./route-data";
+import type { MatchRouteData } from "./route-data";
 import type { MatchState } from "./state";
 
 const analysisPosition = (state: MatchState) =>
@@ -50,7 +50,7 @@ export function MatchScreen({
   readonly stopped: boolean;
   readonly departing: boolean;
   readonly onRetry: () => void;
-  readonly entry: ArenaRouteData["data"];
+  readonly entry: MatchRouteData["data"];
 }) {
   const { t } = useTranslation();
   const { sandboxEnabled, apiBaseUrl } = useAppRoute();

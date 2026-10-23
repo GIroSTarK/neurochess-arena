@@ -37,6 +37,22 @@ const fixtures = [
     path: "apps/web/src/match/forbidden-credential-screen-import.ts",
     rule: "web-match-feature-imports",
   },
+  { path: "apps/web/src/match/forbidden-room-route-import.ts", rule: "web-match-feature-imports" },
+  { path: "apps/web/src/match/forbidden-room-data-import.ts", rule: "web-match-feature-imports" },
+  { path: "apps/web/src/match/forbidden-public-game-import.ts", rule: "web-match-feature-imports" },
+  { path: "apps/web/src/rooms/forbidden-public-game-import.ts", rule: "web-rooms-feature-imports" },
+  {
+    path: "apps/web/src/public-game/forbidden-match-controller-import.ts",
+    rule: "web-public-game-feature-imports",
+  },
+  {
+    path: "apps/web/src/public-game/forbidden-room-controller-import.ts",
+    rule: "web-public-game-feature-imports",
+  },
+  {
+    path: "apps/web/src/routing/forbidden-public-game-import.ts",
+    rule: "web-routing-no-composition",
+  },
   { path: "apps/web/src/profile/forbidden-match-import.ts", rule: "web-profile-feature-imports" },
   {
     path: "apps/web/src/gameplay/forbidden-feature-import.ts",
