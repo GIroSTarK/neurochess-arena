@@ -79,87 +79,234 @@ function moveValues(gameId: string): NewMove {
   };
 }
 
-describe("reviewed PostgreSQL migration and structural constraints", () => {
-  it("bounds AI budgets and normalized attempts, enforces dispatch uniqueness, and cascades private records", async () => {
-    const created = await game();
-    const [turn] = await database.db
-      .insert(aiTurns)
-      .values({ gameId: created.id, ply: 1, color: "white", attemptCount: 1 })
-      .returning();
-    const invocation = {
-      turnId: turn!.id,
+async function aiTurn() {
+  const created = await game();
+  const [turn] = await database.db
+    .insert(aiTurns)
+    .values({ gameId: created.id, ply: 1, color: "white", attemptCount: 1 })
+    .returning();
+  if (!turn) throw new Error("Fixture insertion failed");
+  return turn;
+}
+
+async function invocation(outcome: "accepted" | "in_flight" = "accepted") {
+  const turn = await aiTurn();
+  const [attempt] = await database.db
+    .insert(modelInvocations)
+    .values({
+      turnId: turn.id,
       attemptNumber: 1,
       reservationId: randomUUID(),
       commandId: randomUUID(),
       expectedVersion: 0,
-      provider: "openai" as const,
+      provider: "openai",
       modelId: "fixture",
       effectiveParameters: { temperature: 0 },
-    };
-    const [attempt] = await database.db.insert(modelInvocations).values(invocation).returning();
-    for (const patch of [
-      { invalidOutputCount: -1 },
-      { invalidOutputCount: 4 },
-      { invalidOutputCount: 2 },
-      { attemptCount: -1 },
-      { acceptedMovePly: 2 },
-      { color: "black" as const },
-    ]) {
-      await expect(
-        database.db.update(aiTurns).set(patch).where(eq(aiTurns.id, turn!.id)),
-      ).rejects.toThrow();
-    }
+      outcome,
+      durationMs: outcome === "accepted" ? 1 : null,
+    })
+    .returning();
+  if (!attempt) throw new Error("Fixture insertion failed");
+  return { turn, attempt };
+}
+
+async function aiParticipant() {
+  const created = await game();
+  const [seat] = await database.db
+    .insert(gameParticipants)
+    .values({
+      gameId: created.id,
+      color: "white",
+      seatType: "ai",
+      provider: "google",
+      modelId: "models/fixture",
+      parameters: { temperature: 0, reasoningEffort: "high", maxOutputTokens: 1000 },
+    })
+    .returning();
+  if (!seat) throw new Error("Fixture insertion failed");
+  return { created, seat };
+}
+
+async function reservation() {
+  const created = await game();
+  const [row] = await database.db
+    .insert(aiTurnReservations)
+    .values({
+      gameId: created.id,
+      reservationId: randomUUID(),
+      commandId: randomUUID(),
+      expectedVersion: 0,
+    })
+    .returning();
+  if (!row) throw new Error("Fixture insertion failed");
+  return row;
+}
+
+describe("reviewed PostgreSQL migration and structural constraints", () => {
+  it.each([
+    {
+      name: "negative invalid-output count",
+      patch: { invalidOutputCount: -1 },
+      constraint: "ai_turns_budget_check",
+    },
+    {
+      name: "more than three invalid outputs",
+      patch: { invalidOutputCount: 4, attemptCount: 4 },
+      constraint: "ai_turns_budget_check",
+    },
+    {
+      name: "invalid outputs exceeding dispatched attempts",
+      patch: { invalidOutputCount: 2 },
+      constraint: "ai_turns_budget_check",
+    },
+    {
+      name: "negative attempt count",
+      patch: { attemptCount: -1 },
+      constraint: "ai_turns_budget_check",
+    },
+    { name: "black on an odd ply", patch: { color: "black" }, constraint: "ai_turns_color_check" },
+  ] as const)("rejects AI turn with $name", async ({ patch, constraint }) => {
+    const turn = await aiTurn();
     await expect(
-      database.db.insert(aiTurns).values({ gameId: created.id, ply: 1, color: "white" }),
-    ).rejects.toThrow();
+      database.db.update(aiTurns).set(patch).where(eq(aiTurns.id, turn.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+  });
+
+  it("rejects an accepted move at a different ply even when that move exists", async () => {
+    const turn = await aiTurn();
+    await database.db.insert(moves).values({ ...moveValues(turn.gameId), ply: 2 });
     await expect(
-      database.db.insert(modelInvocations).values({ ...invocation, reservationId: randomUUID() }),
-    ).rejects.toThrow();
+      database.db.update(aiTurns).set({ acceptedMovePly: 2 }).where(eq(aiTurns.id, turn.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint: "ai_turns_ply_check" } });
+  });
+
+  it("requires the accepted move to exist at the AI turn's ply", async () => {
+    const turn = await aiTurn();
     await expect(
-      database.db.insert(modelInvocations).values({ ...invocation, attemptNumber: 2 }),
-    ).rejects.toThrow();
-    await expect(
-      database.db.update(aiTurns).set({ acceptedMovePly: 1 }).where(eq(aiTurns.id, turn!.id)),
-    ).rejects.toThrow();
-    for (const patch of [
-      { durationMs: -1 },
-      { expectedVersion: -1 },
-      { attemptNumber: 0 },
-      { inputTokens: 0 },
-      { usageReported: true, inputTokens: -1 },
-      { usageReported: true, totalTokens: Number.MAX_SAFE_INTEGER + 1 },
-      { outcome: "provider_error" as const, durationMs: 1 },
-      { outcome: "discarded" as const, durationMs: 1, errorReason: "network" as const },
-      { outcome: "model_invalid" as const, durationMs: 1, errorCode: "provider_auth" as const },
-      {
-        outcome: "provider_error" as const,
-        durationMs: 1,
-        errorCode: "provider_auth" as const,
-        commentary: "unaccepted",
+      database.db.update(aiTurns).set({ acceptedMovePly: 1 }).where(eq(aiTurns.id, turn.id)),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23503",
+        constraint: "ai_turns_game_id_accepted_move_ply_moves_game_id_ply_fk",
       },
-      { outcome: "accepted" as const, durationMs: 1, commentary: "x".repeat(2001) },
-      { modelId: "model?key=secret" },
-    ]) {
-      await expect(
-        database.db.update(modelInvocations).set(patch).where(eq(modelInvocations.id, attempt!.id)),
-      ).rejects.toThrow();
-    }
-    for (const parameters of [
-      { apiKey: "secret" },
-      [],
-      { temperature: "0" },
-      { reasoningEffort: null },
-      { maxOutputTokens: 1.5 },
-    ]) {
-      await expect(
-        database.db.execute(
-          sql`update model_invocations set effective_parameters = ${JSON.stringify(parameters)}::jsonb where id = ${attempt!.id}`,
-        ),
-      ).rejects.toThrow();
-    }
-    await database.db.delete(games).where(eq(games.id, created.id));
-    expect(await database.db.$count(aiTurns, eq(aiTurns.gameId, created.id))).toBe(0);
-    expect(await database.db.$count(modelInvocations, eq(modelInvocations.turnId, turn!.id))).toBe(
+    });
+  });
+
+  it("rejects a second logical AI turn at the same game ply", async () => {
+    const turn = await aiTurn();
+    await expect(
+      database.db.insert(aiTurns).values({ ...turn, id: randomUUID() }),
+    ).rejects.toMatchObject({ cause: { code: "23505", constraint: "ai_turns_ply_unique" } });
+  });
+
+  it.each([
+    {
+      name: "duplicate attempt number with a new reservation",
+      patch: { reservationId: randomUUID() },
+      constraint: "model_invocations_attempt_unique",
+    },
+    {
+      name: "second pending attempt in the same reservation",
+      patch: { attemptNumber: 2 },
+      constraint: "model_invocations_pending_unique",
+    },
+  ] as const)("rejects $name", async ({ patch, constraint }) => {
+    const { attempt } = await invocation("in_flight");
+    await expect(
+      database.db.insert(modelInvocations).values({ ...attempt, id: randomUUID(), ...patch }),
+    ).rejects.toMatchObject({ cause: { code: "23505", constraint } });
+  });
+
+  it.each([
+    {
+      name: "negative duration on a completed attempt",
+      patch: { durationMs: -1 },
+      constraint: "model_invocations_usage_check",
+    },
+    {
+      name: "negative expected revision",
+      patch: { expectedVersion: -1 },
+      constraint: "model_invocations_sequence_check",
+    },
+    {
+      name: "zero attempt number",
+      patch: { attemptNumber: 0 },
+      constraint: "model_invocations_sequence_check",
+    },
+    {
+      name: "token count without reported usage",
+      patch: { inputTokens: 0 },
+      constraint: "model_invocations_usage_check",
+    },
+    {
+      name: "negative reported input tokens",
+      patch: { usageReported: true, inputTokens: -1 },
+      constraint: "model_invocations_usage_check",
+    },
+    {
+      name: "reported total tokens above the safe-integer bound",
+      patch: { usageReported: true, totalTokens: Number.MAX_SAFE_INTEGER + 1 },
+      constraint: "model_invocations_usage_check",
+    },
+    {
+      name: "provider failure without an error code",
+      patch: { outcome: "provider_error" },
+      constraint: "model_invocations_result_check",
+    },
+    {
+      name: "discarded result with an error reason but no code",
+      patch: { outcome: "discarded", errorReason: "network" },
+      constraint: "model_invocations_error_check",
+    },
+    {
+      name: "model-invalid outcome with a provider-auth code",
+      patch: { outcome: "model_invalid", errorCode: "provider_auth" },
+      constraint: "model_invocations_result_check",
+    },
+    {
+      name: "commentary on a provider failure",
+      patch: { outcome: "provider_error", errorCode: "provider_auth", commentary: "unaccepted" },
+      constraint: "model_invocations_result_check",
+    },
+    {
+      name: "accepted commentary longer than 2000 characters",
+      patch: { commentary: "x".repeat(2001) },
+      constraint: "model_invocations_commentary_check",
+    },
+    {
+      name: "model ID containing a query string",
+      patch: { modelId: "model?key=secret" },
+      constraint: "model_invocations_model_id_check",
+    },
+  ] as const)("rejects invocation with $name", async ({ patch, constraint }) => {
+    const { attempt } = await invocation();
+    await expect(
+      database.db.update(modelInvocations).set(patch).where(eq(modelInvocations.id, attempt.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+  });
+
+  it.each([
+    { name: "credential field", parameters: { apiKey: "secret" } },
+    { name: "array instead of an object", parameters: [] },
+    { name: "string temperature", parameters: { temperature: "0" } },
+    { name: "null reasoning effort", parameters: { reasoningEffort: null } },
+    { name: "fractional output-token limit", parameters: { maxOutputTokens: 1.5 } },
+  ])("rejects invocation parameters with $name", async ({ parameters }) => {
+    const { attempt } = await invocation();
+    await expect(
+      database.db.execute(
+        sql`update model_invocations set effective_parameters = ${JSON.stringify(parameters)}::jsonb where id = ${attempt.id}`,
+      ),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "model_invocations_parameters_check" },
+    });
+  });
+
+  it("cascades private AI turns and invocations when their game is deleted", async () => {
+    const { turn } = await invocation();
+    await database.db.delete(games).where(eq(games.id, turn.gameId));
+    expect(await database.db.$count(aiTurns, eq(aiTurns.gameId, turn.gameId))).toBe(0);
+    expect(await database.db.$count(modelInvocations, eq(modelInvocations.turnId, turn.id))).toBe(
       0,
     );
   });
@@ -560,13 +707,17 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       expect((await tx.execute(sql`select * from rooms`)).rows).toEqual([]);
       expect((await tx.execute(sql`select * from room_creation_operations`)).rows).toEqual([]);
       for (const mode of [null, "ai_vs_ai", "ai_vs_human"]) {
+        const ownedGameId = randomUUID();
+        await tx.execute(sql`
+          insert into games(id, owner_guest_session_id, mode, state, result, termination_reason, fen, pgn)
+          values (${ownedGameId}, ${aiOwner}, ${mode}, 'aborted', '*', 'aborted', 'position', 'history')`);
         await expect(
           tx.transaction((savepoint) =>
             savepoint.execute(sql`
-          insert into games(mode, state, result, termination_reason, fen, pgn)
-          values (${mode}, 'aborted', '*', 'aborted', 'position', 'history')`),
+              update games set owner_guest_session_id = null where id = ${ownedGameId}`),
           ),
-        ).rejects.toThrow();
+          `solo mode ${mode ?? "legacy"} still requires an owner after the room upgrade`,
+        ).rejects.toMatchObject({ cause: { code: "23514", constraint: "games_owner_check" } });
       }
       const modes = await tx.execute<{ enumlabel: string }>(sql`
         select e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid
@@ -632,110 +783,190 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     });
   });
 
-  it("enforces one bounded reservation per game, separate from accepted receipts, and cascades deletion", async () => {
-    const created = await game();
-    const reservation = {
-      gameId: created.id,
-      reservationId: randomUUID(),
-      commandId: randomUUID(),
-      expectedVersion: 0,
-    };
-    await database.db.insert(aiTurnReservations).values(reservation);
-    expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, created.id))).toBe(0);
+  it("rejects a second reservation for the same game", async () => {
+    const row = await reservation();
     await expect(
       database.db
         .insert(aiTurnReservations)
-        .values({ ...reservation, reservationId: randomUUID(), commandId: randomUUID() }),
-    ).rejects.toThrow();
-    for (const expectedVersion of [-1, Number.MAX_SAFE_INTEGER + 1]) {
-      await expect(
-        database.db
-          .update(aiTurnReservations)
-          .set({ expectedVersion })
-          .where(eq(aiTurnReservations.gameId, created.id)),
-      ).rejects.toThrow();
-    }
+        .values({ ...row, reservationId: randomUUID(), commandId: randomUUID() }),
+    ).rejects.toMatchObject({ cause: { code: "23505", constraint: "ai_turn_reservations_pkey" } });
+  });
+
+  it.each([
+    {
+      name: "negative expected revision",
+      patch: { expectedVersion: -1 },
+      constraint: "ai_turn_reservations_version_check",
+    },
+    {
+      name: "expected revision above the safe-integer bound",
+      patch: { expectedVersion: Number.MAX_SAFE_INTEGER + 1 },
+      constraint: "ai_turn_reservations_version_check",
+    },
+  ])("rejects a reservation with $name", async ({ patch, constraint }) => {
+    const row = await reservation();
+    await expect(
+      database.db
+        .update(aiTurnReservations)
+        .set(patch)
+        .where(eq(aiTurnReservations.gameId, row.gameId)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+  });
+
+  it("rejects an accepted state in the execution-reservation table", async () => {
+    const row = await reservation();
     await expect(
       database.db.execute(
-        sql`update ai_turn_reservations set state = 'accepted' where game_id = ${created.id}`,
+        sql`update ai_turn_reservations set state = 'accepted' where game_id = ${row.gameId}`,
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "ai_turn_reservations_state_check" },
+    });
+  });
+
+  it("requires a reservation's game to exist", async () => {
+    const row = await reservation();
     await expect(
-      database.db.insert(aiTurnReservations).values({ ...reservation, gameId: randomUUID() }),
-    ).rejects.toThrow();
-    await database.db.delete(games).where(eq(games.id, created.id));
+      database.db
+        .update(aiTurnReservations)
+        .set({ gameId: randomUUID() })
+        .where(eq(aiTurnReservations.gameId, row.gameId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23503", constraint: "ai_turn_reservations_game_id_games_id_fk" },
+    });
+  });
+
+  it("keeps reservations separate from accepted receipts and cascades game deletion", async () => {
+    const row = await reservation();
+    expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, row.gameId))).toBe(0);
+    await database.db.delete(games).where(eq(games.id, row.gameId));
     expect(
-      await database.db.$count(aiTurnReservations, eq(aiTurnReservations.gameId, created.id)),
+      await database.db.$count(aiTurnReservations, eq(aiTurnReservations.gameId, row.gameId)),
     ).toBe(0);
   });
 
-  it("enforces typed AI selection, bounded parameter metadata and credential-free human seats in PostgreSQL", async () => {
-    const created = await game();
-    const seat = {
-      gameId: created.id,
-      color: "white" as const,
-      seatType: "ai" as const,
-      provider: "google" as const,
-      modelId: "models/fixture",
-      parameters: { temperature: 0, reasoningEffort: "high", maxOutputTokens: 1000 },
-    };
-    await database.db.insert(gameParticipants).values(seat);
-    const [stored] = await database.db
-      .select()
-      .from(gameParticipants)
-      .where(eq(gameParticipants.gameId, created.id));
-    expect(stored).toMatchObject({ ...seat, guestSessionId: null });
-    for (const parameters of [
-      null,
-      [],
-      { apiKey: "sentinel" },
-      { temperature: "1" },
-      { temperature: null },
-      { temperature: -1 },
-      { reasoningEffort: {} },
-      { reasoningEffort: "" },
-      { reasoningEffort: "x".repeat(65) },
-      { maxOutputTokens: 0 },
-      { maxOutputTokens: 1.5 },
-      { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 },
-      { nested: { key: "sentinel" } },
-    ]) {
-      await expect(
-        database.db.execute(
-          sql`update game_participants set parameters = ${JSON.stringify(parameters)}::jsonb where id = ${stored!.id}`,
-        ),
-      ).rejects.toThrow();
-    }
-    for (const patch of [
-      { provider: null },
-      { modelId: null },
-      { modelId: "" },
-      { modelId: "m".repeat(257) },
-      { modelId: "model\n" },
-      { parameters: null },
-      { guestSessionId: created.ownerGuestSessionId },
-      { seatType: "human" as const },
-    ]) {
-      await expect(
-        database.db.update(gameParticipants).set(patch).where(eq(gameParticipants.id, stored!.id)),
-      ).rejects.toThrow();
-    }
+  it.each([
+    { name: "JSON null instead of an object", parameters: null },
+    { name: "array instead of an object", parameters: [] },
+    { name: "credential field", parameters: { apiKey: "sentinel" } },
+    { name: "string temperature", parameters: { temperature: "1" } },
+    { name: "null temperature", parameters: { temperature: null } },
+    { name: "negative temperature", parameters: { temperature: -1 } },
+    { name: "object reasoning effort", parameters: { reasoningEffort: {} } },
+    { name: "empty reasoning effort", parameters: { reasoningEffort: "" } },
+    {
+      name: "reasoning effort longer than 64 characters",
+      parameters: { reasoningEffort: "x".repeat(65) },
+    },
+    { name: "zero output-token limit", parameters: { maxOutputTokens: 0 } },
+    { name: "fractional output-token limit", parameters: { maxOutputTokens: 1.5 } },
+    {
+      name: "output-token limit above the safe-integer bound",
+      parameters: { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 },
+    },
+    { name: "unknown nested field", parameters: { nested: { key: "sentinel" } } },
+  ])("rejects AI seat parameters with $name", async ({ parameters }) => {
+    const { seat } = await aiParticipant();
     await expect(
       database.db.execute(
-        sql`update game_participants set provider = 'mock' where id = ${stored!.id}`,
+        sql`update game_participants set parameters = ${JSON.stringify(parameters)}::jsonb where id = ${seat.id}`,
       ),
-    ).rejects.toThrow();
-    await expect(
-      database.db
-        .update(games)
-        .set({ mode: "ai_vs_ai", isSandbox: true })
-        .where(eq(games.id, created.id)),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "game_participants_parameters_check" },
+    });
     expect(
       (
-        await database.db.select().from(gameParticipants).where(eq(gameParticipants.id, stored!.id))
+        await database.db.select().from(gameParticipants).where(eq(gameParticipants.id, seat.id))
       )[0],
-    ).toEqual(stored);
+    ).toEqual(seat);
+  });
+
+  it.each([
+    {
+      name: "missing provider",
+      patch: { provider: null },
+      constraint: "game_participants_configuration_check",
+    },
+    {
+      name: "missing model ID",
+      patch: { modelId: null },
+      constraint: "game_participants_configuration_check",
+    },
+    {
+      name: "empty model ID",
+      patch: { modelId: "" },
+      constraint: "game_participants_model_id_check",
+    },
+    {
+      name: "model ID longer than 256 characters",
+      patch: { modelId: "m".repeat(257) },
+      constraint: "game_participants_model_id_check",
+    },
+    {
+      name: "model ID containing a newline",
+      patch: { modelId: "model\n" },
+      constraint: "game_participants_model_id_check",
+    },
+    {
+      name: "SQL NULL parameters",
+      patch: { parameters: null },
+      constraint: "game_participants_configuration_check",
+    },
+    {
+      name: "human seat retaining AI configuration",
+      patch: { seatType: "human" },
+      constraint: "game_participants_configuration_check",
+    },
+  ] as const)("rejects participant with $name", async ({ patch, constraint }) => {
+    const { seat } = await aiParticipant();
+    await expect(
+      database.db.update(gameParticipants).set(patch).where(eq(gameParticipants.id, seat.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+    expect(
+      (
+        await database.db.select().from(gameParticipants).where(eq(gameParticipants.id, seat.id))
+      )[0],
+    ).toEqual(seat);
+  });
+
+  it("persists typed AI configuration without a human identity", async () => {
+    const { seat } = await aiParticipant();
+    expect(seat).toMatchObject({
+      provider: "google",
+      modelId: "models/fixture",
+      parameters: { temperature: 0, reasoningEffort: "high", maxOutputTokens: 1000 },
+      guestSessionId: null,
+      userId: null,
+    });
+  });
+
+  it("rejects a guest identity on an otherwise valid AI seat", async () => {
+    const { created, seat } = await aiParticipant();
+    await expect(
+      database.db
+        .update(gameParticipants)
+        .set({ guestSessionId: created.ownerGuestSessionId })
+        .where(eq(gameParticipants.id, seat.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "game_participants_identity_check" },
+    });
+  });
+
+  it("rejects a provider outside the PostgreSQL provider enum", async () => {
+    const { seat } = await aiParticipant();
+    await expect(
+      database.db.execute(
+        sql`update game_participants set provider = 'mock' where id = ${seat.id}`,
+      ),
+    ).rejects.toMatchObject({ cause: { code: "22P02" } });
+  });
+
+  it("rejects a public AI mode on a Sandbox game", async () => {
+    const created = await game();
+    await database.db.update(games).set({ isSandbox: true }).where(eq(games.id, created.id));
+    await expect(
+      database.db.update(games).set({ mode: "ai_vs_ai" }).where(eq(games.id, created.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint: "games_sandbox_mode_check" } });
   });
 
   it("backfills pre-existing move identities with the actual forward migration", async () => {
@@ -783,7 +1014,40 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     });
   });
 
-  it("enforces receipt identity/version uniqueness and cascades receipts only with their game", async () => {
+  it.each([
+    {
+      name: "reused command ID at a new revision",
+      patch: { version: 2, kind: "abort" },
+      code: "23505",
+      constraint: "game_commands_game_id_command_id_pk",
+    },
+    {
+      name: "reused revision with a new command ID",
+      patch: { commandId: randomUUID() },
+      code: "23505",
+      constraint: "game_commands_version_unique",
+    },
+    {
+      name: "zero revision with a new command ID",
+      patch: { version: 0, commandId: randomUUID() },
+      code: "23514",
+      constraint: "game_commands_version_check",
+    },
+  ] as const)("rejects receipt with $name", async ({ patch, code, constraint }) => {
+    const created = await game();
+    const receipt = {
+      gameId: created.id,
+      commandId: randomUUID(),
+      kind: "pause" as const,
+      version: 1,
+    };
+    await database.db.insert(gameCommands).values(receipt);
+    await expect(
+      database.db.insert(gameCommands).values({ ...receipt, ...patch }),
+    ).rejects.toMatchObject({ cause: { code, constraint } });
+  });
+
+  it("scopes receipt identity to each game and cascades only the deleted game's receipts", async () => {
     const created = await game();
     const other = await game();
     const receipt = {
@@ -793,15 +1057,6 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       version: 1,
     };
     await database.db.insert(gameCommands).values(receipt);
-    for (const duplicate of [
-      { ...receipt, version: 2, kind: "abort" as const },
-      { ...receipt, commandId: randomUUID() },
-    ]) {
-      await expect(database.db.insert(gameCommands).values(duplicate)).rejects.toThrow();
-    }
-    await expect(
-      database.db.insert(gameCommands).values({ ...receipt, version: 0, commandId: randomUUID() }),
-    ).rejects.toThrow();
     await database.db.insert(gameCommands).values({ ...receipt, gameId: other.id });
     await database.db.delete(games).where(eq(games.id, created.id));
     expect(await database.db.$count(gameCommands, eq(gameCommands.gameId, created.id))).toBe(0);
@@ -838,6 +1093,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
         ]);
         expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
         expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+        expect(results.find((result) => result.status === "rejected")).toMatchObject({
+          reason: { cause: { code: "23505", constraint: "games_one_unfinished_per_guest_scope" } },
+        });
         expect(await database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(1);
       } finally {
         await second.close();
@@ -911,13 +1169,38 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
       lifecycle: { state: "aborted", result: "0-1", terminationReason: "aborted" },
     },
   ] as const)("rejects contradictory lifecycle: $name", async ({ lifecycle }) => {
-    const owner = await guest();
+    const created = await game();
     await expect(
-      database.db.insert(games).values({ ...gameValues(owner.id), ...lifecycle }),
-    ).rejects.toThrow();
+      database.db.update(games).set(lifecycle).where(eq(games.id, created.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint: "games_lifecycle_check" } });
   });
 
-  it("enforces foreign keys, exclusive colors and a single assigned seat per guest", async () => {
+  it.each([
+    {
+      name: "occupied color with no duplicate guest identity",
+      patch: { guestSessionId: null },
+      code: "23505",
+      constraint: "game_participants_color_unique",
+    },
+    {
+      name: "guest assigned to the other color",
+      patch: { color: "black" },
+      code: "23505",
+      constraint: "game_participants_guest_unique",
+    },
+    {
+      name: "missing guest in the unoccupied color",
+      patch: { color: "black", guestSessionId: randomUUID() },
+      code: "23503",
+      constraint: "game_participants_guest_session_id_guest_sessions_id_fk",
+    },
+    {
+      name: "missing game",
+      patch: { gameId: randomUUID() },
+      code: "23503",
+      constraint: "game_participants_game_id_games_id_fk",
+    },
+  ] as const)("rejects human participant with $name", async ({ patch, code, constraint }) => {
     const created = await game();
     const white = {
       gameId: created.id,
@@ -927,37 +1210,59 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     };
     await database.db.insert(gameParticipants).values(white);
     await expect(
-      database.db.insert(gameParticipants).values({ ...white, guestSessionId: null }),
-    ).rejects.toThrow();
-    await expect(
-      database.db.insert(gameParticipants).values({ ...white, color: "black" }),
-    ).rejects.toThrow();
-    await expect(
-      database.db
-        .insert(gameParticipants)
-        .values({ ...white, color: "black", guestSessionId: randomUUID() }),
-    ).rejects.toThrow();
-    await expect(
-      database.db.insert(gameParticipants).values({ ...white, gameId: randomUUID() }),
-    ).rejects.toThrow();
-    await expect(
-      database.db.insert(gameParticipants).values({ ...white, color: "black", seatType: "ai" }),
-    ).rejects.toThrow();
-    await expect(database.db.insert(games).values(gameValues(randomUUID()))).rejects.toThrow();
-    await expect(database.db.insert(moves).values(moveValues(randomUUID()))).rejects.toThrow();
+      database.db.insert(gameParticipants).values({ ...white, ...patch }),
+    ).rejects.toMatchObject({ cause: { code, constraint } });
   });
 
-  it("enforces per-game move ply, command and aggregate-version uniqueness", async () => {
+  it("requires a game's guest owner to exist", async () => {
+    const created = await game();
+    await expect(
+      database.db
+        .update(games)
+        .set({ ownerGuestSessionId: randomUUID() })
+        .where(eq(games.id, created.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23503", constraint: "games_owner_guest_session_id_guest_sessions_id_fk" },
+    });
+  });
+
+  it("requires a move's game to exist", async () => {
+    const created = await game();
+    await database.db.insert(moves).values(moveValues(created.id));
+    await expect(
+      database.db.update(moves).set({ gameId: randomUUID() }).where(eq(moves.gameId, created.id)),
+    ).rejects.toMatchObject({ cause: { code: "23503", constraint: "moves_game_id_games_id_fk" } });
+  });
+
+  it.each([
+    {
+      name: "duplicate ply with a new command and revision",
+      patch: { commandId: randomUUID(), version: 2 },
+      constraint: "moves_ply_unique",
+    },
+    {
+      name: "duplicate command with a new ply and revision",
+      patch: { ply: 2, version: 2 },
+      constraint: "moves_command_unique",
+    },
+    {
+      name: "duplicate revision with a new command and ply",
+      patch: { commandId: randomUUID(), ply: 2 },
+      constraint: "moves_version_unique",
+    },
+  ])("rejects move with $name", async ({ patch, constraint }) => {
     const created = await game();
     const accepted = moveValues(created.id);
     await database.db.insert(moves).values(accepted);
-    for (const duplicate of [
-      { ...accepted, commandId: randomUUID(), version: 2 },
-      { ...accepted, ply: 2, version: 2 },
-      { ...accepted, commandId: randomUUID(), ply: 2 },
-    ]) {
-      await expect(database.db.insert(moves).values(duplicate)).rejects.toThrow();
-    }
+    await expect(database.db.insert(moves).values({ ...accepted, ...patch })).rejects.toMatchObject(
+      { cause: { code: "23505", constraint } },
+    );
+  });
+
+  it("allows the same move ply, command and revision in another game", async () => {
+    const created = await game();
+    const accepted = moveValues(created.id);
+    await database.db.insert(moves).values(accepted);
     const other = await game();
     // Deduplication IDs are scoped to the aggregate, not to all games.
     await expect(
@@ -965,25 +1270,41 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     ).resolves.toBeDefined();
   });
 
-  it("rejects invalid counters and malformed UCI while keeping safe-integer revisions", async () => {
+  it.each([
+    { name: "zero ply", patch: { ply: 0 }, constraint: "moves_ply_check" },
+    { name: "zero revision", patch: { version: 0 }, constraint: "moves_version_check" },
+    { name: "negative revision", patch: { version: -1 }, constraint: "moves_version_check" },
+    {
+      name: "revision above the safe-integer bound",
+      patch: { version: Number.MAX_SAFE_INTEGER + 1 },
+      constraint: "moves_version_check",
+    },
+    { name: "SAN instead of UCI", patch: { uci: "e4" }, constraint: "moves_uci_check" },
+    {
+      name: "identical source and destination squares",
+      patch: { uci: "e2e2" },
+      constraint: "moves_uci_check",
+    },
+  ])("rejects move with $name", async ({ patch, constraint }) => {
     const created = await game();
-    for (const patch of [
-      { ply: 0 },
-      { version: 0 },
-      { version: -1 },
-      { version: Number.MAX_SAFE_INTEGER + 1 },
-      { uci: "e4" },
-      { uci: "e2e2" },
-    ]) {
-      await expect(
-        database.db.insert(moves).values({ ...moveValues(created.id), ...patch }),
-      ).rejects.toThrow();
-    }
-    for (const version of [-1, Number.MAX_SAFE_INTEGER + 1]) {
-      await expect(
-        database.db.update(games).set({ version }).where(eq(games.id, created.id)),
-      ).rejects.toThrow();
-    }
+    await database.db.insert(moves).values(moveValues(created.id));
+    await expect(
+      database.db.update(moves).set(patch).where(eq(moves.gameId, created.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+  });
+
+  it.each([
+    { name: "negative revision", version: -1 },
+    { name: "revision above the safe-integer bound", version: Number.MAX_SAFE_INTEGER + 1 },
+  ])("rejects game with $name", async ({ version }) => {
+    const created = await game();
+    await expect(
+      database.db.update(games).set({ version }).where(eq(games.id, created.id)),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint: "games_version_check" } });
+  });
+
+  it("accepts the maximum safe-integer game revision", async () => {
+    const created = await game();
     await expect(
       database.db
         .update(games)
@@ -1004,7 +1325,9 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
           { gameId: values.id!, color: "white", seatType: "human", guestSessionId: null },
         ]);
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      cause: { code: "23505", constraint: "game_participants_color_unique" },
+    });
     expect(await database.db.$count(games, eq(games.ownerGuestSessionId, owner.id))).toBe(0);
   });
 

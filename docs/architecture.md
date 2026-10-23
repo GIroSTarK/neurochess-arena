@@ -105,20 +105,20 @@ New pages extend this route tree and its feature-owned loader/action modules; th
 
 Current implementation paths (relative to the repository root):
 
-| Path | Responsibility |
-| --- | --- |
-| `apps/api/src/app.ts`, `apps/api/src/server.ts` | API composition, startup, and service lifetimes |
-| `apps/api/src/auth/` | Better Auth integration, email/OAuth flows, and account-deletion entry point |
-| `apps/api/src/profiles/` | Usernames, avatar metadata, and profile settings |
-| `apps/api/src/identity/`, `apps/api/src/guests/` | Server-derived principals, validity/locking, and guest sessions |
-| `apps/api/src/credentials/` | Request-scoped provider access and encrypted saved credentials |
-| `apps/api/src/providers/` | Provider adapters, discovery, normalization, and request cancellation |
-| `apps/api/src/games/` | Game commands/reads, AI execution and controller presence, history ownership/deletion, account game cleanup, replay, and PGN |
-| `apps/api/src/rooms/` | Invitations, admission, membership, and room lifecycle |
-| `apps/api/src/realtime/` | Human-room WebSocket authentication, presence, synchronization, events, and connection registry |
-| `apps/api/src/analysis/`, `apps/api/src/pricing/` | Private Stockfish samples and provider cost estimates, respectively |
-| `apps/api/src/limits/`, `apps/api/src/monitoring/`, `apps/api/src/operations/` | Request budgets, operational health/metrics, and reconciliation CLI |
-| `packages/chess/src/` | Deterministic position, legality, and result authority used by the API |
+| Path                                                                           | Responsibility                                                                                                               |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/src/app.ts`, `apps/api/src/server.ts`                                | API composition, startup, and service lifetimes                                                                              |
+| `apps/api/src/auth/`                                                           | Better Auth integration, email/OAuth flows, and account-deletion entry point                                                 |
+| `apps/api/src/profiles/`                                                       | Usernames, avatar metadata, and profile settings                                                                             |
+| `apps/api/src/identity/`, `apps/api/src/guests/`                               | Server-derived principals, validity/locking, and guest sessions                                                              |
+| `apps/api/src/credentials/`                                                    | Request-scoped provider access and encrypted saved credentials                                                               |
+| `apps/api/src/providers/`                                                      | Provider adapters, discovery, normalization, and request cancellation                                                        |
+| `apps/api/src/games/`                                                          | Game commands/reads, AI execution and controller presence, history ownership/deletion, account game cleanup, replay, and PGN |
+| `apps/api/src/rooms/`                                                          | Invitations, admission, membership, and room lifecycle                                                                       |
+| `apps/api/src/realtime/`                                                       | Human-room WebSocket authentication, presence, synchronization, events, and connection registry                              |
+| `apps/api/src/analysis/`, `apps/api/src/pricing/`                              | Private Stockfish samples and provider cost estimates, respectively                                                          |
+| `apps/api/src/limits/`, `apps/api/src/monitoring/`, `apps/api/src/operations/` | Request budgets, operational health/metrics, and reconciliation CLI                                                          |
+| `packages/chess/src/`                                                          | Deterministic position, legality, and result authority used by the API                                                       |
 
 Profile and account/game lifecycle responsibilities are split across these modules; there is no `users` or `chess` directory inside the API.
 
