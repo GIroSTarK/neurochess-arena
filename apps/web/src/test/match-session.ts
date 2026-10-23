@@ -1,21 +1,18 @@
-import {
-  type AiProvider,
-  type ChessColor,
-  type GameDetails,
-  gameReplayResponseSchema,
-  type GameSnapshot,
-  gameSnapshotSchema,
-  type ProviderCredentialSource,
+import type {
+  AiProvider,
+  ChessColor,
+  GameDetails,
+  ProviderCredentialSource,
 } from "@neurochess/contracts";
 import { vi } from "vitest";
 
-import { type AiApi, AiRequestFailure } from "../api/ai-client";
-import { ApiFailure } from "../api/failures";
+import { AiRequestFailure } from "../api/ai-client";
 import { createMatchComposition } from "../match/composition";
 import type { SessionCredentials } from "../match/seat-credentials";
 import type { MatchSession } from "../match/session";
 
 import { snapshot } from "./fixtures";
+import { createMatchApiFixture } from "./match-api";
 
 const seat = { type: "ai", provider: "openai", modelId: "fixture", parameters: {} } as const;
 export function matchDetails(human?: ChessColor): GameDetails {
@@ -71,42 +68,7 @@ export function cleanupMatches() {
 }
 
 export function matchHarness(initial = matchDetails()) {
-  let stored = initial.snapshot;
-  const api = {
-    bootstrap: vi.fn<AiApi["bootstrap"]>(),
-    discover: vi.fn<AiApi["discover"]>(),
-    create: vi.fn<AiApi["create"]>(),
-    details: vi.fn<AiApi["details"]>(async () => ({ ...initial, snapshot: stored })),
-    snapshot: vi.fn<AiApi["snapshot"]>(async () => stored),
-    controller: vi.fn<AiApi["controller"]>(async () => stored),
-    unfinished: vi.fn<AiApi["unfinished"]>(async () => null),
-    move: vi.fn<AiApi["move"]>(),
-    invocations: vi.fn<AiApi["invocations"]>(async () => ({
-      gameId: stored.gameId,
-      version: stored.version,
-      turns: [],
-    })),
-    turn: vi.fn<AiApi["turn"]>(),
-    lifecycle: vi.fn<AiApi["lifecycle"]>(async (command) => {
-      if (command.expectedVersion !== stored.version) {
-        throw new ApiFailure("api", "GAME_CONFLICT", stored);
-      }
-      const state =
-        command.action === "resume" ? "active" : command.action === "abort" ? "aborted" : "paused";
-      stored = gameSnapshotSchema.parse({
-        ...snapshot(stored.moves.map(({ uci }) => uci)),
-        version: stored.version + 1,
-        state,
-        ...(state !== "active" ? { legalMoves: [] } : {}),
-        terminationReason: state === "aborted" ? "aborted" : null,
-      });
-      return stored;
-    }),
-    replay: vi.fn<AiApi["replay"]>(async () =>
-      gameReplayResponseSchema.parse({ snapshot: stored, initialFen: snapshot().fen }),
-    ),
-    pgn: vi.fn<AiApi["pgn"]>(),
-  } satisfies AiApi;
+  const { api, readSnapshot, seedSnapshot } = createMatchApiFixture(initial);
   const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
   const composition = createMatchComposition({
     api,
@@ -119,14 +81,12 @@ export function matchHarness(initial = matchDetails()) {
   return {
     api,
     ...composition,
-    seed: (next: GameSnapshot) => {
-      stored = next;
-    },
+    seed: seedSnapshot,
     enter: () =>
       session.enter({
         kind: "game",
-        gameId: stored.gameId,
-        details: { ...initial, snapshot: stored },
+        gameId: readSnapshot().gameId,
+        details: { ...initial, snapshot: readSnapshot() },
       }),
     keys: () => {
       seats.current?.set("white", "openai", "white-secret-sentinel");

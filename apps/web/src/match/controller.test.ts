@@ -2,7 +2,6 @@ import {
   type GameDetails,
   gameReplayResponseSchema,
   type GameSnapshot,
-  gameSnapshotSchema,
 } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +10,7 @@ import { ApiFailure } from "../api/failures";
 import type { PgnDelivery } from "../gameplay/pgn";
 import { invocationRecords, telemetryDetails } from "../test/ai-invocations";
 import { FOOLS_MATE, GAME_ID, OTHER_GAME_ID, snapshot } from "../test/fixtures";
+import { createMatchApiFixture } from "../test/match-api";
 
 import { MatchController } from "./controller";
 
@@ -21,43 +21,7 @@ const details: GameDetails = {
 };
 
 function harness(initial = details, delivery?: PgnDelivery, enterSetup = true) {
-  let stored = initial.snapshot;
-  const api = {
-    bootstrap: vi.fn<AiApi["bootstrap"]>(),
-    discover: vi.fn<AiApi["discover"]>(),
-    create: vi.fn<AiApi["create"]>(),
-    details: vi.fn<AiApi["details"]>(async () => ({ ...initial, snapshot: stored })),
-    snapshot: vi.fn<AiApi["snapshot"]>(async () => stored),
-    controller: vi.fn<AiApi["controller"]>(async () => stored),
-    unfinished: vi.fn<AiApi["unfinished"]>(async () => null),
-    move: vi.fn<AiApi["move"]>(),
-    invocations: vi.fn<AiApi["invocations"]>(async () => ({
-      gameId: GAME_ID,
-      version: stored.version,
-      turns: [],
-    })),
-    turn: vi.fn<AiApi["turn"]>(),
-    lifecycle: vi.fn<AiApi["lifecycle"]>(async (command) => {
-      if (command.expectedVersion !== stored.version) {
-        throw new ApiFailure("api", "GAME_CONFLICT", stored);
-      }
-      const state =
-        command.action === "resume" ? "active" : command.action === "abort" ? "aborted" : "paused";
-      stored = gameSnapshotSchema.parse({
-        ...stored,
-        version: stored.version + 1,
-        state,
-        legalMoves:
-          state === "active" ? snapshot(stored.moves.map(({ uci }) => uci)).legalMoves : [],
-        terminationReason: state === "aborted" ? "aborted" : null,
-      });
-      return stored;
-    }),
-    replay: vi.fn<AiApi["replay"]>(async () =>
-      gameReplayResponseSchema.parse({ snapshot: stored, initialFen: snapshot().fen }),
-    ),
-    pgn: vi.fn<AiApi["pgn"]>(),
-  } satisfies AiApi;
+  const { api, readSnapshot, seedSnapshot } = createMatchApiFixture(initial);
   const navigation = { game: vi.fn(), setup: vi.fn() };
   const controller = new MatchController(api, delivery, navigation);
   if (enterSetup) void controller.enter({ kind: "setup" });
@@ -77,12 +41,10 @@ function harness(initial = details, delivery?: PgnDelivery, enterSetup = true) {
     enter: () =>
       controller.enter({
         kind: "game",
-        gameId: initial.snapshot.gameId,
-        details: { ...initial, snapshot: stored },
+        gameId: readSnapshot().gameId,
+        details: { ...initial, snapshot: readSnapshot() },
       }),
-    store: (next: GameSnapshot) => {
-      stored = next;
-    },
+    store: seedSnapshot,
   };
 }
 
@@ -97,6 +59,26 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("recovers a non-default game and loads telemetry for its accepted revision", async () => {
+    const initial = {
+      ...details,
+      snapshot: snapshot(["e2e4"], { gameId: OTHER_GAME_ID, version: 7 }),
+    };
+    const h = harness(initial);
+    await h.enter();
+
+    expect(h.controller.getSnapshot()).toMatchObject({
+      phase: "ready",
+      details: {
+        ...initial,
+        snapshot: { ...initial.snapshot, state: "paused", version: 8, legalMoves: [] },
+      },
+      invocations: { gameId: OTHER_GAME_ID, version: 8, turns: [] },
+      invocationsError: false,
+    });
+    expect(h.api.turn).not.toHaveBeenCalled();
+  });
+
   it("constructs an idle graph and opens credentials only on explicit entry", async () => {
     const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
     const h = harness(details, delivery, false);
