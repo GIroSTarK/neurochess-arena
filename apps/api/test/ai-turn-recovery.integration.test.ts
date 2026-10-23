@@ -115,27 +115,31 @@ describe("AI reservation invalidation and crash recovery", () => {
     },
   );
 
-  it("rejects a blocked reservation's result even at an unchanged revision", async () => {
-    const api = await harness.createApi();
-    const owner = await harness.guest(api);
-    const principal = owner.principal;
-    const gate = gatedAdapter();
-    const gamesService = service(api, { openai: gate.adapter });
-    const { snapshot } = await gamesService.createAi(principal, aiMatch);
-    const pending = gamesService.aiTurn(principal, turnCommand(snapshot), access());
-    await gate.entered;
-    await api.database.db
-      .update(aiTurnReservations)
-      .set({ state: "blocked" })
-      .where(eq(aiTurnReservations.gameId, snapshot.gameId));
-    const rejected = expect(pending).rejects.toMatchObject({
-      code: "GAME_CONFLICT",
-      currentSnapshot: snapshot,
-    });
-    gate.resolve(output("e2e4"));
-    await rejected;
-    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
-  });
+  it.each([false, true])(
+    "rejects a blocked reservation's result even at an unchanged revision (step: %s)",
+    async (step) => {
+      const api = await harness.createApi();
+      const owner = await harness.guest(api);
+      const principal = owner.principal;
+      const gate = gatedAdapter();
+      const gamesService = service(api, { openai: gate.adapter });
+      let { snapshot } = await gamesService.createAi(principal, aiMatch);
+      if (step) snapshot = await gamesService.lifecycle(principal, control(snapshot, "pause"));
+      const pending = gamesService.aiTurn(principal, { ...turnCommand(snapshot), step }, access());
+      await gate.entered;
+      await api.database.db
+        .update(aiTurnReservations)
+        .set({ state: "blocked" })
+        .where(eq(aiTurnReservations.gameId, snapshot.gameId));
+      const rejected = expect(pending).rejects.toMatchObject({
+        code: "GAME_CONFLICT",
+        currentSnapshot: snapshot,
+      });
+      gate.resolve(output("e2e4"));
+      await rejected;
+      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+    },
+  );
 
   it("cancels before dispatch without a reservation, and interrupts an in-flight adapter without leaking the abort reason or accepting its late result", async () => {
     const api = await harness.createApi();
@@ -275,7 +279,7 @@ describe("AI reservation invalidation and crash recovery", () => {
     });
   });
 
-  it.each(["receipt", "move", "position", "reservation deletion"] as const)(
+  it.each(["receipt", "move", "position", "execution invalidation"] as const)(
     "rolls back a commit failure after an actual %s write and retains a recovery block",
     async (stage) => {
       const api = await harness.createApi();
@@ -307,9 +311,9 @@ describe("AI reservation invalidation and crash recovery", () => {
                   failAt("position");
                   return result;
                 },
-                async clearAiTurn(gameId) {
-                  await tx.clearAiTurn(gameId);
-                  failAt("reservation deletion");
+                async invalidateAiExecution(gameId) {
+                  await tx.invalidateAiExecution(gameId);
+                  failAt("execution invalidation");
                 },
               }),
             ),
@@ -497,6 +501,9 @@ describe("AI reservation invalidation and crash recovery", () => {
       }
       expect(adapter.moveCalls).toBe(0);
       const before = await gamesService.invocations(principal, snapshot.gameId);
+      const logicalTurnsBefore = await restarted.repository.read((reader) =>
+        reader.getAiTurns(snapshot.gameId),
+      );
       expect(before.turns[0]?.invalidOutputCount).toBe(invalidFirst ? 1 : 0);
       expect(before.turns[0]?.attempts.at(-1)?.outcome).toBe("in_flight");
       const paused = await gamesService.lifecycle(principal, control(snapshot, "pause"));
@@ -505,6 +512,9 @@ describe("AI reservation invalidation and crash recovery", () => {
           ?.outcome,
       ).toBe("interrupted");
       const resumed = await gamesService.lifecycle(principal, control(paused, "resume"));
+      expect(
+        await restarted.repository.read((reader) => reader.getAiTurns(snapshot.gameId)),
+      ).toEqual(logicalTurnsBefore);
       await expect(gamesService.aiTurn(principal, cmd, access())).rejects.toMatchObject({
         code: "GAME_CONFLICT",
       });

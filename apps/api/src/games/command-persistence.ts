@@ -22,7 +22,7 @@ export async function persistCommand(
     throw new GameIntegrityError();
   }
   if (isAiGameMode(stored.mode)) {
-    await tx.clearAiTurn(stored.id);
+    await tx.invalidateAiExecution(stored.id);
     if (snapshot.state === "completed" || snapshot.state === "aborted") {
       await tx.clearAiController(stored.id);
     }

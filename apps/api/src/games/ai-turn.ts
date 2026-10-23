@@ -40,7 +40,7 @@ import { requireController } from "./controller-presence.js";
 import { AiTurnError, GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 export { AiTurnError } from "./errors.js";
 
-interface PreparedCommand {
+interface RestoredCommand {
   readonly stored: StoredGame;
   readonly game: ChessGame;
   readonly snapshot: GameSnapshot;
@@ -50,19 +50,28 @@ interface PreparedCommand {
 
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;
 
-function aiSeat(principal: Principal, prepared: PreparedCommand, step = false) {
-  const { stored, snapshot, configuration, participants } = prepared;
+function requireAiSeat(
+  principal: Principal,
+  restored: Omit<RestoredCommand, "game">,
+  step = false,
+) {
+  const { stored, snapshot: persistedSnapshot, configuration, participants } = restored;
   authorizeGameControl(principal, stored);
   if (stored.state !== (step ? "paused" : "active")) {
     throw new GameRequestError("INVALID_GAME_STATE");
   }
-  const seat = configuration?.seats[snapshot.turn];
-  const participant = participants.find((entry) => entry.color === snapshot.turn);
+  const seat = configuration?.seats[persistedSnapshot.turn];
+  const participant = participants.find((entry) => entry.color === persistedSnapshot.turn);
   if (stored.isSandbox || seat?.type !== "ai" || participant?.seatType !== "ai") {
     throw new GameRequestError("FORBIDDEN");
   }
-  if (step && !prepared.game.resume().ok) throw new GameIntegrityError();
-  return { seat, participantId: participant.id, color: snapshot.turn };
+  return { seat, participantId: participant.id, color: persistedSnapshot.turn };
+}
+
+function prepareExecutionGame(restoredGame: ChessGame, step = false): ChessGame {
+  // A paused step resumes only this in-memory aggregate, never the persisted snapshot.
+  if (step && !restoredGame.resume().ok) throw new GameIntegrityError();
+  return restoredGame;
 }
 
 function invocationResult(
@@ -104,7 +113,7 @@ export function createAiTurnExecutor(options: {
     tx: GameTransaction,
     principal: Principal,
     command: AiTurnCommand,
-  ) => Promise<PreparedCommand>;
+  ) => Promise<RestoredCommand>;
 }) {
   const { repository, prepareCommand } = options;
   const adapters = { ...options.adapters };
@@ -122,8 +131,10 @@ export function createAiTurnExecutor(options: {
       commandId: parsed.data.commandId.toLowerCase(),
     };
     const reserved = await repository.write(async (tx) => {
-      const prepared = await prepareCommand(tx, principal, command);
-      const selected = aiSeat(principal, prepared, command.step);
+      const restored = await prepareCommand(tx, principal, command);
+      const { snapshot: persistedSnapshot } = restored;
+      const selected = requireAiSeat(principal, restored, command.step);
+      const executionGame = prepareExecutionGame(restored.game, command.step);
       await requireController(tx, command.gameId, command.controllerId);
       const pending = await tx.getAiTurnReservation(command.gameId);
       if (pending) {
@@ -145,7 +156,7 @@ export function createAiTurnExecutor(options: {
       });
       const turn = await tx.getOrCreateAiTurn({
         gameId: command.gameId,
-        ply: prepared.snapshot.moves.length + 1,
+        ply: persistedSnapshot.moves.length + 1,
         color: selected.color,
       });
       if (
@@ -163,25 +174,27 @@ export function createAiTurnExecutor(options: {
         provider: selected.seat.provider,
         modelId: selected.seat.modelId,
       };
-      const snapshot = prepared.game.snapshot();
+      const executionSnapshot = executionGame.snapshot();
       return {
         selected,
         adapter,
         reservationId,
         invocation,
         context: {
-          fen: snapshot.fen,
-          pgn: snapshot.pgn,
-          color: snapshot.turn,
-          turn: snapshot.turn,
-          legalMoves: [...snapshot.legalMoves],
+          fen: executionSnapshot.fen,
+          pgn: executionSnapshot.pgn,
+          color: executionSnapshot.turn,
+          turn: executionSnapshot.turn,
+          legalMoves: [...executionSnapshot.legalMoves],
         },
       };
     });
 
     async function recheck(tx: GameTransaction) {
-      const prepared = await prepareCommand(tx, principal, command);
-      const selected = aiSeat(principal, prepared, command.step);
+      const restored = await prepareCommand(tx, principal, command);
+      const { stored, snapshot: persistedSnapshot } = restored;
+      const selected = requireAiSeat(principal, restored, command.step);
+      const executionGame = prepareExecutionGame(restored.game, command.step);
       await requireController(tx, command.gameId, command.controllerId);
       const pending = await tx.getAiTurnReservation(command.gameId);
       if (
@@ -191,9 +204,9 @@ export function createAiTurnExecutor(options: {
         pending.expectedVersion !== command.expectedVersion ||
         !isDeepStrictEqual(selected, reserved.selected)
       ) {
-        throw new GameConflictError(prepared.snapshot);
+        throw new GameConflictError(persistedSnapshot);
       }
-      return prepared;
+      return { stored, persistedSnapshot, executionGame };
     }
 
     let attempt: Awaited<ReturnType<GameTransaction["beginModelInvocation"]>> | undefined;
@@ -221,10 +234,10 @@ export function createAiTurnExecutor(options: {
         : {};
       if (parameters === null) {
         await repository.write(async (tx) => {
-          const prepared = await recheck(tx);
-          const paused = prepared.game.pause();
+          const { stored, executionGame } = await recheck(tx);
+          const paused = executionGame.pause();
           if (!paused.ok) throw new GameIntegrityError();
-          await persistCommand(tx, prepared.stored, command.commandId, "pause", paused.value);
+          await persistCommand(tx, stored, command.commandId, "pause", paused.value);
         });
         throw new AiTurnError("AI_PARAMETERS_INVALID");
       }
@@ -273,11 +286,11 @@ export function createAiTurnExecutor(options: {
         const currentAttempt = attempt;
         const received = response;
         const snapshot = await repository.write(async (tx) => {
-          const prepared = await recheck(tx);
+          const { stored, persistedSnapshot, executionGame } = await recheck(tx);
           let classified = received;
           if (
             classified.ok &&
-            !prepared.game.snapshot().legalMoves.includes(classified.output.move)
+            !executionGame.snapshot().legalMoves.includes(classified.output.move)
           ) {
             classified = {
               ...classified,
@@ -302,53 +315,41 @@ export function createAiTurnExecutor(options: {
             if ((await tx.incrementAiInvalidCount(currentAttempt.turnId)) < 3) {
               if (!access.signal.aborted) return null;
               // Cancellation may stop retries, but cannot erase an already-observed invalid output.
-              const paused = prepared.game.pause();
+              const paused = executionGame.pause();
               if (!paused.ok) throw new GameIntegrityError();
-              return persistCommand(tx, prepared.stored, command.commandId, "pause", paused.value);
+              return persistCommand(tx, stored, command.commandId, "pause", paused.value);
             }
-            const lost = prepared.game.recordTechnicalLoss(reserved.selected.color);
+            const lost = executionGame.recordTechnicalLoss(reserved.selected.color);
             if (!lost.ok) throw new GameIntegrityError();
-            return persistCommand(
-              tx,
-              prepared.stored,
-              command.commandId,
-              "technical_loss",
-              lost.value,
-            );
+            return persistCommand(tx, stored, command.commandId, "technical_loss", lost.value);
           }
           let accepted = classified.ok
-            ? prepared.game.playMove(classified.output.move)
-            : prepared.game.pause();
+            ? executionGame.playMove(classified.output.move)
+            : executionGame.pause();
           if (!accepted.ok) throw new GameIntegrityError();
-          if (command.step && accepted.value.state === "active") accepted = prepared.game.pause();
+          if (command.step && accepted.value.state === "active") accepted = executionGame.pause();
           if (!accepted.ok) throw new GameIntegrityError();
           const result = await persistCommand(
             tx,
-            prepared.stored,
+            stored,
             command.commandId,
             classified.ok ? "move" : "pause",
             accepted.value,
           );
           if (classified.ok) {
-            await tx.linkAiTurnMove(currentAttempt.turnId, prepared.snapshot.moves.length + 1);
+            await tx.linkAiTurnMove(currentAttempt.turnId, persistedSnapshot.moves.length + 1);
           }
           return result;
         });
         if (snapshot) return snapshot;
         response = undefined;
         const next = await repository.write(async (tx) => {
-          const prepared = await recheck(tx);
+          const { stored, executionGame } = await recheck(tx);
           if (access.signal.aborted) {
-            const paused = prepared.game.pause();
+            const paused = executionGame.pause();
             if (!paused.ok) throw new GameIntegrityError();
             return {
-              snapshot: await persistCommand(
-                tx,
-                prepared.stored,
-                command.commandId,
-                "pause",
-                paused.value,
-              ),
+              snapshot: await persistCommand(tx, stored, command.commandId, "pause", paused.value),
             };
           }
           return { attempt: await tx.beginModelInvocation(invocation) };

@@ -159,7 +159,8 @@ export interface GameTransaction extends GameReader, RoomTransaction, AnalysisTr
   getAiTurnReservation(gameId: string): Promise<StoredAiTurnReservation | undefined>;
   reserveAiTurn(reservation: NewAiTurnReservation): Promise<void>;
   blockAiTurn(gameId: string, reservationId: string): Promise<void>;
-  clearAiTurn(gameId: string): Promise<void>;
+  // Interrupts pending attempts and removes the reservation, preserving the logical turn and budget.
+  invalidateAiExecution(gameId: string): Promise<void>;
   getOrCreateAiTurn(turn: Pick<StoredAiTurn, "gameId" | "ply" | "color">): Promise<StoredAiTurn>;
   beginModelInvocation(invocation: NewModelInvocation): Promise<StoredModelInvocation>;
   finishModelInvocation(
@@ -578,7 +579,7 @@ export function createGameRepository(connection: DatabaseConnection): GameReposi
                   ),
                 );
             },
-            async clearAiTurn(gameId) {
+            async invalidateAiExecution(gameId) {
               await tx
                 .update(modelInvocations)
                 .set({ outcome: "interrupted" })

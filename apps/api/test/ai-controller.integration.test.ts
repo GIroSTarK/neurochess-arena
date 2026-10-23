@@ -245,12 +245,26 @@ describe("database-backed AI controllers and paused single steps", () => {
         legalMoves: [],
       });
       expect(snapshot.moves).toHaveLength(index + 1);
+      expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
       await expect(gamesService.aiTurn(principal, command, access())).rejects.toMatchObject({
         code: "GAME_CONFLICT",
         currentSnapshot: snapshot,
       });
     }
     expect(snapshot.terminationReason).toBe("checkmate");
+    expect(
+      await api.database.db
+        .select({ version: gameCommands.version, kind: gameCommands.kind })
+        .from(gameCommands)
+        .where(eq(gameCommands.gameId, snapshot.gameId))
+        .orderBy(gameCommands.version),
+    ).toEqual([
+      { version: 1, kind: "pause" },
+      { version: 2, kind: "move" },
+      { version: 3, kind: "move" },
+      { version: 4, kind: "move" },
+      { version: 5, kind: "move" },
+    ]);
     expect((await gamesService.replay(principal, snapshot.gameId)).snapshot).toEqual(snapshot);
   });
 
