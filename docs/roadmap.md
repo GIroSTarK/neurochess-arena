@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–4 completed; Phase 5 analysis, costing, telemetry, responsive/performance refinement, automated accessibility, cross-browser acceptance, production deployment preparation, request/socket limits, header/dependency hardening, private operational monitoring and tested backup/recovery implemented; manual accessibility, physical-device and live operational release gates pending
 
-**Last updated:** 2026-10-15
+**Last updated:** 2026-10-24
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -172,6 +172,18 @@ Deliverables:
 - [ ] complete release acceptance, including physical browsers/accessibility, live services, licensing and operational verification.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
+
+## Architecture clarity review
+
+**Status:** Complete. T01–T11 integrated and independently reviewed in T12.
+
+- [x] Separate AI outcome policy and shared provider parsing while preserving atomic outcomes, durable retry budgets, paused-step semantics, and credential/authority fences.
+- [x] Split repository capabilities and historical migration scenarios; share equivalent AI parameter predicates without changing migrations or transaction boundaries.
+- [x] Separate public-game API and mode entry from AI orchestration; share the MatchController collaborator composition while retaining feature lifetimes and identity cleanup.
+- [x] Independently review the integrated changes and reconcile the [architecture map](architecture.md) with final module ownership.
+- [x] Confirm targeted regression suites, relevant browser acceptance, and the full configured baseline.
+
+The existing live-service, physical-device, accessibility, and operational release gates remain unchanged.
 
 ## Post-MVP candidates
 

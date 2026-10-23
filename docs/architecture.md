@@ -1,7 +1,7 @@
 # Architecture
 
 **Status:** Proposed baseline for MVP  
-**Last updated:** 2026-10-23
+**Last updated:** 2026-10-24
 
 ## Architectural drivers
 
@@ -89,6 +89,8 @@ Identity invalidation synchronously clears the values already issued to router l
 
 Public-game leaf loaders in `public-game/route-data.ts` own unfinished-game discovery at `/` and private details at `/games/:gameId`, together with applicable masked credential metadata. `public-game/public-game-route.tsx` selects the AI or room route from the authorized entry; `match` and `rooms` retain their controllers and recovery policies without importing this selector or each other. Requests use the route and identity cancellation signals, and results share the runtime's generation fence. Loaders never bootstrap a guest or issue gameplay commands. The setup form consumes discovery; the match owner consumes committed details and performs one versioned recovery pause for an unfinished AI game. A creation handoff reuses the existing owner without a details read or recovery. Terminal entry reads replay and telemetry within the feature lifetime without requesting credentials or acquiring control. Human rooms use their own synchronized controller as described under [realtime rooms](#realtime-rooms).
 
+`api/public-game-client.ts` owns the shared details, unfinished-game, history, delete, and clear-history operations. `api/identity.ts` defines their neutral `PublicIdentity` request context. `api/ai-client.ts` composes the shared details/unfinished operations and retains AI discovery, creation, controller, turn, and telemetry operations alongside its game commands. History and public entry loaders use the public-game client directly; each client keeps endpoint validation and identity cancellation/access-loss handling over the shared HTTP transport.
+
 Same-game action revalidation skips the entry read while identity changes and explicit revalidation still read. Ordinary revalidated details cannot restart recovery, replace an accepted controller snapshot, or reset keys. A fresh access denial clears the private view; an explicit retry after an entry failure or canceled departure reads again before entering. Telemetry polling, replay selection, PGN delivery, provider discovery and all gameplay writes remain controller-owned.
 
 History uses one account/profile-gated loader for entry and cursor fetchers, with generation-scoped results. Deletion actions validate confirmation, intent, game UUID where applicable, and the displayed account expectation before calling the existing API. Confirmed deletion clears every issued History page and fences older reads; the screen resets its pagination fetcher before revalidating. Confirmation and cursor navigation remain local UI state. Failed acknowledgements require explicit retry or refresh, and cancellation never proves that a server write stopped.
@@ -129,6 +131,8 @@ The API's `identity` module defines a credential-free, server-derived `Principal
 ### PostgreSQL and Drizzle
 
 PostgreSQL is the durable system of record. Drizzle ORM defines the schema in TypeScript and Drizzle Kit produces reviewed SQL migrations. Use the latest stable release line; do not base the MVP on Drizzle v1 beta/RC relations APIs.
+
+`packages/database/src/game-repository.ts` coordinates game reads and writes, composing the identity, game-state, AI-execution, credential-access, room, and analysis repositories on the same connection or transaction. Their interfaces live in the corresponding `*-repository.ts` modules; API helpers accept only the capabilities they need. Read transactions remain read-only `REPEATABLE READ`; writes remain `READ COMMITTED` with the existing lock order. Extracted capabilities do not start independent transactions. `schema/ai-parameters.ts` supplies the shared participant/invocation parameter predicate while their nullable rules and constraint names remain in `schema/games.ts`.
 
 Core tables are expected to include:
 
@@ -266,6 +270,8 @@ AI execution uses the reservations in [ADR-0009](decisions/0009-ai-turn-reservat
 
 The executor rechecks authority, seat configuration, revision, and reservation at each dispatch/outcome. Known invalid outputs increment the durable count; the third commits the trusted domain technical loss and an internal `technical_loss` command receipt. Provider failures commit an ordinary pause under the AI command ID and return the paused snapshot. They never consume invalid-output budget. Both outcomes, and successful moves, commit their required attempt, counter, and command records atomically. Explicit Resume or Next move and a fresh versioned command authorize another attempt on the same logical turn.
 
+`games/ai-turn.ts` owns reservation, dispatch, response classification, and outcome persistence. The pure `games/ai-outcome-policy.ts` selects `retry`, `move`, `pause`, or `technicalLoss` after classification and the current invalid-count write; a third invalid takes precedence over cancellation. `games/command-persistence.ts` writes the accepted receipt and position on that same transaction. Database `invalidateAiExecution` interrupts unfinished attempts and removes the reservation without deleting the logical turn or resetting its budget.
+
 `GameService.invocations` exposes private normalized records in a read-only transaction after the same ownership and full-history checks as game reads. Records include the exact parameters supplied to the adapter, service-measured duration, independently nullable reported usage, safe enumerated failure causes, and accepted commentary. A logical turn links all its attempts to the accepted move; failures without a move remain readable. Invocation reads are separate from chess snapshots, and operational metadata may change without a game revision. Commentary never enters PGN or model context. Raw responses, prompts, exceptions, credentials, and upstream request IDs are not persisted.
 
 Lifecycle commands interrupt unfinished attempt records while invalidating reservations. A late result may update only its own attempt as discarded, never a counter or canonical game outcome. Unresolved dispatches retain unknown duration/usage; recovery neither invents an upstream result nor silently retries it. The public controller reads these records independently of chess revisions for commentary, telemetry, Events, and safe provider-error guidance. Reads refresh during unfinished games and on explicit Refresh details, including terminal games; request lifetime, game ID, and revision fence stale responses. These reads cannot dispatch moves.
@@ -333,6 +339,8 @@ The public `match` controller holds complete accepted snapshots, page-memory cre
 
 `match/controller.ts` is the facade over `MatchSession`, `MatchStore`, `ControllerLease`, `AiTurnRunner`, `MatchCommands`, `InvocationFeed`, `SeatCredentials`, and the shared archive controller. The session coordinates entry, lifetime cleanup, accepted snapshots, and access loss. The store accepts complete typed game-flow, seat-key, invocation, and archive substates; its stable snapshot preserves the facade's view fields and publishes `canMove`, `pendingMove`, and `pendingControl` for React. Raw credentials remain outside published state. Revision changes clear archive state atomically while retaining received telemetry and its move count until the next read; lifetime cleanup clears all private slices together. Collaborators run without a DOM through injected credential ownership and PGN delivery.
 
+`match/composition.ts` constructs this collaborator graph once for both the facade and `test/match-session.ts`. It accepts credential creation and PGN delivery as injected dependencies. Constructors only wire references; explicit entry starts the lifetime after the graph is complete. Facade tests still exercise the real `MatchController` and browser-owned credential cleanup.
+
 `match/presentation.ts` projects subscribed state and the display name into localized status, announcements, players, results, board data, and control/recovery availability without a DOM or side effects. `MatchScreen` owns the subscription, credential reconciliation, orientation, focus, and route/setup composition; `match/panels` adapts the header, board controls, and details rail to shared presentation components. The match-only `AiControls` lives with those adapters. Shared play-area, game-details, and player-activity labels use neutral `arena.*` and `players.*` localization keys.
 
 Arena setup and gameplay treat `PROFILE_REQUIRED` as access loss. Pending work is canceled, page-owned credentials and private data are cleared, and late responses cannot restore them. Entry loaders classify this response as denied access; account identity resolution still owns the onboarding flow.
@@ -383,10 +391,11 @@ The normalized move response contains:
 
 - required UCI move;
 - optional viewer commentary;
-- provider request identifier when safe to retain;
 - latency;
 - normalized token usage when available;
 - retry and error classification.
+
+`providers/move-output.ts` shares pure JSON move parsing and commentary sanitization across the four adapters. Provider envelopes and finish reasons remain adapter-owned. `providers/invoke-move.ts` independently validates the normalized envelope, measures duration, and discards upstream request IDs. For schema-valid output, NUL or key-echo commentary is omitted without rejecting the move; malformed model output remains distinct from malformed provider envelopes, and missing usage remains distinct from reported zero.
 
 Model lists come from the selected provider through the API. Discovery is currently uncached and scoped to the supplied request credential; another account's catalog is never reused. Malformed, mismatched-provider, or credential-echoing descriptors become safe provider failures. A missing or explicitly unsupported selected model pauses a turn without inference. Unknown move-generation capability permits a runtime attempt with no optional parameters. For supported models, unknown/unsupported parameter fields are omitted; values outside an advertised range or enumeration pause the game and return `AI_PARAMETERS_INVALID` before inference, without consuming an invalid-output attempt. Seat configuration is immutable, so a changed range that invalidates a selection requires a new configuration/game. Invocation records contain the parameters actually supplied to inference. Discovery failures retain a safe failure attempt with no effective parameters or token usage.
 
