@@ -3,7 +3,15 @@ import userEvent from "@testing-library/user-event";
 import type { RouteObject } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FOOLS_MATE, GAME_ID, jsonResponse, requestPath, snapshot } from "../test/fixtures";
+import {
+  errorResponse,
+  FOOLS_MATE,
+  GAME_ID,
+  jsonResponse,
+  requestBody,
+  requestPath,
+  snapshot,
+} from "../test/fixtures";
 import { createHttpMock as createBaseHttpMock, type HttpRoutes } from "../test/http";
 import { renderApp } from "../test/render";
 import { INVITATION, joinedRoom, roomProfile, roomSession, waitingRoom } from "../test/rooms";
@@ -34,9 +42,86 @@ class Socket extends EventTarget {
 afterEach(() => {
   Socket.instances = [];
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("production private room routes", () => {
+  it("keeps clipboard fallback selectable and requires a fresh owner decision after a conflict", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("unavailable"));
+    const waiting = waitingRoom("black");
+    const changed = { ...waiting, snapshot: { ...waiting.snapshot, version: 1 } };
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(roomSession),
+      "GET /profile": () => jsonResponse(roomProfile),
+      "GET /games/unfinished": () => jsonResponse({ game: null }),
+      "POST /rooms/creation-operation": () =>
+        jsonResponse({ operationId: GAME_ID, expiresAt: "2027-01-01T00:00:00.000Z" }),
+      "POST /rooms": () => jsonResponse({ room: waiting, invitation: INVITATION }),
+      [`POST /games/${GAME_ID}/lifecycle`]: () =>
+        errorResponse("GAME_CONFLICT", 409, changed.snapshot),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    vi.stubGlobal("WebSocket", Socket);
+    renderApp(options, { initialEntries: ["/rooms"] });
+    await user.click(await screen.findByRole("button", { name: "Create room" }));
+    await screen.findByRole("textbox", { name: /^Invitation link$/ });
+    await waitFor(() => expect(Socket.instances.length).toBe(1));
+    act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: waiting }));
+    await user.click(screen.getByRole("button", { name: "Copy invitation" }));
+    expect(await screen.findByText(/select and copy the invitation/i)).toBeVisible();
+    const link = screen.getByRole("textbox", { name: "Invitation link" });
+    expect(link).toHaveValue(`${window.location.origin}/rooms/join#invite=${INVITATION}`);
+    await user.click(link);
+    expect((link as HTMLTextAreaElement).selectionEnd).toBe(
+      (link as HTMLTextAreaElement).value.length,
+    );
+    expect(screen.getByText("Waiting for White")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /resign|resume|pause/i })).not.toBeInTheDocument();
+    const closures = () =>
+      http.fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/lifecycle"));
+    for (const label of ["Revoke invitation", "Replace invitation", "Close room"]) {
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+    }
+    expect(closures()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Close room" }));
+    await user.click(screen.getByRole("button", { name: "Confirm close" }));
+    await waitFor(() => expect(Socket.instances.length).toBe(2));
+    expect(JSON.parse(requestBody(closures()[0]![1]))).toMatchObject({
+      action: "abort",
+      gameId: GAME_ID,
+      expectedVersion: 0,
+    });
+    act(() => Socket.instances[1]!.frame({ protocol: 1, type: "snapshot", room: changed }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(closures()).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Close room" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(closures()).toHaveLength(1);
+    http.assertNoUnexpectedRequests();
+  });
+  it("offers replacement on re-entry and retains a waiting room after invitation revocation", async () => {
+    const waiting = { ...waitingRoom(), invitationAvailable: false };
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(roomSession),
+      "GET /profile": () => jsonResponse(roomProfile),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({ snapshot: waiting.snapshot, configuration }),
+      [`GET /rooms/${GAME_ID}`]: () => jsonResponse(waiting),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    vi.stubGlobal("WebSocket", Socket);
+    renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+    expect(await screen.findByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
+    expect(screen.getByText(/replace the invitation to share a new link/i)).toBeVisible();
+    expect(screen.getByText(/your public game slot stays reserved/i)).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "Invitation link" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Replace invitation" })).toBeVisible();
+    http.assertNoUnexpectedRequests();
+  });
   it("keeps explicit recovery retryable after a failed read, without replacing a healthy owner on revalidation", async () => {
     let unavailable = false;
     const joined = joinedRoom();

@@ -187,9 +187,10 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 ## Architecture clarity top-10 follow-up
 
-**Status:** T01 complete; T02–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+**Status:** T01–T02 complete; T03–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
 
 - [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
+- [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
 
 ## Post-MVP candidates
 

@@ -1,4 +1,4 @@
-import { chessColorSchema, gameIdSchema, type RoomView } from "@neurochess/contracts";
+import { chessColorSchema, type RoomView } from "@neurochess/contracts";
 import { replace } from "react-router";
 import { z } from "zod";
 
@@ -12,7 +12,7 @@ import {
   strictFormIntent,
 } from "../routing/route-data";
 import type { PublicAccess, ScopedRouteData } from "../routing/route-runtime";
-import { gameHref, parseGameId } from "../routing/route-urls";
+import { gameHref } from "../routing/route-urls";
 
 import { RoomEntryMemory, type RoomIssue } from "./entry-memory";
 import { parseInvitation, type RoomInvitationEntry } from "./invitation";
@@ -28,33 +28,22 @@ const expectation = {
   generation: sequence,
   expectedIdentity: z.union([z.uuid(), z.literal("guest"), z.literal("none")]),
 };
-const ownerCommand = {
-  ...expectation,
-  gameId: gameIdSchema,
-  expectedVersion: sequence,
-  confirm: z.literal("true"),
-};
 const intentSchema = z.discriminatedUnion("intent", [
   z.strictObject({ intent: z.literal("create"), ownerColor: chessColorSchema, ...expectation }),
   ...(["resolve", "join", "retry-create", "retry-join"] as const).map((intent) =>
     z.strictObject({ intent: z.literal(intent), ...expectation }),
   ),
-  ...(["replace", "revoke", "close"] as const).map((intent) =>
-    z.strictObject({ intent: z.literal(intent), ...ownerCommand }),
-  ),
-  z.strictObject({ intent: z.literal("refresh-room"), gameId: gameIdSchema, ...expectation }),
 ]);
 type Pending =
   | { kind: "create"; operationId: string; ownerColor: "white" | "black" }
-  | { kind: "join"; invitation: string; commandId: string; bootstrapped: boolean }
-  | { kind: "owner" };
+  | { kind: "join"; invitation: string; commandId: string; bootstrapped: boolean };
 
-function issueFor(error: unknown, owner = false): RoomIssue {
+function issueFor(error: unknown): RoomIssue {
   if (error instanceof RequestRateLimitFailure) return "limited";
   if (!(error instanceof RoomFailure) || error.kind !== "api") return "uncertain";
   switch (error.code) {
     case "GAME_CONFLICT":
-      return owner ? "synchronize" : "occupied";
+      return "occupied";
     case "UNAUTHORIZED":
     case "PROFILE_REQUIRED":
       return "access";
@@ -81,7 +70,6 @@ export function roomRouteData(
     navigation,
   }: Pick<AppRouteContext, "apiBaseUrl" | "runtime" | "navigation">,
   bootstrap?: RoomInvitationEntry,
-  joinPath = "/rooms/join",
 ) {
   const memory = new RoomEntryMemory(bootstrap?.read() ?? null);
   bootstrap?.retire();
@@ -137,10 +125,8 @@ export function roomRouteData(
     });
     pending = null;
   };
-  const loader = (kind: "setup" | "join" | "waiting") =>
-    protectedLoader(async ({ request, params }): Promise<RoomEntryData | null> => {
-      const id = kind === "waiting" ? parseGameId(params.gameId) : null;
-      if (kind === "waiting" && !id) return null;
+  const loader = (kind: "setup" | "join") =>
+    protectedLoader(async ({ request }): Promise<RoomEntryData | null> => {
       const lifetime = memory.signal;
       const resolved = await runtime.resolvePublicIdentity(request.signal, true);
       generation = resolved.generation;
@@ -161,19 +147,12 @@ export function roomRouteData(
       try {
         if (kind === "join") {
           const input = memory.getSnapshot().input;
-          const invitation = parseInvitation(input, window.location.origin, joinPath);
+          const invitation = parseInvitation(input, window.location.origin);
           if (invitation) {
             const response = await createRoomApi(apiBaseUrl).resolve(invitation, signal);
             if (!cancelled() && memory.getSnapshot().input === input) {
               memory.update({ resolution: response.status });
             }
-          }
-        } else if (identity && kind === "waiting" && id) {
-          if (handoff === id && memory.getSnapshot().room?.snapshot.gameId === id) {
-            handoff = null;
-          } else {
-            const room = await createRoomApi(apiBaseUrl, { identity }).read(id, signal);
-            if (!cancelled()) acceptRoom(room);
           }
         } else if (identity?.intent === "account") {
           const existing = await createRoomApi(apiBaseUrl, { identity }).unfinished(signal);
@@ -198,8 +177,6 @@ export function roomRouteData(
     }
     const lifetime = memory.signal;
     memory.update({ busy: true });
-    const owner =
-      input.intent === "close" || input.intent === "replace" || input.intent === "revoke";
     try {
       const resolved = await scope.resolveIdentity(true);
       generation ??= resolved.generation;
@@ -220,11 +197,7 @@ export function roomRouteData(
       }
       if (input.intent === "resolve") {
         if (pending) return null;
-        const invitation = parseInvitation(
-          memory.getSnapshot().input,
-          window.location.origin,
-          joinPath,
-        );
+        const invitation = parseInvitation(memory.getSnapshot().input, window.location.origin);
         if (!invitation) {
           memory.update({ issue: "invalid", resolution: null });
           return null;
@@ -235,7 +208,7 @@ export function roomRouteData(
       }
       if (
         !identity ||
-        ((input.intent === "create" || input.intent === "retry-create" || owner) &&
+        ((input.intent === "create" || input.intent === "retry-create") &&
           identity.intent !== "account")
       ) {
         memory.update({ issue: "access" });
@@ -267,78 +240,44 @@ export function roomRouteData(
         handoff = issued.room.snapshot.gameId;
         return replace(gameHref("arena", handoff));
       }
-      if (input.intent === "join" || input.intent === "retry-join") {
-        if (input.intent === "join") {
-          if (pending) return null;
-          const invitation = parseInvitation(
-            memory.getSnapshot().input,
-            window.location.origin,
-            joinPath,
-          );
-          if (!invitation) {
-            memory.update({ issue: "invalid" });
-            return null;
-          }
-          pending = {
-            kind: "join",
-            invitation,
-            commandId: crypto.randomUUID(),
-            bootstrapped: identity.intent !== "guest",
-          };
-        }
-        if (pending?.kind !== "join") {
+      if (input.intent === "join") {
+        if (pending) return null;
+        const invitation = parseInvitation(memory.getSnapshot().input, window.location.origin);
+        if (!invitation) {
           memory.update({ issue: "invalid" });
           return null;
         }
-        memory.update({ pending: "join", issue: null });
-        const command = pending;
-        if (!command.bootstrapped) {
-          await api.bootstrap(signal);
-          if (cancelled()) return null;
-          command.bootstrapped = true;
-        }
-        const room = await api.join(
-          { invitation: command.invitation, commandId: command.commandId },
-          signal,
-        );
-        if (cancelled()) return null;
-        acceptRoom(room);
-        handoff = room.snapshot.gameId;
-        return replace(gameHref("arena", handoff));
+        pending = {
+          kind: "join",
+          invitation,
+          commandId: crypto.randomUUID(),
+          bootstrapped: identity.intent !== "guest",
+        };
       }
-      if (input.intent === "refresh-room") {
-        const room = await api.read(input.gameId, signal);
-        if (!cancelled()) acceptRoom(room);
+      if (pending?.kind !== "join") {
+        memory.update({ issue: "invalid" });
         return null;
       }
-      if (owner && "gameId" in input && "expectedVersion" in input) {
-        if (pending) return null;
-        pending = { kind: "owner" };
-        memory.update({ pending: "owner", issue: null });
-        const command = {
-          gameId: input.gameId,
-          expectedVersion: input.expectedVersion,
-          commandId: crypto.randomUUID(),
-        };
-        if (input.intent === "close") {
-          await api.close(command, signal);
-          if (cancelled()) return null;
-          memory.update({ issuedInvitation: null });
-          const room = await api.read(input.gameId, signal);
-          if (!cancelled()) acceptRoom(room);
-        } else {
-          const issued = await api.invitation({ ...command, action: input.intent }, signal);
-          if (!cancelled()) acceptRoom(issued.room, issued.invitation);
-        }
+      memory.update({ pending: "join", issue: null });
+      const command = pending;
+      if (!command.bootstrapped) {
+        await api.bootstrap(signal);
+        if (cancelled()) return null;
+        command.bootstrapped = true;
       }
-      return null;
+      const room = await api.join(
+        { invitation: command.invitation, commandId: command.commandId },
+        signal,
+      );
+      if (cancelled()) return null;
+      acceptRoom(room);
+      handoff = room.snapshot.gameId;
+      return replace(gameHref("arena", handoff));
     } catch (error) {
       if (scope.signal.aborted || lifetime.aborted) return null;
-      const issue = issueFor(error, owner);
-      if (owner) memory.update({ issuedInvitation: null });
+      const issue = issueFor(error);
       if (
         issue !== "uncertain" &&
-        issue !== "synchronize" &&
         !((pending?.kind === "join" || pending?.kind === "create") && issue === "limited")
       ) {
         pending = null;
@@ -370,12 +309,6 @@ export function roomRouteData(
     },
     setup: { loader: loader("setup"), action, shouldRevalidate: selfPostRevalidation("/rooms") },
     join: { loader: loader("join"), action, shouldRevalidate: selfPostRevalidation("/rooms/join") },
-    waiting: {
-      loader: loader("waiting"),
-      action,
-      shouldRevalidate: (args: Parameters<ReturnType<typeof selfPostRevalidation>>[0]) =>
-        args.formMethod === "POST" ? false : args.defaultShouldRevalidate,
-    },
     dispose() {
       unsubscribeInvitation?.();
       bootstrap?.dispose();

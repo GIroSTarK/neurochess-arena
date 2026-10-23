@@ -1,21 +1,21 @@
 import AxeBuilder from "@axe-core/playwright";
-import { roomViewSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { createAccount } from "./account-helpers";
 import { expectClipboardCopy } from "./clipboard";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
+import { confirm, createRoom, room } from "./room-helpers";
 import { setPseudoLocalization } from "./text-layout";
 
-const entryPath = "/__test__/rooms";
+const entryPath = "/rooms";
 const joinPath = entryPath + "/join";
 
 test("same-document invitation fragments are consumed before routing and cannot return through history", async ({
   page,
   newContext,
 }) => {
-  const link = await createRoom(page);
+  const { invitation: link } = await createRoom(page, "White");
   const token = new URL(link).hash.slice("#invite=".length);
   const guest = await (await newContext()).newPage();
   await guest.goto(joinPath);
@@ -32,26 +32,13 @@ test("same-document invitation fragments are consumed before routing and cannot 
     )
     .toBe(true);
   await assertNoStoredInvitation(guest, token);
-  await guest.getByRole("link", { name: "Leave entry", exact: true }).click();
+  await guest.getByRole("link", { name: "Arena", exact: true }).click();
   await guest.goBack();
   await expect(guest.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
   await guest.goForward();
   await guest.goBack();
   await assertNoStoredInvitation(guest, token);
 });
-async function createRoom(page: Page, color: "White" | "Black" = "White") {
-  await createAccount(page.request);
-  await page.goto(entryPath);
-  await page.getByRole("radio", { name: color, exact: true }).check();
-  await page.getByRole("button", { name: "Create room", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
-  return page.getByRole("textbox", { name: "Invitation link", exact: true }).inputValue();
-}
-async function confirm(page: Page, label: string, confirmLabel: string) {
-  await page.getByRole("button", { name: label, exact: true }).click();
-  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
-  await page.getByRole("button", { name: confirmLabel, exact: true }).click();
-}
 async function assertNoStoredInvitation(page: Page, token: string) {
   expect(
     await page.evaluate((token) => {
@@ -73,8 +60,7 @@ test("Black owner creates and a separate guest explicitly joins by link with no 
   page,
   newContext,
 }) => {
-  const link = await createRoom(page, "Black");
-  const gameId = new URL(page.url()).pathname.split("/").at(-1)!;
+  const { invitation: link, gameId } = await createRoom(page, "Black");
   const guest = await (await newContext()).newPage();
   let bootstraps = 0;
   guest.on("request", (request) => {
@@ -90,22 +76,24 @@ test("Black owner creates and a separate guest explicitly joins by link with no 
   const token = new URL(link).hash.slice("#invite=".length);
   await assertNoStoredInvitation(guest, token);
   await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
-  await expect(guest).toHaveURL(`${WEB_ORIGIN}/__test__/games/${gameId}`);
-  await expect(guest.getByRole("status").filter({ hasText: "Room handoff: active" })).toBeVisible();
+  await expect(guest).toHaveURL(`${WEB_ORIGIN}/games/${gameId}`);
+  await expect(guest.getByTestId("room-connection")).toHaveText("Room connected");
+  await expect(guest.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
   expect(bootstraps).toBe(1);
-  const room = roomViewSchema.parse(
-    await (await guest.request.get(API_ORIGIN + "/rooms/" + gameId)).json(),
-  );
-  expect(room.viewer).toEqual({ color: "white", isOwner: false });
-  await page.getByRole("button", { name: "Refresh room", exact: true }).click();
-  await expect(page.getByText("Room handoff: active", { exact: true })).toBeVisible();
+  const joined = await room(guest, gameId);
+  expect(joined.viewer).toEqual({ color: "white", isOwner: false });
+  expect(joined.snapshot.state).toBe("active");
+  await expect(page.getByRole("heading", { name: "Waiting for opponent" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Resign", exact: true })).toBeVisible();
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  expect((await room(page, gameId)).snapshot).toEqual(joined.snapshot);
 });
 
 test("manual code join, invitation replacement/revocation, reload recovery and confirmed owner closure", async ({
   page,
   newContext,
 }) => {
-  const first = await createRoom(page);
+  const { invitation: first, gameId } = await createRoom(page, "White");
   const guest = await (await newContext()).newPage();
   await confirm(page, "Revoke invitation", "Confirm revocation");
   await expect(page.getByText(/Your public game slot stays reserved/)).toBeVisible();
@@ -129,15 +117,21 @@ test("manual code join, invitation replacement/revocation, reload recovery and c
     .getByRole("textbox", { name: "Invitation link or code" })
     .fill(new URL(current).hash.slice("#invite=".length));
   await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
-  await expect(guest.getByText("Room handoff: active", { exact: true })).toBeVisible();
-  // A second waiting room proves the closure UI without enabling the later gameplay controller.
+  await expect(guest).toHaveURL(`${WEB_ORIGIN}/games/${gameId}`);
+  await expect(guest.getByTestId("room-connection")).toHaveText("Room connected");
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  expect((await room(guest, gameId)).snapshot.state).toBe("active");
   const otherOwner = await (await newContext()).newPage();
-  await createRoom(otherOwner);
+  const other = await createRoom(otherOwner, "White");
   await otherOwner.getByRole("button", { name: "Close room", exact: true }).click();
   await otherOwner.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(otherOwner.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
   await confirm(otherOwner, "Close room", "Confirm close");
-  await expect(otherOwner.getByText("Room handoff: aborted", { exact: true })).toBeVisible();
+  await expect(
+    otherOwner.getByRole("heading", { name: "Game stopped", exact: true }),
+  ).toBeVisible();
+  await expect(otherOwner.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  expect((await room(otherOwner, other.gameId)).snapshot.state).toBe("aborted");
 });
 
 test("lost create and join acknowledgements recover the same operation and seat", async ({
@@ -162,7 +156,10 @@ test("lost create and join acknowledgements recover the same operation and seat"
   await page.getByRole("button", { name: "Create room", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("acknowledgement was lost");
   await page.getByRole("button", { name: "Recover previous request", exact: true }).click();
+  await expect(page).toHaveURL(/\/games\/[a-f0-9-]+$/);
   await expect(page.getByRole("heading", { name: "Waiting for opponent" })).toBeVisible();
+  await expect(page.getByTestId("room-connection")).toHaveText("Room connected");
+  const gameId = new URL(page.url()).pathname.split("/").at(-1)!;
   expect(operations).toBe(1);
   expect(createBodies).toHaveLength(2);
   expect(createBodies[0]).toBe(createBodies[1]);
@@ -183,7 +180,12 @@ test("lost create and join acknowledgements recover the same operation and seat"
   await guest.getByRole("button", { name: "Join as guest", exact: true }).click();
   await expect(guest.getByRole("alert")).toContainText("acknowledgement was lost");
   await guest.getByRole("button", { name: "Recover previous request", exact: true }).click();
-  await expect(guest.getByText("Room handoff: active", { exact: true })).toBeVisible();
+  await expect(guest).toHaveURL(`${WEB_ORIGIN}/games/${gameId}`);
+  await expect(guest.getByTestId("room-connection")).toHaveText("Room connected");
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  const joined = await room(guest, gameId);
+  expect(joined.viewer).toEqual({ color: "black", isOwner: false });
+  expect(joined.snapshot.state).toBe("active");
   expect(joinBodies).toHaveLength(2);
   expect(joinBodies[0] === joinBodies[1]).toBe(true);
 });
@@ -192,7 +194,7 @@ test("sign-in departure and Back/Forward clear invitations and token-free auth r
   page,
   newContext,
 }) => {
-  const link = await createRoom(page);
+  const { invitation: link } = await createRoom(page, "White");
   const guest = await (await newContext()).newPage();
   const account = await createAccount(guest.request);
   // Sign out through the real account API before entering the guest invitation flow.
@@ -281,7 +283,7 @@ test("onboarding returns without the invitation and an account joins after pasti
   page,
   newContext,
 }) => {
-  const link = await createRoom(page);
+  const { invitation: link, gameId } = await createRoom(page, "White");
   const invitee = await (await newContext()).newPage();
   const account = await createAccount(invitee.request, { completeProfile: false });
   await invitee.goto(link);
@@ -295,13 +297,16 @@ test("onboarding returns without the invitation and an account joins after pasti
   await expect(invitee.getByRole("textbox", { name: "Invitation link or code" })).toHaveValue("");
   await invitee.getByRole("textbox", { name: "Invitation link or code" }).fill(link);
   await invitee.getByRole("button", { name: "Join room", exact: true }).click();
-  await expect(invitee.getByText("Room handoff: active", { exact: true })).toBeVisible();
+  await expect(invitee).toHaveURL(`${WEB_ORIGIN}/games/${gameId}`);
+  await expect(invitee.getByTestId("room-connection")).toHaveText("Room connected");
+  await expect(invitee.getByRole("button", { name: "Resign", exact: true })).toBeVisible();
+  expect((await room(invitee, gameId)).viewer).toEqual({ color: "black", isOwner: false });
 });
 
 test("identity changes and pagehide remove the issued invitation and open confirmations", async ({
   page,
 }) => {
-  const link = await createRoom(page);
+  const { invitation: link } = await createRoom(page, "White");
   await page.getByRole("button", { name: "Close room", exact: true }).click();
   await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -318,7 +323,7 @@ test("occupied slots and invalid invitations show bounded feedback", async ({
   page,
   newContext,
 }) => {
-  await createRoom(page);
+  await createRoom(page, "White");
   await page.getByRole("link", { name: "Private rooms", exact: true }).click();
   await expect(page.getByText(/You already have an unfinished public game/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Create room", exact: true })).toHaveCount(0);

@@ -33,7 +33,7 @@ function setup(path = "/rooms", routes: HttpRoutes = {}, account = true) {
     [
       { path: "/rooms", ...feature.setup },
       { path: "/rooms/join", ...feature.join },
-      { path: "/games/:gameId", ...feature.waiting },
+      { path: "/games/:gameId" },
       { path: "*" },
     ],
     { initialEntries: [window.location.pathname] },
@@ -367,41 +367,28 @@ describe("room entry route data", () => {
     },
   );
 
-  it("requires a fresh confirmation after stale owner actions, without repeating closure", async () => {
-    const room = waitingRoom();
-    const { router, feature, http, submit } = setup(`/games/${GAME_ID}`, {
-      [`GET /rooms/${GAME_ID}`]: () => jsonResponse(room),
-      [`POST /games/${GAME_ID}/lifecycle`]: () =>
-        jsonResponse(
-          {
-            code: "GAME_CONFLICT",
-            message: "safe",
-            requestId: "test",
-            currentSnapshot: room.snapshot,
-          },
-          409,
-        ),
+  it("hands the room and invitation to the game owner without exposing them to router results", async () => {
+    const room = waitingRoom("black");
+    const { router, feature, http, submit } = setup("/rooms", {
+      "POST /rooms/creation-operation": () =>
+        jsonResponse({ operationId: GAME_ID, expiresAt: "2027-10-01T00:00:00.000Z" }),
+      "POST /rooms": () => jsonResponse({ room, invitation: INVITATION }),
     });
     await ready(router);
-    await submit("close", { gameId: GAME_ID, expectedVersion: "0", confirm: "true" });
-    expect(feature.memory.getSnapshot().issue).toBe("synchronize");
-    await submit("refresh-room", { gameId: GAME_ID });
-    expect(feature.memory.getSnapshot().pending).toBeNull();
+    await submit("create", { ownerColor: "black" });
+    expect(feature.peekHandoff(GAME_ID)).toEqual(room);
     expect(
-      http.fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/lifecycle")),
-    ).toHaveLength(1);
-  });
-
-  it("rejects invalid game IDs before resolving identity", async () => {
-    const { router, feature, http } = setup("/absent");
-    await ready(router);
-    await feature.waiting.loader({
-      request: new Request("https://arena.test/games/bad"),
-      params: { gameId: "bad" },
-      context: new RouterContextProvider(),
-      url: new URL("https://arena.test/games/bad"),
-      pattern: "/games/:gameId",
-    });
-    expect(http.fetch).not.toHaveBeenCalled();
+      JSON.stringify({ loaders: router.state.loaderData, location: router.state.location }),
+    ).not.toContain(INVITATION);
+    expect(feature.takeInvitation(crypto.randomUUID())).toBeNull();
+    expect(feature.takeInvitation(GAME_ID)).toBe(INVITATION);
+    expect(feature.takeInvitation(GAME_ID)).toBe(INVITATION);
+    await Promise.resolve();
+    expect(feature.peekHandoff(GAME_ID)).toBeNull();
+    expect(feature.takeInvitation(GAME_ID)).toBeNull();
+    expect(feature.memory.getSnapshot()).toMatchObject({ room: null, issuedInvitation: null });
+    expect(http.fetch.mock.calls.some(([url]) => requestPath(url) === `/rooms/${GAME_ID}`)).toBe(
+      false,
+    );
   });
 });

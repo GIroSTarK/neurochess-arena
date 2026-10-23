@@ -3,11 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderLocalized } from "../test/render";
-import { INVITATION, waitingRoom } from "../test/rooms";
+import { INVITATION } from "../test/rooms";
 
 import { RoomEntryMemory } from "./entry-memory";
 import { RoomEntryScreen } from "./room-entry-screen";
-import { RoomWaitingScreen } from "./room-waiting-screen";
 
 describe("room entry screens", () => {
   it("lets an account choose Black and explains its reserved public slot", async () => {
@@ -68,45 +67,5 @@ describe("room entry screens", () => {
     expect(memory.getSnapshot().input).toBe(INVITATION);
     expect(screen.getByText(/reopen the invitation or paste its code again/i)).toBeVisible();
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-  });
-
-  it("shows a selectable invitation when clipboard access fails and confirms owner actions Cancel first", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("unavailable"));
-    const memory = new RoomEntryMemory(null);
-    memory.update({ room: waitingRoom("black"), issuedInvitation: INVITATION });
-    const submit = vi.fn();
-    renderLocalized(<RoomWaitingScreen memory={memory} onSubmit={submit} />);
-    await user.click(screen.getByRole("button", { name: "Copy invitation" }));
-    expect(await screen.findByText(/select and copy the invitation/i)).toBeVisible();
-    const link = screen.getByRole("textbox", { name: "Invitation link" });
-    expect(link).toHaveValue(`${window.location.origin}/rooms/join#invite=${INVITATION}`);
-    await user.click(link);
-    expect((link as HTMLTextAreaElement).selectionEnd).toBe(
-      (link as HTMLTextAreaElement).value.length,
-    );
-    expect(screen.getByText("Waiting for White")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /resign|resume|pause/i })).not.toBeInTheDocument();
-    for (const label of ["Revoke invitation", "Replace invitation", "Close room"]) {
-      await user.click(screen.getByRole("button", { name: label }));
-      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-      await user.click(screen.getByRole("button", { name: "Cancel" }));
-    }
-    expect(submit).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Close room" }));
-    await user.click(screen.getByRole("button", { name: "Confirm close" }));
-    expect(submit).toHaveBeenCalledWith(
-      "close",
-      expect.objectContaining({ confirm: "true", expectedVersion: "0" }),
-    );
-  });
-
-  it("offers replacement after reload and retains the room when admission is revoked", () => {
-    const memory = new RoomEntryMemory(null);
-    memory.update({ room: { ...waitingRoom(), invitationAvailable: false } });
-    renderLocalized(<RoomWaitingScreen memory={memory} onSubmit={vi.fn()} />);
-    expect(screen.getByText(/replace the invitation to share a new link/i)).toBeVisible();
-    expect(screen.getByText(/your public game slot stays reserved/i)).toBeVisible();
-    expect(screen.queryByRole("textbox", { name: "Invitation link" })).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { GAME_ID, jsonResponse, OTHER_GAME_ID, requestBody, requestPath } from "../test/fixtures";
+import { GAME_ID, jsonResponse, requestBody, requestPath } from "../test/fixtures";
 import { INVITATION, roomSession, waitingRoom } from "../test/rooms";
 
 import { createRoomApi } from "./room-client";
@@ -37,7 +37,7 @@ describe("room HTTP client", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("validates creation, room identity, and issued secrets without retaining response diagnostics", async () => {
+  it("validates creation and issued secrets without retaining response diagnostics", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValue(jsonResponse({ room: waitingRoom("black"), invitation: INVITATION }));
@@ -49,13 +49,10 @@ describe("room HTTP client", () => {
       operationId: GAME_ID,
       ownerColor: "black",
     });
-    fetch.mockResolvedValue(
-      jsonResponse({
-        ...waitingRoom(),
-        snapshot: { ...waitingRoom().snapshot, gameId: OTHER_GAME_ID },
-      }),
-    );
-    await expect(api.read(GAME_ID, signal())).rejects.toMatchObject({ kind: "malformed" });
+    fetch.mockResolvedValue(jsonResponse({ room: waitingRoom(), invitation: "unsafe" }));
+    await expect(
+      api.create({ operationId: GAME_ID, ownerColor: "black" }, signal()),
+    ).rejects.toMatchObject({ kind: "malformed" });
     fetch.mockResolvedValue(
       jsonResponse(
         { code: "ROOM_UNAVAILABLE", message: INVITATION, requestId: "private-canary" },
@@ -77,27 +74,13 @@ describe("room HTTP client", () => {
       fetch,
       identity: { ...identity(), signal: lifetime.signal },
     });
-    const read = api.read(GAME_ID, signal());
+    const command = { invitation: INVITATION, commandId: GAME_ID };
+    const join = api.join(command, signal());
     lifetime.abort();
     response.resolve(jsonResponse(waitingRoom()));
-    await expect(read).rejects.toMatchObject({ kind: "cancelled" });
+    await expect(join).rejects.toMatchObject({ kind: "cancelled" });
     await expect(
-      createRoomApi("https://api.example.test", { fetch }).read(GAME_ID, signal()),
+      createRoomApi("https://api.example.test", { fetch }).join(command, signal()),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-  });
-
-  it("uses the existing versioned abort command for owner closure", async () => {
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(jsonResponse(waitingRoom().snapshot));
-    const api = createRoomApi("https://api.example.test", { fetch, identity: identity() });
-    await api.close({ gameId: GAME_ID, commandId: OTHER_GAME_ID, expectedVersion: 0 }, signal());
-    expect(requestPath(fetch.mock.calls[0]![0])).toBe(`/games/${GAME_ID}/lifecycle`);
-    expect(JSON.parse(requestBody(fetch.mock.calls[0]?.[1]))).toEqual({
-      gameId: GAME_ID,
-      commandId: OTHER_GAME_ID,
-      expectedVersion: 0,
-      action: "abort",
-    });
   });
 });

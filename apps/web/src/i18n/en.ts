@@ -134,7 +134,6 @@ export const en = {
     replace: "Replace invitation",
     revoke: "Revoke invitation",
     close: "Close room",
-    refresh: "Refresh room",
     revoked:
       "Invitation revoked. Your public game slot stays reserved until you close the room or finish a game.",
     cancel: "Cancel",
@@ -167,7 +166,6 @@ export const en = {
         "The previous creation request can no longer be recovered. Check your unfinished game before creating a new room.",
       uncertain:
         "The request may have succeeded, but its acknowledgement was lost. Recover the previous request or refresh the room before making another decision.",
-      synchronize: "The room changed. Refresh it, then confirm your decision again.",
     },
   },
   routing: {

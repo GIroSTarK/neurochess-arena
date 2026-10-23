@@ -9,15 +9,14 @@ export type RoomIssue =
   | "self"
   | "limited"
   | "operation"
-  | "uncertain"
-  | "synchronize";
+  | "uncertain";
 export interface RoomEntryState {
   readonly input: string;
   readonly issuedInvitation: string | null;
   readonly resolution: "joinable" | "unavailable" | null;
   readonly room: RoomView | null;
   readonly busy: boolean;
-  readonly pending: "create" | "join" | "owner" | null;
+  readonly pending: "create" | "join" | null;
   readonly issue: RoomIssue | null;
 }
 const empty: RoomEntryState = {

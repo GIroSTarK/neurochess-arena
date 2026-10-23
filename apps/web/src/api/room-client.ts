@@ -1,14 +1,10 @@
 import {
   createRoomRequestSchema,
   type GameErrorCode,
-  gameParamsSchema,
-  gameSnapshotSchema,
   guestSessionResponseSchema,
-  lifecycleCommandSchema,
   roomCreationOperationSchema,
   type RoomErrorCode,
   roomErrorResponseSchema,
-  roomInvitationRequestSchema,
   roomIssuedResponseSchema,
   roomJoinRequestSchema,
   roomResolutionRequestSchema,
@@ -38,9 +34,9 @@ function validated<T>(schema: z.ZodType<T>, value: unknown) {
   return validate(schema, value, () => new RoomFailure("malformed"));
 }
 
-function roomFor(room: RoomView, gameId?: string): RoomView {
+function roomFor(room: RoomView): RoomView {
   try {
-    snapshotFor(room.snapshot, gameId?.toLowerCase());
+    snapshotFor(room.snapshot);
     return room;
   } catch {
     throw new RoomFailure("malformed");
@@ -83,7 +79,6 @@ export function createRoomApi(
       throw new RoomFailure("api", "UNAUTHORIZED");
     }
   }
-  const idFor = (gameId: string) => validated(gameParamsSchema, { gameId }).gameId.toLowerCase();
 
   return {
     async operation(signal: AbortSignal) {
@@ -126,42 +121,10 @@ export function createRoomApi(
         ),
       );
     },
-    async read(gameId: string, signal: AbortSignal) {
-      requireIdentity();
-      return roomFor(await request("/rooms/" + idFor(gameId), roomViewSchema, signal), gameId);
-    },
     async unfinished(signal: AbortSignal) {
       requireIdentity();
       const { game } = await request("/games/unfinished", unfinishedGameDetailsSchema, signal);
       return game?.snapshot.gameId ?? null;
-    },
-    async invitation(input: z.infer<typeof roomInvitationRequestSchema>, signal: AbortSignal) {
-      requireIdentity(true);
-      const issued = await request(
-        `/rooms/${idFor(input.gameId)}/invitation`,
-        roomIssuedResponseSchema,
-        signal,
-        validated(roomInvitationRequestSchema, input),
-      );
-      roomFor(issued.room, input.gameId);
-      return issued;
-    },
-    async close(
-      input: { gameId: string; commandId: string; expectedVersion: number },
-      signal: AbortSignal,
-    ) {
-      requireIdentity(true);
-      const snapshot = await request(
-        `/games/${idFor(input.gameId)}/lifecycle`,
-        gameSnapshotSchema,
-        signal,
-        validated(lifecycleCommandSchema, { ...input, action: "abort" }),
-      );
-      try {
-        return snapshotFor(snapshot, input.gameId.toLowerCase());
-      } catch {
-        throw new RoomFailure("malformed");
-      }
     },
   };
 }
