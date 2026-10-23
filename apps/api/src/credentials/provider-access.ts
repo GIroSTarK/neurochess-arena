@@ -5,7 +5,7 @@ import type { GameRepository, GameTransaction } from "@neurochess/database";
 
 import type { Principal } from "../identity/principal.js";
 import { requireActivePrincipal } from "../identity/validity.js";
-import type { ListModelsInput } from "../providers/adapter.js";
+import type { ProviderRequestAccess } from "../providers/adapter.js";
 
 import type { CredentialCipher } from "./crypto.js";
 
@@ -21,7 +21,7 @@ export function createProviderCredentialAccess(
     provider: AiProvider,
     source: ProviderOperationAccess,
     authorize: (tx: GameTransaction) => Promise<unknown>,
-    operation: (input: ListModelsInput) => Promise<T>,
+    operation: (input: ProviderRequestAccess) => Promise<T>,
   ): Promise<T | null> {
     const access = await repository.write(async (tx) => {
       await authorize(tx);

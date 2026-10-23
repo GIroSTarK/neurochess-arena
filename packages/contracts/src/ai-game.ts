@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { commandIdSchema, gameIdSchema, gameVersionSchema } from "./game.js";
+import { gameCommandIdentitySchema, gameIdSchema, gameVersionSchema } from "./game.js";
 import { aiParametersSchema, aiProviderSchema, modelIdSchema } from "./provider.js";
 
 export const aiGameModeSchema = z.enum(["ai_vs_ai", "ai_vs_human"]);
@@ -28,11 +28,7 @@ export const aiGameConfigurationSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
-export const aiTurnCommandSchema = z.strictObject({
-  gameId: gameIdSchema,
-  expectedVersion: gameVersionSchema,
-  commandId: commandIdSchema,
-});
+export const aiTurnCommandSchema = gameCommandIdentitySchema;
 
 export const aiControlledTurnCommandSchema = aiTurnCommandSchema.extend({
   controllerId: z.uuid(),

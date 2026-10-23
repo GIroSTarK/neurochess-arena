@@ -103,37 +103,29 @@ export const gameSnapshotSchema = z
     });
   });
 
-export const moveCommandSchema = z.strictObject({
+export const gameCommandIdentitySchema = z.strictObject({
   gameId: gameIdSchema,
-  move: uciMoveSchema,
   expectedVersion: gameVersionSchema,
   /** Reuse for retries of the same command; deduplication is application-owned. */
   commandId: commandIdSchema,
 });
 
-const commandFields = {
-  gameId: gameIdSchema,
-  expectedVersion: gameVersionSchema,
-  commandId: commandIdSchema,
-};
+export const moveCommandSchema = gameCommandIdentitySchema.extend({ move: uciMoveSchema });
 
 export const lifecycleCommandSchema = z.discriminatedUnion("action", [
-  z.strictObject({
-    ...commandFields,
+  gameCommandIdentitySchema.extend({
     action: z.literal("pause"),
     controllerId: z.uuid().optional(),
   }),
-  z.strictObject({
-    ...commandFields,
+  gameCommandIdentitySchema.extend({
     action: z.literal("resume"),
     controllerId: z.uuid().optional(),
   }),
-  z.strictObject({
-    ...commandFields,
+  gameCommandIdentitySchema.extend({
     action: z.literal("abort"),
     controllerId: z.uuid().optional(),
   }),
-  z.strictObject({ ...commandFields, action: z.literal("resign"), losingColor: chessColorSchema }),
+  gameCommandIdentitySchema.extend({ action: z.literal("resign"), losingColor: chessColorSchema }),
 ]);
 
 export const unfinishedGameResponseSchema = z.strictObject({
@@ -193,6 +185,7 @@ export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 export type GuestSessionResponse = z.infer<typeof guestSessionResponseSchema>;
 export type MoveRecord = z.infer<typeof moveRecordSchema>;
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
+export type GameCommandIdentity = z.infer<typeof gameCommandIdentitySchema>;
 export type MoveCommand = z.infer<typeof moveCommandSchema>;
 export type LifecycleCommand = z.infer<typeof lifecycleCommandSchema>;
 export type UnfinishedGameResponse = z.infer<typeof unfinishedGameResponseSchema>;

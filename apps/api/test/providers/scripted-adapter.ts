@@ -8,15 +8,15 @@ import {
 
 import type {
   AiProviderAdapter,
-  ListModelsInput,
   MoveRequest,
+  ProviderRequestAccess,
 } from "../../src/providers/adapter.js";
 
 type Step<Input, Output> = Output | ((input: Input) => Output | Promise<Output>);
 
 export function createScriptedAdapter(script: {
   provider: AiProvider;
-  models?: readonly Step<ListModelsInput, ModelDiscoveryResult>[];
+  models?: readonly Step<ProviderRequestAccess, ModelDiscoveryResult>[];
   moves?: readonly Step<MoveRequest, NormalizedMoveResponse>[];
 }): AiProviderAdapter & { readonly discoveryCalls: number; readonly moveCalls: number } {
   let discoveryCalls = 0;

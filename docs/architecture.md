@@ -230,6 +230,8 @@ The server persists the move and updated game state atomically. Duplicate or sta
 
 For conflict handling, establish read authorization first, then check the accepted command ID and expected version before fresh-command lifecycle and current-seat checks. This lets an authorized retry return the current snapshot even when the accepted move changed the turn or completed the game.
 
+`games/command-preparation.ts` owns shared command preparation for human moves, lifecycle commands, and AI execution. It accepts the caller's transaction, a neutral `GameCommandIdentity` (`gameId`, `expectedVersion`, `commandId`), and explicit Sandbox/room permissions; it preserves room gate → identity → game locking, session rechecks, authorized restoration, and conflict snapshots. `PreparedGameCommand` extends `RestoredGame` with the stored game row. The module does not depend on the service facade or AI executor and starts no transaction.
+
 Reconstruct the chess engine from the ordered, persisted UCI moves starting at the standard initial position. Current FEN alone cannot restore repetition history. Keep FEN, PGN, result, and termination reason consistent with this history; evaluate the [product's automatic draw policy](product.md#automatic-draw-policy) before allowing another turn.
 
 ### Deterministic domain and core contracts
@@ -378,12 +380,14 @@ Each provider adapter implements equivalent operations conceptually:
 ```ts
 interface AiProviderAdapter {
   readonly provider: AiProvider;
-  listModels(input: ListModelsInput): Promise<ModelDiscoveryResult>;
+  listModels(input: ProviderRequestAccess): Promise<ModelDiscoveryResult>;
   requestMove(input: MoveRequest): Promise<NormalizedMoveResponse>;
 }
 ```
 
 `ModelDescriptor` includes capability metadata used to build a capability-aware configuration UI. The server filters unsupported parameters rather than sending speculative fields to a provider.
+
+`ProviderRequestAccess` carries the resolved request-scoped key, cancellation signal, and optional pre-dispatch authorization callback; `MoveRequest` extends it with inference inputs. `ProviderOperationAccess` instead describes an unresolved session key or saved credential reference and signal at the credential resolver's entry point.
 
 Shared schemas distinguish supported, unsupported, and unknown move-generation capability; null parameter capability never enables a speculative control. Normalized operations return discriminated success/failure results with enumerated diagnostics, excluding upstream exception text. Usage may be entirely null or contain independently nullable reported counts; absent totals are never synthesized. Adapter inputs carry cancellation and a request-scoped key, which must not be retained on the adapter. The reusable scripted adapter lives only in API test fixtures, with an architecture guard excluding it from production imports.
 

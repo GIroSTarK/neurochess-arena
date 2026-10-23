@@ -6,7 +6,6 @@ import {
   type AiGameConfiguration,
   aiGameConfigurationSchema,
   type AiProvider,
-  type AiTurnCommand,
   type GameDetails,
   type GameHistoryDeletedResponse,
   type GameHistoryQuery,
@@ -38,14 +37,10 @@ import type { Operations } from "../monitoring/operations.js";
 import { discoverModels } from "../providers/discovery.js";
 import type { RoomEvents } from "../realtime/room-events.js";
 
-import {
-  type AiAdapters,
-  AiTurnError,
-  type CommandPreparationTransaction,
-  createAiTurnExecutor,
-} from "./ai-turn.js";
+import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
 import { authorizeGameControl, authorizeHumanSeat, ownerOf } from "./authorization.js";
 import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
+import { prepareGameCommand } from "./command-preparation.js";
 import { configurationOf, participantsFor } from "./configuration.js";
 import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
@@ -141,34 +136,12 @@ export function createGameService(
     return snapshot;
   }
 
-  async function prepareCommand(
-    tx: CommandPreparationTransaction,
-    principal: Principal,
-    command: AiTurnCommand,
-    allowRoom = false,
-  ) {
-    if ((await tx.getGame(command.gameId))?.mode === "human_vs_human") await tx.lockSharedRooms();
-    if (!(await lockPrincipal(tx, principal))) {
-      throw new GameRequestError("UNAUTHORIZED");
-    }
-    const stored = await tx.lockGame(command.gameId);
-    await requireActivePrincipal(tx, principal);
-    if (!stored) throw new GameRequestError("NOT_FOUND");
-    const restored = await restoreAuthorized(tx, principal, stored);
-    if (stored.mode === "human_vs_human" && !allowRoom) throw new GameRequestError("FORBIDDEN");
-    // Accepted IDs span every command kind, including retries after completion.
-    if (
-      command.expectedVersion !== stored.version ||
-      (await tx.hasCommand(stored.id, command.commandId.toLowerCase()))
-    ) {
-      throw new GameConflictError(restored.snapshot);
-    }
-    return { ...restored, stored };
-  }
-
   async function mutate(principal: Principal, command: MoveCommand | LifecycleCommand) {
     const result = await repository.write(async (tx) => {
-      const restored = await prepareCommand(tx, principal, command, true);
+      const restored = await prepareGameCommand(tx, principal, command, {
+        sandboxEnabled,
+        allowRoomCommands: true,
+      });
       const { stored } = restored;
       const commandId = command.commandId.toLowerCase();
       if (
@@ -459,7 +432,8 @@ export function createGameService(
       ...(options.operations ? { operations: options.operations } : {}),
       repository,
       adapters,
-      prepareCommand,
+      prepareCommand: (tx, principal, command) =>
+        prepareGameCommand(tx, principal, command, { sandboxEnabled, allowRoomCommands: false }),
       useCredential,
     }),
     lifecycle: mutate,

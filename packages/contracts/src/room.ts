@@ -4,10 +4,9 @@ import { humanSeatSchema } from "./ai-game.js";
 import {
   chessColorSchema,
   commandIdSchema,
+  gameCommandIdentitySchema,
   gameErrorResponseSchema,
-  gameIdSchema,
   gameSnapshotSchema,
-  gameVersionSchema,
 } from "./game.js";
 import { humanPlayerSchema } from "./game-player.js";
 import { safeErrorResponseSchema } from "./system.js";
@@ -39,10 +38,7 @@ export const roomJoinRequestSchema = z.strictObject({
   invitation: roomInvitationSchema,
   commandId: commandIdSchema,
 });
-export const roomInvitationRequestSchema = z.strictObject({
-  gameId: gameIdSchema,
-  commandId: commandIdSchema,
-  expectedVersion: gameVersionSchema,
+export const roomInvitationRequestSchema = gameCommandIdentitySchema.extend({
   action: z.enum(["replace", "revoke"]),
 });
 export const roomViewSchema = z.strictObject({

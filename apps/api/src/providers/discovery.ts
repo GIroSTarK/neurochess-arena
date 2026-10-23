@@ -7,12 +7,12 @@ import {
 
 import { observeProvider, type Operations } from "../monitoring/operations.js";
 
-import type { AiProviderAdapter, ListModelsInput } from "./adapter.js";
+import type { AiProviderAdapter, ProviderRequestAccess } from "./adapter.js";
 import { cancellationFailure } from "./invoke-move.js";
 
 export function discoverModels(
   adapter: AiProviderAdapter | undefined,
-  input: ListModelsInput,
+  input: ProviderRequestAccess,
   operations?: Operations,
 ): Promise<ModelDiscoveryResult> {
   return observeProvider(operations, () => discoverModelsResult(adapter, input));
@@ -20,7 +20,7 @@ export function discoverModels(
 
 async function discoverModelsResult(
   adapter: AiProviderAdapter | undefined,
-  input: ListModelsInput,
+  input: ProviderRequestAccess,
 ): Promise<ModelDiscoveryResult> {
   const isAborted = () => input.signal.aborted;
   if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };

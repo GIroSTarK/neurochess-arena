@@ -187,12 +187,13 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 ## Architecture clarity top-10 follow-up
 
-**Status:** T01–T04 complete; T05–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+**Status:** T01–T05 complete; T06–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
 
 - [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
 - [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
 - [x] T03: Make controller acquisition explicit in backend fixtures, keep the real game service unmodified, and pass controller IDs through turn/control builders; retain coverage for missing, mismatched, and expired claims.
 - [x] T04: Share the typed mock AI API while retaining the real MatchController/browser-credential and production-composition/memory-credential harnesses; preserve seeded snapshots and telemetry identity, version conflicts, and fixture isolation.
+- [x] T05: Share neutral command identity and preparation contracts, and distinguish resolved provider request access from credential sources; preserve strict wire schemas, transaction ownership, lock ordering, authority rechecks, and conflict snapshots.
 
 ## Post-MVP candidates
 

@@ -1,7 +1,7 @@
 import type { ProviderFailure } from "@neurochess/contracts";
 import { z } from "zod";
 
-import type { ListModelsInput } from "./adapter.js";
+import type { ProviderRequestAccess } from "./adapter.js";
 import { cancellationFailure } from "./invoke-move.js";
 
 const errorSchema = z.object({
@@ -111,7 +111,7 @@ async function readJson(response: Response, signal: AbortSignal): Promise<JsonRe
 
 export async function googleRequest(
   transport: typeof fetch,
-  input: ListModelsInput,
+  input: ProviderRequestAccess,
   operation: GoogleOperation,
 ): Promise<JsonResult> {
   const isAborted = () => input.signal.aborted;

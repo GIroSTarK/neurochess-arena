@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   createGameRequestSchema,
   drawReasonSchema,
+  gameCommandIdentitySchema,
   gameErrorCodeSchema,
   gameErrorResponseSchema,
   gameLifecycleSchema,
@@ -42,6 +43,38 @@ const moveRecord = {
   fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
 };
 const errorEnvelope = { message: "application-supplied text", requestId: "request-1" };
+
+describe("game command identity contract", () => {
+  const identity = { gameId, commandId, expectedVersion: 0 };
+
+  it("preserves identifiers and aggregate revisions without command-specific fields", () => {
+    for (const expectedVersion of [0, Number.MAX_SAFE_INTEGER]) {
+      const input = { ...identity, expectedVersion };
+      expect(gameCommandIdentitySchema.parse(input)).toEqual(input);
+    }
+  });
+
+  it("rejects missing or malformed identity fields and extra command or authority fields", () => {
+    for (const input of [
+      {},
+      { gameId, commandId },
+      { gameId, expectedVersion: 0 },
+      { commandId, expectedVersion: 0 },
+      { ...identity, gameId: "invalid" },
+      { ...identity, commandId: "invalid" },
+      ...[-1, 0.5, Number.MAX_SAFE_INTEGER + 1, "0", null].map((expectedVersion) => ({
+        ...identity,
+        expectedVersion,
+      })),
+      ...["move", "action", "controllerId", "ownerId", "apiKey"].map((field) => ({
+        ...identity,
+        [field]: "untrusted",
+      })),
+    ]) {
+      expect(gameCommandIdentitySchema.safeParse(input).success).toBe(false);
+    }
+  });
+});
 
 describe("lifecycle and private read contracts", () => {
   it("requires an explicit human color only for resignation and rejects extra authority", () => {

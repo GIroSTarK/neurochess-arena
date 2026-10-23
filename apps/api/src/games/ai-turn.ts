@@ -6,21 +6,15 @@ import type { ChessGame } from "@neurochess/chess";
 import {
   aiControlledTurnCommandSchema,
   type AiProvider,
-  type AiTurnCommand,
-  type GameConfiguration,
+  type GameCommandIdentity,
   type GameSnapshot,
   type NormalizedMoveResponse,
 } from "@neurochess/contracts";
 import type {
   AiExecutionTransaction,
   GameRepository,
-  GameStateTransaction,
-  IdentityTransaction,
   InvocationResult,
-  RoomTransaction,
-  StoredGame,
   StoredModelInvocation,
-  StoredParticipant,
 } from "@neurochess/database";
 
 import {
@@ -40,29 +34,16 @@ import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 import { decideAiOutcome } from "./ai-outcome-policy.js";
 import { authorizeGameControl } from "./authorization.js";
 import { persistCommand } from "./command-persistence.js";
+import type { CommandPreparationTransaction, PreparedGameCommand } from "./command-preparation.js";
 import { requireController } from "./controller-presence.js";
 import { AiTurnError, GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
-import type { GameRestorationReader } from "./restoration.js";
 export { AiTurnError } from "./errors.js";
-
-export type CommandPreparationTransaction = IdentityTransaction &
-  GameRestorationReader &
-  Pick<GameStateTransaction, "getGame" | "lockGame" | "hasCommand"> &
-  Pick<RoomTransaction, "lockSharedRooms">;
-
-interface RestoredCommand {
-  readonly stored: StoredGame;
-  readonly game: ChessGame;
-  readonly snapshot: GameSnapshot;
-  readonly participants: readonly StoredParticipant[];
-  readonly configuration: GameConfiguration | null;
-}
 
 export type AiAdapters = Readonly<Partial<Record<AiProvider, AiProviderAdapter>>>;
 
 function requireAiSeat(
   principal: Principal,
-  restored: Omit<RestoredCommand, "game">,
+  restored: Omit<PreparedGameCommand, "game">,
   step = false,
 ) {
   const { stored, snapshot: persistedSnapshot, configuration, participants } = restored;
@@ -122,8 +103,8 @@ export function createAiTurnExecutor(options: {
   readonly prepareCommand: (
     tx: CommandPreparationTransaction,
     principal: Principal,
-    command: AiTurnCommand,
-  ) => Promise<RestoredCommand>;
+    command: GameCommandIdentity,
+  ) => Promise<PreparedGameCommand>;
 }) {
   const { repository, prepareCommand } = options;
   const adapters = { ...options.adapters };

@@ -9,7 +9,7 @@ import type {
   UciMove,
 } from "@neurochess/contracts";
 
-export interface ListModelsInput {
+export interface ProviderRequestAccess {
   // Request-scoped only: adapters must not retain credentials on an instance.
   readonly apiKey: string;
   readonly signal: AbortSignal;
@@ -24,7 +24,7 @@ export interface AiChessContext {
   readonly legalMoves: readonly UciMove[];
 }
 
-export interface MoveRequest extends ListModelsInput {
+export interface MoveRequest extends ProviderRequestAccess {
   readonly instructions: string;
   readonly modelId: string;
   readonly parameters: Readonly<AiParameters>;
@@ -46,6 +46,6 @@ export interface AiProviderAdapter {
     requested: Readonly<AiParameters>,
     capabilities: ModelCapabilities,
   ) => AiParameters | null;
-  listModels(input: ListModelsInput): Promise<ModelDiscoveryResult>;
+  listModels(input: ProviderRequestAccess): Promise<ModelDiscoveryResult>;
   requestMove(input: MoveRequest): Promise<NormalizedMoveResponse>;
 }

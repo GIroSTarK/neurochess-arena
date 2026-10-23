@@ -1,7 +1,7 @@
 import type { BillingUsage, ProviderFailure, TokenUsage } from "@neurochess/contracts";
 import { z } from "zod";
 
-import type { ListModelsInput } from "./adapter.js";
+import type { ProviderRequestAccess } from "./adapter.js";
 import { normalizeBilling } from "./billing.js";
 import { cancellationFailure } from "./invoke-move.js";
 
@@ -144,7 +144,7 @@ async function readJson(response: Response, signal: AbortSignal): Promise<JsonRe
 
 export async function openRouterRequest(
   transport: typeof fetch,
-  input: ListModelsInput,
+  input: ProviderRequestAccess,
   operation: OpenRouterOperation,
 ): Promise<JsonResult> {
   const isAborted = () => input.signal.aborted;
