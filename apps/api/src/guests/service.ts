@@ -20,7 +20,10 @@ export interface GuestService {
 
 const tokenPattern = /^[A-Za-z0-9_-]{43}(?![\s\S])/;
 
-export function createGuestService(repository: GameRepository, ttlSeconds: number): GuestService {
+export function createGuestService(
+  repository: Pick<GameRepository, "createGuest" | "renewGuest">,
+  ttlSeconds: number,
+): GuestService {
   async function renew(token: string | undefined): Promise<GuestIdentity | undefined> {
     if (token === undefined || !tokenPattern.test(token)) return undefined;
     const guest = await repository.renewGuest(hashToken(token), ttlSeconds);

@@ -12,8 +12,9 @@ import {
   storedAnalysisSampleSchema,
 } from "@neurochess/contracts";
 import type {
-  GameReader,
   GameRepository,
+  GameStateReader,
+  RoomReader,
   StoredAnalysisRecord,
   StoredGame,
 } from "@neurochess/database";
@@ -30,7 +31,7 @@ import {
 } from "./profiles.js";
 
 export function createAnalysisService(
-  repository: GameRepository,
+  repository: Pick<GameRepository, "read" | "write">,
   profiles: AnalysisProfiles = analysisProfiles,
 ) {
   const known = new Map(profiles.known.map((profile) => [profile.id, profile]));
@@ -40,7 +41,7 @@ export function createAnalysisService(
   }
 
   async function authorize(
-    reader: GameReader,
+    reader: Pick<GameStateReader, "getParticipants"> & Pick<RoomReader, "hasRetainedRoomAccess">,
     principal: AccountPrincipal,
     game: StoredGame | undefined,
   ) {
@@ -190,7 +191,11 @@ export function createAnalysisService(
   };
 }
 
-async function verifyHistory(reader: GameReader, gameId: string, samples: AnalysisSample[]) {
+async function verifyHistory(
+  reader: Pick<GameStateReader, "getMoves">,
+  gameId: string,
+  samples: AnalysisSample[],
+) {
   const history = await reader.getMoves(gameId);
   const lastPly = samples.at(-1)?.ply;
   if (lastPly === undefined) throw new GameRequestError("INVALID_REQUEST");

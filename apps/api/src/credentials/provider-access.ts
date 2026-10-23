@@ -13,7 +13,7 @@ export type ProviderOperationAccess = ProviderCredentialSource & { readonly sign
 export const credentialFailure = { ok: false, error: { code: "provider_auth" } } as const;
 
 export function createProviderCredentialAccess(
-  repository: GameRepository,
+  repository: Pick<GameRepository, "write">,
   cipher?: Pick<CredentialCipher, "decrypt">,
 ) {
   return async function useCredential<T>(

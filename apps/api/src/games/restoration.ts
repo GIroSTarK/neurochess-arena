@@ -4,7 +4,13 @@ import {
   gameLifecycleSchema,
   type GameSnapshot,
 } from "@neurochess/contracts";
-import type { GameReader, StoredGame, StoredMove, StoredParticipant } from "@neurochess/database";
+import type {
+  GameStateReader,
+  RoomReader,
+  StoredGame,
+  StoredMove,
+  StoredParticipant,
+} from "@neurochess/database";
 
 import type { GameIdentity } from "../identity/principal.js";
 
@@ -21,8 +27,11 @@ export interface RestoredGame {
   readonly configuration: GameConfiguration | null;
 }
 
+export type GameRestorationReader = Pick<GameStateReader, "getParticipants" | "getMoves"> &
+  Pick<RoomReader, "hasRetainedRoomAccess" | "getRoom">;
+
 export async function restoreAuthorizedGame(
-  reader: GameReader,
+  reader: GameRestorationReader,
   principal: GameIdentity,
   stored: StoredGame,
   sandboxEnabled: boolean,

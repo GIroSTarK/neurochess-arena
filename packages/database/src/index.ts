@@ -77,3 +77,7 @@ export {
 export { gameAnalysisSamples } from "./schema/analysis.js";
 export { reconcileRestoredDatabase } from "./recovery-repository.js";
 export type { StoredAnalysisRecord, NewAnalysisRecord } from "./analysis-repository.js";
+export type { IdentityReader, IdentityTransaction } from "./identity-repository.js";
+export type { GameStateReader, GameStateTransaction } from "./game-state-repository.js";
+export type { AiExecutionReader, AiExecutionTransaction } from "./ai-execution-repository.js";
+export type { CredentialReader } from "./credential-access-repository.js";

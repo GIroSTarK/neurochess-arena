@@ -24,7 +24,7 @@ import {
   type UnfinishedGameDetails,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
-import type { GameReader, GameRepository, GameTransaction, StoredGame } from "@neurochess/database";
+import type { GameRepository, IdentityTransaction, StoredGame } from "@neurochess/database";
 
 import type { CredentialCipher } from "../credentials/crypto.js";
 import {
@@ -38,7 +38,12 @@ import type { Operations } from "../monitoring/operations.js";
 import { discoverModels } from "../providers/discovery.js";
 import type { RoomEvents } from "../realtime/room-events.js";
 
-import { type AiAdapters, AiTurnError, createAiTurnExecutor } from "./ai-turn.js";
+import {
+  type AiAdapters,
+  AiTurnError,
+  type CommandPreparationTransaction,
+  createAiTurnExecutor,
+} from "./ai-turn.js";
 import { authorizeGameControl, authorizeHumanSeat, ownerOf } from "./authorization.js";
 import { persistCommand, positionOf, transportSnapshot } from "./command-persistence.js";
 import { configurationOf, participantsFor } from "./configuration.js";
@@ -46,7 +51,7 @@ import { CONTROLLER_LEASE_MS, requireController } from "./controller-presence.js
 import { GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
 import { createHistoryDeletion } from "./history-deletion.js";
 import { readInvocations } from "./invocations.js";
-import { restoreAuthorizedGame } from "./restoration.js";
+import { type GameRestorationReader, restoreAuthorizedGame } from "./restoration.js";
 
 export interface GameService {
   cleanupSharedRooms(): Promise<void>;
@@ -89,7 +94,10 @@ export interface GameService {
 }
 
 export function createGameService(
-  repository: GameRepository,
+  repository: Pick<
+    GameRepository,
+    "read" | "write" | "expiredAiControllers" | "cleanupSharedRooms"
+  >,
   options: {
     readonly nodeEnv: "development" | "test" | "production";
     readonly sandboxEnabled: boolean;
@@ -105,8 +113,11 @@ export function createGameService(
   const leaseMs = options.controllerLeaseMs ?? CONTROLLER_LEASE_MS;
   const useCredential = createProviderCredentialAccess(repository, options.credentialCipher);
 
-  const restoreAuthorized = (reader: GameReader, principal: GameIdentity, stored: StoredGame) =>
-    restoreAuthorizedGame(reader, principal, stored, sandboxEnabled);
+  const restoreAuthorized = (
+    reader: GameRestorationReader,
+    principal: GameIdentity,
+    stored: StoredGame,
+  ) => restoreAuthorizedGame(reader, principal, stored, sandboxEnabled);
 
   function readDetails(principal: Principal, gameId: string): Promise<GameDetails> {
     return repository.read(async (reader) => {
@@ -131,7 +142,7 @@ export function createGameService(
   }
 
   async function prepareCommand(
-    tx: GameTransaction,
+    tx: CommandPreparationTransaction,
     principal: Principal,
     command: AiTurnCommand,
     allowRoom = false,
@@ -400,7 +411,7 @@ export function createGameService(
     sandboxEnabled,
     async models(principal, provider, access) {
       const adapter = adapters[provider];
-      const authorize = async (tx: GameTransaction) => {
+      const authorize = async (tx: IdentityTransaction) => {
         if (!(await lockPrincipal(tx, principal))) throw new GameRequestError("UNAUTHORIZED");
       };
       const result = await useCredential(principal, provider, access, authorize, (resolved) =>

@@ -3,14 +3,14 @@ import {
   gameInvocationsSchema,
   type GameSnapshot,
 } from "@neurochess/contracts";
-import type { GameReader, StoredModelInvocation } from "@neurochess/database";
+import type { AiExecutionReader, StoredModelInvocation } from "@neurochess/database";
 
 import { readBilling, readCost } from "../pricing/persistence.js";
 
 import { GameIntegrityError } from "./errors.js";
 
 export async function readInvocations(
-  reader: GameReader,
+  reader: AiExecutionReader,
   snapshot: GameSnapshot,
 ): Promise<GameInvocations> {
   const turns = await reader.getAiTurns(snapshot.gameId);

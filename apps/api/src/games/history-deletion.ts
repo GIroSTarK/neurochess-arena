@@ -13,7 +13,10 @@ import type { RoomEvents } from "../realtime/room-events.js";
 import { GameRequestError } from "./errors.js";
 import { cleanupAfterCommit } from "./shared-room-cleanup.js";
 
-export function createHistoryDeletion(repository: GameRepository, events?: RoomEvents) {
+export function createHistoryDeletion(
+  repository: Pick<GameRepository, "write" | "cleanupSharedRooms">,
+  events?: RoomEvents,
+) {
   async function remove(
     principal: Principal,
     gameId?: string,

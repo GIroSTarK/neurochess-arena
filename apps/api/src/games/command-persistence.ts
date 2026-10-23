@@ -1,11 +1,19 @@
 import type { ChessSnapshot } from "@neurochess/chess";
 import { type GameSnapshot, gameSnapshotSchema, isAiGameMode } from "@neurochess/contracts";
-import type { GameTransaction, NewGameCommand, StoredGame } from "@neurochess/database";
+import type {
+  AiExecutionTransaction,
+  GameStateTransaction,
+  NewGameCommand,
+  RoomTransaction,
+  StoredGame,
+} from "@neurochess/database";
 
 import { GameIntegrityError } from "./errors.js";
 
 export async function persistCommand(
-  tx: GameTransaction,
+  tx: Pick<GameStateTransaction, "appendCommand" | "appendMove" | "updatePosition"> &
+    Pick<AiExecutionTransaction, "invalidateAiExecution" | "clearAiController"> &
+    Pick<RoomTransaction, "setRoomInvitation">,
   stored: StoredGame,
   commandId: string,
   kind: NewGameCommand["kind"],

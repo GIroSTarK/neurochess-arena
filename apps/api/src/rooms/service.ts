@@ -14,9 +14,12 @@ import {
   roomViewSchema,
 } from "@neurochess/contracts";
 import type {
-  GameReader,
   GameRepository,
-  GameTransaction,
+  GameStateTransaction,
+  IdentityReader,
+  IdentityTransaction,
+  RoomReader,
+  RoomTransaction,
   StoredGame,
   StoredRoom,
 } from "@neurochess/database";
@@ -25,7 +28,7 @@ import type { z } from "zod";
 import { authorizeGameControl, occupiesSeat, ownerOf } from "../games/authorization.js";
 import { persistCommand, positionOf, transportSnapshot } from "../games/command-persistence.js";
 import { GameConflictError, GameIntegrityError, GameRequestError } from "../games/errors.js";
-import { restoreAuthorizedGame } from "../games/restoration.js";
+import { type GameRestorationReader, restoreAuthorizedGame } from "../games/restoration.js";
 import type { AccountPrincipal, Principal } from "../identity/principal.js";
 import { lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
 import type { RoomEvents } from "../realtime/room-events.js";
@@ -54,26 +57,40 @@ function account(principal: Principal): AccountPrincipal {
   return principal;
 }
 
-async function requireRoomPrincipal(reader: GameReader, principal: Principal) {
+type RoomPrincipalReader = IdentityReader & Pick<RoomReader, "isVerifiedRoomAccount">;
+
+async function requireRoomPrincipal(reader: RoomPrincipalReader, principal: Principal) {
   await requireActivePrincipal(reader, principal);
   if (principal.kind === "account" && !(await reader.isVerifiedRoomAccount(principal.userId))) {
     throw new RoomRequestError("ROOM_ACCOUNT_UNVERIFIED");
   }
 }
 
-async function prepare(tx: GameTransaction, principal: Principal) {
+async function prepare(
+  tx: IdentityTransaction & Pick<RoomTransaction, "lockSharedRooms" | "isVerifiedRoomAccount">,
+  principal: Principal,
+) {
   await tx.lockSharedRooms();
   if (!(await lockPrincipal(tx, principal))) throw new GameRequestError("UNAUTHORIZED");
   await requireRoomPrincipal(tx, principal);
 }
 
-async function requireOperation(tx: GameReader, userId: string, operationId: string) {
+async function requireOperation(
+  tx: Pick<RoomReader, "getLiveRoomCreationOperation">,
+  userId: string,
+  operationId: string,
+) {
   const operation = await tx.getLiveRoomCreationOperation(userId, operationId);
   if (!operation) throw new RoomRequestError("ROOM_OPERATION_UNAVAILABLE");
   return operation;
 }
 
-async function requireFreeSlot(tx: GameTransaction, principal: Principal) {
+async function requireFreeSlot(
+  tx: RoomPrincipalReader &
+    GameRestorationReader &
+    Pick<GameStateTransaction, "findUnfinishedAccountGame" | "findUnfinishedGame" | "lockGame">,
+  principal: Principal,
+) {
   const occupied =
     principal.kind === "account"
       ? await tx.findUnfinishedAccountGame(principal.userId)
@@ -86,7 +103,7 @@ async function requireFreeSlot(tx: GameTransaction, principal: Principal) {
 }
 
 async function project(
-  reader: GameReader,
+  reader: GameRestorationReader & Pick<IdentityReader, "getAccountUsername">,
   principal: Principal,
   stored: StoredGame,
 ): Promise<RoomView> {
@@ -135,7 +152,10 @@ function joinable(room: StoredRoom, stored: StoredGame | undefined): stored is S
   );
 }
 
-export function createRoomService(repository: GameRepository, events?: RoomEvents): RoomService {
+export function createRoomService(
+  repository: Pick<GameRepository, "read" | "write" | "hasCurrentRoomAccess">,
+  events?: RoomEvents,
+): RoomService {
   return {
     async authorize(principal, gameId) {
       await repository.read((reader) => requireRoomPrincipal(reader, principal));

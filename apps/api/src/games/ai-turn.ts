@@ -12,9 +12,12 @@ import {
   type NormalizedMoveResponse,
 } from "@neurochess/contracts";
 import type {
+  AiExecutionTransaction,
   GameRepository,
-  GameTransaction,
+  GameStateTransaction,
+  IdentityTransaction,
   InvocationResult,
+  RoomTransaction,
   StoredGame,
   StoredModelInvocation,
   StoredParticipant,
@@ -39,7 +42,13 @@ import { authorizeGameControl } from "./authorization.js";
 import { persistCommand } from "./command-persistence.js";
 import { requireController } from "./controller-presence.js";
 import { AiTurnError, GameConflictError, GameIntegrityError, GameRequestError } from "./errors.js";
+import type { GameRestorationReader } from "./restoration.js";
 export { AiTurnError } from "./errors.js";
+
+export type CommandPreparationTransaction = IdentityTransaction &
+  GameRestorationReader &
+  Pick<GameStateTransaction, "getGame" | "lockGame" | "hasCommand"> &
+  Pick<RoomTransaction, "lockSharedRooms">;
 
 interface RestoredCommand {
   readonly stored: StoredGame;
@@ -107,11 +116,11 @@ function invocationResult(
 
 export function createAiTurnExecutor(options: {
   readonly operations?: Operations;
-  readonly repository: GameRepository;
+  readonly repository: Pick<GameRepository, "write">;
   readonly adapters: AiAdapters;
   readonly useCredential: ProviderCredentialAccess;
   readonly prepareCommand: (
-    tx: GameTransaction,
+    tx: CommandPreparationTransaction,
     principal: Principal,
     command: AiTurnCommand,
   ) => Promise<RestoredCommand>;
@@ -191,7 +200,10 @@ export function createAiTurnExecutor(options: {
       };
     });
 
-    async function recheck(tx: GameTransaction) {
+    async function recheck(
+      tx: CommandPreparationTransaction &
+        Pick<AiExecutionTransaction, "getAiController" | "getAiTurnReservation">,
+    ) {
       const restored = await prepareCommand(tx, principal, command);
       const { stored, snapshot: persistedSnapshot } = restored;
       const selected = requireAiSeat(principal, restored, command.step);
@@ -210,7 +222,7 @@ export function createAiTurnExecutor(options: {
       return { stored, persistedSnapshot, executionGame };
     }
 
-    let attempt: Awaited<ReturnType<GameTransaction["beginModelInvocation"]>> | undefined;
+    let attempt: StoredModelInvocation | undefined;
     let response: NormalizedMoveResponse | undefined;
     try {
       // Discovery shares the reservation fence with inference, but never holds database locks.
