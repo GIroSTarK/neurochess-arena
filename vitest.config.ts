@@ -40,6 +40,7 @@ const webNodeTestFiles = [
   "apps/web/src/api/http.test.ts",
   "apps/web/src/api/transport-contract.test.ts",
   "apps/web/src/api/ai-client.test.ts",
+  "apps/web/src/api/public-game-client.test.ts",
   "apps/web/src/app/env.test.ts",
 ];
 const unitTestExclude = [...configDefaults.exclude, "**/*.integration.test.ts"];

@@ -7,16 +7,8 @@ import {
   aiGameConfigurationSchema,
   type AiRequestErrorCode,
   aiTurnRequestSchema,
-  gameDeleteRequestSchema,
   type GameDetails,
   gameDetailsSchema,
-  gameHistoryClearRequestSchema,
-  type GameHistoryDeletedResponse,
-  gameHistoryDeletedResponseSchema,
-  type GameHistoryQuery,
-  gameHistoryQuerySchema,
-  type GameHistoryResponse,
-  gameHistoryResponseSchema,
   type GameInvocations,
   gameInvocationsSchema,
   gameParamsSchema,
@@ -32,7 +24,6 @@ import {
   modelDiscoveryResultSchema,
   moveCommandSchema,
   type ProviderCredentialSource,
-  unfinishedGameDetailsSchema,
 } from "@neurochess/contracts";
 import type { z } from "zod";
 
@@ -40,7 +31,8 @@ import { ApiFailure } from "./failures";
 import type { GameCommandApi } from "./game-command-api";
 import { detailsFor, pgnFor, replayFor, snapshotFor } from "./game-validation";
 import { apiOrigin, createHttpRequest, validated as validate } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
+import { createPublicGameApi, type PublicGameApi } from "./public-game-client";
 
 export class AiRequestFailure extends Error {
   constructor(readonly code: AiRequestErrorCode | "AI_KEY_REQUIRED") {
@@ -49,14 +41,9 @@ export class AiRequestFailure extends Error {
   }
 }
 
-export interface AiApi extends GameCommandApi {
-  deleteGame(gameId: string, signal: AbortSignal): Promise<GameHistoryDeletedResponse>;
-  clearHistory(signal: AbortSignal): Promise<GameHistoryDeletedResponse>;
-  history(query: GameHistoryQuery, signal: AbortSignal): Promise<GameHistoryResponse>;
+export interface AiApi extends GameCommandApi, Pick<PublicGameApi, "details" | "unfinished"> {
   discover(input: ModelDiscoveryRequest, signal: AbortSignal): Promise<ModelDiscoveryResult>;
   create(configuration: AiGameConfiguration, signal: AbortSignal): Promise<GameDetails>;
-  details(gameId: string, signal: AbortSignal): Promise<GameDetails>;
-  unfinished(signal: AbortSignal): Promise<GameDetails | null>;
   invocations(gameId: string, signal: AbortSignal): Promise<GameInvocations>;
   controller(command: AiControllerRequest, signal: AbortSignal): Promise<GameSnapshot>;
   turn(
@@ -72,8 +59,9 @@ function validated<T>(schema: z.ZodType<T>, input: unknown): T {
 
 export function createAiApi(
   apiBaseUrl: string,
-  options: { fetch?: typeof fetch; identity?: AiIdentity } = {},
+  options: { fetch?: typeof fetch; identity?: PublicIdentity } = {},
 ): AiApi {
+  const publicGames = createPublicGameApi(apiBaseUrl, options);
   const identity = options.identity;
   const request = createHttpRequest({
     baseUrl: apiOrigin(apiBaseUrl, () => new ApiFailure("malformed")),
@@ -115,33 +103,8 @@ export function createAiApi(
   }
 
   return {
-    async deleteGame(gameId, signal) {
-      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
-      return request(
-        gamePath(gameId) + "/delete",
-        gameHistoryDeletedResponseSchema,
-        signal,
-        validated(gameDeleteRequestSchema, { gameId, confirm: true }),
-      );
-    },
-    async clearHistory(signal) {
-      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
-      return request(
-        "/games/history/clear",
-        gameHistoryDeletedResponseSchema,
-        signal,
-        validated(gameHistoryClearRequestSchema, { confirm: true }),
-      );
-    },
-    async history(query, signal) {
-      if (options.identity?.intent !== "account") throw new ApiFailure("api", "UNAUTHORIZED");
-      const input = validated(gameHistoryQuerySchema, query);
-      const search = new URLSearchParams({
-        limit: String(input.limit),
-        ...(input.cursor ? { cursor: input.cursor } : {}),
-      });
-      return request("/games/history?" + search.toString(), gameHistoryResponseSchema, signal);
-    },
+    details: publicGames.details.bind(publicGames),
+    unfinished: publicGames.unfinished.bind(publicGames),
     async bootstrap(signal) {
       if (options.identity?.intent === "account") {
         await options.identity.verify();
@@ -231,18 +194,6 @@ export function createAiApi(
           validated(aiGameConfigurationSchema, configuration),
         ),
       );
-    },
-    async details(gameId, signal) {
-      return detailsFor(
-        await request(gamePath(gameId) + "/details", gameDetailsSchema, signal, undefined, {
-          errorContext: gameId,
-        }),
-        gameId.toLowerCase(),
-      );
-    },
-    async unfinished(signal) {
-      const { game } = await request("/games/unfinished", unfinishedGameDetailsSchema, signal);
-      return game ? detailsFor(game) : null;
     },
     async invocations(gameId, signal) {
       const result = await request(

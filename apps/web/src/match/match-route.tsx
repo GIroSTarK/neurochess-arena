@@ -2,7 +2,7 @@ import { useLayoutEffect } from "react";
 import { useRevalidator, useRouteLoaderData } from "react-router";
 
 import { createAiApi } from "../api/ai-client";
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { useGameRouteController } from "../routing/use-game-route-controller";
 
 import { MatchController } from "./controller";
@@ -14,7 +14,7 @@ export function MatchRoute({
   identity,
 }: {
   readonly apiBaseUrl: string;
-  readonly identity: AiIdentity;
+  readonly identity: PublicIdentity;
 }) {
   const gameData = useRouteLoaderData<ArenaRouteData>("arena-game");
   const setupData = useRouteLoaderData<ArenaRouteData>("arena-entry");

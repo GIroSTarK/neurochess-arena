@@ -6,6 +6,7 @@ import { createAiApi } from "./ai-client";
 import { AccountFailure, createAuthApi } from "./auth-client";
 import { createCredentialApi, CredentialFailure } from "./credential-client";
 import { ApiFailure } from "./failures";
+import { createPublicGameApi } from "./public-game-client";
 import { createSandboxApi } from "./sandbox-client";
 
 const origin = "https://api.example.test";
@@ -23,7 +24,17 @@ const clients = [
   {
     name: "AI",
     request: (fetch: typeof globalThis.fetch, signal: AbortSignal) =>
-      createAiApi(origin, { fetch }).unfinished(signal),
+      createAiApi(origin, { fetch }).invocations(GAME_ID, signal),
+    unavailable: { kind: "network" },
+    malformed: { kind: "malformed" },
+    timeout: { kind: "timeout" },
+    cancelled: { kind: "cancelled" },
+    failure: ApiFailure,
+  },
+  {
+    name: "public game",
+    request: (fetch: typeof globalThis.fetch, signal: AbortSignal) =>
+      createPublicGameApi(origin, { fetch }).unfinished(signal),
     unavailable: { kind: "network" },
     malformed: { kind: "malformed" },
     timeout: { kind: "timeout" },

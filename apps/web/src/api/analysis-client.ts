@@ -12,7 +12,7 @@ import { z } from "zod";
 
 import { ApiFailure } from "./failures";
 import { apiOrigin, createHttpRequest, validated } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 
 export class AnalysisProfileObsolete extends Error {
   constructor() {
@@ -20,7 +20,11 @@ export class AnalysisProfileObsolete extends Error {
   }
 }
 
-export function createAnalysisApi(baseUrl: string, identity: AiIdentity, fetcher?: typeof fetch) {
+export function createAnalysisApi(
+  baseUrl: string,
+  identity: PublicIdentity,
+  fetcher?: typeof fetch,
+) {
   const malformed = () => new ApiFailure("malformed");
   const request = createHttpRequest({
     baseUrl: apiOrigin(baseUrl, malformed),

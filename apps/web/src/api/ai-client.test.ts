@@ -25,36 +25,6 @@ const command = {
 const signal = () => new AbortController().signal;
 
 describe("AI HTTP client", () => {
-  it("validates history responses and sends only account intent and a bounded cursor query", async () => {
-    const lifetime = new AbortController();
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(jsonResponse({ games: [], nextCursor: null }));
-    const api = createAiApi("https://api.example.test", {
-      fetch,
-      identity: {
-        intent: "account",
-        expectedAccount: GAME_ID,
-        signal: lifetime.signal,
-        verify: async () => undefined,
-      },
-    });
-    const cursor = "2026-10-01T00:00:00.123456Z_" + GAME_ID;
-    expect(await api.history({ limit: 20, cursor }, signal())).toEqual({
-      games: [],
-      nextCursor: null,
-    });
-    const [url, init] = fetch.mock.calls[0]!;
-    expect(new URL(url instanceof Request ? url.url : url).searchParams.get("cursor")).toBe(cursor);
-    expect(init).toMatchObject({ method: "GET", credentials: "include", cache: "no-store" });
-    expect(new Headers(init?.headers).get("x-neurochess-expected-account")).toBe(GAME_ID);
-    expect(init?.body).toBeUndefined();
-    fetch.mockResolvedValue(jsonResponse({ games: [], nextCursor: "unbounded" }));
-    await expect(api.history({ limit: 20 }, signal())).rejects.toMatchObject({ kind: "malformed" });
-    await expect(
-      createAiApi("https://api.example.test", { fetch }).history({ limit: 20 }, signal()),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-  });
   it("sends only the selected saved reference for discovery and inference", async () => {
     const credentialId = "61111111-1111-4111-8111-111111111111";
     const fetch = vi

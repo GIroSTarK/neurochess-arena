@@ -1,15 +1,15 @@
 import { AccountFailure, type AuthApi } from "../api/auth-client";
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { type AuthEntry, readAuthEntry } from "../auth/auth-entry";
 import { AccountController } from "../auth/controller";
 
 import { IssuedResults } from "./issued-results";
 
 export type PublicAccess = "guest" | "account" | "onboarding" | "required" | "unavailable";
-export interface PublicIdentity {
+export interface ResolvedPublicIdentity {
   readonly generation: number;
   readonly access: PublicAccess;
-  readonly identity: AiIdentity | null;
+  readonly identity: PublicIdentity | null;
 }
 export interface ScopedRouteData<T> {
   readonly generation: number;
@@ -107,7 +107,10 @@ export class RouteRuntime {
     };
   }
 
-  async resolvePublicIdentity(signal: AbortSignal, requireProfile = true): Promise<PublicIdentity> {
+  async resolvePublicIdentity(
+    signal: AbortSignal,
+    requireProfile = true,
+  ): Promise<ResolvedPublicIdentity> {
     const cancelled = () => signal.aborted;
     if (cancelled()) throw new AccountFailure("cancelled");
     this.disconnect ??= this.account.connect(false);

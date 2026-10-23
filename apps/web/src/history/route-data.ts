@@ -5,9 +5,9 @@ import {
 } from "@neurochess/contracts";
 import { z } from "zod";
 
-import { createAiApi } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
 import { accountIdSchema } from "../api/identifier-schemas";
+import { createPublicGameApi } from "../api/public-game-client";
 import { FencedResults } from "../routing/fenced-results";
 import type { AppRouteContext } from "../routing/route-context";
 import {
@@ -78,7 +78,10 @@ export function historyRouteData({
     const signal = AbortSignal.any([request.signal, identity.signal]);
     try {
       const page = await waitForRouteResult(
-        createAiApi(apiBaseUrl, { identity }).history({ limit: 20, ...parsed.data }, signal),
+        createPublicGameApi(apiBaseUrl, { identity }).history(
+          { limit: 20, ...parsed.data },
+          signal,
+        ),
         signal,
       );
       return request.signal.aborted ? null : result(signal.aborted ? null : page);
@@ -103,7 +106,7 @@ export function historyRouteData({
           return result({ error: "rejected" });
         }
         const signal = AbortSignal.any([scope.signal, identity.signal]);
-        const api = createAiApi(apiBaseUrl, { identity });
+        const api = createPublicGameApi(apiBaseUrl, { identity });
         if (input.intent === "delete-game") await api.deleteGame(input.gameId, signal);
         else await api.clearHistory(signal);
         if (signal.aborted) return null;

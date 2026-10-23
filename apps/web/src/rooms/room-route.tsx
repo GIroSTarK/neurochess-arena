@@ -2,7 +2,7 @@ import type { RoomView } from "@neurochess/contracts";
 import { useLayoutEffect } from "react";
 import { useRevalidator } from "react-router";
 
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { createRoomGameApi } from "../api/room-game-client";
 import { createRoomRealtime } from "../api/room-realtime-client";
 import { PageContext } from "../routing/route-context";
@@ -21,7 +21,7 @@ export function RoomRoute({
   takeInvitation,
 }: {
   readonly apiBaseUrl: string;
-  readonly identity: AiIdentity;
+  readonly identity: PublicIdentity;
   readonly room: RoomView | null;
   readonly entryData: unknown;
   readonly accessLost: boolean;

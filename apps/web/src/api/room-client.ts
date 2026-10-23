@@ -22,7 +22,7 @@ import type { z } from "zod";
 import type { ApiFailureKind } from "./failures";
 import { snapshotFor } from "./game-validation";
 import { apiOrigin, createHttpRequest, validated as validate } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 
 export class RoomFailure extends Error {
   constructor(
@@ -49,7 +49,7 @@ function roomFor(room: RoomView, gameId?: string): RoomView {
 
 export function createRoomApi(
   baseUrl: string,
-  options: { fetch?: typeof fetch; identity?: AiIdentity } = {},
+  options: { fetch?: typeof fetch; identity?: PublicIdentity } = {},
 ) {
   const { identity } = options;
   const request = createHttpRequest({

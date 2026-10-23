@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useFetcher } from "react-router";
 
 import type { CredentialFailure } from "../api/credential-client";
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { AccountField } from "../auth/account-field";
 import { PasswordField } from "../auth/password-field";
 import { Button } from "../ui/button";
@@ -19,7 +19,7 @@ export function SaveCredentialForm({
   version,
   refresh,
 }: {
-  readonly identity: AiIdentity;
+  readonly identity: PublicIdentity;
   readonly catalog: CredentialCatalogState;
   readonly version: number;
   readonly refresh: () => Promise<void>;

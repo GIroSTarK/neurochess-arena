@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { ArenaLayout } from "../arena/arena-layout";
 import { BoardTools } from "../arena/board-tools";
 import { EvaluationIndicator } from "../arena/panels/evaluation-indicator";
@@ -45,7 +45,7 @@ export function MatchScreen({
   onRetry,
   entry,
 }: {
-  readonly identity?: AiIdentity;
+  readonly identity?: PublicIdentity;
   readonly controller: MatchController;
   readonly stopped: boolean;
   readonly departing: boolean;

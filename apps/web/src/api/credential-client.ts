@@ -13,7 +13,7 @@ import type { z } from "zod";
 
 import { RequestRateLimitFailure } from "./failures";
 import { apiOrigin, createHttpRequest, validated } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 
 export class CredentialFailure extends Error {
   constructor(readonly code: CredentialErrorCode | "cancelled" | "RATE_LIMITED") {
@@ -27,7 +27,7 @@ export function credentialError(error: unknown): CredentialFailure["code"] {
 
 export function createCredentialApi(
   apiBaseUrl: string,
-  identity: AiIdentity,
+  identity: PublicIdentity,
   fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
 ) {
   const request = createHttpRequest({

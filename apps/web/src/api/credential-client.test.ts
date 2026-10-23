@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { GAME_ID, jsonResponse, requestBody } from "../test/fixtures";
 
 import { createCredentialApi } from "./credential-client";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 
 const signal = () => new AbortController().signal;
-const identity = (): AiIdentity => ({
+const identity = (): PublicIdentity => ({
   intent: "account",
   expectedAccount: GAME_ID,
   signal: signal(),

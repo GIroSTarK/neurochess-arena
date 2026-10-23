@@ -17,7 +17,7 @@ import { ApiFailure } from "./failures";
 import type { GameCommandApi } from "./game-command-api";
 import { pgnFor, replayFor, snapshotFor } from "./game-validation";
 import { apiOrigin, createHttpRequest, validated } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 
 export interface RoomGameApi extends Pick<GameCommandApi, "move" | "lifecycle" | "replay" | "pgn"> {
   read(gameId: string, signal: AbortSignal): Promise<RoomView>;
@@ -34,7 +34,7 @@ export function roomViewFor(room: RoomView, gameId: string) {
 
 export function createRoomGameApi(
   baseUrl: string,
-  identity: AiIdentity,
+  identity: PublicIdentity,
   fetcher?: typeof fetch,
 ): RoomGameApi {
   const input = <T>(schema: z.ZodType<T>, value: unknown) =>

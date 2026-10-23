@@ -1,4 +1,4 @@
-export interface AiIdentity {
+export interface PublicIdentity {
   readonly intent: "account" | "guest";
   readonly expectedAccount?: string;
   readonly signal: AbortSignal;

@@ -6,9 +6,9 @@ import type {
 import type { z } from "zod";
 
 import { accountError, AccountFailure } from "../api/auth-client";
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 
-import type { PublicIdentity, RouteRuntime, ScopedRouteData } from "./route-runtime";
+import type { ResolvedPublicIdentity, RouteRuntime, ScopedRouteData } from "./route-runtime";
 
 export function protectedLoader<T>(load: (args: LoaderFunctionArgs) => Promise<T>) {
   return async (args: LoaderFunctionArgs): Promise<T | null> => {
@@ -29,8 +29,8 @@ export function strictFormIntent<T>(form: FormData, schema: z.ZodType<T>): T | n
 
 export interface RouteActionScope {
   readonly signal: AbortSignal;
-  resolveIdentity(requireProfile: boolean): Promise<PublicIdentity>;
-  resolveAccount(expectedAccount: unknown, requireProfile: boolean): Promise<AiIdentity | null>;
+  resolveIdentity(requireProfile: boolean): Promise<ResolvedPublicIdentity>;
+  resolveAccount(expectedAccount: unknown, requireProfile: boolean): Promise<PublicIdentity | null>;
   useCurrentGeneration(): void;
   result<T>(data: T): ScopedRouteData<T>;
 }

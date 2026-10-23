@@ -1,9 +1,9 @@
 import { isAiGameMode, type RoomView } from "@neurochess/contracts";
 import type { LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
 
-import { createAiApi } from "../api/ai-client";
 import { createCredentialApi } from "../api/credential-client";
 import { ApiFailure } from "../api/failures";
+import { createPublicGameApi } from "../api/public-game-client";
 import { createRoomGameApi } from "../api/room-game-client";
 import type { CredentialCatalogState } from "../credentials/catalog";
 import { isAccessFailure } from "../gameplay/failures";
@@ -58,7 +58,7 @@ function entryLoader(context: ArenaContext, kind: "setup" | "game", rooms?: Room
       if (target.kind === "game" && navigation.hasHandoff(url)) {
         return result({ kind: "handoff", gameId: target.gameId });
       }
-      const api = createAiApi(apiBaseUrl, { identity });
+      const api = createPublicGameApi(apiBaseUrl, { identity });
       let entry: ArenaEntry;
       try {
         if (kind === "setup") {

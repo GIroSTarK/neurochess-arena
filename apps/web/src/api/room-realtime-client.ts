@@ -6,7 +6,7 @@ import {
 
 import { ApiFailure } from "./failures";
 import { apiOrigin } from "./http";
-import type { AiIdentity } from "./identity";
+import type { PublicIdentity } from "./identity";
 import { roomViewFor } from "./room-game-client";
 
 export interface RoomRealtime {
@@ -18,7 +18,7 @@ export interface RoomRealtime {
 
 export function createRoomRealtime(
   baseUrl: string,
-  identity: AiIdentity,
+  identity: PublicIdentity,
   createSocket: (url: string) => WebSocket = (url) => new WebSocket(url),
 ): RoomRealtime {
   const url = apiOrigin(baseUrl, () => new ApiFailure("malformed"));

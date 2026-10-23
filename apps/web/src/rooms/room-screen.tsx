@@ -1,7 +1,7 @@
 import { useId, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { ArenaDetails } from "../arena/arena-details";
 import { ArenaHeader } from "../arena/arena-header";
 import { ArenaLayout } from "../arena/arena-layout";
@@ -43,7 +43,7 @@ export function RoomScreen({
 }: {
   readonly controller: RoomController;
   readonly onRetry: () => void;
-  readonly identity: AiIdentity;
+  readonly identity: PublicIdentity;
   readonly apiBaseUrl: string;
 }) {
   const { t } = useTranslation();

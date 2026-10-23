@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { useFetcher } from "react-router";
 
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 
 import { type CredentialCatalogState, observeCredentialChanges } from "./catalog";
 import type { CredentialRouteData } from "./route-data";
 
 const empty: CredentialCatalogState = { phase: "loading", credentials: [] };
 export function useCredentials(
-  identity: AiIdentity | undefined,
+  identity: PublicIdentity | undefined,
   enabled: boolean,
   initial?: CredentialCatalogState,
   loader?: CredentialRouteData | null,

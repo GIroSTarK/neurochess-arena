@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFetcher, useLoaderData } from "react-router";
 
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 import { AccountFrame } from "../auth/account-frame";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -17,7 +17,7 @@ export function CredentialsScreen({
   identity,
   returnTo,
 }: {
-  readonly identity: AiIdentity;
+  readonly identity: PublicIdentity;
   readonly returnTo: string;
 }) {
   const { t, i18n } = useTranslation();

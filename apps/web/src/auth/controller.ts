@@ -11,7 +11,7 @@ import {
   type AuthApi,
 } from "../api/auth-client";
 import { ApiFailure } from "../api/failures";
-import type { AiIdentity } from "../api/identity";
+import type { PublicIdentity } from "../api/identity";
 
 export interface AccountState {
   phase: "checking" | "changing" | "guest" | "account" | "required" | "unavailable";
@@ -219,7 +219,7 @@ export class AccountController {
     this.invalidate("required");
     this.publish({ issue: "AUTH_UNAUTHORIZED" });
   }
-  identity(requireProfile = true): AiIdentity {
+  identity(requireProfile = true): PublicIdentity {
     const signal = this.lifetime.signal;
     const cancelled = () => signal.aborted;
     const intent = this.state.phase === "account" ? "account" : "guest";
