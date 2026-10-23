@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { integrationDatabase } from "../../../test/database.js";
@@ -284,23 +285,6 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
   });
 
-  it.each([
-    { name: "credential field", parameters: { apiKey: "secret" } },
-    { name: "array instead of an object", parameters: [] },
-    { name: "string temperature", parameters: { temperature: "0" } },
-    { name: "null reasoning effort", parameters: { reasoningEffort: null } },
-    { name: "fractional output-token limit", parameters: { maxOutputTokens: 1.5 } },
-  ])("rejects invocation parameters with $name", async ({ parameters }) => {
-    const { attempt } = await invocation();
-    await expect(
-      database.db.execute(
-        sql`update model_invocations set effective_parameters = ${JSON.stringify(parameters)}::jsonb where id = ${attempt.id}`,
-      ),
-    ).rejects.toMatchObject({
-      cause: { code: "23514", constraint: "model_invocations_parameters_check" },
-    });
-  });
-
   it("cascades private AI turns and invocations when their game is deleted", async () => {
     const { turn } = await invocation();
     await database.db.delete(games).where(eq(games.id, turn.gameId));
@@ -372,40 +356,141 @@ describe("reviewed PostgreSQL migration and structural constraints", () => {
     ).toBe(0);
   });
 
-  it.each([
-    { name: "JSON null instead of an object", parameters: null },
-    { name: "array instead of an object", parameters: [] },
-    { name: "credential field", parameters: { apiKey: "sentinel" } },
-    { name: "string temperature", parameters: { temperature: "1" } },
-    { name: "null temperature", parameters: { temperature: null } },
-    { name: "negative temperature", parameters: { temperature: -1 } },
-    { name: "object reasoning effort", parameters: { reasoningEffort: {} } },
-    { name: "empty reasoning effort", parameters: { reasoningEffort: "" } },
+  describe.each([
     {
-      name: "reasoning effort longer than 64 characters",
-      parameters: { reasoningEffort: "x".repeat(65) },
+      name: "participant parameters",
+      table: gameParticipants,
+      column: gameParticipants.parameters,
+      constraint: "game_participants_parameters_check",
+      nullable: true,
+      create: async () => (await aiParticipant()).seat.id,
     },
-    { name: "zero output-token limit", parameters: { maxOutputTokens: 0 } },
-    { name: "fractional output-token limit", parameters: { maxOutputTokens: 1.5 } },
     {
-      name: "output-token limit above the safe-integer bound",
-      parameters: { maxOutputTokens: Number.MAX_SAFE_INTEGER + 1 },
+      name: "invocation effective parameters",
+      table: modelInvocations,
+      column: modelInvocations.effectiveParameters,
+      constraint: "model_invocations_parameters_check",
+      nullable: false,
+      create: async () => (await invocation()).attempt.id,
     },
-    { name: "unknown nested field", parameters: { nested: { key: "sentinel" } } },
-  ])("rejects AI seat parameters with $name", async ({ parameters }) => {
-    const { seat } = await aiParticipant();
-    await expect(
-      database.db.execute(
-        sql`update game_participants set parameters = ${JSON.stringify(parameters)}::jsonb where id = ${seat.id}`,
-      ),
-    ).rejects.toMatchObject({
-      cause: { code: "23514", constraint: "game_participants_parameters_check" },
+  ])("$name", ({ table, column, constraint, nullable, create }) => {
+    async function declaredCheck(json: string | null) {
+      const check = getTableConfig(table).checks.find((check) => check.name === constraint);
+      if (!check) throw new Error(`Missing constraint: ${constraint}`);
+      return (
+        await database.db.execute(sql`
+          select ${check.value} as valid
+          from (select ${json}::jsonb as ${sql.identifier(column.name)}) as ${table}
+        `)
+      ).rows;
+    }
+
+    it.each([
+      { name: "empty object", json: "{}" },
+      { name: "zero temperature", json: '{"temperature":0}' },
+      { name: "fractional temperature", json: '{"temperature":0.5}' },
+      { name: "maximum temperature", json: '{"temperature":9007199254740991}' },
+      { name: "minimum output-token limit", json: '{"maxOutputTokens":1}' },
+      { name: "maximum output-token limit", json: '{"maxOutputTokens":9007199254740991}' },
+      { name: "integral decimal output-token limit", json: '{"maxOutputTokens":1.0}' },
+      { name: "one-character reasoning effort", json: '{"reasoningEffort":"0"}' },
+      { name: "reasoning effort punctuation", json: '{"reasoningEffort":"high_2-x"}' },
+      { name: "64-character reasoning effort", json: `{"reasoningEffort":"${"x".repeat(64)}"}` },
+      {
+        name: "all allowed keys",
+        json: '{"temperature":0,"reasoningEffort":"high","maxOutputTokens":1000}',
+      },
+      // Raw JSON keeps precision and size that a JavaScript number cannot represent.
+      { name: "512-byte object", json: `{"temperature": 0.${"0".repeat(492)}1}` },
+    ])("accepts $name in the declaration and migrated table", async ({ json }) => {
+      expect(await declaredCheck(json)).toEqual([{ valid: true }]);
+      const id = await create();
+      await database.db.execute(sql`
+        update ${table} set ${sql.identifier(column.name)} = ${json}::jsonb where id = ${id}
+      `);
+      expect(
+        (
+          await database.db.execute(sql`
+            select ${column} = ${json}::jsonb as matches from ${table} where id = ${id}
+          `)
+        ).rows,
+      ).toEqual([{ matches: true }]);
     });
-    expect(
-      (
-        await database.db.select().from(gameParticipants).where(eq(gameParticipants.id, seat.id))
-      )[0],
-    ).toEqual(seat);
+
+    it.each([
+      { name: "JSON null", json: "null" },
+      { name: "array", json: "[]" },
+      { name: "string", json: '"parameters"' },
+      { name: "number", json: "1" },
+      { name: "boolean", json: "true" },
+      { name: "credential field", json: '{"apiKey":"sentinel"}' },
+      { name: "unknown nested field", json: '{"nested":{"key":"sentinel"}}' },
+      { name: "string temperature", json: '{"temperature":"0"}' },
+      { name: "null temperature", json: '{"temperature":null}' },
+      { name: "boolean temperature", json: '{"temperature":true}' },
+      { name: "negative temperature", json: '{"temperature":-1}' },
+      { name: "temperature above the bound", json: '{"temperature":9007199254740992}' },
+      { name: "unrounded temperature above the bound", json: '{"temperature":9007199254740991.1}' },
+      { name: "null reasoning effort", json: '{"reasoningEffort":null}' },
+      { name: "object reasoning effort", json: '{"reasoningEffort":{}}' },
+      { name: "numeric reasoning effort", json: '{"reasoningEffort":1}' },
+      { name: "empty reasoning effort", json: '{"reasoningEffort":""}' },
+      { name: "65-character reasoning effort", json: `{"reasoningEffort":"${"x".repeat(65)}"}` },
+      { name: "reasoning effort starting with punctuation", json: '{"reasoningEffort":"-high"}' },
+      { name: "reasoning effort with a space", json: '{"reasoningEffort":"high effort"}' },
+      { name: "reasoning effort with a newline", json: '{"reasoningEffort":"high\\n"}' },
+      { name: "non-ASCII reasoning effort", json: '{"reasoningEffort":"é"}' },
+      { name: "null output-token limit", json: '{"maxOutputTokens":null}' },
+      { name: "string output-token limit", json: '{"maxOutputTokens":"1"}' },
+      { name: "boolean output-token limit", json: '{"maxOutputTokens":true}' },
+      { name: "negative output-token limit", json: '{"maxOutputTokens":-1}' },
+      { name: "zero output-token limit", json: '{"maxOutputTokens":0}' },
+      { name: "fractional output-token limit", json: '{"maxOutputTokens":1.5}' },
+      {
+        name: "unrounded fractional output-token limit",
+        json: '{"maxOutputTokens":1.0000000000000001}',
+      },
+      { name: "output-token limit above the bound", json: '{"maxOutputTokens":9007199254740992}' },
+      { name: "513-byte object", json: `{"temperature": 0.${"0".repeat(493)}1}` },
+    ])("rejects $name in the declaration and migrated table", async ({ json }) => {
+      expect(await declaredCheck(json)).toEqual([{ valid: false }]);
+      const id = await create();
+      const before = await database.db.execute(sql`select * from ${table} where id = ${id}`);
+      await expect(
+        database.db.execute(sql`
+          update ${table} set ${sql.identifier(column.name)} = ${json}::jsonb where id = ${id}
+        `),
+      ).rejects.toMatchObject({ cause: { code: "23514", constraint } });
+      expect(
+        (await database.db.execute(sql`select * from ${table} where id = ${id}`)).rows,
+      ).toEqual(before.rows);
+    });
+
+    it("preserves SQL NULL semantics", async () => {
+      expect(await declaredCheck(null)).toEqual([{ valid: nullable ? true : null }]);
+      if (nullable) {
+        const created = await game();
+        const [seat] = await database.db
+          .insert(gameParticipants)
+          .values({
+            gameId: created.id,
+            color: "white",
+            seatType: "human",
+            parameters: null,
+          })
+          .returning();
+        expect(seat?.parameters).toBeNull();
+      } else {
+        const id = await create();
+        await expect(
+          database.db.execute(sql`
+            update ${table} set ${sql.identifier(column.name)} = null where id = ${id}
+          `),
+        ).rejects.toMatchObject({
+          cause: { code: "23502", table: "model_invocations", column: "effective_parameters" },
+        });
+      }
+    });
   });
 
   it.each([

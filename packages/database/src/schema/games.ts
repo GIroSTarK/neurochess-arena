@@ -18,6 +18,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { aiParametersPredicate } from "./ai-parameters.js";
 import { user } from "./auth.js";
 
 // Database literals are intentionally independent of the chess and transport leaves.
@@ -183,22 +184,7 @@ export const gameParticipants = pgTable(
     check(
       "game_participants_parameters_check",
       sql`${table.parameters} is null or (
-        jsonb_typeof(${table.parameters}) = 'object'
-        and octet_length(${table.parameters}::text) <= 512
-        and ${table.parameters} - array['temperature', 'reasoningEffort', 'maxOutputTokens'] = '{}'::jsonb
-        and (not (${table.parameters} ? 'temperature') or case
-          when jsonb_typeof(${table.parameters}->'temperature') = 'number'
-          then (${table.parameters}->>'temperature')::numeric between 0 and 9007199254740991
-          else false end)
-        and (not (${table.parameters} ? 'reasoningEffort') or (
-          jsonb_typeof(${table.parameters}->'reasoningEffort') = 'string'
-          and length(${table.parameters}->>'reasoningEffort') between 1 and 64
-          and ${table.parameters}->>'reasoningEffort' ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]*$'))
-        and (not (${table.parameters} ? 'maxOutputTokens') or case
-          when jsonb_typeof(${table.parameters}->'maxOutputTokens') = 'number'
-          then (${table.parameters}->>'maxOutputTokens')::numeric between 1 and 9007199254740991
-            and mod((${table.parameters}->>'maxOutputTokens')::numeric, 1) = 0
-          else false end)
+        ${aiParametersPredicate(table.parameters)}
       )`,
     ),
   ],
@@ -470,22 +456,6 @@ export const modelInvocations = pgTable(
       "model_invocations_model_id_check",
       sql`length(${table.modelId}) between 1 and 256 and ${table.modelId} ~ '^~?[a-zA-Z0-9][a-zA-Z0-9._:/@+-]*$'`,
     ),
-    check(
-      "model_invocations_parameters_check",
-      sql`jsonb_typeof(${table.effectiveParameters}) = 'object'
-      and octet_length(${table.effectiveParameters}::text) <= 512
-      and ${table.effectiveParameters} - array['temperature', 'reasoningEffort', 'maxOutputTokens'] = '{}'::jsonb
-      and (not (${table.effectiveParameters} ? 'temperature') or case
-        when jsonb_typeof(${table.effectiveParameters}->'temperature') = 'number'
-        then (${table.effectiveParameters}->>'temperature')::numeric between 0 and 9007199254740991 else false end)
-      and (not (${table.effectiveParameters} ? 'reasoningEffort') or (
-        jsonb_typeof(${table.effectiveParameters}->'reasoningEffort') = 'string'
-        and length(${table.effectiveParameters}->>'reasoningEffort') between 1 and 64
-        and ${table.effectiveParameters}->>'reasoningEffort' ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]*$'))
-      and (not (${table.effectiveParameters} ? 'maxOutputTokens') or case
-        when jsonb_typeof(${table.effectiveParameters}->'maxOutputTokens') = 'number'
-        then (${table.effectiveParameters}->>'maxOutputTokens')::numeric between 1 and 9007199254740991
-          and mod((${table.effectiveParameters}->>'maxOutputTokens')::numeric, 1) = 0 else false end)`,
-    ),
+    check("model_invocations_parameters_check", aiParametersPredicate(table.effectiveParameters)),
   ],
 );
