@@ -7,24 +7,23 @@ import type {
 
 import type { AiApi } from "../api/ai-client";
 import { createSessionCredentials } from "../api/session-credentials";
-import { ArchiveController } from "../gameplay/archive";
+import type { ArchiveController } from "../gameplay/archive";
 import { browserPgnDelivery, type PgnDelivery } from "../gameplay/pgn";
 
-import { AiTurnRunner } from "./ai-turn-runner";
-import { MatchCommands } from "./commands";
-import type { MatchContext } from "./context";
-import { ControllerLease } from "./controller-lease";
-import { InvocationFeed } from "./invocation-feed";
-import { SeatCredentials } from "./seat-credentials";
-import { type MatchEntry, type MatchNavigation, MatchSession } from "./session";
-import { MatchStore } from "./store";
+import type { AiTurnRunner } from "./ai-turn-runner";
+import type { MatchCommands } from "./commands";
+import { createMatchComposition } from "./composition";
+import type { InvocationFeed } from "./invocation-feed";
+import type { SeatCredentials } from "./seat-credentials";
+import type { MatchEntry, MatchNavigation, MatchSession } from "./session";
+import type { MatchStore } from "./store";
 
 export type { MatchEntry, MatchNavigation } from "./session";
 export { humanColor, type MatchIssue, matchKeysReady, type MatchState } from "./state";
 
 export class MatchController {
-  private readonly store = new MatchStore();
-  private readonly seats = new SeatCredentials(this.store);
+  private readonly store: MatchStore;
+  private readonly seats: SeatCredentials;
   private readonly session: MatchSession;
   private readonly runner: AiTurnRunner;
   private readonly commands: MatchCommands;
@@ -36,49 +35,19 @@ export class MatchController {
     delivery: PgnDelivery = browserPgnDelivery,
     navigation?: MatchNavigation,
   ) {
-    const context: MatchContext = {
-      api,
-      store: this.store,
-      signal: () => this.session.signal(),
-      live: (signal) => this.session.live(signal),
-      adopt: (snapshot) => this.session.adopt(snapshot),
-      fail: (error) => this.session.fail(error),
-      accessLost: (error) => this.session.accessLost(error),
-    };
-    const lease = new ControllerLease(context);
-    this.invocations = new InvocationFeed(context);
-    const loadInvocations = () => this.invocations.load();
-    this.runner = new AiTurnRunner(context, {
-      lease,
-      seats: this.seats,
-      resume: (signal) => this.commands.resume(signal),
-      loadInvocations,
-    });
-    this.commands = new MatchCommands(context, { lease, runner: this.runner, loadInvocations });
-    this.archive = new ArchiveController({
+    const composition = createMatchComposition({
       api,
       delivery,
-      store: {
-        get: () => this.store.getArchive(),
-        setReplay: (state) => this.store.setReplay(state),
-        setExport: (state) => this.store.setExport(state),
-      },
-      isConnected: () => this.session.signal() !== null,
-      loseAccess: context.accessLost,
-    });
-    this.session = new MatchSession(
-      this.store,
-      {
-        archive: this.archive,
-        lease,
-        runner: this.runner,
-        commands: this.commands,
-        invocations: this.invocations,
-        seats: this.seats,
-        createCredentials: createSessionCredentials,
-      },
+      createCredentials: createSessionCredentials,
       navigation,
-    );
+    });
+    this.store = composition.store;
+    this.seats = composition.seats;
+    this.session = composition.session;
+    this.runner = composition.runner;
+    this.commands = composition.commands;
+    this.invocations = composition.invocations;
+    this.archive = composition.archive;
   }
 
   readonly getSnapshot = () => this.store.get();

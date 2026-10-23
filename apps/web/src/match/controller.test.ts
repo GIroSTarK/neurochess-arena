@@ -20,7 +20,7 @@ const details: GameDetails = {
   configuration: { mode: "ai_vs_ai", seats: { white: seat, black: seat } },
 };
 
-function harness(initial = details, delivery?: PgnDelivery) {
+function harness(initial = details, delivery?: PgnDelivery, enterSetup = true) {
   let stored = initial.snapshot;
   const api = {
     bootstrap: vi.fn<AiApi["bootstrap"]>(),
@@ -60,7 +60,7 @@ function harness(initial = details, delivery?: PgnDelivery) {
   } satisfies AiApi;
   const navigation = { game: vi.fn(), setup: vi.fn() };
   const controller = new MatchController(api, delivery, navigation);
-  void controller.enter({ kind: "setup" });
+  if (enterSetup) void controller.enter({ kind: "setup" });
   const disconnect = () => controller.endLifetime();
   cleanups.push(disconnect);
   const keys = () => {
@@ -97,6 +97,31 @@ afterEach(() => {
 });
 
 describe("page-owned Arena orchestration", () => {
+  it("constructs an idle graph and opens credentials only on explicit entry", async () => {
+    const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
+    const h = harness(details, delivery, false);
+    expect(h.controller.credentials).toBeNull();
+    expect(h.controller.getSnapshot().details).toBeNull();
+
+    await h.controller.created(details);
+    h.controller.endLifetime();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(h.controller.credentials).toBeNull();
+    for (const request of Object.values(h.api)) expect(request).not.toHaveBeenCalled();
+    expect(h.navigation.game).not.toHaveBeenCalled();
+    expect(h.navigation.setup).not.toHaveBeenCalled();
+    expect(delivery.copy).not.toHaveBeenCalled();
+    expect(delivery.download).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await h.controller.enter({ kind: "setup" });
+    const credentials = h.controller.credentials!;
+    expect(credentials.signal.aborted).toBe(false);
+    h.controller.endLifetime();
+    expect(credentials.signal.aborted).toBe(true);
+    expect(h.controller.credentials).toBeNull();
+  });
+
   it("publishes move and control availability with the state observed by subscribers", async () => {
     const game = humanGame("white");
     const h = harness(game);

@@ -11,15 +11,9 @@ import { vi } from "vitest";
 
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
 import { ApiFailure } from "../api/failures";
-import { ArchiveController } from "../gameplay/archive";
-import { AiTurnRunner } from "../match/ai-turn-runner";
-import { MatchCommands } from "../match/commands";
-import type { MatchContext } from "../match/context";
-import { ControllerLease } from "../match/controller-lease";
-import { InvocationFeed } from "../match/invocation-feed";
-import { SeatCredentials, type SessionCredentials } from "../match/seat-credentials";
-import { MatchSession } from "../match/session";
-import { MatchStore } from "../match/store";
+import { createMatchComposition } from "../match/composition";
+import type { SessionCredentials } from "../match/seat-credentials";
+import type { MatchSession } from "../match/session";
 
 import { snapshot } from "./fixtures";
 
@@ -113,60 +107,18 @@ export function matchHarness(initial = matchDetails()) {
     ),
     pgn: vi.fn<AiApi["pgn"]>(),
   } satisfies AiApi;
-  const store = new MatchStore();
-  const context: MatchContext = {
-    api,
-    store,
-    signal: () => session.signal(),
-    live: (signal) => session.live(signal),
-    adopt: (value) => session.adopt(value),
-    fail: (error) => session.fail(error),
-    accessLost: (error) => session.accessLost(error),
-  };
-  const seats = new SeatCredentials(store);
-  const lease = new ControllerLease(context);
-  const invocations = new InvocationFeed(context);
-  const loadInvocations = () => invocations.load();
-  const runner: AiTurnRunner = new AiTurnRunner(context, {
-    lease,
-    seats,
-    loadInvocations,
-    resume: (signal) => commands.resume(signal),
-  });
-  const commands: MatchCommands = new MatchCommands(context, { lease, runner, loadInvocations });
   const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
-  const archive = new ArchiveController({
+  const composition = createMatchComposition({
     api,
     delivery,
-    store: {
-      get: () => store.getArchive(),
-      setReplay: (state) => store.setReplay(state),
-      setExport: (state) => store.setExport(state),
-    },
-    isConnected: () => session.signal() !== null,
-    loseAccess: context.accessLost,
-  });
-  const session: MatchSession = new MatchSession(store, {
-    archive,
-    lease,
-    runner,
-    commands,
-    invocations,
-    seats,
     createCredentials: memoryCredentials,
   });
+  const { session, seats } = composition;
   sessions.push(session);
   void session.enter({ kind: "setup" });
   return {
     api,
-    store,
-    session,
-    seats,
-    lease,
-    runner,
-    commands,
-    invocations,
-    archive,
+    ...composition,
     seed: (next: GameSnapshot) => {
       stored = next;
     },
