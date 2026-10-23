@@ -74,7 +74,7 @@ describe("AI reservation invalidation and crash recovery", () => {
     },
   );
 
-  it.each(["success", "failure"] as const)(
+  it.each(["success", "failure", "invalid"] as const)(
     "cannot let an old %s or its cleanup affect a new reservation after Pause/Resume",
     async (outcome) => {
       const api = await harness.createApi();
@@ -98,8 +98,23 @@ describe("AI reservation invalidation and crash recovery", () => {
         code: "GAME_CONFLICT",
       });
       if (outcome === "success") oldGate.resolve(output("e2e4"));
-      else oldGate.reject(new Error("secret-upstream-sentinel"));
+      else if (outcome === "invalid") {
+        oldGate.resolve({
+          ok: false,
+          error: { code: "model_invalid", reason: "malformed_output" },
+          durationMs: 1,
+          usage: null,
+          providerRequestId: null,
+        });
+      } else oldGate.reject(new Error("secret-upstream-sentinel"));
       await rejected;
+      expect((await newService.invocations(principal, snapshot.gameId)).turns).toMatchObject([
+        {
+          invalidOutputCount: 0,
+          acceptedMovePly: null,
+          attempts: [{ outcome: "discarded" }, { outcome: "in_flight" }],
+        },
+      ]);
       expect(
         await api.database.db
           .select()

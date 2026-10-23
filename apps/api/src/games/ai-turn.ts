@@ -34,6 +34,7 @@ import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapt
 import { discoverModels, effectiveParameters } from "../providers/discovery.js";
 import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
 
+import { decideAiOutcome } from "./ai-outcome-policy.js";
 import { authorizeGameControl } from "./authorization.js";
 import { persistCommand } from "./command-persistence.js";
 import { requireController } from "./controller-presence.js";
@@ -285,7 +286,7 @@ export function createAiTurnExecutor(options: {
             )) ?? { ...credentialFailure, durationMs: 0, usage: null, providerRequestId: null });
         const currentAttempt = attempt;
         const received = response;
-        const snapshot = await repository.write(async (tx) => {
+        const outcome = await repository.write(async (tx) => {
           const { stored, persistedSnapshot, executionGame } = await recheck(tx);
           let classified = received;
           if (
@@ -311,21 +312,30 @@ export function createAiTurnExecutor(options: {
           ) {
             throw new GameIntegrityError();
           }
-          if (!classified.ok && classified.error.code === "model_invalid") {
-            if ((await tx.incrementAiInvalidCount(currentAttempt.turnId)) < 3) {
-              if (!access.signal.aborted) return null;
-              // Cancellation may stop retries, but cannot erase an already-observed invalid output.
-              const paused = executionGame.pause();
-              if (!paused.ok) throw new GameIntegrityError();
-              return persistCommand(tx, stored, command.commandId, "pause", paused.value);
-            }
+          const invalidOutputCount =
+            !classified.ok && classified.error.code === "model_invalid"
+              ? await tx.incrementAiInvalidCount(currentAttempt.turnId)
+              : 0;
+          const decision = decideAiOutcome(classified, invalidOutputCount, access.signal.aborted);
+          if (decision.kind === "retry") return decision;
+          if (decision.kind === "technicalLoss") {
             const lost = executionGame.recordTechnicalLoss(reserved.selected.color);
             if (!lost.ok) throw new GameIntegrityError();
-            return persistCommand(tx, stored, command.commandId, "technical_loss", lost.value);
+            return {
+              kind: decision.kind,
+              snapshot: await persistCommand(
+                tx,
+                stored,
+                command.commandId,
+                "technical_loss",
+                lost.value,
+              ),
+            };
           }
-          let accepted = classified.ok
-            ? executionGame.playMove(classified.output.move)
-            : executionGame.pause();
+          let accepted =
+            decision.kind === "move"
+              ? executionGame.playMove(decision.move)
+              : executionGame.pause();
           if (!accepted.ok) throw new GameIntegrityError();
           if (command.step && accepted.value.state === "active") accepted = executionGame.pause();
           if (!accepted.ok) throw new GameIntegrityError();
@@ -333,15 +343,15 @@ export function createAiTurnExecutor(options: {
             tx,
             stored,
             command.commandId,
-            classified.ok ? "move" : "pause",
+            decision.kind,
             accepted.value,
           );
-          if (classified.ok) {
+          if (decision.kind === "move") {
             await tx.linkAiTurnMove(currentAttempt.turnId, persistedSnapshot.moves.length + 1);
           }
-          return result;
+          return { kind: decision.kind, snapshot: result };
         });
-        if (snapshot) return snapshot;
+        if (outcome.kind !== "retry") return outcome.snapshot;
         response = undefined;
         const next = await repository.write(async (tx) => {
           const { stored, executionGame } = await recheck(tx);
@@ -349,12 +359,13 @@ export function createAiTurnExecutor(options: {
             const paused = executionGame.pause();
             if (!paused.ok) throw new GameIntegrityError();
             return {
+              kind: "pause" as const,
               snapshot: await persistCommand(tx, stored, command.commandId, "pause", paused.value),
             };
           }
-          return { attempt: await tx.beginModelInvocation(invocation) };
+          return { kind: "retry" as const, attempt: await tx.beginModelInvocation(invocation) };
         });
-        if (next.snapshot) return next.snapshot;
+        if (next.kind === "pause") return next.snapshot;
         attempt = next.attempt;
       }
     } catch (error: unknown) {

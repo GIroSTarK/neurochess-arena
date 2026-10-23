@@ -46,9 +46,16 @@ const providerFailures: ProviderFailure[] = [
 ];
 
 describe("durable AI failure policy and private invocation records", () => {
-  it.each([1, 3])(
-    "retains invalid output %i when transport cancellation arrives after the response but before its outcome transaction",
-    async (invalidNumber) => {
+  it.each(
+    [1, 2, 3].flatMap((invalidNumber) =>
+      (["before outcome", "after budget write"] as const).map((cancellationStage) => ({
+        invalidNumber,
+        cancellationStage,
+      })),
+    ),
+  )(
+    "retains invalid output $invalidNumber when transport cancellation arrives $cancellationStage",
+    async ({ invalidNumber, cancellationStage }) => {
       const api = await harness.createApi();
       const owner = await harness.guest(api);
       const principal = owner.principal;
@@ -62,10 +69,17 @@ describe("durable AI failure policy and private invocation records", () => {
               ...tx,
               async lockGame(gameId) {
                 const game = await tx.lockGame(gameId);
-                if (responses === invalidNumber) {
+                if (cancellationStage === "before outcome" && responses === invalidNumber) {
                   controller.abort("transport-secret-sentinel");
                 }
                 return game;
+              },
+              async incrementAiInvalidCount(turnId) {
+                const count = await tx.incrementAiInvalidCount(turnId);
+                if (cancellationStage === "after budget write" && count === invalidNumber) {
+                  controller.abort("transport-secret-sentinel");
+                }
+                return count;
               },
             }),
           ),
@@ -98,6 +112,72 @@ describe("durable AI failure policy and private invocation records", () => {
         error: { code: "model_invalid", reason: "malformed_output" },
       });
       expect(adapter.moveCalls).toBe(invalidNumber);
+    },
+  );
+
+  it.each(["before outcome", "after invocation write"] as const)(
+    "keeps a legal response and its invocation consistent when cancellation arrives %s",
+    async (cancellationStage) => {
+      const api = await harness.createApi();
+      const owner = await harness.guest(api);
+      const principal = owner.principal;
+      const controller = new AbortController();
+      let responded = false;
+      const repository: GameRepository = {
+        ...api.repository,
+        write: (action) =>
+          api.repository.write((tx) =>
+            action({
+              ...tx,
+              async lockGame(gameId) {
+                const game = await tx.lockGame(gameId);
+                if (responded && cancellationStage === "before outcome") controller.abort();
+                return game;
+              },
+              async finishModelInvocation(...args) {
+                const finished = await tx.finishModelInvocation(...args);
+                if (cancellationStage === "after invocation write") controller.abort();
+                return finished;
+              },
+            }),
+          ),
+      };
+      const adapter = createScriptedAdapter({
+        provider: "openai",
+        moves: [
+          () => {
+            responded = true;
+            return output("e2e4", "Viewer commentary");
+          },
+        ],
+      });
+      const gamesService = service(api, { openai: adapter }, repository);
+      const { snapshot } = await gamesService.createAi(principal, aiMatch);
+      const cmd = turnCommand(snapshot);
+      const result = await gamesService.aiTurn(principal, cmd, access(controller.signal));
+      const accepted = cancellationStage === "after invocation write";
+      expect(result).toMatchObject({ version: 1, state: accepted ? "active" : "paused" });
+      expect(result.moves.map((move) => move.uci)).toEqual(accepted ? ["e2e4"] : []);
+      expect((await gamesService.invocations(principal, snapshot.gameId)).turns).toMatchObject([
+        {
+          invalidOutputCount: 0,
+          acceptedMovePly: accepted ? 1 : null,
+          attempts: [
+            {
+              outcome: accepted ? "accepted" : "provider_error",
+              error: accepted ? null : { code: "provider_unavailable", reason: "cancelled" },
+              commentary: accepted ? "Viewer commentary" : null,
+            },
+          ],
+        },
+      ]);
+      expect(
+        await api.database.db
+          .select()
+          .from(gameCommands)
+          .where(eq(gameCommands.commandId, cmd.commandId)),
+      ).toMatchObject([{ kind: accepted ? "move" : "pause", version: 1 }]);
+      expect(adapter.moveCalls).toBe(1);
     },
   );
 
