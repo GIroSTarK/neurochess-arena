@@ -43,10 +43,35 @@ const webFeatureImports = {
   reference: [],
 };
 const webFeatures = Object.keys(webFeatureImports).join("|");
+const webTestModules = "(^|/)apps/web/src/(test/|.*\\.test\\.[^/]+$)";
+const webProductionModules = { path: "(^|/)apps/web/src/", pathNot: webTestModules };
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
   forbidden: [
+    {
+      name: "web-production-no-node-builtins",
+      comment: "Browser production modules cannot depend on Node.js infrastructure.",
+      severity: "error",
+      from: webProductionModules,
+      to: { dependencyTypes: ["core"] },
+    },
+    {
+      name: "web-production-no-server-libraries",
+      comment: "Server libraries belong behind the API boundary, never in browser production code.",
+      severity: "error",
+      from: webProductionModules,
+      to: {
+        path: "(^|/)node_modules/(fastify|fastify-type-provider-zod|@fastify/[^/]+|pg|pg-[^/]+|postgres|drizzle-orm|drizzle-kit|better-auth|pino)(/|$)",
+      },
+    },
+    {
+      name: "web-production-no-test-helpers",
+      comment: "Test modules may use server infrastructure but cannot enter the production graph.",
+      severity: "error",
+      from: webProductionModules,
+      to: { path: webTestModules },
+    },
     {
       name: "analysis-no-controllers-or-api",
       comment:

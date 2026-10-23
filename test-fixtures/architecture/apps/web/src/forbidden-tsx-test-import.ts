@@ -1,0 +1,1 @@
+import "./allowed-component.test";

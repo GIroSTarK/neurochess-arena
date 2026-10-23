@@ -185,6 +185,12 @@ Exit condition: every MVP acceptance criterion in `docs/product.md` is verified 
 
 The existing live-service, physical-device, accessibility, and operational release gates remain unchanged.
 
+## Architecture clarity top-10 follow-up
+
+**Status:** T01 complete; T02–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+
+- [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
+
 ## Post-MVP candidates
 
 - chess clocks and provider-response time limits;

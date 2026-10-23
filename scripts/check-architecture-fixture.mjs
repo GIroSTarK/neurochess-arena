@@ -7,7 +7,16 @@ const { bin } = JSON.parse(
   readFileSync(resolve(dependencyCruiserDirectory, "package.json"), "utf8"),
 );
 const executable = resolve(dependencyCruiserDirectory, bin.depcruise);
+const webProductionFixtures = [
+  { path: "apps/web/src/forbidden-node-import.ts", rule: "web-production-no-node-builtins" },
+  { path: "apps/web/src/forbidden-pg-import.ts", rule: "web-production-no-server-libraries" },
+  { path: "apps/web/src/forbidden-fastify-import.ts", rule: "web-production-no-server-libraries" },
+  { path: "apps/web/src/forbidden-test-helper-import.ts", rule: "web-production-no-test-helpers" },
+  { path: "apps/web/src/forbidden-test-file-import.ts", rule: "web-production-no-test-helpers" },
+  { path: "apps/web/src/forbidden-tsx-test-import.ts", rule: "web-production-no-test-helpers" },
+].map((fixture) => ({ ...fixture, exclusive: true }));
 const fixtures = [
+  ...webProductionFixtures,
   {
     path: "apps/web/src/analysis/forbidden-controller-import.ts",
     rule: "analysis-no-controllers-or-api",
@@ -95,6 +104,12 @@ const fixtures = [
     rule: "chess-production-no-test-helpers",
   },
 ].map((fixture) => ({ ...fixture, path: `test-fixtures/architecture/${fixture.path}` }));
+const allowedFixtures = [
+  "apps/web/allowed-server-imports.config.ts",
+  "apps/web/src/allowed-server-imports.test.ts",
+  "apps/web/src/allowed-component.test.tsx",
+  "apps/web/src/test/allowed-server-imports.ts",
+].map((path) => `test-fixtures/architecture/${path}`);
 const result = spawnSync(
   process.execPath,
   [
@@ -104,6 +119,7 @@ const result = spawnSync(
     "--output-type",
     "json",
     ...fixtures.map((fixture) => fixture.path),
+    ...allowedFixtures,
   ],
   { encoding: "utf8" },
 );
@@ -124,16 +140,27 @@ if (report.summary.error === 0) {
   throw new Error("The deliberately invalid architecture fixtures were not rejected.");
 }
 for (const fixture of fixtures) {
+  const violations = report.summary.violations.filter(
+    (violation) => violation.from === fixture.path,
+  );
   if (
-    !report.summary.violations.some(
-      (violation) => violation.from === fixture.path && violation.rule.name === fixture.rule,
-    )
+    !violations.some((violation) => violation.rule.name === fixture.rule) ||
+    (fixture.exclusive && violations.some((violation) => violation.rule.name !== fixture.rule))
   ) {
     process.stderr.write(JSON.stringify(report.summary.violations, null, 2));
-    throw new Error(`Architecture fixture ${fixture.path} was not rejected by ${fixture.rule}.`);
+    throw new Error(
+      `Architecture fixture ${fixture.path} must be rejected ${fixture.exclusive ? "only " : ""}by ${fixture.rule}.`,
+    );
+  }
+}
+
+for (const path of allowedFixtures) {
+  if (report.summary.violations.some((violation) => violation.from === path)) {
+    process.stderr.write(JSON.stringify(report.summary.violations, null, 2));
+    throw new Error(`Allowed architecture fixture ${path} was rejected.`);
   }
 }
 
 process.stdout.write(
-  `All ${fixtures.length} architecture guard fixtures were rejected as expected.\n`,
+  `All ${fixtures.length} architecture guard fixtures were rejected as expected; ${allowedFixtures.length} allowed fixtures passed.\n`,
 );

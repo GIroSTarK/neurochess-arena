@@ -100,6 +100,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 ## Dependency direction
 
 - `apps/web` may consume `packages/contracts` and presentation-safe exports from `packages/chess`.
+- Browser production modules in `apps/web/src` cannot import Node built-ins, server libraries listed in the architecture guards, or test modules. Build/config files outside `src`, `*.test.*` files, and `src/test/` helpers may use Node and server libraries.
 - `apps/api` may consume `packages/contracts`, `packages/chess`, and `packages/database`.
 - `packages/contracts` and `packages/chess` are infrastructure-independent leaves.
 - `packages/database` is server-only and does not depend on application code.
@@ -109,7 +110,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 
 Use kebab-case filenames throughout `apps/web`, including React components and hooks (`match-screen.tsx`, `use-sandbox.ts`). Keep exported React component names in PascalCase and hooks in camelCase. Colocate tests with the matching filename and `.test.ts` or `.test.tsx` suffix; dotted suite qualifiers such as `controller.commands.test.ts` remain supported.
 
-`npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, the shared-package infrastructure restrictions, and exclusion of chess test helpers from production imports.
+`npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, browser/shared-package infrastructure restrictions, and exclusion of web/chess test helpers from production imports. Allowed fixtures protect the web build/config and test-module exceptions.
 
 ## Chess domain development
 
