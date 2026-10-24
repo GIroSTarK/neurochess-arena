@@ -78,10 +78,10 @@ export function MatchBoard({
             void controller.lifecycle("pause");
           }}
           onResume={() => {
-            void controller.continue(false);
+            void controller.resume();
           }}
           onStep={() => {
-            void controller.continue(true);
+            void controller.step();
           }}
           onStop={() => {
             void controller.lifecycle("abort");

@@ -43,7 +43,7 @@ export function MatchDetails({
       onCredentialChange={(color, value) => controller.setCredential(color, value, credentials)}
       onKeyChange={(color, value) => controller.setKey(color, value)}
       onResume={() => {
-        void controller.continue(false);
+        void controller.resume();
       }}
     >
       <ArenaDetails

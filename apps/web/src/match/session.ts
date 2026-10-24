@@ -125,7 +125,7 @@ export class MatchSession {
     this.navigation?.game(details.snapshot.gameId, "created");
     if (!this.live(signal)) return;
     void this.services.invocations.load();
-    await this.services.runner.continue(false, true);
+    await this.services.runner.startCreated();
   }
   adopt(snapshot: GameSnapshot) {
     const flow = this.store.getFlow();

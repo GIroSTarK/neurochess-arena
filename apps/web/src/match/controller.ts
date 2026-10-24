@@ -90,8 +90,11 @@ export class MatchController {
   setSpeed(speed: number) {
     this.runner.setSpeed(speed);
   }
-  continue(step: boolean, created = false) {
-    return this.runner.continue(step, created);
+  resume() {
+    return this.runner.resume();
+  }
+  step() {
+    return this.runner.step();
   }
   move(move: string) {
     return this.commands.move(move);

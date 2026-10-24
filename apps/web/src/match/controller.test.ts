@@ -492,7 +492,7 @@ describe("page-owned Arena orchestration", () => {
     expect(h.controller.getSnapshot().keys).toEqual({ white: true, black: true });
     expect(h.api.turn).not.toHaveBeenCalled();
     h.api.turn.mockResolvedValue(snapshot(["e2e4"], { state: "paused", legalMoves: [] }));
-    await h.controller.continue(true);
+    await h.controller.step();
     expect(h.api.turn.mock.calls[0]?.[1]).toEqual({ credentialId: GAME_ID });
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     h.controller.endLifetime();
@@ -516,7 +516,7 @@ describe("page-owned Arena orchestration", () => {
     h.controller.setKey("black", "black-secret");
     const pending = Promise.withResolvers<GameSnapshot>();
     h.api.turn.mockReturnValueOnce(pending.promise);
-    const sending = h.controller.continue(true);
+    const sending = h.controller.step();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().thinking).toBe(true);
     await h.controller.loadInvocations();
@@ -614,7 +614,7 @@ describe("page-owned Arena orchestration", () => {
     const unsubscribe = h.controller.subscribe(() =>
       observed.push(h.controller.getSnapshot().invocations),
     );
-    await h.controller.continue(true);
+    await h.controller.step();
     expect(h.controller.getSnapshot()).toMatchObject({
       invocations: received,
       invocationsMoveCount: 2,
@@ -937,12 +937,12 @@ describe("page-owned Arena orchestration", () => {
     await h.enter();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
-    await h.controller.continue(false);
+    await h.controller.resume();
     expect(h.api.controller).not.toHaveBeenCalled();
     h.controller.setKey("black", "ai-key");
-    await h.controller.continue(true);
+    await h.controller.step();
     expect(h.api.controller).not.toHaveBeenCalled();
-    await h.controller.continue(false);
+    await h.controller.resume();
     expect(h.controller.canMove()).toBe(true);
     expect(h.api.turn).not.toHaveBeenCalled();
   });
@@ -973,7 +973,7 @@ describe("page-owned Arena orchestration", () => {
     const starting = h.controller.created(details);
     await vi.advanceTimersByTimeAsync(0);
     expect(h.api.turn).toHaveBeenCalledTimes(1);
-    await h.controller.continue(false);
+    await h.controller.resume();
     await vi.advanceTimersByTimeAsync(6000);
     expect(h.api.turn).toHaveBeenCalledTimes(1);
     expect(h.controller.getSnapshot().details?.snapshot).toEqual(details.snapshot);
@@ -1016,7 +1016,7 @@ describe("page-owned Arena orchestration", () => {
     await h.controller.created(details);
     expect(h.controller.getSnapshot().phase).toBe("uncertain");
     await vi.advanceTimersByTimeAsync(6000);
-    await h.controller.continue(false);
+    await h.controller.resume();
     expect(h.api.turn).toHaveBeenCalledTimes(1);
     await h.controller.recover();
     expect(h.api.lifecycle.mock.calls[0]?.[0]).toMatchObject({
@@ -1057,17 +1057,17 @@ describe("page-owned Arena orchestration", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.api.controller).not.toHaveBeenCalled();
-    await h.controller.continue(false);
+    await h.controller.resume();
     expect(h.api.turn).not.toHaveBeenCalled();
     h.controller.setKey("white", "white-secret-sentinel");
-    await h.controller.continue(true);
+    await h.controller.step();
     expect(h.api.turn).not.toHaveBeenCalled();
     h.controller.setKey("black", "black-secret-sentinel");
     expect(h.api.turn).not.toHaveBeenCalled();
     h.api.turn.mockResolvedValue(
       snapshot(["e2e4"], { state: "paused", version: 2, legalMoves: [] }),
     );
-    await h.controller.continue(true);
+    await h.controller.step();
     expect(h.api.turn.mock.calls[0]?.[0]).toMatchObject({ step: true, expectedVersion: 1 });
     expect(h.api.lifecycle).toHaveBeenCalledTimes(1);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");

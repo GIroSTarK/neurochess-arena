@@ -343,6 +343,8 @@ The public `match` controller holds complete accepted snapshots, page-memory cre
 
 `match/composition.ts` constructs this collaborator graph once for both the facade and `test/match-session.ts`. It accepts credential creation and PGN delivery as injected dependencies. Constructors only wire references; explicit entry starts the lifetime after the graph is complete. Facade tests still exercise the real `MatchController` and browser-owned credential cleanup.
 
+`AiTurnRunner` exposes `startCreated()`, `resume()`, and `step()` over a private discriminated intent. The session uses `startCreated()` for an already-active creation without a Resume command; the UI facade exposes only `resume()` and `step()`. Resume sends one lifecycle command before continuous play, while Step sends one paused AI turn using the unchanged transport `step` flag.
+
 `match/presentation.ts` projects subscribed state and the display name into localized status, announcements, players, results, board data, and control/recovery availability without a DOM or side effects. `MatchScreen` owns the subscription, credential reconciliation, orientation, focus, and route/setup composition; `match/panels` adapts the header, board controls, and details rail to shared presentation components. The match-only `AiControls` lives with those adapters. Shared play-area, game-details, and player-activity labels use neutral `arena.*` and `players.*` localization keys.
 
 Arena setup and gameplay treat `PROFILE_REQUIRED` as access loss. Pending work is canceled, page-owned credentials and private data are cleared, and late responses cannot restore them. Entry loaders classify this response as denied access; account identity resolution still owns the onboarding flow.

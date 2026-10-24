@@ -10,6 +10,9 @@ interface TurnServices {
   readonly loadInvocations: () => Promise<void>;
 }
 
+type AiTurnIntent =
+  { readonly kind: "startCreated" } | { readonly kind: "resume" } | { readonly kind: "step" };
+
 export class AiTurnRunner {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private request: AbortController | null = null;
@@ -34,7 +37,16 @@ export class AiTurnRunner {
     store.setFlow({ ...store.getFlow(), speed });
     if (store.getActivity().running && store.getActivity().turn.phase === "idle") this.schedule();
   }
-  async continue(step: boolean, created = false) {
+  startCreated() {
+    return this.run({ kind: "startCreated" });
+  }
+  resume() {
+    return this.run({ kind: "resume" });
+  }
+  step() {
+    return this.run({ kind: "step" });
+  }
+  private async run(intent: AiTurnIntent) {
     const { store, live, fail } = this.context;
     const signal = this.context.signal();
     const state = store.get();
@@ -48,8 +60,8 @@ export class AiTurnRunner {
       activity.humanCommand ||
       state.phase !== "ready" ||
       !matchKeysReady(state) ||
-      (step && state.details.configuration?.seats[snapshot.turn].type !== "ai") ||
-      (created ? snapshot.state !== "active" : snapshot.state !== "paused")
+      (intent.kind === "step" && state.details.configuration?.seats[snapshot.turn].type !== "ai") ||
+      (intent.kind === "startCreated" ? snapshot.state !== "active" : snapshot.state !== "paused")
     ) {
       return;
     }
@@ -59,16 +71,18 @@ export class AiTurnRunner {
     let dispatch = false;
     try {
       if (!(await this.services.lease.acquire(signal))) return;
-      if (!created && !step) await this.services.resume(signal);
+      if (intent.kind === "resume") await this.services.resume(signal);
       if (!live(signal)) return;
-      store.setActivity({ ...store.getActivity(), running: !step });
+      store.setActivity({ ...store.getActivity(), running: intent.kind !== "step" });
       dispatch = true;
     } catch (error) {
       if (live(signal)) fail(error);
     } finally {
       if (live(signal)) store.setActivity({ ...store.getActivity(), busy: false });
     }
-    if (dispatch && live(signal)) await this.execute(step);
+    if (dispatch && live(signal)) {
+      await this.execute(intent.kind === "step" ? "step" : "continuous");
+    }
   }
   schedule() {
     clearTimeout(this.timer);
@@ -84,11 +98,11 @@ export class AiTurnRunner {
       details?.configuration?.seats[details.snapshot.turn].type === "ai"
     ) {
       this.timer = setTimeout(() => {
-        void this.execute(false);
+        void this.execute("continuous");
       }, store.get().speed);
     }
   }
-  private async execute(step: boolean) {
+  private async execute(mode: "continuous" | "step") {
     const { api, store, live, adopt, fail } = this.context;
     const signal = this.context.signal();
     const { details, phase } = store.get();
@@ -101,14 +115,18 @@ export class AiTurnRunner {
       humanCommand ||
       busy ||
       phase !== "ready" ||
-      details.snapshot.state !== (step ? "paused" : "active")
+      details.snapshot.state !== (mode === "step" ? "paused" : "active")
     ) {
       return;
     }
     const seat = details.configuration?.seats[details.snapshot.turn];
     const credentials = this.services.seats.current;
     if (seat?.type !== "ai" || !credentials) return;
-    const command = { ...matchCommand(store), controllerId: this.services.lease.id, step };
+    const command = {
+      ...matchCommand(store),
+      controllerId: this.services.lease.id,
+      step: mode === "step",
+    };
     const request = new AbortController();
     this.request = request;
     const flow = store.getFlow();
