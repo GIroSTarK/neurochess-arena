@@ -1,7 +1,7 @@
 import { type ReplayedPosition, replayPositions } from "@neurochess/chess";
 import { z } from "zod";
 
-export const PROFILE_ID = "sf19-lite-single-v1";
+export const PROFILE_ID = "sf19-lite-single-v2";
 export const ENGINE_DIRECTORY = `engines/${PROFILE_ID}`;
 export const UNAVAILABLE_REASONS = [
   "unsupported_browser",

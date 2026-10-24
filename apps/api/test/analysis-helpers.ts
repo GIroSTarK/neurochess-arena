@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { GameSnapshot } from "@neurochess/contracts";
 
+import { currentAnalysisProfile } from "../src/analysis/profiles.js";
+
 export function analysisSample(snapshot: GameSnapshot, ply = 0) {
   return {
     ply,
@@ -12,7 +14,7 @@ export function analysisSample(snapshot: GameSnapshot, ply = 0) {
     historyDigest: createHash("sha256")
       .update(JSON.stringify(["standard-v1", ...snapshot.moves.slice(0, ply).map((m) => m.uci)]))
       .digest("hex"),
-    profileId: "sf19-lite-single-v1",
+    profileId: currentAnalysisProfile.id,
     depth: 12,
     durationMs: 900,
     score: { kind: "cp" as const, value: 24 },

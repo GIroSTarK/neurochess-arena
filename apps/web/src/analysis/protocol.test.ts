@@ -1,7 +1,7 @@
 import { createGame } from "@neurochess/chess";
 import { describe, expect, it } from "vitest";
 
-import { historyDigest, positionFacts, validateRequest } from "./protocol";
+import { historyDigest, positionFacts, PROFILE_ID, validateRequest } from "./protocol";
 
 const gameId = "f0cfe67b-38a0-4e83-aec4-96c81ef479b7";
 
@@ -17,7 +17,7 @@ async function request(moves: string[]) {
     fen: game.snapshot().fen,
     moves,
     historyDigest: await historyDigest(moves),
-    profileId: "sf19-lite-single-v1" as const,
+    profileId: PROFILE_ID,
   };
 }
 

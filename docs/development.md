@@ -592,11 +592,14 @@ worker failure and unsaved-result recovery. Provider fixtures assert that their
 chess context contains no analysis, opponent commentary or identities.
 
 Vite verifies and emits only the pinned lite single-threaded pair under
-`<base>/engines/sf19-lite-single-v1/`. Its `index.html` links the manifest, exact
+`<base>/engines/sf19-lite-single-v2/`. Its `index.html` links the manifest, exact
 source archive, embedded network, notices and rebuild instructions from
 `apps/web/vendor/stockfish`. Ordinary application entry does not fetch the engine.
-The unnecessary npm postinstall is disabled; builds consume the versioned files
-directly. Keep corresponding source materials with every distributed version.
+Stockfish 19.0.1 has no install script; builds consume the versioned files directly.
+The source rebuild separately pins Emscripten and Terser through the manifest and
+`build-package-lock.json`. Keep corresponding source materials with every distributed version.
+An engine rollback must retain all registered analysis profiles so samples already
+stored by a newer engine remain readable; change the current profile without removing known entries.
 The application license and compatibility policy are selected in
 [ADR-0021](decisions/0021-project-license-and-source-distribution.md). Web builds
 also package the application build sources and GPL text using `tar` on PATH;

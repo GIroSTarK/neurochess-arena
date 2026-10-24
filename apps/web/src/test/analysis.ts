@@ -1,4 +1,4 @@
-import type { AnalysisTarget } from "../analysis/protocol";
+import { type AnalysisTarget, PROFILE_ID } from "../analysis/protocol";
 import type { EngineWorker } from "../analysis/worker-client";
 
 export const initialTarget: AnalysisTarget = {
@@ -8,7 +8,7 @@ export const initialTarget: AnalysisTarget = {
   fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   moves: [],
   historyDigest: "c562a09adf818d7f7223abf87a2269ecbfd58b5bf3660bcda356df2eb6cbdff5",
-  profileId: "sf19-lite-single-v1",
+  profileId: PROFILE_ID,
 };
 
 export function fakeEngine() {

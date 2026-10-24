@@ -2,13 +2,26 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { PROFILE_ID } from "./src/analysis/protocol";
 import {
   embeddedNetworkMatches,
   loadStockfishDistribution,
   wasmMemoryLimits,
 } from "./stockfish-assets";
+import manifest from "./vendor/stockfish/manifest.json" with { type: "json" };
 
 describe("pinned Stockfish distribution", () => {
+  it("keeps browser requests, the distributed profile and installed package in sync", () => {
+    expect(manifest.profileId).toBe(PROFILE_ID);
+    const installed: unknown = JSON.parse(
+      readFileSync(new URL("../../node_modules/stockfish/package.json", import.meta.url), "utf8"),
+    );
+    expect(installed).toMatchObject({
+      name: manifest.package.name,
+      version: manifest.package.version,
+    });
+  });
+
   it("verifies exact lite assets, embedded network, source and notices before serving or building", () => {
     const assets = loadStockfishDistribution();
     expect(assets.map((asset) => asset.fileName)).toEqual(
@@ -18,6 +31,7 @@ describe("pinned Stockfish distribution", () => {
         "manifest.json",
         "index.html",
         "stockfish-source.tar.gz",
+        "build-package-lock.json",
         "nn-61e7af4bb97d.nnue",
         "Copying.txt",
         "AUTHORS",

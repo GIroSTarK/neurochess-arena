@@ -103,6 +103,7 @@ it.each(["development", "test"])(
     expect(names).toContain("apps/web/terms.html");
     expect(names).toContain("packages/config/tsconfig/react.json");
     expect(names).toContain("package-lock.json");
+    expect(names).toContain("apps/web/vendor/stockfish/build-package-lock.json");
     expect(names).toContain("docs/licensing.md");
     expect(names).not.toMatch(/(?:^|\/)(?:node_modules|dist|\.git|\.env)(?:\/|\r?$)/m);
     const source = execFileSync("tar", ["-xOzf", "-", "apps/web/src/shell/app-shell.tsx"], {

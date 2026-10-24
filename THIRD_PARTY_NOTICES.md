@@ -4,7 +4,7 @@ Neurochess Arena's original code is licensed under GPL-3.0-only. This does not
 replace the licenses or copyright notices of its dependencies, fonts, or
 vendored materials.
 
-- **Stockfish.js 19.0.0 / Stockfish:** GPLv3. The exact engine source, NNUE
+- **Stockfish.js 19.0.1 / Stockfish:** GPLv3. The exact engine source, NNUE
   network, author notices, license, hashes and build instructions are in
   [apps/web/vendor/stockfish](apps/web/vendor/stockfish/REBUILD.md).
   [Supplemental notices](apps/web/vendor/stockfish/SOURCE-NOTICES.txt) cover the

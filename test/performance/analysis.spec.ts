@@ -75,7 +75,7 @@ test("production entry, engine resources and repeated game lifetimes stay bounde
   const engineAssets = await Promise.all(
     ["js", "wasm"].map(async (extension) => {
       const bytes = await readFile(
-        join(directory, "engines/sf19-lite-single-v1", `stockfish-19-lite-single.${extension}`),
+        join(directory, "engines/sf19-lite-single-v2", `stockfish-19-lite-single.${extension}`),
       );
       return { extension, bytes: bytes.length, gzipBytes: gzipSync(bytes).length };
     }),

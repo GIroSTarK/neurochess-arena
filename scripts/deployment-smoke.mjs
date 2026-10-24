@@ -369,7 +369,7 @@ try {
     assert.match(response.headers["cache-control"], /immutable/);
     securityHeaders(response, "web");
   }
-  const engineRoot = web + "/engines/sf19-lite-single-v1/";
+  const engineRoot = web + "/engines/sf19-lite-single-v2/";
   const manifest = (await request(engineRoot + "manifest.json")).json();
   for (const path of [
     ...Object.keys(manifest.files),

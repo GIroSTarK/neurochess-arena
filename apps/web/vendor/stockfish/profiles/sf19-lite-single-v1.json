@@ -1,0 +1,117 @@
+{
+  "profileId": "sf19-lite-single-v1",
+  "rank": 1,
+  "package": {
+    "name": "stockfish",
+    "version": "19.0.0",
+    "integrity": "sha512-jDyYLbqNpboQcMs5HodTHI2CrKL74zkQWb1+sgoNXw5HI6avTblW4G0X7afFt3BBOc6VbTSkOV64EUxm/DWSpg==",
+    "tarball": "https://registry.npmjs.org/stockfish/-/stockfish-19.0.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/nmrugg/stockfish.js",
+    "revision": "54fde71d90c7c403964f6cacef48f7bbec495df1",
+    "archive": "stockfish-source.tar.gz",
+    "network": "nn-61e7af4bb97d.nnue",
+    "networkUrl": "https://tests.stockfishchess.org/api/nn/nn-61e7af4bb97d.nnue",
+    "modifications": []
+  },
+  "build": {
+    "compiler": "Emscripten 3.1.7",
+    "container": "emscripten/emsdk@sha256:6143f5b3d58fe6e7faf9f279d27ea9ea975983ee2b5490478abda126a6762f34",
+    "command": "node build.js --lite --single-threaded --no-split --strict-em-check",
+    "headerYear": 2026,
+    "flags": [
+      "-msimd128",
+      "LITE_NET=yes",
+      "WASM_SINGLE_THREADED=yes",
+      "NO_SYZYGY=yes",
+      "ASYNCIFY=1",
+      "ASYNCIFY_STACK_SIZE=10485760",
+      "ALLOW_MEMORY_GROWTH=1",
+      "INITIAL_MEMORY=134217728",
+      "MAXIMUM_MEMORY=2147483648"
+    ],
+    "sourceReproduction": "JS and WASM SHA-256 match the npm package byte-for-byte",
+    "headerYearPreload": "source-year.cjs"
+  },
+  "memory": {
+    "initialBytes": 134217728,
+    "maximumBytes": 2147483648,
+    "shared": false,
+    "hashMiB": 16
+  },
+  "options": {
+    "Threads": 1,
+    "Hash": 16,
+    "MultiPV": 1,
+    "Ponder": false,
+    "UCI_LimitStrength": false,
+    "Skill Level": 20,
+    "UCI_Chess960": false
+  },
+  "limits": {
+    "depth": 18,
+    "nodes": 1000000,
+    "movetimeMs": 1000,
+    "startupMs": 15000,
+    "watchdogMs": 2000,
+    "stopMs": 1000,
+    "readinessMs": 1000,
+    "idleMs": 250,
+    "lineBytes": 16384,
+    "partialBufferBytes": 65536,
+    "pendingDescriptors": 2
+  },
+  "score": {
+    "perspective": "white",
+    "centipawns": [-100000, 100000],
+    "mateMaximumMoves": 128,
+    "depth": [0, 18],
+    "durationMs": [0, 3000],
+    "exactPrimaryOnly": true
+  },
+  "license": "GPL-3.0",
+  "publicReleaseGate": "Owner repository-license decision and application/engine compatibility review required; ADR-0019.",
+  "files": {
+    "stockfish-19-lite-single.js": {
+      "origin": "npm",
+      "bytes": 21415,
+      "sha256": "d3344124ab067fb0b90ee77873bb8e9fbf5fc01bc525fe714b0f942581e889e6"
+    },
+    "stockfish-19-lite-single.wasm": {
+      "origin": "npm",
+      "bytes": 1787571,
+      "sha256": "57ac2d72312aba346760e3f173f687a8c211208e97a87268436f7f0e10bb5387"
+    },
+    "stockfish-source.tar.gz": {
+      "origin": "vendored",
+      "bytes": 632604,
+      "sha256": "ff4955eb2b2c6e49152dee875b28794be58cf52a8f019bcb230251207dbdce09"
+    },
+    "nn-61e7af4bb97d.nnue": {
+      "origin": "vendored",
+      "bytes": 1166381,
+      "sha256": "61e7af4bb97d51eeeb25d322916f86513b5cd3a827ce189c98c6e31946f99e5b"
+    },
+    "Copying.txt": {
+      "origin": "vendored",
+      "bytes": 35821,
+      "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+    },
+    "AUTHORS": {
+      "origin": "vendored",
+      "bytes": 6881,
+      "sha256": "f81e7d74c350626766382ec67fa262c38cda00cb8b501790f95cdebb526006c1"
+    },
+    "Top CPU Contributors.txt": {
+      "origin": "vendored",
+      "bytes": 25405,
+      "sha256": "2f5589fb7df96e732605cf4af303f4c126e7adc3f1cbbcd23b48e1cbfc6c50ca"
+    },
+    "source-year.cjs": {
+      "origin": "vendored",
+      "bytes": 256,
+      "sha256": "4371a06b43272014c48c5bd26846e51985d92dc535cdef52b6ce32c4d6b6e9a9"
+    }
+  }
+}

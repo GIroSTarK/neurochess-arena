@@ -151,7 +151,7 @@ test("a live engine loading failure still fails its owning test", async ({ page,
     const worker = new Worker(url);
     Reflect.set(window, "fixtureEngine", worker);
     worker.postMessage("uci");
-  }, WEB_ORIGIN + "/engines/sf19-lite-single-v1/stockfish-19-lite-single.js");
+  }, WEB_ORIGIN + "/engines/sf19-lite-single-v2/stockfish-19-lite-single.js");
   await failure;
   await page.evaluate(() => (Reflect.get(window, "fixtureEngine") as Worker).terminate());
   test.fail(true, "Only obsolete worker loads after navigation may be ignored");

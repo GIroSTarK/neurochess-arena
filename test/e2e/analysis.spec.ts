@@ -13,7 +13,7 @@ let directory: string;
 let origin: string;
 const base = "/analysis-smoke/";
 const probePath = `${base}analysis-probe.js`;
-const enginePath = `${base}engines/sf19-lite-single-v1/`;
+const enginePath = `${base}engines/sf19-lite-single-v2/`;
 
 test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "neurochess-analysis-build-"));
@@ -91,7 +91,7 @@ test("production deep links load the real engine lazily with correct MIME types 
     "stockfish-source.tar.gz",
   );
   const manifest = await request.get(`${origin}${enginePath}manifest.json`);
-  expect(((await manifest.json()) as { profileId: string }).profileId).toBe("sf19-lite-single-v1");
+  expect(((await manifest.json()) as { profileId: string }).profileId).toBe("sf19-lite-single-v2");
 });
 
 test("real no-move completion reports verified checkmate without inventing a score from a result", async ({

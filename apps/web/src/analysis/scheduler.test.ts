@@ -335,7 +335,7 @@ describe("bounded analysis scheduling", () => {
       {
         ...initialTarget,
         moves: undefined,
-        profileId: "sf18-old",
+        profileId: "sf19-lite-single-v1",
         generation: 1,
         depth: 12,
         durationMs: 50,
@@ -349,7 +349,7 @@ describe("bounded analysis scheduling", () => {
     await settle();
     expect(h.scheduler.getState(0)).toMatchObject({
       status: "unavailable",
-      sample: { profileId: "sf18-old" },
+      sample: { profileId: "sf19-lite-single-v1" },
     });
     h.scheduler.dispose();
   });

@@ -70,7 +70,7 @@ test("account AI observation persists every prefix and replays saved analysis wi
   await expect(page.getByTestId("evaluation-selected")).toContainText("Black delivered checkmate");
   await expect(
     page.getByRole("link", { name: "Stockfish 19 · License and exact source" }),
-  ).toHaveAttribute("href", /engines\/sf19-lite-single-v1\/index.html$/);
+  ).toHaveAttribute("href", /engines\/sf19-lite-single-v2\/index.html$/);
   expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("evaluation-replay.png"), fullPage: true });
   const forbidden: string[] = [];

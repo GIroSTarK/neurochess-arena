@@ -1,23 +1,23 @@
 {
-  "profileId": "sf19-lite-single-v1",
-  "rank": 1,
+  "profileId": "sf19-lite-single-v2",
+  "rank": 2,
   "package": {
     "name": "stockfish",
-    "version": "19.0.0",
-    "integrity": "sha512-jDyYLbqNpboQcMs5HodTHI2CrKL74zkQWb1+sgoNXw5HI6avTblW4G0X7afFt3BBOc6VbTSkOV64EUxm/DWSpg==",
-    "tarball": "https://registry.npmjs.org/stockfish/-/stockfish-19.0.0.tgz"
+    "version": "19.0.1",
+    "integrity": "sha512-bTwsO4e9HAwPBKls1+szcfibmaWRNzTF20rQE/XPdB3LOSoT6XTZDr1zYwriwSRRFT5MkvqrglPmJrKEVXGnyQ==",
+    "tarball": "https://registry.npmjs.org/stockfish/-/stockfish-19.0.1.tgz"
   },
   "source": {
     "repository": "https://github.com/nmrugg/stockfish.js",
-    "revision": "54fde71d90c7c403964f6cacef48f7bbec495df1",
+    "revision": "0d5dd7944f88c817c07a26bc4fb1905d5f9c46d6",
     "archive": "stockfish-source.tar.gz",
     "network": "nn-61e7af4bb97d.nnue",
     "networkUrl": "https://tests.stockfishchess.org/api/nn/nn-61e7af4bb97d.nnue",
     "modifications": []
   },
   "build": {
-    "compiler": "Emscripten 3.1.7",
-    "container": "emscripten/emsdk@sha256:6143f5b3d58fe6e7faf9f279d27ea9ea975983ee2b5490478abda126a6762f34",
+    "compiler": "Emscripten 6.0.9",
+    "container": "emscripten/emsdk@sha256:96617f27fe16421588241def73908fd348a7f9d260440ed0d00b36dcf7a063cc",
     "command": "node build.js --lite --single-threaded --no-split --strict-em-check",
     "headerYear": 2026,
     "flags": [
@@ -27,12 +27,15 @@
       "NO_SYZYGY=yes",
       "ASYNCIFY=1",
       "ASYNCIFY_STACK_SIZE=10485760",
+      "STACK_SIZE=4194304",
       "ALLOW_MEMORY_GROWTH=1",
       "INITIAL_MEMORY=134217728",
       "MAXIMUM_MEMORY=2147483648"
     ],
     "sourceReproduction": "JS and WASM SHA-256 match the npm package byte-for-byte",
-    "headerYearPreload": "source-year.cjs"
+    "headerYearPreload": "source-year.cjs",
+    "minifier": "Terser 5.51.2",
+    "dependencyLock": "build-package-lock.json"
   },
   "memory": {
     "initialBytes": 134217728,
@@ -71,22 +74,22 @@
     "exactPrimaryOnly": true
   },
   "license": "GPL-3.0",
-  "publicReleaseGate": "Owner repository-license decision and application/engine compatibility review required; ADR-0019.",
+  "publicReleaseGate": "GPL-3.0-only application policy selected in ADR-0021; retain corresponding source, network and notices alongside every distributed engine.",
   "files": {
     "stockfish-19-lite-single.js": {
       "origin": "npm",
-      "bytes": 21415,
-      "sha256": "d3344124ab067fb0b90ee77873bb8e9fbf5fc01bc525fe714b0f942581e889e6"
+      "bytes": 28230,
+      "sha256": "ccb130d7ff29408531c47d859a49f91d59d4f482d05a53eb1a3231a4f624c91a"
     },
     "stockfish-19-lite-single.wasm": {
       "origin": "npm",
-      "bytes": 1787571,
-      "sha256": "57ac2d72312aba346760e3f173f687a8c211208e97a87268436f7f0e10bb5387"
+      "bytes": 1845971,
+      "sha256": "ee4f115bdb2d32cadf96cada104a05b5ec257d7ad6f57582190b49bc71f096de"
     },
     "stockfish-source.tar.gz": {
       "origin": "vendored",
-      "bytes": 632604,
-      "sha256": "ff4955eb2b2c6e49152dee875b28794be58cf52a8f019bcb230251207dbdce09"
+      "bytes": 426352,
+      "sha256": "e5289a920554bf0069a6601c228e81d957c00522bb31c4343588dc5d7d251879"
     },
     "nn-61e7af4bb97d.nnue": {
       "origin": "vendored",
@@ -112,6 +115,11 @@
       "origin": "vendored",
       "bytes": 256,
       "sha256": "4371a06b43272014c48c5bd26846e51985d92dc535cdef52b6ce32c4d6b6e9a9"
+    },
+    "build-package-lock.json": {
+      "origin": "vendored",
+      "bytes": 4881,
+      "sha256": "cfafd4b1b8bb59e25c5fc076c7b28c2e81942fbc26f88585ffa70c436a3a48ff"
     }
   }
 }

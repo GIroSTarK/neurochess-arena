@@ -79,7 +79,7 @@ export const test = base.extend<{
     const reads: Promise<void>[] = [];
     const errors: string[] = [];
     const navigationEpoch = new Map<Page, number>();
-    const engineUrl = WEB_ORIGIN + "/engines/sf19-lite-single-v1/stockfish-19-lite-single.js";
+    const engineUrl = WEB_ORIGIN + "/engines/sf19-lite-single-v2/stockfish-19-lite-single.js";
     const engineWorkers = new Map<
       Worker,
       { page: Page; epoch: number; path: string; closed: Promise<void> }

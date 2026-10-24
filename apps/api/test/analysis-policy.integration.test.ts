@@ -7,7 +7,7 @@ import { gameAnalysisSamples, gameSlots } from "@neurochess/database";
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
 
-import { currentAnalysisProfile } from "../src/analysis/profiles.js";
+import { analysisProfiles, currentAnalysisProfile } from "../src/analysis/profiles.js";
 import { createAnalysisService } from "../src/analysis/service.js";
 import { positionOf, transportSnapshot } from "../src/games/command-persistence.js";
 import { createLoggerOptions } from "../src/logger.js";
@@ -63,11 +63,12 @@ it("accepts earlier history after new moves without touching execution, slots or
 
 it("retains old labelled profiles until a current higher-rank replacement commits, regardless of depth", async () => {
   const { api, owner, snapshot } = await harness.room();
-  const old = createAnalysisService(api.repository);
-  const sample = { ...analysisSample(snapshot), depth: 18 };
+  const previous = analysisProfiles.known.find((profile) => profile.id === "sf19-lite-single-v1")!;
+  const old = createAnalysisService(api.repository, { current: previous, known: [previous] });
+  const sample = { ...analysisSample(snapshot), profileId: previous.id, depth: 18 };
   const saved = await old.write(owner.principal, snapshot.gameId, { samples: [sample] });
-  const newer = { ...currentAnalysisProfile, id: "fixture-next-profile", rank: 2 };
-  const registry = { current: newer, known: [currentAnalysisProfile, newer] };
+  const newer = currentAnalysisProfile;
+  const registry = analysisProfiles;
   const current = createAnalysisService(api.repository, registry);
   expect((await current.read(owner.principal, snapshot.gameId, {})).samples).toEqual(saved.samples);
   await expect(
@@ -104,7 +105,7 @@ it("retains old labelled profiles until a current higher-rank replacement commit
   });
   expect(replaced.samples).toEqual([expect.objectContaining(replacement)]);
   const rollbackDeployment = createAnalysisService(api.repository, {
-    current: currentAnalysisProfile,
+    current: previous,
     known: registry.known,
   });
   expect(
