@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { aiTurns, authSessions, authUsers, games, modelInvocations } from "@neurochess/database";
+import {
+  aiControllers,
+  aiTurns,
+  authSessions,
+  authUsers,
+  games,
+  modelInvocations,
+} from "@neurochess/database";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,6 +76,65 @@ describe("account session dispatch and revocation races", () => {
     const disabled = await harness.createAuthenticatedApi({ sandboxEnabled: false });
     expect((await harness.post(disabled, cookie, "/sandbox/games", {})).statusCode).toBe(404);
   });
+
+  it.each(["acquire", "heartbeat"] as const)(
+    "rejects controller %s after session revocation during a game lock wait",
+    async (action) => {
+      const api = await harness.createAuthenticatedApi();
+      const account = await harness.account(api);
+      const original = createGameService(api.repository, { nodeEnv: "test", sandboxEnabled: true });
+      const { snapshot } = await original.createAi(account.principal, aiMatch);
+      const controllerId = randomUUID();
+      await original.controller(account.principal, {
+        gameId: snapshot.gameId,
+        expectedVersion: snapshot.version,
+        controllerId,
+        action: "acquire",
+      });
+      const leaseBefore = await api.database.db
+        .select()
+        .from(aiControllers)
+        .where(eq(aiControllers.gameId, snapshot.gameId));
+      const locking = Promise.withResolvers<void>();
+      const service = createGameService(
+        {
+          ...api.repository,
+          write: (command) =>
+            api.repository.write((tx) =>
+              command({
+                ...tx,
+                lockGame: (id) => {
+                  locking.resolve();
+                  return tx.lockGame(id);
+                },
+              }),
+            ),
+        },
+        { nodeEnv: "test", sandboxEnabled: true },
+      );
+      let pending: Promise<unknown> | undefined;
+      await api.database.db.transaction(async (tx) => {
+        await tx.select().from(games).where(eq(games.id, snapshot.gameId)).for("update");
+        pending = service
+          .controller(account.principal, {
+            gameId: snapshot.gameId,
+            controllerId,
+            action,
+            ...(action === "acquire" ? { expectedVersion: snapshot.version } : {}),
+          })
+          .catch((error: unknown) => error);
+        await locking.promise;
+        await tx.delete(authSessions).where(eq(authSessions.id, account.principal.sessionId));
+      });
+      expect(await pending).toMatchObject({ code: "UNAUTHORIZED" });
+      expect(
+        await api.database.db
+          .select()
+          .from(aiControllers)
+          .where(eq(aiControllers.gameId, snapshot.gameId)),
+      ).toEqual(leaseBefore);
+    },
+  );
 
   it.each([
     { timezone: "Pacific/Kiritimati", lifetime: 3_600_000, valid: true },

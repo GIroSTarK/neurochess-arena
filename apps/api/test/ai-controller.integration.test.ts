@@ -170,6 +170,60 @@ describe("database-backed AI controllers and paused single steps", () => {
     expect(await gamesService.snapshot(sandboxOwner.principal, sandbox.gameId)).toEqual(sandbox);
   });
 
+  it("preserves a replacement lease committed while the expiry sweep waits for the game lock", async () => {
+    const api = await harness.createApi();
+    const { principal } = await harness.guest(api);
+    const adapter = createScriptedAdapter({ provider: "openai", moves: [output("e2e4")] });
+    const gamesService = createTestGameService(api, { openai: adapter });
+    const { snapshot } = await gamesService.createAi(principal, aiMatch);
+    await api.database.db
+      .update(aiControllers)
+      .set({ expiresAt: sql`clock_timestamp() - interval '1 second'` })
+      .where(eq(aiControllers.gameId, snapshot.gameId));
+    const locking = Promise.withResolvers<void>();
+    const sweeper = createTestGameService(
+      api,
+      { openai: adapter },
+      {
+        ...api.repository,
+        write: (action) =>
+          api.repository.write((tx) =>
+            action({
+              ...tx,
+              lockGame: (id) => {
+                if (id === snapshot.gameId) locking.resolve();
+                return tx.lockGame(id);
+              },
+            }),
+          ),
+      },
+    );
+    const replacementId = randomUUID();
+    let pending: Promise<void> | undefined;
+    await api.database.db.transaction(async (tx) => {
+      await tx.select().from(games).where(eq(games.id, snapshot.gameId)).for("update");
+      pending = sweeper.expireControllers();
+      await locking.promise;
+      await tx
+        .update(aiControllers)
+        .set({
+          controllerId: replacementId,
+          expiresAt: sql`clock_timestamp() + interval '1 minute'`,
+        })
+        .where(eq(aiControllers.gameId, snapshot.gameId));
+    });
+    await pending;
+    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+    expect(await api.repository.write((tx) => tx.getAiController(snapshot.gameId))).toMatchObject({
+      controllerId: replacementId,
+      expired: false,
+    });
+    expect(
+      await api.database.db.$count(gameCommands, eq(gameCommands.gameId, snapshot.gameId)),
+    ).toBe(0);
+    expect(adapter.moveCalls).toBe(0);
+  });
+
   it.each([false, true])(
     "fences an expired in-flight result before the sweeper runs (step: %s)",
     async (step) => {
@@ -199,6 +253,16 @@ describe("database-backed AI controllers and paused single steps", () => {
         .update(aiControllers)
         .set({ expiresAt: sql`clock_timestamp() - interval '1 second'` })
         .where(eq(aiControllers.gameId, snapshot.gameId));
+      if (step) {
+        await expect(
+          first.controller(principal, {
+            gameId: snapshot.gameId,
+            expectedVersion: snapshot.version,
+            controllerId: randomUUID(),
+            action: "acquire",
+          }),
+        ).rejects.toMatchObject({ code: "AI_TURN_RECOVERY_REQUIRED" });
+      }
       gate.resolve(output("e2e4"));
       await rejected;
       await createTestGameService(await harness.createApi()).expireControllers();
