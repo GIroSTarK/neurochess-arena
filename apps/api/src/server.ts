@@ -20,6 +20,7 @@ import { createOperations } from "./monitoring/operations.js";
 import { createProfileService } from "./profiles/service.js";
 import { createAnthropicAdapter } from "./providers/anthropic.js";
 import { createGoogleAdapter } from "./providers/google.js";
+import { createProviderModelService } from "./providers/model-service.js";
 import { createOpenAiAdapter } from "./providers/openai.js";
 import { createOpenRouterAdapter } from "./providers/openrouter.js";
 import { createRoomEvents } from "./realtime/room-events.js";
@@ -33,6 +34,13 @@ async function main(): Promise<void> {
   const repository = createGameRepository(database);
   const roomEvents = createRoomEvents();
   const operations = createOperations();
+  const guests = createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS);
+  const aiAdapters = {
+    openai: createOpenAiAdapter(),
+    anthropic: createAnthropicAdapter(),
+    google: createGoogleAdapter(),
+    openrouter: createOpenRouterAdapter(),
+  };
   const credentialCipher =
     environment.CREDENTIAL_ENCRYPTION_KEY_ID && environment.CREDENTIAL_ENCRYPTION_KEY
       ? createCredentialCipher({
@@ -52,6 +60,14 @@ async function main(): Promise<void> {
     credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
     rooms: createRoomService(repository, roomEvents),
     roomEvents,
+    providerApi: {
+      models: createProviderModelService(repository, {
+        aiAdapters,
+        operations,
+        ...(credentialCipher ? { credentialCipher } : {}),
+      }),
+      guests,
+    },
     gameApi: {
       games: createGameService(repository, {
         operations,
@@ -59,14 +75,9 @@ async function main(): Promise<void> {
         nodeEnv: environment.NODE_ENV,
         sandboxEnabled: environment.SANDBOX_ENABLED,
         ...(credentialCipher ? { credentialCipher } : {}),
-        aiAdapters: {
-          openai: createOpenAiAdapter(),
-          anthropic: createAnthropicAdapter(),
-          google: createGoogleAdapter(),
-          openrouter: createOpenRouterAdapter(),
-        },
+        aiAdapters,
       }),
-      guests: createGuestService(repository, environment.GUEST_SESSION_TTL_SECONDS),
+      guests,
     },
   });
 

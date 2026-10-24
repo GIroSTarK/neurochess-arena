@@ -24,6 +24,8 @@ import { createAccountAuth } from "../src/auth/service.js";
 import { createGameService } from "../src/games/service.js";
 import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js";
 import { createLoggerOptions } from "../src/logger.js";
+import { createOperations } from "../src/monitoring/operations.js";
+import { createProviderModelService } from "../src/providers/model-service.js";
 
 const environment = {
   BETTER_AUTH_URL: "http://localhost:3001",
@@ -45,7 +47,11 @@ beforeEach(async () => {
   auth = createAccountAuth(database, environment);
   ip = `198.18.${randomInt(256)}.${randomInt(1, 255)}`;
   const repository = createGameRepository(database);
+  const guests = createGuestService(repository, 3600);
+  const aiAdapters = {};
+  const operations = createOperations();
   app = await buildApp({
+    operations,
     readiness: database,
     webOrigin: environment.WEB_ORIGIN,
     auth,
@@ -57,13 +63,18 @@ beforeEach(async () => {
         },
       },
     },
+    providerApi: {
+      models: createProviderModelService(repository, { aiAdapters, operations }),
+      guests,
+    },
     gameApi: {
       games: createGameService(repository, {
+        operations,
         nodeEnv: "test",
         sandboxEnabled: true,
-        aiAdapters: {},
+        aiAdapters,
       }),
-      guests: createGuestService(repository, 3600),
+      guests,
     },
   });
 });

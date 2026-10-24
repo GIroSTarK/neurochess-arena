@@ -20,8 +20,6 @@ import {
   guestSessionRequestSchema,
   guestSessionResponseSchema,
   lifecycleCommandSchema,
-  modelDiscoveryRequestSchema,
-  modelDiscoveryResultSchema,
   moveCommandSchema,
   unfinishedGameDetailsSchema,
   unfinishedGameResponseSchema,
@@ -34,11 +32,7 @@ import { authenticateGuestRequest, setGuestCookie } from "../guests/http.js";
 import { GUEST_COOKIE_NAME, type GuestService } from "../guests/service.js";
 import { publicPrincipalFor } from "../identity/http.js";
 import type { Principal } from "../identity/principal.js";
-import {
-  AI_TURN_TIMEOUT_MS,
-  DISCOVERY_TIMEOUT_MS,
-  providerRequestScope,
-} from "../providers/request-scope.js";
+import { AI_TURN_TIMEOUT_MS, providerRequestScope } from "../providers/request-scope.js";
 
 import { GameRequestError } from "./errors.js";
 import { gameErrorResponses, handleGameError } from "./http.js";
@@ -49,7 +43,7 @@ export interface GameApiOptions {
   readonly games: GameService;
   readonly guests: GuestService;
   readonly webOrigin: string;
-  readonly providerTimeouts?: { readonly discoveryMs?: number; readonly turnMs?: number };
+  readonly turnTimeoutMs?: number;
 }
 
 export async function registerGameRoutes(
@@ -189,36 +183,6 @@ export async function registerGameRoutes(
   );
 
   routes.post(
-    "/providers/models",
-    {
-      schema: {
-        body: modelDiscoveryRequestSchema,
-        querystring: emptyQuerySchema,
-        response: { 200: modelDiscoveryResultSchema, ...aiErrors },
-      },
-    },
-    async (request, reply) => {
-      const principal = await principalFor(request, reply);
-      const scope = providerRequestScope(
-        request,
-        reply,
-        options.providerTimeouts?.discoveryMs ?? DISCOVERY_TIMEOUT_MS,
-      );
-      try {
-        return await options.games.models(principal, request.body.provider, {
-          ...("apiKey" in request.body
-            ? { apiKey: request.body.apiKey }
-            : { credentialId: request.body.credentialId }),
-          signal: scope.signal,
-        });
-      } finally {
-        if ("apiKey" in request.body) request.body.apiKey = "";
-        scope.dispose();
-      }
-    },
-  );
-
-  routes.post(
     "/games",
     {
       schema: {
@@ -288,7 +252,7 @@ export async function registerGameRoutes(
       const scope = providerRequestScope(
         request,
         reply,
-        options.providerTimeouts?.turnMs ?? AI_TURN_TIMEOUT_MS,
+        options.turnTimeoutMs ?? AI_TURN_TIMEOUT_MS,
       );
       try {
         const { gameId, expectedVersion, commandId, controllerId, step } = request.body;

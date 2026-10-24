@@ -25,6 +25,7 @@ import { createGuestService, GUEST_COOKIE_NAME } from "../src/guests/service.js"
 import type { GuestPrincipal } from "../src/identity/principal.js";
 import { createOperations } from "../src/monitoring/operations.js";
 import { createProfileService } from "../src/profiles/service.js";
+import { createProviderModelService } from "../src/providers/model-service.js";
 import { createRoomEvents, type RoomEvents } from "../src/realtime/room-events.js";
 import { createRoomService } from "../src/rooms/service.js";
 
@@ -73,6 +74,8 @@ export class ApiHarness {
     const repository = options.repository?.(original) ?? original;
     const roomEvents = createRoomEvents();
     const operations = createOperations();
+    const guests = createGuestService(repository, options.ttlSeconds ?? 86_400);
+    const aiAdapters = options.aiAdapters ?? {};
     const credentialCipher =
       options.credentialCipher === undefined
         ? createCredentialCipher({
@@ -103,17 +106,30 @@ export class ApiHarness {
               ),
           }
         : {}),
+      providerApi: {
+        models: createProviderModelService(repository, {
+          operations,
+          aiAdapters,
+          ...(credentialCipher ? { credentialCipher } : {}),
+        }),
+        guests,
+        ...(options.providerTimeouts?.discoveryMs === undefined
+          ? {}
+          : { discoveryTimeoutMs: options.providerTimeouts.discoveryMs }),
+      },
       gameApi: {
         games: createGameService(repository, {
           operations,
           roomEvents,
           nodeEnv: options.nodeEnv ?? "test",
           sandboxEnabled: options.sandboxEnabled ?? true,
-          aiAdapters: options.aiAdapters ?? {},
+          aiAdapters,
           ...(credentialCipher ? { credentialCipher } : {}),
         }),
-        guests: createGuestService(repository, options.ttlSeconds ?? 86_400),
-        providerTimeouts: options.providerTimeouts ?? {},
+        guests,
+        ...(options.providerTimeouts?.turnMs === undefined
+          ? {}
+          : { turnTimeoutMs: options.providerTimeouts.turnMs }),
       },
     });
     const instance = { app, database, repository, roomEvents };

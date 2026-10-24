@@ -116,7 +116,7 @@ Current implementation paths (relative to the repository root):
 | `apps/api/src/profiles/`                                                       | Usernames, avatar metadata, and profile settings                                                                             |
 | `apps/api/src/identity/`, `apps/api/src/guests/`                               | Server-derived principals, validity/locking, and guest sessions                                                              |
 | `apps/api/src/credentials/`                                                    | Request-scoped provider access and encrypted saved credentials                                                               |
-| `apps/api/src/providers/`                                                      | Provider adapters, discovery, normalization, and request cancellation                                                        |
+| `apps/api/src/providers/`                                                      | Provider adapters, standalone model-discovery service/routes, normalization, and request cancellation                        |
 | `apps/api/src/games/`                                                          | Game commands/reads, AI execution and controller presence, history ownership/deletion, account game cleanup, replay, and PGN |
 | `apps/api/src/rooms/`                                                          | Invitations, admission, membership, and room lifecycle                                                                       |
 | `apps/api/src/realtime/`                                                       | Human-room WebSocket authentication, presence, synchronization, events, and connection registry                              |
@@ -127,6 +127,8 @@ Current implementation paths (relative to the repository root):
 Profile and account/game lifecycle responsibilities are split across these modules; there is no `users` or `chess` directory inside the API.
 
 Fastify route schemas validate external input and serialize explicit response shapes. Domain services do not depend on Fastify request objects.
+
+`providers/model-service.ts` owns standalone discovery authorization and credential resolution; `providers/routes.ts` registers `/providers/models` independently of game routes. Composition shares guest services, adapters, credential ciphers, and monitoring instances with game execution. Turn-scoped discovery and parameter selection remain in the AI executor.
 
 The API's `identity` module defines a credential-free, server-derived `Principal` and its database validity/locking boundary. Guest token verification and cookie renewal stay in `guests`; game authorization consumes the principal rather than the guest authentication service. See [ADR-0013](decisions/0013-server-derived-principals-and-account-lifecycle.md) for the account extension and cleanup rules.
 

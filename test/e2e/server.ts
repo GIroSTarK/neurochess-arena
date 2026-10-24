@@ -22,7 +22,9 @@ import { createCredentialCipher } from "../../apps/api/src/credentials/crypto.js
 import { createCredentialService } from "../../apps/api/src/credentials/service.js";
 import { createGameService } from "../../apps/api/src/games/service.js";
 import { createGuestService } from "../../apps/api/src/guests/service.js";
+import { createOperations } from "../../apps/api/src/monitoring/operations.js";
 import { createProfileService } from "../../apps/api/src/profiles/service.js";
+import { createProviderModelService } from "../../apps/api/src/providers/model-service.js";
 import { createRoomEvents } from "../../apps/api/src/realtime/room-events.js";
 import { createRoomService } from "../../apps/api/src/rooms/service.js";
 import { buildWeb } from "../../apps/web/build.js";
@@ -55,6 +57,9 @@ async function main() {
       return guest;
     },
   };
+  const guests = createGuestService(repository, 86_400);
+  const aiAdapters = setupProviders();
+  const operations = createOperations();
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   let web: Awaited<ReturnType<typeof createServer>> | undefined;
   let disabledWeb: Awaited<ReturnType<typeof createServer>> | undefined;
@@ -149,6 +154,7 @@ async function main() {
 
   async function start() {
     app = await buildApp({
+      operations,
       serverFactory: testApiServerFactory,
       analysis: createAnalysisService(repository),
       roomRealtimeLimits: { heartbeatMs: 250, pongTimeoutMs: 1000, reconciliationMs: 250 },
@@ -159,13 +165,22 @@ async function main() {
       credentials: createCredentialService(createCredentialRepository(database), credentialCipher),
       rooms: createRoomService(repository, roomEvents),
       roomEvents,
+      providerApi: {
+        models: createProviderModelService(repository, {
+          aiAdapters,
+          credentialCipher,
+          operations,
+        }),
+        guests,
+      },
       gameApi: {
-        guests: createGuestService(repository, 86_400),
+        guests,
         games: createGameService(repository, {
+          operations,
           roomEvents,
           nodeEnv: "test",
           sandboxEnabled: true,
-          aiAdapters: setupProviders(),
+          aiAdapters,
           credentialCipher,
         }),
       },

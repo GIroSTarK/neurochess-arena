@@ -4,7 +4,6 @@ import { createGame } from "@neurochess/chess";
 import {
   type AiGameConfiguration,
   aiGameConfigurationSchema,
-  type AiProvider,
   type GameDetails,
   type GameHistoryDeletedResponse,
   type GameHistoryQuery,
@@ -15,23 +14,20 @@ import {
   type GameSnapshot,
   isAiGameMode,
   type LifecycleCommand,
-  type ModelDiscoveryResult,
   type MoveCommand,
   type UnfinishedGameDetails,
   type UnfinishedGameResponse,
 } from "@neurochess/contracts";
-import type { GameRepository, IdentityTransaction, StoredGame } from "@neurochess/database";
+import type { GameRepository, StoredGame } from "@neurochess/database";
 
 import type { CredentialCipher } from "../credentials/crypto.js";
 import {
   createProviderCredentialAccess,
-  credentialFailure,
   type ProviderOperationAccess,
 } from "../credentials/provider-access.js";
 import type { GameIdentity, Principal } from "../identity/principal.js";
 import { lockPrincipal, requireActivePrincipal } from "../identity/validity.js";
 import type { Operations } from "../monitoring/operations.js";
-import { discoverModels } from "../providers/discovery.js";
 import type { RoomEvents } from "../realtime/room-events.js";
 
 import { type AiAdapters, createAiTurnExecutor } from "./ai-turn.js";
@@ -64,11 +60,6 @@ export interface GameService {
   controller(principal: Principal, input: unknown): Promise<GameSnapshot>;
   expireControllers(): Promise<void>;
   readonly sandboxEnabled: boolean;
-  models(
-    principal: Principal,
-    provider: AiProvider,
-    access: ProviderOperationAccess,
-  ): Promise<ModelDiscoveryResult>;
   createSandbox(principal: Principal): Promise<GameSnapshot>;
   createAi(principal: Principal, configuration: unknown): Promise<GameDetails>;
   details(principal: Principal, gameId: string): Promise<GameDetails>;
@@ -266,21 +257,6 @@ export function createGameService(
       repository.read(async (reader) => (await reader.getGame(gameId))?.isSandbox === true),
     ...createControllerService(repository, { sandboxEnabled, controllerLeaseMs: leaseMs }),
     sandboxEnabled,
-    async models(principal, provider, access) {
-      const adapter = adapters[provider];
-      const authorize = async (tx: IdentityTransaction) => {
-        if (!(await lockPrincipal(tx, principal))) throw new GameRequestError("UNAUTHORIZED");
-      };
-      const result = await useCredential(principal, provider, access, authorize, (resolved) =>
-        discoverModels(
-          adapter?.provider === provider ? adapter : undefined,
-          resolved,
-          options.operations,
-        ),
-      );
-      await repository.write(authorize);
-      return result ?? credentialFailure;
-    },
     async createSandbox(principal) {
       return (await createOwnedGame(principal, null)).snapshot;
     },

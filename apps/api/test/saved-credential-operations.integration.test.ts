@@ -5,12 +5,17 @@ import { providerCredentials } from "@neurochess/database";
 import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { buildApp } from "../src/app.js";
+import { createAccountAuth } from "../src/auth/service.js";
 import { createCredentialCipher } from "../src/credentials/crypto.js";
+import { createGuestService } from "../src/guests/service.js";
 import { createLoggerOptions } from "../src/logger.js";
+import { createOperations } from "../src/monitoring/operations.js";
+import { createProviderModelService } from "../src/providers/model-service.js";
 
-import { AccountGameHarness } from "./account-game-helpers.js";
+import { AccountGameHarness, authEnvironment } from "./account-game-helpers.js";
 import { control, turnCommand } from "./ai-turn-helpers.js";
-import type { TestApi } from "./helpers.js";
+import { type TestApi, WEB_ORIGIN } from "./helpers.js";
 import { type AdapterContractFixture, PROVIDER_KEY } from "./providers/adapter-contract.js";
 import { anthropicFixture } from "./providers/anthropic-fixtures.js";
 import { googleFixture } from "./providers/google-fixtures.js";
@@ -71,6 +76,83 @@ async function invocations(api: TestApi, cookie: string, gameId: string) {
 }
 
 describe("saved credentials in authorized provider operations", () => {
+  it("rejects standalone discovery delivery after its exact account session is revoked", async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const catalog = () => openAiFixture.catalog([openAiFixture.modelId])[0] as Response;
+    const http = mockHttp([
+      async () => {
+        entered.resolve();
+        await release.promise;
+        return catalog();
+      },
+      catalog(),
+    ]);
+    const api = await harness.createAuthenticatedApi();
+    const account = await harness.account(api);
+    const otherSession = await account.anotherSession();
+    const operations = createOperations();
+    const standalone = await buildApp({
+      operations,
+      readiness: api.database,
+      webOrigin: WEB_ORIGIN,
+      auth: createAccountAuth(api.database, authEnvironment),
+      providerApi: {
+        models: createProviderModelService(api.repository, {
+          operations,
+          aiAdapters: { openai: openAiFixture.createAdapter(http.transport) },
+        }),
+        guests: createGuestService(api.repository, 3600),
+      },
+    });
+    const discover = (cookie: string) =>
+      standalone
+        .inject({
+          method: "POST",
+          url: "/providers/models",
+          headers: { origin: WEB_ORIGIN, cookie, "x-neurochess-identity": "account" },
+          payload: { provider: "openai", apiKey: PROVIDER_KEY },
+        })
+        .then((response) => response);
+    try {
+      const pending = discover(account.cookie);
+      try {
+        await entered.promise;
+        expect((await harness.post(api, account.cookie, "/api/auth/sign-out", {})).statusCode).toBe(
+          200,
+        );
+        expect(
+          await api.repository.read((reader) =>
+            reader.hasAccountSession(account.principal.userId, account.principal.sessionId),
+          ),
+        ).toBe(false);
+        expect(
+          await api.repository.read((reader) =>
+            reader.hasAccountSession(
+              otherSession.principal.userId,
+              otherSession.principal.sessionId,
+            ),
+          ),
+        ).toBe(true);
+      } finally {
+        release.resolve();
+      }
+      const rejected = await pending;
+      expect(rejected.statusCode).toBe(401);
+      expect(rejected.json()).toMatchObject({ code: "UNAUTHORIZED" });
+      expect(rejected.headers["cache-control"]).toBe("no-store");
+      expect(rejected.body).not.toContain(PROVIDER_KEY);
+      expect(rejected.body).not.toContain(openAiFixture.modelId);
+      const accepted = await discover(otherSession.cookie);
+      expect(accepted.statusCode).toBe(200);
+      expect(accepted.json()).toMatchObject({ ok: true, models: [{ id: openAiFixture.modelId }] });
+      expect((await standalone.inject({ url: "/games/unfinished" })).statusCode).toBe(404);
+    } finally {
+      release.resolve();
+      await standalone.close();
+    }
+  });
+
   it.each(["discovery", "turn"] as const)(
     "fences a saved-key %s outcome after session revocation",
     async (operation) => {

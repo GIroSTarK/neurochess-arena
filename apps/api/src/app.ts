@@ -30,6 +30,7 @@ import { type ReadinessProbe, registerOperations } from "./monitoring/http.js";
 import { createOperations, type Operations } from "./monitoring/operations.js";
 import { registerProfileRoutes } from "./profiles/routes.js";
 import type { ProfileService } from "./profiles/service.js";
+import { type ProviderApiOptions, registerProviderRoutes } from "./providers/routes.js";
 import type { RoomConnectionLimits } from "./realtime/connections.js";
 import type { RoomEvents } from "./realtime/room-events.js";
 import { registerRoomRealtime } from "./realtime/routes.js";
@@ -48,6 +49,7 @@ export interface BuildAppOptions {
   readonly trustedProxyIp?: string;
   readonly requestLimits?: RequestLimitOptions;
   readonly gameApi?: Omit<GameApiOptions, "webOrigin" | "auth">;
+  readonly providerApi?: Omit<ProviderApiOptions, "webOrigin" | "auth">;
   readonly auth?: AccountAuth;
   readonly profiles?: ProfileService;
   readonly credentials?: CredentialService;
@@ -128,6 +130,14 @@ export async function buildApp(options: BuildAppOptions) {
         ? { status: "ready" as const }
         : reply.code(503).send({ status: "not_ready" as const }),
   );
+
+  if (options.providerApi) {
+    await app.register(registerProviderRoutes, {
+      ...options.providerApi,
+      webOrigin: options.webOrigin,
+      ...(options.auth ? { auth: options.auth } : {}),
+    });
+  }
 
   if (options.gameApi) {
     if (options.analysis) {
