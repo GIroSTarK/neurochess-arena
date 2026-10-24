@@ -104,6 +104,8 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 - `apps/web` may consume `packages/contracts` and presentation-safe exports from `packages/chess`.
 - Browser production modules in `apps/web/src` cannot import Node built-ins, server libraries listed in the architecture guards, or test modules. Build/config files outside `src`, `*.test.*` files, and `src/test/` helpers may use Node and server libraries.
 - `apps/api` may consume `packages/contracts`, `packages/chess`, and `packages/database`.
+- Production API modules in `apps/api/src` and operational scripts in `scripts/monitoring` and `scripts/recovery` cannot import first-party test support: app/package `test/` or `src/test/` directories, root `test/` or `test-fixtures/`, or `*.test.*` files. Colocated tests and each production area's own `test/` helpers are excluded from those production categories.
+- Deployment rehearsals and the architecture fixture runner are outside the production operational category; they and API tests may use test infrastructure, including database helpers.
 - `packages/contracts` and `packages/chess` are infrastructure-independent leaves.
 - `packages/database` is server-only and does not depend on application code.
 - Product packages expose explicit entrypoints; consumers must not deep-import their source files.
@@ -112,7 +114,7 @@ Vite explicitly exposes only `SANDBOX_ENABLED` in addition to the public `VITE_`
 
 Use kebab-case filenames throughout `apps/web`, including React components and hooks (`match-screen.tsx`, `use-sandbox.ts`). Keep exported React component names in PascalCase and hooks in camelCase. Colocate tests with the matching filename and `.test.ts` or `.test.tsx` suffix; dotted suite qualifiers such as `controller.commands.test.ts` remain supported.
 
-`npm run test:architecture` validates the real graph, including external dependency edges without traversing dependency implementations. Deliberately invalid fixtures prove the web/database boundary, both independent leaves, rules-engine encapsulation, public entrypoints, browser/shared-package infrastructure restrictions, and exclusion of web/chess test helpers from production imports. Allowed fixtures protect the web build/config and test-module exceptions.
+`npm run test:architecture` scans `apps`, `packages`, and `scripts`, including standalone monitoring/recovery entrypoints and external dependency edges without traversing dependency implementations. Deliberately invalid fixtures live outside those roots and prove the web/database boundary, both independent leaves, rules-engine encapsulation, all three public package entrypoints, browser/shared-package infrastructure restrictions, and exclusion of test support (including scripted providers) from production API, operational, web, and chess imports. Allowed fixtures protect web build/config exceptions, API test composition, operational package imports, and deployment/fixture-runner test infrastructure. Backend feature ownership and resource-lifetime ordering remain conventions checked by review and behavior tests; no API feature-import matrix is enforced.
 
 ## Chess domain development
 

@@ -45,6 +45,8 @@ const webFeatureImports = {
 const webFeatures = Object.keys(webFeatureImports).join("|");
 const webTestModules = "(^|/)apps/web/src/(test/|.*\\.test\\.[^/]+$)";
 const webProductionModules = { path: "(^|/)apps/web/src/", pathNot: webTestModules };
+const firstPartyTestModules =
+  "(^|/)((apps/[^/]+|packages/[^/]+)/(test/|src/test/)|test/|test-fixtures/)|\\.test\\.[^/]+$";
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 export default {
@@ -125,12 +127,21 @@ export default {
       },
     })),
     {
-      name: "api-production-no-test-adapters",
-      comment:
-        "Scripted providers are injected test fixtures, never production options or fallbacks.",
+      name: "api-production-no-test-helpers",
+      comment: "API production cannot depend on test infrastructure, including scripted providers.",
       severity: "error",
-      from: { path: "(^|/)apps/api/src/", pathNot: "\\.test\\.ts$" },
-      to: { path: "(^|/)apps/api/test/providers/" },
+      from: { path: "(^|/)apps/api/src/", pathNot: "(^|/)apps/api/src/test/|\\.test\\.[^/]+$" },
+      to: { path: firstPartyTestModules },
+    },
+    {
+      name: "operations-production-no-test-helpers",
+      comment: "Production monitoring and recovery scripts cannot depend on test infrastructure.",
+      severity: "error",
+      from: {
+        path: "(^|/)scripts/(monitoring|recovery)/",
+        pathNot: "(^|/)scripts/(monitoring|recovery)/test/|\\.test\\.[^/]+$",
+      },
+      to: { path: firstPartyTestModules },
     },
     {
       name: "no-circular-dependencies",

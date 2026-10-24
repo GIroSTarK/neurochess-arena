@@ -15,8 +15,39 @@ const webProductionFixtures = [
   { path: "apps/web/src/forbidden-test-file-import.ts", rule: "web-production-no-test-helpers" },
   { path: "apps/web/src/forbidden-tsx-test-import.ts", rule: "web-production-no-test-helpers" },
 ].map((fixture) => ({ ...fixture, exclusive: true }));
+const backendFixtures = [
+  { path: "apps/api/src/forbidden-scripted-adapter.ts", rule: "api-production-no-test-helpers" },
+  { path: "apps/api/src/forbidden-api-helper.ts", rule: "api-production-no-test-helpers" },
+  { path: "apps/api/src/forbidden-colocated-test.ts", rule: "api-production-no-test-helpers" },
+  { path: "apps/api/src/forbidden-root-test-support.ts", rule: "api-production-no-test-helpers" },
+  {
+    path: "apps/api/src/forbidden-package-test-support.ts",
+    rule: "api-production-no-test-helpers",
+  },
+  {
+    path: "scripts/monitoring/forbidden-test-support.ts",
+    rule: "operations-production-no-test-helpers",
+  },
+  {
+    path: "scripts/recovery/forbidden-api-helper.ts",
+    rule: "operations-production-no-test-helpers",
+  },
+  {
+    path: "scripts/recovery/forbidden-colocated-test.ts",
+    rule: "operations-production-no-test-helpers",
+  },
+  {
+    path: "apps/api/forbidden-contracts-internal-import.ts",
+    rule: "contracts-public-entrypoint-only",
+  },
+  {
+    path: "apps/api/forbidden-database-internal-import.ts",
+    rule: "database-public-entrypoint-only",
+  },
+].map((fixture) => ({ ...fixture, exclusive: true }));
 const fixtures = [
   ...webProductionFixtures,
+  ...backendFixtures,
   {
     path: "apps/web/src/analysis/forbidden-controller-import.ts",
     rule: "analysis-no-controllers-or-api",
@@ -67,7 +98,6 @@ const fixtures = [
     path: "apps/web/src/gameplay/forbidden-feature-import.ts",
     rule: "gameplay-no-features",
   },
-  { path: "apps/api/src/forbidden-scripted-adapter.ts", rule: "api-production-no-test-adapters" },
   { path: "apps/web/forbidden-database-import.ts", rule: "web-no-server-infrastructure" },
   { path: "apps/web/forbidden-engine-import.ts", rule: "chess-engine-is-encapsulated" },
   {
@@ -105,10 +135,16 @@ const fixtures = [
   },
 ].map((fixture) => ({ ...fixture, path: `test-fixtures/architecture/${fixture.path}` }));
 const allowedFixtures = [
+  "apps/api/src/allowed-infrastructure.test.ts",
+  "apps/api/test/allowed-infrastructure.ts",
   "apps/web/allowed-server-imports.config.ts",
   "apps/web/src/allowed-server-imports.test.ts",
   "apps/web/src/allowed-component.test.tsx",
   "apps/web/src/test/allowed-server-imports.ts",
+  "scripts/monitoring/allowed-package-imports.ts",
+  "scripts/recovery/allowed-package-imports.ts",
+  "scripts/deployment-smoke.mjs",
+  "scripts/check-architecture-fixture.mjs",
 ].map((path) => `test-fixtures/architecture/${path}`);
 const result = spawnSync(
   process.execPath,
@@ -121,7 +157,7 @@ const result = spawnSync(
     ...fixtures.map((fixture) => fixture.path),
     ...allowedFixtures,
   ],
-  { encoding: "utf8" },
+  { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
 );
 const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
 
