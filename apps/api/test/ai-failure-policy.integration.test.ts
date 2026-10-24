@@ -697,6 +697,56 @@ describe("durable AI failure policy and private invocation records", () => {
     },
   );
 
+  it("does not attach a previous invalid response to a retry fenced before dispatch", async () => {
+    const api = await harness.createApi();
+    const owner = await harness.guest(api);
+    const principal = owner.principal;
+    const adapter = createScriptedAdapter({ provider: "openai", moves: [invalid] });
+    const repository: GameRepository = {
+      ...api.repository,
+      write: (action) =>
+        api.repository.write((tx) =>
+          action({
+            ...tx,
+            async beginModelInvocation(invocation) {
+              const attempt = await tx.beginModelInvocation(invocation);
+              if (attempt.attemptNumber === 2) await tx.clearAiController(snapshot.gameId);
+              return attempt;
+            },
+          }),
+        ),
+    };
+    const gamesService = createTestGameService(api, { openai: adapter }, repository);
+    const {
+      details: { snapshot },
+      controllerId,
+    } = await createControlledAiGame(gamesService, principal, aiMatch, randomUUID());
+    await expect(
+      gamesService.aiTurn(principal, turnCommand(snapshot, controllerId), access()),
+    ).rejects.toMatchObject({ code: "AI_CONTROLLER_LOST" });
+    expect(await gamesService.snapshot(principal, snapshot.gameId)).toEqual(snapshot);
+    expect((await gamesService.invocations(principal, snapshot.gameId)).turns).toMatchObject([
+      {
+        invalidOutputCount: 1,
+        acceptedMovePly: null,
+        attempts: [
+          { outcome: "model_invalid", error: { code: "model_invalid" } },
+          { outcome: "in_flight", error: null, durationMs: null, usage: null, commentary: null },
+        ],
+      },
+    ]);
+    expect(adapter.moveCalls).toBe(1);
+    expect(
+      await api.database.db
+        .select()
+        .from(aiTurnReservations)
+        .where(eq(aiTurnReservations.gameId, snapshot.gameId)),
+    ).toMatchObject([{ state: "blocked" }]);
+    expect(
+      await api.database.db.$count(gameCommands, eq(gameCommands.gameId, snapshot.gameId)),
+    ).toBe(0);
+  });
+
   it("rejects inconsistent persisted counters on private reads without changing records", async () => {
     const api = await harness.createApi();
     const owner = await harness.guest(api);
