@@ -140,13 +140,25 @@ setTimeout(() => postMessage("settled"), 100);`,
   });
 }
 
-test("a live engine loading failure still fails its owning test", async ({ page, context }) => {
+test("a live engine loading failure still fails its owning test", async ({
+  page,
+  context,
+  browserName,
+}) => {
   await context.route("**/stockfish-19-lite-single.wasm", (route) => route.abort());
   await page.goto("/");
-  const failure = page.waitForEvent(
-    "console",
-    (message) => message.type() === "error" && message.worker() !== null,
-  );
+  // Chromium reports a WebError; Firefox's native fetch error has no worker association.
+  const failure =
+    browserName === "chromium"
+      ? context.waitForEvent("weberror")
+      : page.waitForEvent(
+          "console",
+          (message) =>
+            message.type() === "error" &&
+            (message.worker() !== null ||
+              (browserName === "firefox" &&
+                message.text().includes("NetworkError when attempting to fetch resource."))),
+        );
   await page.evaluate((url) => {
     const worker = new Worker(url);
     Reflect.set(window, "fixtureEngine", worker);
