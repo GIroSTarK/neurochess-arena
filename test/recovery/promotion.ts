@@ -3,9 +3,10 @@ import { stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { join, resolve } from "node:path";
 
-import { command } from "../../scripts/recovery/runtime.ts";
+import { type Command, command } from "../../scripts/recovery/runtime.ts";
 
 import type { environment } from "./environment.js";
+import { closePromotion } from "./lifecycle.js";
 
 type Infrastructure = Awaited<ReturnType<typeof environment>>;
 export async function recoveryApiEnvironment(
@@ -67,32 +68,18 @@ export async function runReconciliation(
     "/recovery-manifest.json",
   ]);
 }
-export async function promote(directory: string, infra: Infrastructure, apiEnv: string) {
+export async function promote(
+  directory: string,
+  infra: Infrastructure,
+  apiEnv: string,
+  runCommand: Command = command,
+) {
   const project = `nc-promote-${randomUUID()}`;
   const envFile = join(directory, "promoted.env");
   const overrideFile = join(directory, "promoted-isolation.json");
-  await writeFile(
-    envFile,
-    [
-      `API_IMAGE=${process.env.DEPLOY_API_IMAGE ?? "neurochess-api:p5-10"}`,
-      "WEB_IMAGE=neurochess-web:p5-10",
-      "WEB_ORIGIN=https://arena.example.com",
-      "BETTER_AUTH_URL=https://api.example.com",
-      `API_ENV_FILE=${apiEnv.replaceAll("\\", "/")}`,
-      `SECRETS_DIR=${infra.recovery.secretDirectory.replaceAll("\\", "/")}`,
-      `RECOVERED_VOLUME=${infra.recovery.volume}`,
-      "EDGE_SUBNET=172.31.254.0/24",
-      "EDGE_DYNAMIC_RANGE=172.31.254.128/25",
-      "PROXY_IP=172.31.254.2",
-    ].join("\n") + "\n",
-  );
-  await writeFile(
-    overrideFile,
-    JSON.stringify({
-      services: { api: { container_name: `${project}-api` } },
-      networks: { edge: { internal: true } },
-    }),
-  );
+  let composeStarted = false;
+  const relay = `${project}-relay`;
+  let relayCreated = false;
   const compose = [
     "compose",
     "--project-name",
@@ -106,26 +93,53 @@ export async function promote(directory: string, infra: Infrastructure, apiEnv: 
     "-f",
     overrideFile,
   ];
-  const relay = `${project}-relay`;
-  let relayCreated = false;
-  async function close() {
-    if (relayCreated) await command("docker", ["rm", "-f", relay]);
-    await command("docker", [...compose, "down", "--volumes", "--remove-orphans"]);
-  }
+  const close = (setupFailed = false) =>
+    closePromotion(
+      {
+        ...(relayCreated ? { relay } : {}),
+        ...(composeStarted ? { compose } : {}),
+      },
+      runCommand,
+      setupFailed,
+    );
   try {
-    await command("docker", [...infra.recovery.compose, "stop", "postgres"]);
-    const state = await command("docker", [
+    await writeFile(
+      envFile,
+      [
+        `API_IMAGE=${process.env.DEPLOY_API_IMAGE ?? "neurochess-api:p5-10"}`,
+        "WEB_IMAGE=neurochess-web:p5-10",
+        "WEB_ORIGIN=https://arena.example.com",
+        "BETTER_AUTH_URL=https://api.example.com",
+        `API_ENV_FILE=${apiEnv.replaceAll("\\", "/")}`,
+        `SECRETS_DIR=${infra.recovery.secretDirectory.replaceAll("\\", "/")}`,
+        `RECOVERED_VOLUME=${infra.recovery.volume}`,
+        "EDGE_SUBNET=172.31.254.0/24",
+        "EDGE_DYNAMIC_RANGE=172.31.254.128/25",
+        "PROXY_IP=172.31.254.2",
+      ].join("\n") + "\n",
+    );
+    await writeFile(
+      overrideFile,
+      JSON.stringify({
+        services: { api: { container_name: `${project}-api` } },
+        networks: { edge: { internal: true } },
+      }),
+    );
+    await runCommand("docker", [...infra.recovery.compose, "stop", "postgres"]);
+    const state = await runCommand("docker", [
       "inspect",
       "--format",
       "{{.State.Running}}",
       infra.target.name,
     ]);
     if (state.trim() !== "false") throw new Error("RECOVERY_OWNER_STILL_RUNNING");
-    await command("docker", [...compose, "config", "--quiet"]);
-    await command("docker", [...compose, "up", "-d", "--wait", "postgres"]);
-    await command("docker", [...compose, "run", "--rm", "migrate"]);
-    await command("docker", [...compose, "up", "-d", "--wait", "api"]);
-    await command("docker", [
+    composeStarted = true;
+    await runCommand("docker", [...compose, "config", "--quiet"]);
+    await runCommand("docker", [...compose, "up", "-d", "--wait", "postgres"]);
+    await runCommand("docker", [...compose, "run", "--rm", "migrate"]);
+    await runCommand("docker", [...compose, "up", "-d", "--wait", "api"]);
+    relayCreated = true;
+    await runCommand("docker", [
       "run",
       "-d",
       "--name",
@@ -139,9 +153,8 @@ export async function promote(directory: string, infra: Infrastructure, apiEnv: 
       "-e",
       `const net=require('node:net');net.createServer(s=>{const d=net.connect(3001,'${project}-api');s.on('error',()=>d.destroy());d.on('error',()=>s.destroy());s.pipe(d).pipe(s)}).listen(3001)`,
     ]);
-    relayCreated = true;
-    await command("docker", ["network", "connect", `${project}_edge`, relay]);
-    const address = (await command("docker", ["port", relay, "3001/tcp"])).trim();
+    await runCommand("docker", ["network", "connect", `${project}_edge`, relay]);
+    const address = (await runCommand("docker", ["port", relay, "3001/tcp"])).trim();
     if (!/^127\.0\.0\.1:\d+$/.test(address)) throw new Error("UNSAFE_PROMOTION_RELAY");
     return {
       container: `${project}-postgres-1`,
@@ -187,7 +200,7 @@ export async function promote(directory: string, infra: Infrastructure, apiEnv: 
         ),
     };
   } catch (error) {
-    await close();
+    await close(true);
     throw error;
   }
 }

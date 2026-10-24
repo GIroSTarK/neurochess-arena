@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { roomIssuedResponseSchema } from "@neurochess/contracts";
 import {
@@ -27,26 +27,37 @@ import { RoomSocketHarness } from "../../apps/api/test/room-socket-helpers.js";
 import { command } from "../../scripts/recovery/runtime.ts";
 
 import { environment } from "./environment.js";
+import { closeRecoveryScenario } from "./lifecycle.js";
 import { recoveryApiEnvironment, runReconciliation } from "./promotion.js";
 
 it("reconciles known deletions without user sessions and preserves the surviving room participant", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nc-recovery-reconcile-"));
-  const infra = await environment(directory);
-  const databaseName = `nc_restore_${randomUUID().replaceAll("-", "")}`;
-  await command("docker", [
-    "exec",
-    infra.target.name,
-    "createdb",
-    "-U",
-    "postgres",
-    "-O",
-    "neurochess",
-    databaseName,
-  ]);
-  const connect = () => createDatabase(infra.target.url(databaseName));
-  const harness = new RoomSocketHarness(connect);
-  let maintenance = connect();
+  let infra: Awaited<ReturnType<typeof environment>> | undefined;
+  const resources: { name: string; close(): unknown }[] = [];
+  let scenarioFailed = false;
   try {
+    const infrastructure = await environment(directory);
+    infra = infrastructure;
+    const databaseName = `nc_restore_${randomUUID().replaceAll("-", "")}`;
+    await command("docker", [
+      "exec",
+      infra.target.name,
+      "createdb",
+      "-U",
+      "postgres",
+      "-O",
+      "neurochess",
+      databaseName,
+    ]);
+    const connect = () => createDatabase(infrastructure.target.url(databaseName));
+    const harness = new RoomSocketHarness(connect);
+    resources.push({ name: "room harness", close: () => harness.dispose() });
+    let maintenance = connect();
+    let maintenanceOpen = true;
+    resources.unshift({
+      name: "maintenance database",
+      close: () => (maintenanceOpen ? maintenance.close() : undefined),
+    });
     await runMigrations(maintenance);
     const { api, owner, room, invitation } = await harness.room();
     const peer = await harness.account(api);
@@ -107,15 +118,19 @@ it("reconciles known deletions without user sessions and preserves the surviving
       invalidateSessions: true,
     };
     const otherConnection = connect();
-    try {
-      await otherConnection.check();
-      await expect(
-        reconcileRestoredDatabase(maintenance, manifest, abortSharedGame),
-      ).rejects.toThrow("RESTORE_RECONCILIATION_REFUSED");
-    } finally {
-      await otherConnection.close();
-    }
+    let otherOpen = true;
+    resources.push({
+      name: "secondary database",
+      close: () => (otherOpen ? otherConnection.close() : undefined),
+    });
+    await otherConnection.check();
+    await expect(reconcileRestoredDatabase(maintenance, manifest, abortSharedGame)).rejects.toThrow(
+      "RESTORE_RECONCILIATION_REFUSED",
+    );
+    await otherConnection.close();
+    otherOpen = false;
     await maintenance.close();
+    maintenanceOpen = false;
     const apiEnv = await recoveryApiEnvironment(directory, infra, databaseName, {
       auth: authEnvironment.BETTER_AUTH_SECRET,
       keyId: "integration-fixture",
@@ -127,6 +142,7 @@ it("reconciles known deletions without user sessions and preserves the surviving
       expect(await runReconciliation(infra, apiEnv, manifestFile)).toContain('"status":"success"');
     } finally {
       maintenance = connect();
+      maintenanceOpen = true;
     }
     expect(await maintenance.db.$count(authUsers, eq(authUsers.id, owner.principal.userId))).toBe(
       0,
@@ -172,24 +188,22 @@ it("reconciles known deletions without user sessions and preserves the surviving
     expect(await maintenance.db.$count(games, eq(games.id, room.snapshot.gameId))).toBe(0);
     expect(await maintenance.db.$count(gameAnalysisSamples)).toBe(0);
     const ordinary = createDatabase(infra.source.url("neurochess"));
-    try {
-      await expect(reconcileRestoredDatabase(ordinary, manifest, abortSharedGame)).rejects.toThrow(
-        "RESTORE_RECONCILIATION_REFUSED",
-      );
-    } finally {
-      await ordinary.close();
-    }
+    resources.push({ name: "source database", close: () => ordinary.close() });
+    await expect(reconcileRestoredDatabase(ordinary, manifest, abortSharedGame)).rejects.toThrow(
+      "RESTORE_RECONCILIATION_REFUSED",
+    );
+  } catch (error) {
+    scenarioFailed = true;
+    throw error;
   } finally {
-    try {
-      await maintenance.close();
-      await harness.dispose();
-    } finally {
-      try {
-        await infra.close();
-      } finally {
-        expect(dirname(directory)).toBe(tmpdir());
-        await rm(directory, { recursive: true, force: true });
-      }
-    }
+    await closeRecoveryScenario(
+      {
+        resources,
+        infrastructure: () => infra?.close(),
+        directory,
+        prefix: "nc-recovery-reconcile-",
+      },
+      scenarioFailed,
+    );
   }
 });

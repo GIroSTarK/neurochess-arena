@@ -82,6 +82,8 @@ export default defineConfig({
             "apps/web/*.test.ts",
             "packages/**/*.test.ts",
             "test/e2e/**/*.test.ts",
+            "test/resource-cleanup.test.ts",
+            "test/operational-fixture-lifecycle.test.ts",
             ...webNodeTestFiles,
           ],
         },

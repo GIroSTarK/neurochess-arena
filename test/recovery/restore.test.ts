@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { copyFile, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { createGame } from "@neurochess/chess";
 import {
@@ -33,23 +33,33 @@ import { type Command, command } from "../../scripts/recovery/runtime.ts";
 
 import { environment } from "./environment.js";
 import { fixtures } from "./fixtures.js";
+import { closeRecoveryScenario } from "./lifecycle.js";
 import { promote, recoveryApiEnvironment, runReconciliation } from "./promotion.js";
 
 it("recovers a private populated database and separate secrets, then reconciles post-backup deletions before reopening", async () => {
   const directory = await mkdtemp(join(tmpdir(), "nc-recovery-drill-"));
-  const infra = await environment(directory).catch(async (error: unknown) => {
-    expect(dirname(directory)).toBe(tmpdir());
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  });
-  const sourceHarness = new RoomSocketHarness(() => createDatabase(infra.source.url("neurochess")));
-  let restoredUrl = "";
-  const targetHarness = new RoomSocketHarness(() => createDatabase(restoredUrl));
-  let targetDisposed = false;
-  vi.stubGlobal("fetch", () => {
-    throw new Error("OUTBOUND_NETWORK_DISABLED");
-  });
+  let infra: Awaited<ReturnType<typeof environment>> | undefined;
+  const resources: { name: string; close(): unknown }[] = [
+    { name: "globals", close: () => vi.unstubAllGlobals() },
+  ];
+  let scenarioFailed = false;
   try {
+    const infrastructure = await environment(directory);
+    infra = infrastructure;
+    const sourceHarness = new RoomSocketHarness(() =>
+      createDatabase(infrastructure.source.url("neurochess")),
+    );
+    resources.push({ name: "source harness", close: () => sourceHarness.dispose() });
+    let restoredUrl = "";
+    const targetHarness = new RoomSocketHarness(() => createDatabase(restoredUrl));
+    let targetDisposed = false;
+    resources.splice(1, 0, {
+      name: "target harness",
+      close: () => (targetDisposed ? undefined : targetHarness.dispose()),
+    });
+    vi.stubGlobal("fetch", () => {
+      throw new Error("OUTBOUND_NETWORK_DISABLED");
+    });
     const secretDirectory = join(directory, "separate-secret-store");
     const { mkdir } = await import("node:fs/promises");
     await mkdir(secretDirectory, { mode: 0o700 });
@@ -405,6 +415,7 @@ it("recovers a private populated database and separate secrets, then reconciles 
     );
     expect(await runReconciliation(infra, apiEnv, manifestFile)).toContain('"status":"success"');
     const promoted = await promote(directory, infra, apiEnv);
+    let promotionFailed = false;
     try {
       expect(
         (await promoted.read(`/games/${fixture.shared.gameId}`, fixture.peer.cookie)).status,
@@ -429,8 +440,11 @@ it("recovers a private populated database and separate secrets, then reconciles 
         },
         cloud,
       );
+    } catch (error) {
+      promotionFailed = true;
+      throw error;
     } finally {
-      await promoted.close();
+      await promoted.close(promotionFailed);
     }
     const recoveryMs = Math.ceil(performance.now() - recoveryStarted);
     expect(recoveryMs).toBeLessThan(7_200_000);
@@ -445,15 +459,18 @@ it("recovers a private populated database and separate secrets, then reconciles 
     if (process.env.RECOVERY_EVIDENCE_FILE) {
       await writeFile(process.env.RECOVERY_EVIDENCE_FILE, JSON.stringify(evidence));
     }
+  } catch (error) {
+    scenarioFailed = true;
+    throw error;
   } finally {
-    vi.unstubAllGlobals();
-    try {
-      if (!targetDisposed) await targetHarness.dispose();
-      await sourceHarness.dispose();
-    } finally {
-      await infra.close();
-      expect(dirname(directory)).toBe(tmpdir());
-      await rm(directory, { recursive: true, force: true });
-    }
+    await closeRecoveryScenario(
+      {
+        resources,
+        infrastructure: () => infra?.close(),
+        directory,
+        prefix: "nc-recovery-drill-",
+      },
+      scenarioFailed,
+    );
   }
 });

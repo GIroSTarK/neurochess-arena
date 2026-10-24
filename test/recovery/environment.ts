@@ -3,54 +3,19 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { command } from "../../scripts/recovery/runtime.ts";
+import { type Command, command as runCommand } from "../../scripts/recovery/runtime.ts";
+
+import { closeRecoveryEnvironment } from "./lifecycle.js";
 
 const image =
   "postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873";
 
-export async function environment(directory: string) {
+export async function environment(directory: string, command: Command = runCommand) {
   const network = `nc-recovery-${randomUUID()}`;
-  const containers: string[] = [];
+  const containers: { name: string; container: string }[] = [];
   const secretDirectory = join(directory, "database-secrets");
-  await mkdir(secretDirectory, { mode: 0o700 });
-  const password = randomBytes(24).toString("hex");
-  await writeFile(
-    join(secretDirectory, "postgres-admin-password"),
-    randomBytes(24).toString("hex"),
-    { mode: 0o600 },
-  );
-  await writeFile(join(secretDirectory, "postgres-app-password"), password, { mode: 0o600 });
-  const certificate = join(secretDirectory, "postgres-cert.pem");
-  const opensslConfig = join(directory, "openssl.cnf");
-  await writeFile(opensslConfig, "[req]\ndistinguished_name=dn\n[dn]\n");
-  await command("openssl", [
-    "req",
-    "-config",
-    opensslConfig,
-    "-x509",
-    "-newkey",
-    "rsa:2048",
-    "-nodes",
-    "-days",
-    "1",
-    "-subj",
-    "/CN=postgres",
-    "-addext",
-    "subjectAltName=DNS:postgres,IP:127.0.0.1",
-    "-addext",
-    "basicConstraints=critical,CA:TRUE",
-    "-keyout",
-    join(secretDirectory, "postgres-key.pem"),
-    "-out",
-    certificate,
-  ]);
   const envFile = join(directory, "restore.env");
   const overrideFile = join(directory, "restore-override.json");
-  await writeFile(envFile, `SECRETS_DIR=${secretDirectory.replaceAll("\\", "/")}\n`);
-  await writeFile(
-    overrideFile,
-    JSON.stringify({ services: { postgres: { container_name: `${network}-target` } } }),
-  );
   const compose = [
     "compose",
     "--project-name",
@@ -63,20 +28,57 @@ export async function environment(directory: string) {
     overrideFile,
   ];
   let composeStarted = false;
-  await command("docker", ["network", "create", "--internal", network]);
-  async function close() {
-    const removed = await Promise.allSettled(
-      containers.map((container) => command("docker", ["rm", "-f", "--volumes", container])),
+  let networkStarted = false;
+  const close = (setupFailed = false) =>
+    closeRecoveryEnvironment(
+      {
+        containers,
+        ...(composeStarted ? { compose } : {}),
+        ...(networkStarted ? { network } : {}),
+      },
+      command,
+      setupFailed,
     );
-    if (composeStarted) {
-      await command("docker", [...compose, "down", "--volumes", "--remove-orphans"]);
-    }
-    await command("docker", ["network", "rm", network]);
-    if (removed.some((result) => result.status === "rejected")) {
-      throw new Error("RECOVERY_DRILL_CLEANUP_FAILED");
-    }
-  }
   try {
+    await mkdir(secretDirectory, { mode: 0o700 });
+    const password = randomBytes(24).toString("hex");
+    await writeFile(
+      join(secretDirectory, "postgres-admin-password"),
+      randomBytes(24).toString("hex"),
+      { mode: 0o600 },
+    );
+    await writeFile(join(secretDirectory, "postgres-app-password"), password, { mode: 0o600 });
+    const certificate = join(secretDirectory, "postgres-cert.pem");
+    const opensslConfig = join(directory, "openssl.cnf");
+    await writeFile(opensslConfig, "[req]\ndistinguished_name=dn\n[dn]\n");
+    await command("openssl", [
+      "req",
+      "-config",
+      opensslConfig,
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-days",
+      "1",
+      "-subj",
+      "/CN=postgres",
+      "-addext",
+      "subjectAltName=DNS:postgres,IP:127.0.0.1",
+      "-addext",
+      "basicConstraints=critical,CA:TRUE",
+      "-keyout",
+      join(secretDirectory, "postgres-key.pem"),
+      "-out",
+      certificate,
+    ]);
+    await writeFile(envFile, `SECRETS_DIR=${secretDirectory.replaceAll("\\", "/")}\n`);
+    await writeFile(
+      overrideFile,
+      JSON.stringify({ services: { postgres: { container_name: `${network}-target` } } }),
+    );
+    networkStarted = true;
+    await command("docker", ["network", "create", "--internal", network]);
     const databases = [];
     for (const kind of ["source", "target"]) {
       const name = `${network}-${kind}`;
@@ -87,6 +89,7 @@ export async function environment(directory: string) {
         await command("docker", [...compose, "up", "-d", "--wait"]);
         databaseNetwork = `${network}-target_database`;
       } else {
+        containers.push({ name: "source container", container: name });
         await command("docker", [
           "run",
           "-d",
@@ -104,7 +107,6 @@ export async function environment(directory: string) {
           "POSTGRES_DB=neurochess",
           image,
         ]);
-        containers.push(name);
         let ready = false;
         for (let attempt = 0; attempt < 80; attempt++) {
           try {
@@ -143,6 +145,7 @@ export async function environment(directory: string) {
       // Internal Docker networks disable published ports. A fixture-only loopback relay
       // lets the host test process connect without giving PostgreSQL an outbound route.
       const relay = `${name}-relay`;
+      containers.push({ name: `${kind} relay`, container: relay });
       await command("docker", [
         "run",
         "-d",
@@ -157,7 +160,6 @@ export async function environment(directory: string) {
         "-e",
         `const net=require('node:net');net.createServer(s=>{const d=net.connect(5432,'${name}');s.on('error',()=>d.destroy());d.on('error',()=>s.destroy());s.pipe(d).pipe(s)}).listen(5432)`,
       ]);
-      containers.push(relay);
       await command("docker", ["network", "connect", databaseNetwork, relay]);
       const port = (await command("docker", ["port", relay, "5432/tcp"])).trim();
       if (!/^127\.0\.0\.1:\d+$/.test(port)) throw new Error("RECOVERY_DRILL_UNSAFE_PORT");
@@ -183,7 +185,7 @@ export async function environment(directory: string) {
       },
     };
   } catch (error) {
-    await close();
+    await close(true);
     throw error;
   }
 }

@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { chromium, firefox, webkit } from "@playwright/test";
 import WebSocket from "ws";
 
 import { checkBrowserPolicy, observePolicy } from "../test/deployment/browser-security.mjs";
+import { closeDeploymentFixture } from "../test/deployment/lifecycle.ts";
 import {
   operationsSnapshot,
   providerTimeoutDrill,
@@ -26,6 +27,7 @@ const apiImage = process.env.DEPLOY_API_IMAGE ?? "neurochess-api:p5-10";
 const webImage = process.env.DEPLOY_WEB_IMAGE ?? "neurochess-web:p5-10";
 let ca;
 let configured = false;
+let scenarioFailed = false;
 const sockets = [];
 const browsers = [];
 const redactions = [];
@@ -671,14 +673,17 @@ try {
     assert(!logs.includes(secret), "Production logs leaked private request data");
   }
   step("Production rehearsal passed; no live infrastructure was provisioned.");
+} catch (error) {
+  scenarioFailed = true;
+  throw error;
 } finally {
-  for (const socket of sockets) socket.terminate();
-  await Promise.all(browsers.map((browser) => browser.close()));
-  try {
-    if (configured) await compose("down", "--volumes", "--remove-orphans");
-  } finally {
-    assert.equal(dirname(directory), tmpdir());
-    assert(basename(directory).startsWith("neurochess-deployment-"));
-    await rm(directory, { recursive: true, force: true });
-  }
+  await closeDeploymentFixture(
+    {
+      sockets,
+      browsers,
+      ...(configured ? { compose: () => compose("down", "--volumes", "--remove-orphans") } : {}),
+      directory,
+    },
+    scenarioFailed,
+  );
 }

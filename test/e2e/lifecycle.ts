@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
+import { attemptCleanup } from "../resource-cleanup.js";
+
 export const shutdownMessage = z.literal("shutdown");
 export const serverMessage = z.enum(["ready", "stopped", "failed"]);
 
@@ -131,14 +133,7 @@ export async function startBrowserTestServer(
 export async function closeResources(
   steps: readonly { name: string; close: () => unknown }[],
 ): Promise<void> {
-  const failed: string[] = [];
-  for (const step of steps) {
-    try {
-      await step.close();
-    } catch {
-      failed.push(step.name);
-    }
-  }
+  const failed = await attemptCleanup(steps);
   // Only caller-owned resource names may reach reports, never underlying errors or credentials.
   if (failed.length) throw new Error("Browser test cleanup failed: " + failed.join(", "));
 }
