@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 
-import { createDatabase, reconcileRestoredDatabase } from "@neurochess/database";
+import { createDatabase, parseDatabaseUrl, reconcileRestoredDatabase } from "@neurochess/database";
 
 import { abortSharedGame } from "../games/account-deletion.js";
 
@@ -16,14 +16,12 @@ try {
   ) {
     throw new Error();
   }
-  const url = new URL(process.env.DATABASE_URL);
-  if (
-    !/^\/nc_restore_[a-f0-9]{32}$/.test(url.pathname) ||
-    url.searchParams.get("sslmode") !== "verify-full"
-  ) {
+  const databaseUrl = parseDatabaseUrl(process.env.DATABASE_URL, true);
+  const url = new URL(databaseUrl);
+  if (!/^\/nc_restore_[a-f0-9]{32}$/.test(url.pathname)) {
     throw new Error();
   }
-  database = createDatabase(process.env.DATABASE_URL);
+  database = createDatabase(databaseUrl);
   await reconcileRestoredDatabase(
     database,
     JSON.parse(await readFile(file, "utf8")) as unknown,
