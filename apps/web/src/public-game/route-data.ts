@@ -36,7 +36,7 @@ function entryLoader(context: PublicGameContext, kind: "setup" | "game", rooms?:
         entry: PublicGameEntry | null,
         credentials: CredentialCatalogState | null = null,
       ) => {
-        latest = runtime.result(generation, { access, entry, credentials });
+        latest = runtime.publicResult(generation, { access, entry, credentials });
         return latest;
       };
       if (!identity) return result(null);

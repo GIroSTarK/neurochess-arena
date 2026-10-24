@@ -84,15 +84,60 @@ describe("public identity runtime", () => {
     const runtime = runtimeFor(http);
     const game = await runtime.resolvePublicIdentity(new AbortController().signal);
     const account = await runtime.resolvePublicIdentity(new AbortController().signal, false);
-    const gated = runtime.result(game.generation, { access: "onboarding", entry: null });
-    const management = runtime.result(account.generation, { access: "account" });
+    const gated = runtime.publicResult(game.generation, { access: "onboarding", entry: null });
+    const management = runtime.publicResult(account.generation, { access: "account" });
     completed = true;
     await runtime.account.refresh();
     expect(gated.data).toBeNull();
     expect(management.data).toEqual({ access: "account" });
     expect(account.identity?.signal.aborted).toBe(false);
     expect(runtime.account.getSnapshot().revision).toBe(account.generation);
-    expect(runtime.result(game.generation, { access: "onboarding", entry: null }).data).toBeNull();
+    expect(
+      runtime.publicResult(game.generation, { access: "onboarding", entry: null }).data,
+    ).toBeNull();
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("does not apply profile or onboarding policies to generic result fields", async () => {
+    let completed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () =>
+        jsonResponse({ ...profile, completed, username: completed ? "Renamed" : null }),
+    });
+    const runtime = runtimeFor(http);
+    const { generation } = await runtime.resolvePublicIdentity(new AbortController().signal);
+    const issued = runtime.result(generation, { profile: "unrelated" });
+    const gated = runtime.result(generation, { access: "onboarding" });
+    completed = true;
+    await runtime.account.refresh();
+    expect(issued.data).toEqual({ profile: "unrelated" });
+    expect(gated.data).toEqual({ access: "onboarding" });
+    expect(runtime.result(generation, { access: "onboarding" }).data).toEqual({
+      access: "onboarding",
+    });
+    http.assertNoUnexpectedRequests();
+  });
+
+  it("updates explicit profile projections in place without changing account authority", async () => {
+    let renamed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse({ ...profile, username: renamed ? "Renamed" : "Player" }),
+    });
+    const runtime = runtimeFor(http);
+    const { generation, access, identity } = await runtime.resolvePublicIdentity(
+      new AbortController().signal,
+    );
+    const issued = runtime.profileResult(generation, access);
+    const data = issued.data;
+    expect(data?.profile?.username).toBe("Player");
+    renamed = true;
+    await runtime.account.refresh();
+    expect(issued.data).toBe(data);
+    expect(data?.profile?.username).toBe("Renamed");
+    expect(runtime.account.getSnapshot().revision).toBe(generation);
+    expect(identity?.signal.aborted).toBe(false);
     http.assertNoUnexpectedRequests();
   });
 
@@ -105,12 +150,16 @@ describe("public identity runtime", () => {
     const runtime = runtimeFor(http);
     const identity = await runtime.resolvePublicIdentity(new AbortController().signal);
     const issued = runtime.result(identity.generation, { notice: "accepted" });
+    const publicResult = runtime.publicResult(identity.generation, { access: identity.access });
+    const profileResult = runtime.profileResult(identity.generation, identity.access);
     const pending = Promise.withResolvers<void>();
     const changing = runtime.account.transition(async () => {
       await pending.promise;
       current = { ...session, user: { ...session.user, id: OTHER_GAME_ID } };
     });
     expect(issued.data).toBeNull();
+    expect(publicResult.data).toBeNull();
+    expect(profileResult.data).toBeNull();
     expect(identity.identity?.signal.aborted).toBe(true);
     expect(runtime.account.getSnapshot()).toMatchObject({
       phase: "changing",
@@ -128,6 +177,10 @@ describe("public identity runtime", () => {
     await changing;
     expect(await next).toMatchObject({ identity: { expectedAccount: OTHER_GAME_ID } });
     expect(runtime.result(identity.generation, { notice: "accepted" }).data).toBeNull();
+    expect(runtime.publicResult(identity.generation, { access: identity.access }).data).toBeNull();
+    expect(runtime.profileResult(identity.generation, identity.access).data).toBeNull();
+    expect(publicResult.data).toBeNull();
+    expect(profileResult.data).toBeNull();
     http.assertNoUnexpectedRequests();
   });
 

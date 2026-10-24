@@ -187,7 +187,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 ## Architecture clarity top-10 follow-up
 
-**Status:** T01–T09 complete; T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+**Status:** T01–T10 complete. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
 
 - [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
 - [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
@@ -198,6 +198,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 - [x] T07: Share bounded provider JSON reading and transport/cancellation normalization; preserve the 4 MiB byte limit, fatal UTF-8 decoding, stream cleanup, per-page dispatch authorization, provider-specific classifications, and OpenRouter usage/billing without implicit retries.
 - [x] T08: Extract account history reads and AI controller lifecycle from GameService; preserve private cursor pagination, identity and lease fences, locked expiry rechecks, and separate history deletion and controller-presence helpers.
 - [x] T09: Separate AI reservation/rechecks, classified attempt outcomes, and late-result recovery; keep transaction boundaries in the orchestrator, explicit attempt state, durable retry budgets, atomic receipts, and identity/controller/credential fences.
+- [x] T10: Make generation fencing, onboarding invalidation, and profile projection explicit through typed weak result registries; preserve synchronous router-cache cleanup, late-result fences, and same-identity controller lifetime.
 
 ## Post-MVP candidates
 

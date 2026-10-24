@@ -67,7 +67,7 @@ export function historyRouteData({
       true,
     );
     const result = (page: GameHistoryResponse | null, error = false) => {
-      return read(runtime.result(generation, { access, page, error }));
+      return read(runtime.publicResult(generation, { access, page, error }));
     };
     if (access !== "account" || !identity) return result(null);
     const query = new URL(request.url).searchParams;

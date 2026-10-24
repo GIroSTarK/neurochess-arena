@@ -99,6 +99,7 @@ describe("profile route data", () => {
       formData: form({ intent: "save-profile", username: " Renamed ", expectedAccount: GAME_ID }),
     });
     expect(router.state.actionData?.account).toMatchObject({ data: { notice: "saved" } });
+    expect(before).toMatchObject({ data: { profile: { username: "Renamed" } } });
     expect(router.state.loaderData.account).toMatchObject({
       generation: (before as { generation: number }).generation,
       data: { profile: { username: "Renamed" } },

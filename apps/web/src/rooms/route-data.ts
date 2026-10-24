@@ -138,7 +138,7 @@ export function roomRouteData(
       ]);
       const cancelled = () => signal.aborted;
       const result = (existingGameId: string | null = null) =>
-        runtime.result(resolved.generation, {
+        runtime.publicResult(resolved.generation, {
           access,
           expectedIdentity: identity?.expectedAccount ?? "none",
           existingGameId,

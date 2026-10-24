@@ -22,7 +22,7 @@ export type ProfileRouteData = ScopedRouteData<{
 export function profileLoader(runtime: RouteRuntime) {
   return protectedLoader(async ({ request }): Promise<ProfileRouteData> => {
     const { generation, access } = await runtime.resolvePublicIdentity(request.signal, false);
-    return runtime.result(generation, { access, profile: runtime.account.getSnapshot().profile });
+    return runtime.profileResult(generation, access);
   });
 }
 

@@ -67,7 +67,7 @@ export function credentialRouteData({
       false,
     );
     const result = (catalog: CredentialCatalogState | null) => {
-      return read(runtime.result(generation, { access, catalog }));
+      return read(runtime.publicResult(generation, { access, catalog }));
     };
     if (access !== "account" || !identity) return result(null);
     const signal = AbortSignal.any([request.signal, identity.signal]);

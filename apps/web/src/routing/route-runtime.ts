@@ -1,3 +1,5 @@
+import type { ProfileResponse } from "@neurochess/contracts";
+
 import { AccountFailure, type AuthApi } from "../api/auth-client";
 import type { PublicIdentity } from "../api/identity";
 import { type AuthEntry, readAuthEntry } from "../auth/auth-entry";
@@ -13,11 +15,17 @@ export interface ResolvedPublicIdentity {
 }
 export interface ScopedRouteData<T> {
   readonly generation: number;
+  // Router caches share this wrapper by identity; clear it in place so every
+  // loader/action/fetcher alias loses its data synchronously, before revalidation.
   data: T | null;
 }
 
-const onboardingResult = (data: unknown) =>
-  typeof data === "object" && data !== null && "access" in data && data.access === "onboarding";
+interface PublicProjection {
+  readonly access: PublicAccess;
+}
+interface ProfileProjection extends PublicProjection {
+  profile: ProfileResponse | null;
+}
 
 export function waitForRouteResult<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -36,6 +44,8 @@ export class RouteRuntime {
   readonly account: AccountController;
   private disconnect: (() => void) | null = null;
   private readonly results = new IssuedResults<ScopedRouteData<unknown>>();
+  private readonly profiles = new IssuedResults<ScopedRouteData<ProfileProjection>>();
+  private readonly onboarding = new IssuedResults<ScopedRouteData<PublicProjection>>();
   private generation = 0;
   private readonly unsubscribe: () => void;
   private readonly actions = new Set<AbortController>();
@@ -50,19 +60,16 @@ export class RouteRuntime {
       const state = this.account.getSnapshot();
       const generation = state.revision;
       if (generation === this.generation) {
-        this.results.forEach((result) => {
-          if (result.data && typeof result.data === "object" && "profile" in result.data) {
-            result.data.profile = state.profile;
-          }
+        this.profiles.forEach((result) => {
+          if (result.data) result.data.profile = state.profile;
         });
         if (state.phase === "account" && state.profile?.completed) {
           // Completing onboarding unlocks previously gated leaf reads without
           // changing identity or ending an already-authorized game owner.
-          this.results.forEach((result) => {
-            if (onboardingResult(result.data)) {
-              result.data = null;
-            }
+          this.onboarding.forEach((result) => {
+            result.data = null;
           });
+          this.onboarding.clear();
         }
         return;
       }
@@ -73,6 +80,8 @@ export class RouteRuntime {
         result.data = null;
       });
       this.results.clear();
+      this.profiles.clear();
+      this.onboarding.clear();
     });
   }
 
@@ -151,14 +160,30 @@ export class RouteRuntime {
   }
 
   result<T>(generation: number, data: T): ScopedRouteData<T> {
-    const state = this.account.getSnapshot();
-    const onboardingCompleted =
-      state.phase === "account" && state.profile?.completed && onboardingResult(data);
     const result = {
       generation,
-      data: generation === state.revision && !onboardingCompleted ? data : null,
+      data: generation === this.account.getSnapshot().revision ? data : null,
     };
     this.results.track(result);
+    return result;
+  }
+
+  publicResult<T extends PublicProjection>(generation: number, data: T): ScopedRouteData<T> {
+    const result = this.result(generation, data);
+    if (result.data?.access === "onboarding") {
+      const state = this.account.getSnapshot();
+      if (state.phase === "account" && state.profile?.completed) result.data = null;
+      else this.onboarding.track(result);
+    }
+    return result;
+  }
+
+  profileResult(generation: number, access: PublicAccess): ScopedRouteData<ProfileProjection> {
+    const result = this.publicResult(generation, {
+      access,
+      profile: this.account.getSnapshot().profile,
+    });
+    if (result.data) this.profiles.track(result);
     return result;
   }
 

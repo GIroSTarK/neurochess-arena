@@ -17,7 +17,7 @@ export type AuthActionData = AccountActionData;
 export function publicLoader(runtime: RouteRuntime, requireProfile: boolean) {
   return protectedLoader(async ({ request }): Promise<PublicRouteData> => {
     const resolved = await runtime.resolvePublicIdentity(request.signal, requireProfile);
-    return runtime.result(resolved.generation, { access: resolved.access });
+    return runtime.publicResult(resolved.generation, { access: resolved.access });
   });
 }
 
