@@ -14,10 +14,27 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createRoomService } from "../src/rooms/service.js";
 
 import { aiMatch, humanMatch } from "./ai-turn-helpers.js";
+import type { TestApi } from "./helpers.js";
 import { RoomApiHarness } from "./room-api-helpers.js";
 
 const harness = new RoomApiHarness();
 afterEach(() => harness.dispose());
+
+async function blocked(api: TestApi, pid: number, count = 1) {
+  await expect
+    .poll(
+      async () =>
+        (
+          await api.database.db.execute<{ count: number }>(sql`
+      with recursive blocked(pid) as (
+        select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))
+        union select a.pid from pg_stat_activity a join blocked b on b.pid = any(pg_blocking_pids(a.pid))
+      ) select count(*)::int as count from blocked
+    `)
+        ).rows[0]?.count,
+    )
+    .toBe(count);
+}
 
 describe("private room admission transactions", () => {
   it("consumes one creation operation once across independent API connections", async () => {
@@ -201,6 +218,56 @@ describe("private room admission transactions", () => {
       ),
     ).toMatchObject({ state: "pending", gameId: null });
     expect((await harness.post(api, owner.cookie, "/rooms", payload)).statusCode).toBe(200);
+  });
+
+  it("fences public joining after owner deletion without leaving seats, slots, access or a private snapshot", async () => {
+    const { api, owner, invitation, room } = await harness.room();
+    const second = await harness.createAuthenticatedApi();
+    const opponent = await harness.account(second);
+    const gameId = room.snapshot.gameId;
+    let deleting: ReturnType<typeof harness.post> | undefined;
+    let joining: ReturnType<typeof harness.post> | undefined;
+    await api.database.db.transaction(async (tx) => {
+      await tx.select().from(games).where(eq(games.id, gameId)).for("update");
+      const pid = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!
+        .pid;
+      deleting = harness.post(api, owner.cookie, "/api/auth/delete-account", { confirm: true });
+      await blocked(api, pid);
+      joining = harness.post(second, opponent.cookie, "/rooms/join", {
+        invitation,
+        commandId: randomUUID(),
+      });
+      await blocked(api, pid, 2);
+    });
+    expect((await deleting)?.statusCode).toBe(200);
+    expect((await joining)?.statusCode).toBe(409);
+    expect((await joining)?.json()).toMatchObject({ code: "ROOM_UNAVAILABLE" });
+    expect((await joining)?.json()).not.toHaveProperty("currentSnapshot");
+    expect((await joining)?.json()).not.toHaveProperty("snapshot");
+    expect(await api.repository.read((reader) => reader.getGame(gameId))).toBeUndefined();
+    expect(await api.repository.read((reader) => reader.getRoom(gameId))).toBeUndefined();
+    expect(await api.repository.read((reader) => reader.getParticipants(gameId))).toEqual([]);
+    expect(await api.database.db.$count(gameSlots, eq(gameSlots.gameId, gameId))).toBe(0);
+    expect(
+      await api.database.db.$count(roomHistoryAccess, eq(roomHistoryAccess.gameId, gameId)),
+    ).toBe(0);
+    expect(
+      await api.database.db.$count(
+        gameParticipants,
+        eq(gameParticipants.userId, owner.principal.userId),
+      ),
+    ).toBe(0);
+    expect(
+      await second.repository.read((reader) =>
+        reader.findUnfinishedAccountGame(opponent.principal.userId),
+      ),
+    ).toBeUndefined();
+    for (const url of [`/rooms/${gameId}`, `/games/${gameId}`]) {
+      const response = await second.app.inject({ url, headers: { cookie: opponent.cookie } });
+      expect(response.statusCode, response.body).toBe(404);
+      expect(response.json()).not.toHaveProperty("currentSnapshot");
+      expect(response.json()).not.toHaveProperty("snapshot");
+    }
   });
 
   it.each(["owner", "opponent"] as const)(
