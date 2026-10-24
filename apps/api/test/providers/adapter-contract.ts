@@ -321,6 +321,50 @@ export function runAdapterContract(fixture: AdapterContractFixture) {
       expect(http.transport).toHaveBeenCalledTimes(1);
     });
 
+    it("accepts a response at the exact 4 MiB byte limit across chunks", async () => {
+      const output = { move: "e7e5", commentary: "Хід ♟" };
+      const envelope = await fixture
+        .completion(JSON.stringify(output), fixture.reportedUsage)
+        .text();
+      const bytes = new Uint8Array(4 * 1024 * 1024).fill(0x20);
+      bytes.set(new TextEncoder().encode(envelope));
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(bytes.subarray(0, bytes.length - 1));
+          stream.enqueue(bytes.subarray(bytes.length - 1));
+          stream.close();
+        },
+      });
+      const http = mockHttp([new Response(body)]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({ ok: true, output, usage: fixture.reportedUsage });
+      expect(body.locked).toBe(false);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([1, 2, 3])("decodes a UTF-8 character split after byte %s", async (splitAfter) => {
+      const output = { move: "e7e5", commentary: "Central pawn 😀" };
+      const envelope = await fixture.completion(JSON.stringify(output)).text();
+      const bytes = new TextEncoder().encode(envelope);
+      const split = bytes.indexOf(0xf0) + splitAfter;
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(bytes.subarray(0, split));
+          stream.enqueue(bytes.subarray(split));
+          stream.close();
+        },
+      });
+      const http = mockHttp([new Response(body)]);
+      const result = await fixture
+        .createAdapter(http.transport)
+        .requestMove(contractInput(fixture));
+      expect(result).toMatchObject({ ok: true, output });
+      expect(body.locked).toBe(false);
+      expect(http.transport).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       { name: "invalid JSON", body: () => "not json" },
       {

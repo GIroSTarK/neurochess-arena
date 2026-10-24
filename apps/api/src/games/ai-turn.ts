@@ -29,7 +29,8 @@ import { calculateCost, pinPricing } from "../pricing/calculator.js";
 import { pricingColumns, readBilling, storedPricing } from "../pricing/persistence.js";
 import { AI_MOVE_INSTRUCTIONS, type AiProviderAdapter } from "../providers/adapter.js";
 import { discoverModels, effectiveParameters } from "../providers/discovery.js";
-import { cancellationFailure, invokeMove } from "../providers/invoke-move.js";
+import { invokeMove } from "../providers/invoke-move.js";
+import { cancellationFailure } from "../providers/transport.js";
 
 import { decideAiOutcome } from "./ai-outcome-policy.js";
 import { authorizeGameControl } from "./authorization.js";

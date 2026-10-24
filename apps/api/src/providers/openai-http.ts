@@ -2,28 +2,16 @@ import type { ProviderFailure } from "@neurochess/contracts";
 import { z } from "zod";
 
 import type { ProviderRequestAccess } from "./adapter.js";
-import { cancellationFailure } from "./invoke-move.js";
+import {
+  cancellationFailure,
+  type ProviderJsonResult,
+  readBoundedJson,
+  transportFailure,
+} from "./transport.js";
 
 const errorSchema = z.object({
   error: z.object({ code: z.string().max(128).nullish(), param: z.string().max(128).nullish() }),
 });
-const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-const timeoutCauseSchema = z.object({
-  cause: z.object({
-    code: z.enum(["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]),
-  }),
-});
-
-function transportFailure(error: unknown, signal: AbortSignal): ProviderFailure {
-  if (signal.aborted) return cancellationFailure(signal);
-  if (
-    (error instanceof DOMException && error.name === "TimeoutError") ||
-    timeoutCauseSchema.safeParse(error).success
-  ) {
-    return { code: "provider_timeout" };
-  }
-  return { code: "provider_unavailable", reason: "network" };
-}
 
 export function openAiFailure(
   status: number,
@@ -60,53 +48,12 @@ export function openAiFailure(
   return { code: "provider_unavailable", reason: "upstream" };
 }
 
-type JsonResult = { ok: true; value: unknown } | { ok: false; error: ProviderFailure };
-
-async function readJson(response: Response, signal: AbortSignal): Promise<JsonResult> {
-  const invalid: JsonResult = {
-    ok: false,
-    error: { code: "provider_unavailable", reason: "invalid_response" },
-  };
-  if (!response.body) return invalid;
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      let chunk: Awaited<ReturnType<typeof reader.read>>;
-      try {
-        chunk = await reader.read();
-      } catch (error: unknown) {
-        return { ok: false, error: transportFailure(error, signal) };
-      }
-      if (chunk.done) break;
-      const value: unknown = chunk.value;
-      if (!(value instanceof Uint8Array)) return invalid;
-      size += value.byteLength;
-      if (size > MAX_RESPONSE_BYTES) return invalid;
-      chunks.push(value);
-    }
-    const bytes = Buffer.concat(chunks);
-    try {
-      return {
-        ok: true,
-        value: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown,
-      };
-    } catch {
-      return invalid;
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-}
-
 export async function openAiRequest(
   transport: typeof fetch,
   path: "models" | "responses",
   input: ProviderRequestAccess,
   body?: object,
-): Promise<JsonResult> {
+): Promise<ProviderJsonResult> {
   const isAborted = () => input.signal.aborted;
   if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
   const denied = await input.beforeDispatch?.();
@@ -131,7 +78,7 @@ export async function openAiRequest(
     };
   }
   try {
-    const result = await readJson(response, input.signal);
+    const result = await readBoundedJson(response, input.signal);
     if (isAborted()) return { ok: false, error: cancellationFailure(input.signal) };
     if (response.ok) return result;
     const error = errorSchema.safeParse(result.ok ? result.value : null);

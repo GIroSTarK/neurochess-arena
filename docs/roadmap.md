@@ -187,7 +187,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 ## Architecture clarity top-10 follow-up
 
-**Status:** T01–T06 complete; T07–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+**Status:** T01–T07 complete; T08–T10 not started. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
 
 - [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
 - [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
@@ -195,6 +195,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 - [x] T04: Share the typed mock AI API while retaining the real MatchController/browser-credential and production-composition/memory-credential harnesses; preserve seeded snapshots and telemetry identity, version conflicts, and fixture isolation.
 - [x] T05: Share neutral command identity and preparation contracts, and distinguish resolved provider request access from credential sources; preserve strict wire schemas, transaction ownership, lock ordering, authority rechecks, and conflict snapshots.
 - [x] T06: Replace boolean AI actions with named creation, resume, and step intents; preserve the transport step flag, atomic paused stepping, pacing, serialization, credential checks, and explicit retry.
+- [x] T07: Share bounded provider JSON reading and transport/cancellation normalization; preserve the 4 MiB byte limit, fatal UTF-8 decoding, stream cleanup, per-page dispatch authorization, provider-specific classifications, and OpenRouter usage/billing without implicit retries.
 
 ## Post-MVP candidates
 

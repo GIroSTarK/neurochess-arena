@@ -8,7 +8,7 @@ import {
 import { observeProvider, type Operations } from "../monitoring/operations.js";
 
 import type { AiProviderAdapter, ProviderRequestAccess } from "./adapter.js";
-import { cancellationFailure } from "./invoke-move.js";
+import { cancellationFailure } from "./transport.js";
 
 export function discoverModels(
   adapter: AiProviderAdapter | undefined,

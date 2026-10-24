@@ -13,16 +13,11 @@ import { observeProvider, type Operations } from "../monitoring/operations.js";
 
 import type { AiProviderAdapter, MoveRequest } from "./adapter.js";
 import { sanitizeMoveOutput } from "./move-output.js";
+import { cancellationFailure } from "./transport.js";
 
 const outputEnvelopeSchema = normalizedMoveResponseSchema.options[0].extend({
   output: z.unknown(),
 });
-
-export function cancellationFailure(signal: AbortSignal): ProviderFailure {
-  return signal.reason instanceof DOMException && signal.reason.name === "TimeoutError"
-    ? { code: "provider_timeout" }
-    : { code: "provider_unavailable", reason: "cancelled" };
-}
 
 export function invokeMove(
   adapter: AiProviderAdapter,
