@@ -156,21 +156,12 @@ try {
       /INVALID_WEB_ENVIRONMENT|INVALID_PRODUCTION_API_ORIGIN/,
     );
   }
-  await command("docker", [
-    "run",
-    "--rm",
-    "--entrypoint",
-    "node",
-    apiImage,
-    "--input-type=module",
-    "-e",
-    `
-    import { existsSync } from 'node:fs';
-    for (const path of ['/app/.env', '/app/apps/api/test', '/app/test']) {
-      if (existsSync(path)) throw new Error('Unexpected production runtime artifact');
-    }
-  `,
-  ]);
+  step("Checking API runtime dependencies and compiled imports.");
+  await command(
+    "docker",
+    ["run", "--rm", "-i", "--entrypoint", "node", apiImage, "--input-type=module"],
+    await readFile("test/deployment/runtime-dependencies.mjs", "utf8"),
+  );
   const password = randomBytes(32).toString("hex");
   await writeFile(join(directory, "postgres-admin-password"), randomBytes(32).toString("hex"));
   await writeFile(join(directory, "postgres-app-password"), password);

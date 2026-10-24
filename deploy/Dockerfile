@@ -23,7 +23,12 @@ ENV SANDBOX_ENABLED=false
 RUN node --input-type=module -e "import { parseWebEnvironment } from './apps/web/src/app/env.ts'; const env = parseWebEnvironment(process.env); if (!env.VITE_API_BASE_URL.startsWith('https://')) throw new Error('INVALID_PRODUCTION_API_ORIGIN');" && npm run build
 
 FROM base AS runtime-dependencies
-RUN npm ci --omit=dev --workspace @neurochess/api --workspace @neurochess/database --workspace @neurochess/chess --workspace @neurochess/contracts --ignore-scripts
+# Unselected workspace/dev edges otherwise keep optional peers such as Vitest in the API tree.
+# Only these intermediate manifests change; npm ci still validates the committed lockfile.
+RUN npm pkg delete devDependencies workspaces \
+    && npm pkg set 'workspaces[0]=packages/contracts' 'workspaces[1]=packages/chess' 'workspaces[2]=packages/database' 'workspaces[3]=apps/api' \
+    && npm pkg delete devDependencies --workspaces \
+    && npm ci --omit=dev --omit=optional --ignore-scripts
 
 FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS api
 WORKDIR /app
@@ -31,10 +36,10 @@ ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3001 SANDBOX_ENABLED=false
 COPY --from=runtime-dependencies /app/node_modules ./node_modules
 COPY --from=runtime-dependencies /app/package.json ./package.json
 COPY --from=build /app/LICENSE /app/THIRD_PARTY_NOTICES.md ./
-COPY --from=runtime-dependencies /app/apps/api/package.json ./apps/api/package.json
-COPY --from=runtime-dependencies /app/packages/contracts/package.json ./packages/contracts/package.json
-COPY --from=runtime-dependencies /app/packages/chess/package.json ./packages/chess/package.json
-COPY --from=runtime-dependencies /app/packages/database/package.json ./packages/database/package.json
+COPY --from=runtime-dependencies /app/apps/api ./apps/api
+COPY --from=runtime-dependencies /app/packages/contracts ./packages/contracts
+COPY --from=runtime-dependencies /app/packages/chess ./packages/chess
+COPY --from=runtime-dependencies /app/packages/database ./packages/database
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
 COPY --from=build /app/packages/chess/dist ./packages/chess/dist
