@@ -155,7 +155,7 @@ export async function environment(directory: string, command: Command = runComma
         "bridge",
         "-p",
         "127.0.0.1::5432",
-        "node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df",
+        "node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205",
         "node",
         "-e",
         `const net=require('node:net');net.createServer(s=>{const d=net.connect(5432,'${name}');s.on('error',()=>d.destroy());d.on('error',()=>s.destroy());s.pipe(d).pipe(s)}).listen(5432)`,

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS base
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 WORKDIR /app
 RUN npm install --global npm@11.21.1
 COPY package.json package-lock.json ./
@@ -30,7 +30,7 @@ RUN npm pkg delete devDependencies workspaces \
     && npm pkg delete devDependencies --workspaces \
     && npm ci --omit=dev --omit=optional --ignore-scripts
 
-FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS api
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS api
 WORKDIR /app
 ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=3001 SANDBOX_ENABLED=false
 COPY --from=runtime-dependencies /app/node_modules ./node_modules

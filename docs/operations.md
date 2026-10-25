@@ -107,7 +107,7 @@ Before the PostgreSQL certificate expires, schedule a maintenance stop, replace 
 
 ## Artifacts and rollout
 
-Use a clean, reviewed release checkout. The Docker build ignores local environments, tests, credentials and prior build output; npm installs from the lockfile. It validates the public API URL before generating web assets, rejecting HTTP and credential-bearing URLs. `deploy/Dockerfile` pins Node 24.19.0, npm 11.21.1 and base manifest digests. Its API runs as an unprivileged user with production dependencies and compiled code. Caddy serves the web artifact directly; `npm start` and Vite preview remain local tools.
+Use a clean, reviewed release checkout. The Docker build ignores local environments, tests, credentials and prior build output; npm installs from the lockfile. It validates the public API URL before generating web assets, rejecting HTTP and credential-bearing URLs. `deploy/Dockerfile` pins Node 24.22.1, npm 11.21.1 and base manifest digests. Its API runs as an unprivileged user with production dependencies and compiled code. Caddy serves the web artifact directly; `npm start` and Vite preview remain local tools.
 
 The API dependency stage narrows its copied manifests to the API, chess, contracts and database workspaces and removes their development requirements before `npm ci --omit=dev --omit=optional --ignore-scripts`. This prevents optional peers from pulling build/test/browser tools into the runtime. The committed manifests and lockfile remain unchanged; required runtime integrations must be explicit dependencies. Preserve workspace-local `node_modules` when copying the installed tree. The deployment rehearsal checks for leaked tooling and imports the compiled API and its runtime dependencies before starting services.
 
