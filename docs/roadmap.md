@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–4 completed; Phase 5 analysis, costing, telemetry, responsive/performance refinement, automated accessibility, cross-browser acceptance, production deployment preparation, request/socket limits, header/dependency hardening, private operational monitoring and tested backup/recovery implemented; manual accessibility, physical-device and live operational release gates pending
 
-**Last updated:** 2026-10-24
+**Last updated:** 2026-10-25
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -199,6 +199,17 @@ The existing live-service, physical-device, accessibility, and operational relea
 - [x] T08: Extract account history reads and AI controller lifecycle from GameService; preserve private cursor pagination, identity and lease fences, locked expiry rechecks, and separate history deletion and controller-presence helpers.
 - [x] T09: Separate AI reservation/rechecks, classified attempt outcomes, and late-result recovery; keep transaction boundaries in the orchestrator, explicit attempt state, durable retry budgets, atomic receipts, and identity/controller/credential fences.
 - [x] T10: Make generation fencing, onboarding invalidation, and profile projection explicit through typed weak result registries; preserve synchronous router-cache cleanup, late-result fences, and same-identity controller lifetime.
+
+## Backend refactoring follow-up
+
+**Status:** Complete. The five-task backend refactor passed integration acceptance and independent review.
+
+- [x] Apply canonical recovery database URL validation and give standalone model discovery its own provider service/routes while preserving authorization and credential lifetimes.
+- [x] Make operational fixture cleanup resilient to partial failures and extend architecture enforcement to production/test boundaries and operational entrypoints.
+- [x] Replace the temporary room writer with deterministic production-route race coverage, preserving deletion, history, receipt, and slot assertions.
+- [x] Pass focused regressions, the full configured baseline, discovery/credential browser smoke, and isolated deployment/recovery rehearsals; verify fixture resource cleanup.
+
+Transport contracts, migrations, retry and retention policies, and public endpoints remain unchanged. The existing manual and live-service release gates remain open.
 
 ## Post-MVP candidates
 
