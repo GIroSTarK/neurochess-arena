@@ -11,7 +11,93 @@ import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 
 import type { CredentialCatalogState } from "./catalog";
-import type { CredentialActionData } from "./route-data";
+import type { CredentialActionData, CredentialOutcome } from "./route-data";
+
+type SaveFeedback =
+  { status: "none" | "saved" } | { status: "error"; code: CredentialFailure["code"] };
+interface UnresolvedSave {
+  id: string;
+  after: number;
+  phase: "awaiting-metadata" | "retryable";
+}
+type SaveAttempt =
+  | { phase: "idle" | "settled"; feedback: SaveFeedback; unresolved: UnresolvedSave | null }
+  | { phase: "submitting" | "settling"; id: string; unresolved: UnresolvedSave | null };
+type SaveAttemptEvent =
+  | { type: "invalid" | "submission-finished" | "clear" }
+  | { type: "submit"; id: string }
+  | { type: "acknowledge"; outcome: CredentialOutcome | null | undefined; version: number }
+  | { type: "metadata"; catalog: CredentialCatalogState; version: number };
+
+const emptyAttempt: SaveAttempt = {
+  phase: "idle",
+  feedback: { status: "none" },
+  unresolved: null,
+};
+
+function reduceSaveAttempt(state: SaveAttempt, event: SaveAttemptEvent): SaveAttempt {
+  switch (event.type) {
+    case "clear":
+      return emptyAttempt;
+    case "invalid":
+      if (state.phase !== "idle" && state.phase !== "settled") return state;
+      return { ...state, feedback: { status: "error", code: "CREDENTIAL_INVALID_REQUEST" } };
+    case "submit":
+      if (
+        (state.phase !== "idle" && state.phase !== "settled") ||
+        state.unresolved?.phase === "awaiting-metadata"
+      ) {
+        return state;
+      }
+      return {
+        phase: "submitting",
+        id: state.unresolved?.id ?? event.id,
+        unresolved: state.unresolved,
+      };
+    case "submission-finished":
+      return state.phase === "submitting" ? { ...state, phase: "settling" } : state;
+    case "acknowledge": {
+      if (state.phase !== "settling") return state;
+      if (event.outcome && "success" in event.outcome) {
+        return { phase: "settled", feedback: { status: "saved" }, unresolved: null };
+      }
+      // Cancellation provides no acknowledgement, even when the API already committed.
+      const code = event.outcome?.error ?? "CREDENTIAL_UNAVAILABLE";
+      return {
+        phase: "settled",
+        feedback: { status: "error", code },
+        unresolved:
+          code === "CREDENTIAL_UNAVAILABLE" || code === "CREDENTIAL_CONFLICT"
+            ? { id: state.id, after: event.version, phase: "awaiting-metadata" }
+            : state.unresolved,
+      };
+    }
+    case "metadata": {
+      if (
+        (state.phase !== "idle" && state.phase !== "settled") ||
+        !state.unresolved ||
+        event.catalog.phase !== "ready" ||
+        event.version <= state.unresolved.after
+      ) {
+        return state;
+      }
+      if (event.catalog.credentials.some((item) => item.credentialId === state.unresolved?.id)) {
+        return {
+          ...state,
+          unresolved: null,
+          feedback:
+            state.feedback.status === "error" && state.feedback.code === "CREDENTIAL_CONFLICT"
+              ? state.feedback
+              : { status: "saved" },
+        };
+      }
+      // Absence cannot rule out a late commit. Only an explicit retry may reuse this ID.
+      return state.unresolved.phase === "awaiting-metadata"
+        ? { ...state, unresolved: { ...state.unresolved, phase: "retryable" } }
+        : state;
+    }
+  }
+}
 
 export function SaveCredentialForm({
   identity,
@@ -27,70 +113,39 @@ export function SaveCredentialForm({
   const { t } = useTranslation();
   const providerId = useId();
   const form = useRef<HTMLFormElement>(null);
-  const pending = useRef(false);
+  const pending = useRef<symbol | null>(null);
   const mutation = useFetcher<CredentialActionData | null>();
   const reset = mutation.reset;
   const busy = mutation.state !== "idle";
   const [consent, setConsent] = useState(false);
-  const [error, setError] = useState<CredentialFailure["code"] | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
-  const [settled, setSettled] = useState(false);
-  // An absent record cannot rule out a late commit. Explicit retries keep the ID
-  // until a response or a fresh metadata read proves the earlier save was stored.
-  const [unconfirmed, setUnconfirmed] = useState<{
-    id: string;
-    after: number;
-    reconciled: boolean;
-  } | null>(null);
-  const reconciling = unconfirmed !== null && !unconfirmed.reconciled;
+  const [attempt, setAttempt] = useState<SaveAttempt>(emptyAttempt);
+  const reconciling = attempt.unresolved?.phase === "awaiting-metadata";
+  const feedback =
+    attempt.phase === "idle" || attempt.phase === "settled" ? attempt.feedback : null;
+  const error = feedback?.status === "error" ? feedback.code : null;
+  const saved = feedback?.status === "saved";
+  const settled = attempt.phase === "settled";
   const outcome = mutation.data?.data;
-  if (!busy && submittedId && settled) {
-    setSubmittedId(null);
-    if (outcome && "success" in outcome) {
-      setSaved(true);
-      setUnconfirmed(null);
-    } else {
-      // A canceled route action returns no outcome even when the API may have committed.
-      const error = outcome?.error ?? "CREDENTIAL_UNAVAILABLE";
-      setError(error);
-      if (error === "CREDENTIAL_UNAVAILABLE" || error === "CREDENTIAL_CONFLICT") {
-        setUnconfirmed({ id: submittedId, after: version, reconciled: false });
-      }
-    }
+  if (!busy) {
+    const next = reduceSaveAttempt(
+      attempt,
+      attempt.phase === "settling"
+        ? { type: "acknowledge", outcome, version }
+        : { type: "metadata", catalog, version },
+    );
+    if (next !== attempt) setAttempt(next);
   }
   useEffect(() => {
-    if (settled && !submittedId) void refresh();
-  }, [settled, submittedId, refresh]);
-  if (
-    !busy &&
-    !submittedId &&
-    unconfirmed &&
-    catalog.phase === "ready" &&
-    version > unconfirmed.after
-  ) {
-    if (catalog.credentials.some((item) => item.credentialId === unconfirmed.id)) {
-      setUnconfirmed(null);
-      if (error !== "CREDENTIAL_CONFLICT") {
-        setSaved(true);
-        setError(null);
-      }
-    } else if (!unconfirmed.reconciled) {
-      setUnconfirmed({ ...unconfirmed, reconciled: true });
-    }
-  }
+    if (settled) void refresh();
+  }, [settled, refresh]);
   useEffect(() => {
     const element = form.current;
     const clear = () => {
       element?.reset();
       reset();
-      pending.current = false;
+      pending.current = null;
       setConsent(false);
-      setError(null);
-      setSaved(false);
-      setSubmittedId(null);
-      setUnconfirmed(null);
-      setSettled(false);
+      setAttempt((state) => reduceSaveAttempt(state, { type: "clear" }));
     };
     window.addEventListener("pagehide", clear);
     identity.signal.addEventListener("abort", clear);
@@ -99,8 +154,8 @@ export function SaveCredentialForm({
       identity.signal.removeEventListener("abort", clear);
       // An unmount has already detached the form, so scrub the key it may still hold.
       // StrictMode's dev replay keeps it connected; resetting then would erase entered input.
-      if (!element?.isConnected) element?.reset();
-      reset();
+      if (!element?.isConnected) clear();
+      else reset();
     };
   }, [identity.signal, reset]);
   function save() {
@@ -116,7 +171,7 @@ export function SaveCredentialForm({
       return;
     }
     const data = new FormData(form.current);
-    const id = unconfirmed?.id ?? crypto.randomUUID();
+    const id = attempt.unresolved?.id ?? crypto.randomUUID();
     const input = credentialSaveRequestSchema.safeParse({
       credentialId: id,
       provider: data.get("provider"),
@@ -125,8 +180,7 @@ export function SaveCredentialForm({
       save: true,
     });
     if (!input.success) {
-      setError("CREDENTIAL_INVALID_REQUEST");
-      setSaved(false);
+      setAttempt((state) => reduceSaveAttempt(state, { type: "invalid" }));
       return;
     }
     data.set("intent", "save");
@@ -135,15 +189,14 @@ export function SaveCredentialForm({
     data.set("expectedAccount", identity.expectedAccount);
     form.current.reset();
     setConsent(false);
-    setError(null);
-    setSaved(false);
-    setSubmittedId(id);
-    setSettled(false);
-    pending.current = true;
+    setAttempt((state) => reduceSaveAttempt(state, { type: "submit", id }));
+    const submission = Symbol();
+    pending.current = submission;
     reset();
     void mutation.submit(data, { method: "post", action: "/account/credentials" }).finally(() => {
-      pending.current = false;
-      if (!identity.signal.aborted) setSettled(true);
+      if (pending.current !== submission || identity.signal.aborted) return;
+      pending.current = null;
+      setAttempt((state) => reduceSaveAttempt(state, { type: "submission-finished" }));
     });
   }
   return (
