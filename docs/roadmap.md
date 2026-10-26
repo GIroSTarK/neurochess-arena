@@ -1,8 +1,8 @@
 # MVP roadmap
 
-**Status:** Phases 0–4 completed; Phase 5 analysis, costing, telemetry, responsive/performance refinement, automated accessibility, cross-browser acceptance, production deployment preparation, request/socket limits, header/dependency hardening, private operational monitoring and tested backup/recovery implemented; manual accessibility, physical-device and live operational release gates pending
+**Status:** Phases 0–5 completed; MVP release accepted by the deployment owner.
 
-**Last updated:** 2026-10-25
+**Last updated:** 2026-10-26
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -147,7 +147,7 @@ Exit condition: two separate browser sessions can complete or abort a private ga
 
 ## Phase 5 — Analysis, polish, and release hardening
 
-**Status:** P5-01–P5-14 complete. The [backup and recovery policy](recovery.md) now defines daily encrypted backups, 24-hour RPO, two-hour RTO and seven-day expiry, with separate secret recovery. Isolated populated restore, expired-session privacy reconciliation, production-volume promotion, subsequent backup and application rollback are tested; live OCI activation, independent-store retrieval and production-size disaster timing remain release gates. [Private operational monitoring](operations.md#operational-monitoring) now provides bounded API/provider/room signals, resource and backup-status alerts, a private dashboard and OCI alarm configuration. Controlled fault and recovery drills verify local behavior and redaction; live OCI activation and notification delivery remain release gates. The [browser and response policy](operations.md#browser-and-response-security) now covers production CSP, private response caches, transport/referrer/framing/permissions headers and asset notices, verified in all three browser engines. Required dependency audits cover production and development graphs. The [production request policy](operations.md#request-and-socket-limits) now enforces verified proxy identity, bounded HTTP/socket admission and explicit 429 recovery while preserving gameplay, analysis and reconnection. [ADR-0020](decisions/0020-single-host-production-deployment.md) selects Oracle Always Free in Frankfurt; the [production runbook](operations.md) and container artifacts cover verified database TLS, private network boundaries, static hosting, bounded shutdown, populated migration/restart and application rollback. Local container and browser rehearsals establish preparation only; Oracle provisioning and live-service acceptance remain open. [ADR-0019](decisions/0019-browser-analysis-and-private-samples.md) defines the accepted analysis and private-sample policies. The [browser analysis service](development.md#browser-analysis-service) now supplies live evaluation and accessible replay graphs in all public modes, with bounded backfill, separate retry controls and private lifetime cancellation. The [private analysis API](development.md#private-analysis-api) retains each account's own samples; guests and Sandbox use page memory. The required [five-project browser matrix](development.md#supported-browsers-and-version-policy) covers desktop Chromium/Firefox/WebKit and Chromium/WebKit touch emulation, with all three modes, Secure sessions, saved/session keys, sockets, private replay/PGN, real engine loading, costs and unavailable states. CI shards use isolated databases and retain only allowlisted artifacts; Chromium projects gate every change, while Firefox/WebKit run weekly, on demand and for dependency or Playwright configuration changes. [Versioned invocation costing](development.md#ai-cost-estimates) records normalized billing, exact list-price estimates, immutable price provenance and explicit unavailable reasons while preserving retry, interruption and deletion behavior. [Telemetry views](architecture.md#telemetry-and-cost) now show per-attempt and per-move estimates, White/Black comparisons and whole-game totals with incomplete coverage explicit, preserving accepted-call measurements and replay selection. Responsive telemetry, evaluation tables and history now fit enlarged text, and the shared production build excludes development React. The [performance budgets](development.md#responsive-layouts-and-performance-budgets) cover entry/engine loading, worker resources and lifetime, and long replay in desktop/touch Chromium, with CI checks. The accessibility review adds complete keyboard journeys, rendered contrast checks, announced field errors and descriptive graph-slider values. Phase 5 remains incomplete: actual screen-reader speech, browser/OS zoom and physical-device checks remain named P5-15 gates in the [validation limits](design-system/validation.md); operational gates follow. [ADR-0021](decisions/0021-project-license-and-source-distribution.md) selects GPL-3.0-only, preserves third-party terms and packages matching application source downloads; anonymous source/notice access on the deployed public origin remains a release check.
+**Status:** Completed (P5-01–P5-15). On 2026-10-26, the deployment owner confirmed completion of the [MVP release acceptance](operations.md#mvp-release-acceptance) for [neurochess-arena.com](https://neurochess-arena.com) and [api.neurochess-arena.com](https://api.neurochess-arena.com), including candidate verification, physical-browser and manual accessibility checks, live services and providers, licensing, monitoring, and backup/recovery. Phase 5 closure is based on that owner confirmation.
 
 Deliverables:
 
@@ -160,7 +160,7 @@ Deliverables:
 - [x] richer commentary, attempt, latency, token, and estimated-cost views;
 - [x] display explicit unavailable states for incomplete pricing or usage data in telemetry views;
 - [x] desktop and mobile UX refinement with measured loading/runtime budgets;
-- [x] keyboard navigation, rendered contrast, focus, reduced-motion and chart review, with unavailable manual release checks explicitly retained;
+- [x] keyboard navigation, rendered contrast, focus, reduced-motion and chart review, with separate manual release acceptance;
 - [x] cross-browser end-to-end suite with Chromium CI gates, scheduled Firefox/WebKit CI and separate physical-device release checks;
 - [x] production request/socket limits, verified proxy identity and bounded rate-limit recovery;
 - [x] production browser/API security headers, dependency audit and verified asset notices;
@@ -169,7 +169,7 @@ Deliverables:
 - [x] private operational metrics, actionable alerts, dashboard and isolated failure/recovery drills;
 - [x] map all eight product acceptance criteria to automated evidence and explicit live/manual gates in the [release checklist](operations.md#mvp-release-acceptance);
 - [x] verify available local release acceptance across the complete browser matrix, migrations, production artifacts, performance, restart/rollback and encrypted recovery; correct the readiness-test race and remote-browser launch instructions found during acceptance;
-- [ ] complete release acceptance, including physical browsers/accessibility, live services, licensing and operational verification.
+- [x] complete release acceptance, including physical browsers/accessibility, live services, licensing and operational verification.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
 
@@ -182,8 +182,6 @@ Exit condition: every MVP acceptance criterion in `docs/product.md` is verified 
 - [x] Separate public-game API and mode entry from AI orchestration; share the MatchController collaborator composition while retaining feature lifetimes and identity cleanup.
 - [x] Independently review the integrated changes and reconcile the [architecture map](architecture.md) with final module ownership.
 - [x] Confirm targeted regression suites, relevant browser acceptance, and the full configured baseline.
-
-The existing live-service, physical-device, accessibility, and operational release gates remain unchanged.
 
 ## Architecture clarity top-10 follow-up
 
@@ -209,7 +207,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 - [x] Replace the temporary room writer with deterministic production-route race coverage, preserving deletion, history, receipt, and slot assertions.
 - [x] Pass focused regressions, the full configured baseline, discovery/credential browser smoke, and isolated deployment/recovery rehearsals; verify fixture resource cleanup.
 
-Transport contracts, migrations, retry and retention policies, and public endpoints remain unchanged. The existing manual and live-service release gates remain open.
+Transport contracts, migrations, retry and retention policies, and public endpoints remain unchanged.
 
 ## Frontend architecture refactoring
 

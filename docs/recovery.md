@@ -1,6 +1,6 @@
 # Backup and recovery
 
-The deployment owner selected a **24-hour recovery-point objective (RPO), two-hour recovery-time objective (RTO), daily backups and seven-day backup retention**. RPO measures the age of the database snapshot; RTO runs from incident declaration through secret retrieval, isolated restore, privacy reconciliation, validation and the controlled service switch. These are operational targets, not an availability guarantee. The [deployment runbook](operations.md) defines the single API owner and $0 Oracle Frankfurt topology. Live bucket, secret-store, timer, capacity and notification activation remain release gates in the [roadmap](roadmap.md).
+The deployment owner selected a **24-hour recovery-point objective (RPO), two-hour recovery-time objective (RTO), daily backups and seven-day backup retention**. RPO measures the age of the database snapshot; RTO runs from incident declaration through secret retrieval, isolated restore, privacy reconciliation, validation and the controlled service switch. These are operational targets, not an availability guarantee. The [deployment runbook](operations.md) defines the single API owner and $0 Oracle Frankfurt topology. Live bucket, secret-store, timer, capacity and notification verification follows the [release checklist](operations.md#mvp-release-acceptance); acceptance status is tracked in the [roadmap](roadmap.md#phase-5--analysis-polish-and-release-hardening).
 
 ## Retention and ownership
 

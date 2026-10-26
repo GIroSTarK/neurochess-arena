@@ -751,8 +751,9 @@ matrix in `playwright.performance.config.ts` because its CPU/heap probes use CDP
 
 ### Physical browser release matrix
 
-P5-15 must perform and record these checks with exact device, OS/browser version,
-revision, observed results and unresolved defects. They remain open until performed.
+For each release candidate, perform and record these checks with exact device,
+OS/browser version, revision, observed results and unresolved defects. Acceptance
+status is tracked in the [roadmap](roadmap.md#phase-5--analysis-polish-and-release-hardening).
 
 | System                      | Required release checks beyond emulation                                                                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
