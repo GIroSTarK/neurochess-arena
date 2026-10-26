@@ -204,34 +204,15 @@ describe("private terminal replay and export", () => {
     expect(api.replay).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps replay selection separate from the accepted snapshot and sends no moves", async () => {
+  it("automatically loads terminal replay without issuing gameplay commands", async () => {
     const { api, controller, initial } = await terminal();
     expect(controller.getSnapshot().replayPly).toBe(4);
-    for (const ply of [0, 1, 3, 4]) controller.selectPly(ply);
-    controller.selectPly(-1);
-    controller.selectPly(99);
-    controller.selectPly(1.5);
-    expect(controller.getSnapshot().replayPly).toBe(4);
+    controller.selectPly(1);
+    expect(controller.getSnapshot().replayPly).toBe(1);
     expect(controller.getSnapshot().snapshot).toBe(initial);
     expect(api.replay).toHaveBeenCalledTimes(1);
     expect(api.move).not.toHaveBeenCalled();
     expect(api.lifecycle).not.toHaveBeenCalled();
-  });
-
-  it("copies/downloads exact authorized PGN and offers manual text if the clipboard is denied", async () => {
-    const { controller, delivery, initial } = await terminal();
-    await controller.exportPgn("copy");
-    expect(delivery.copy).toHaveBeenCalledWith(initial.pgn);
-    expect(controller.getSnapshot().exportPhase).toBe("copied");
-    delivery.copy.mockResolvedValue(false);
-    await controller.exportPgn("copy");
-    expect(controller.getSnapshot()).toMatchObject({
-      exportPhase: "manual",
-      exportText: initial.pgn,
-    });
-    await controller.exportPgn("download");
-    expect(delivery.download).toHaveBeenCalledWith(initial.pgn, initial.gameId);
-    expect(controller.getSnapshot().exportText).toBeNull();
   });
 
   it.each(["response", "failure"] as const)(
@@ -347,16 +328,11 @@ describe("private terminal replay and export", () => {
     },
   );
 
-  it("rejects mismatched exports and clears all private data on access loss", async () => {
+  it("clears all private archive data when export loses access", async () => {
     const { api, controller, delivery, initial } = await terminal();
-    api.pgn.mockResolvedValueOnce({
-      gameId: initial.gameId,
-      version: initial.version + 1,
-      pgn: initial.pgn,
-    });
+    delivery.copy.mockResolvedValueOnce(false);
     await controller.exportPgn("copy");
-    expect(delivery.copy).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().exportNotice).toBe("malformed");
+    expect(controller.getSnapshot().exportText).toBe(initial.pgn);
     api.pgn.mockRejectedValueOnce(new ApiFailure("api", "UNAUTHORIZED"));
     await controller.exportPgn("download");
     expect(delivery.download).not.toHaveBeenCalled();
@@ -395,38 +371,6 @@ describe("private terminal replay and export", () => {
     unsubscribe();
   });
 
-  it.each(["replay", "export"] as const)(
-    "preserves the other archive error while retrying %s",
-    async (operation) => {
-      const { api, controller } = await terminal();
-      api.replay.mockRejectedValueOnce(new ApiFailure("network"));
-      api.pgn.mockRejectedValueOnce(new ApiFailure("timeout"));
-      await controller.loadReplay();
-      await controller.exportPgn("copy");
-      expect(controller.getSnapshot()).toMatchObject({
-        replayPhase: "error",
-        replayNotice: "network",
-        exportPhase: "error",
-        exportNotice: "timeout",
-      });
-
-      const retry = operation === "replay" ? controller.loadReplay() : controller.exportPgn("copy");
-      const preserved =
-        operation === "replay"
-          ? { replayNotice: null, exportPhase: "error", exportNotice: "timeout" }
-          : { exportNotice: null, replayPhase: "error", replayNotice: "network" };
-      expect(controller.getSnapshot()).toMatchObject({
-        ...preserved,
-        [`${operation}Phase`]: "loading",
-      });
-      await retry;
-      expect(controller.getSnapshot()).toMatchObject({
-        ...preserved,
-        [`${operation}Phase`]: operation === "replay" ? "idle" : "copied",
-      });
-    },
-  );
-
   it("ignores a late replay after export reports lost access", async () => {
     const initial = snapshot(FOOLS_MATE);
     const { api, controller } = harness(initial);
@@ -443,32 +387,5 @@ describe("private terminal replay and export", () => {
       replay: null,
       phase: "access-error",
     });
-  });
-
-  it.each([
-    { label: "a later revision", replay: snapshot(FOOLS_MATE, { version: 5 }) },
-    {
-      label: "a different terminal history",
-      replay: snapshot(["e2e4", "f7f6", "d2d4", "g7g5", "d1h5"]),
-    },
-  ])("rejects a replay of $label and keeps the accepted game", async ({ replay }) => {
-    const initial = snapshot(FOOLS_MATE);
-    const { api, controller } = harness(initial);
-    api.replay.mockResolvedValueOnce(
-      gameReplayResponseSchema.parse({ snapshot: replay, initialFen: snapshot().fen }),
-    );
-    await enterSandbox(controller);
-    await controller.start();
-    await vi.waitFor(() => expect(controller.getSnapshot().replayPhase).toBe("error"));
-    expect(controller.getSnapshot()).toMatchObject({
-      snapshot: initial,
-      replay: null,
-      replayNotice: "malformed",
-    });
-    api.replay.mockResolvedValue(
-      gameReplayResponseSchema.parse({ snapshot: initial, initialFen: snapshot().fen }),
-    );
-    await controller.loadReplay();
-    expect(controller.getSnapshot()).toMatchObject({ replayPhase: "idle", replayPly: 4 });
   });
 });

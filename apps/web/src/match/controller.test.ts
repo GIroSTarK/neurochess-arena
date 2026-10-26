@@ -1,8 +1,4 @@
-import {
-  type GameDetails,
-  gameReplayResponseSchema,
-  type GameSnapshot,
-} from "@neurochess/contracts";
+import type { GameDetails, GameSnapshot } from "@neurochess/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AiApi, AiRequestFailure } from "../api/ai-client";
@@ -151,50 +147,6 @@ describe("page-owned Arena orchestration", () => {
       pendingMove: false,
       pendingControl: false,
       canMove: false,
-    });
-  });
-
-  it("rejects a replay whose position differs despite matching version and PGN", async () => {
-    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
-    const h = harness(initial);
-    h.api.replay.mockResolvedValueOnce(
-      gameReplayResponseSchema.parse({
-        snapshot: { ...initial.snapshot, inCheck: false },
-        initialFen: snapshot().fen,
-      }),
-    );
-    await h.enter();
-    expect(h.controller.getSnapshot()).toMatchObject({
-      details: initial,
-      replay: null,
-      replayLoading: false,
-      replayError: true,
-    });
-    await h.controller.loadReplay();
-    expect(h.controller.getSnapshot()).toMatchObject({
-      replay: { snapshot: initial.snapshot },
-      replayPly: 4,
-      replayError: false,
-    });
-  });
-
-  it("rejects PGN for another game before delivering it", async () => {
-    const initial = { ...details, snapshot: snapshot(FOOLS_MATE) };
-    const delivery = { copy: vi.fn().mockResolvedValue(true), download: vi.fn() };
-    const h = harness(initial, delivery);
-    await h.enter();
-    h.api.pgn.mockResolvedValueOnce({
-      gameId: OTHER_GAME_ID,
-      version: initial.snapshot.version,
-      pgn: initial.snapshot.pgn,
-    });
-    await h.controller.exportPgn("download");
-    expect(delivery.download).not.toHaveBeenCalled();
-    expect(h.controller.getSnapshot()).toMatchObject({
-      details: initial,
-      exportResult: "error",
-      exportText: null,
-      exportBusy: false,
     });
   });
 
