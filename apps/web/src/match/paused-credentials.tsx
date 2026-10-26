@@ -11,9 +11,9 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { CredentialSource, type SavedCredentialChoices } from "../arena/setup/credential-source";
-import { setupFieldClass } from "../arena/setup/model-picker";
 import { Button } from "../ui/button";
 import { Icon } from "../ui/icon";
+import { inputFieldClass } from "../ui/input-styles";
 import { SecretInput } from "../ui/secret-input";
 
 interface PausedCredentialsProps {
@@ -212,7 +212,7 @@ function RecoveryForm({
                   autoCapitalize="none"
                   spellCheck={false}
                   maxLength={4096}
-                  className={`${setupFieldClass} w-full pr-12`}
+                  className={`${inputFieldClass} w-full pr-12`}
                   readOnly={disabled}
                   aria-disabled={disabled}
                   onChange={(event) => {

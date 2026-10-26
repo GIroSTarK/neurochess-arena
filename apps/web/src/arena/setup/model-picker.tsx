@@ -3,9 +3,7 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cx } from "../../ui/cx";
-
-export const setupFieldClass =
-  "min-h-target w-full min-w-0 rounded-control border border-control-border bg-surface px-3 py-2 text-body text-text aria-invalid:border-danger";
+import { inputFieldClass } from "../../ui/input-styles";
 
 export function ModelPicker({
   models,
@@ -96,7 +94,7 @@ export function ModelPicker({
         <input
           ref={input}
           id={id}
-          className={setupFieldClass}
+          className={inputFieldClass}
           role="combobox"
           autoComplete="off"
           aria-autocomplete="list"

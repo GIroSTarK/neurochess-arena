@@ -10,11 +10,12 @@ import { useTranslation } from "react-i18next";
 
 import { PieceIcon } from "../../board/piece-icon";
 import { Button } from "../../ui/button";
+import { inputFieldClass } from "../../ui/input-styles";
 import { SecretInput } from "../../ui/secret-input";
 import { Select } from "../../ui/select";
 
 import { CredentialSource, type SavedCredentialChoices } from "./credential-source";
-import { ModelPicker, setupFieldClass } from "./model-picker";
+import { ModelPicker } from "./model-picker";
 
 export interface SeatSetupProps {
   readonly color: ChessColor;
@@ -143,7 +144,7 @@ function SecretField(props: SeatSetupProps & { readonly descriptionId: string })
         autoCapitalize="none"
         spellCheck={false}
         maxLength={4096}
-        className={`${setupFieldClass} flex-[1_1_10rem]`}
+        className={`${inputFieldClass} flex-[1_1_10rem]`}
         readOnly={props.disabled}
         aria-disabled={props.disabled}
         aria-invalid={props.keyInvalid}
@@ -202,7 +203,7 @@ function Parameters(props: SeatSetupProps & { readonly model: ModelDescriptor | 
               <>
                 <input
                   id={fieldId}
-                  className={setupFieldClass}
+                  className={inputFieldClass}
                   // Native number inputs report partial exponents as empty, which would imply a default.
                   type="text"
                   inputMode={name === "temperature" ? "decimal" : "numeric"}

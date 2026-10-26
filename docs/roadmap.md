@@ -213,7 +213,7 @@ Transport contracts, migrations, retry and retention policies, and public endpoi
 
 ## Frontend architecture refactoring
 
-**Status:** T01–T06 complete. T07 remains optional and T08 deferred in the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
+**Status:** T01–T07 complete, including the optional input-style extraction. T08 remains deferred in the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
 
 - [x] T01: Correct upstream source mappings, verify exact release archives independently for direct and grouped transitive packages, and check the emitted inventory against installed and locked versions while retaining generated notices and application/engine source packaging.
 - [x] T02: Extend the browser production test-helper guard to first-party test support, with exclusively attributed root/package fixtures and preserved build/config and test exceptions.
@@ -221,6 +221,7 @@ Transport contracts, migrations, retry and retention policies, and public endpoi
 - [x] T04: Remove obsolete MatchController availability getters and assert on subscribed snapshot fields, preserving atomic availability publication and existing command and lifetime behavior.
 - [x] T05: Colocate the Sandbox application suite under `sandbox`, preserving all test cases, the production router harness, StrictMode coverage, and the web/jsdom environment.
 - [x] T06: Colocate the shared archive specification in a focused Node suite, covering replay/PGN validation, independent requests and late settlement while retaining Sandbox creation/access-loss races, Match telemetry/lifetime integration and Room archive wiring.
+- [x] T07: Move shared input utility classes to a neutral UI module, preserving setup and paused-credential recovery styling and behavior.
 
 ## Post-MVP candidates
 
