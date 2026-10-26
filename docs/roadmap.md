@@ -187,7 +187,7 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 ## Architecture clarity top-10 follow-up
 
-**Status:** T01–T10 complete. Scope and dependencies are in the [implementation plan](superpowers/plans/2026-10-24-architecture-clarity-top-10.md).
+**Status:** T01–T10 complete.
 
 - [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
 - [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
@@ -213,7 +213,7 @@ Transport contracts, migrations, retry and retention policies, and public endpoi
 
 ## Frontend architecture refactoring
 
-**Status:** T01–T08 complete, including the optional input-style extraction and previously deferred credential save-attempt refactor from the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
+**Status:** T01–T08 complete.
 
 - [x] T01: Correct upstream source mappings, verify exact release archives independently for direct and grouped transitive packages, and check the emitted inventory against installed and locked versions while retaining generated notices and application/engine source packaging.
 - [x] T02: Extend the browser production test-helper guard to first-party test support, with exclusively attributed root/package fixtures and preserved build/config and test exceptions.
