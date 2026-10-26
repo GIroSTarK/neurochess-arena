@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
@@ -68,11 +70,56 @@ it.each(["development", "test"])(
       if (item?.type !== "asset") throw new Error(`Missing distribution asset: ${name}`);
       return Buffer.from(item.source);
     };
+    const upstreamSources = asset("THIRD_PARTY_NOTICES.md")
+      .toString()
+      .split("## Upstream JavaScript sources")[1]
+      ?.split(/\r?\n## /)[0];
+    const sourcePackages = [...(upstreamSources ?? "").matchAll(/^\| ([^|]+)\|/gm)].flatMap(
+      ([, packages]) => [...packages!.matchAll(/((?:@[\w.-]+\/)?[\w.-]+)@([^\s,|]+)/g)],
+    );
+    expect(
+      sourcePackages.map(([, name]) => name),
+      "distributed upstream-source inventory includes direct and transitive packages",
+    ).toEqual(
+      expect.arrayContaining([
+        "react",
+        "react-dom",
+        "scheduler",
+        "use-sync-external-store",
+        "react-router",
+        "i18next",
+        "react-i18next",
+        "zod",
+        "chess.js",
+      ]),
+    );
+    const repository = fileURLToPath(new URL("../../", import.meta.url));
+    const lockfile = JSON.parse(
+      readFileSync(new URL("../../package-lock.json", import.meta.url), "utf8"),
+    ) as { packages: Record<string, { version?: string }> };
+    const require = createRequire(new URL("./package.json", import.meta.url));
+    for (const entry of sourcePackages) {
+      const name = entry[1]!;
+      const version = entry[2]!;
+      const packagePath = require.resolve(`${name}/package.json`);
+      const installed = JSON.parse(readFileSync(packagePath, "utf8")) as { version: string };
+      const lockPath = relative(repository, packagePath)
+        .replaceAll("\\", "/")
+        .replace(/\/package\.json$/, "");
+      expect(installed.version, `${name}: installed version matches the lockfile`).toBe(
+        lockfile.packages[lockPath]?.version,
+      );
+      expect(
+        version,
+        `${name}: matches distributed upstream-source package versions to the selected dependency versions`,
+      ).toBe(installed.version);
+    }
     expect(asset("LICENSE.txt").toString()).toContain("GNU GENERAL PUBLIC LICENSE");
     const licensing = asset("licensing.html").toString();
     expect(licensing).toContain('href="neurochess-arena-source.tar.gz"');
     expect(licensing).toContain('href="LICENSE.txt"');
     expect(licensing).toContain('href="THIRD-PARTY-NOTICES.md"');
+    expect(licensing).toContain('href="THIRD_PARTY_NOTICES.md"');
     for (const [file, title] of [
       ["privacy.html", "Privacy Policy"],
       ["terms.html", "Terms of Service"],

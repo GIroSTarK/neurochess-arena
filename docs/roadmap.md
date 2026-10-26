@@ -211,6 +211,12 @@ The existing live-service, physical-device, accessibility, and operational relea
 
 Transport contracts, migrations, retry and retention policies, and public endpoints remain unchanged. The existing manual and live-service release gates remain open.
 
+## Frontend architecture refactoring
+
+**Status:** T01 complete; T02–T06 pending. T07 remains optional and T08 deferred in the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
+
+- [x] T01: Correct upstream source mappings, verify exact release archives independently for direct and grouped transitive packages, and check the emitted inventory against installed and locked versions while retaining generated notices and application/engine source packaging.
+
 ## Post-MVP candidates
 
 - chess clocks and provider-response time limits;

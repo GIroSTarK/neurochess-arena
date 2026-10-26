@@ -34,16 +34,17 @@ packages contain generated distribution files, so the lockfile alone is not an
 offer of their upstream preferred sources. The following full repository archives
 include the sources and build scripts for the currently bundled JavaScript
 dependencies. Revisions come from the exact npm releases' `gitHead` metadata,
-except React Router, whose `react-router@8.4.0` tag resolves to the listed commit.
+except React Router, whose `react-router@8.5.0` tag resolves to the listed commit.
 
-| Bundled package versions                                                        | Upstream source archive                                                                                                  |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| react@19.3.0, react-dom@19.3.0, scheduler@0.28.0, use-sync-external-store@1.7.0 | [React source](https://github.com/react/react/archive/1d34f91dfde6bba84d08b683aaba164c7194dacb.tar.gz)                   |
-| react-router@8.4.0                                                              | [React Router source](https://github.com/remix-run/react-router/archive/7ccdcecdd944e15be0cd0dcb702b86c9af1214a8.tar.gz) |
-| i18next@26.4.4                                                                  | [i18next source](https://github.com/i18next/i18next/archive/f6a7746d119790f07bc03ba86b130b090af8e443.tar.gz)             |
-| react-i18next@17.0.16                                                           | [react-i18next source](https://github.com/i18next/react-i18next/archive/606b6a55f231bbf73823863fbb94e6b8eb8272fd.tar.gz) |
-| zod@4.6.7                                                                       | [Zod source](https://github.com/colinhacks/zod/archive/b500a2ee95134f81d74da7911d7378dd2853d042.tar.gz)                  |
-| chess.js@1.4.0                                                                  | [chess.js source](https://github.com/jhlywa/chess.js/archive/ce1ff9e9fc342984ff75ca475ab39f37888cb28a.tar.gz)            |
+| Bundled package versions                        | Upstream source archive                                                                                                  |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| react@19.3.1, react-dom@19.3.1                  | [React source](https://github.com/react/react/archive/61aa00df822d0eb76d0362eb8b6fdd3527693efe.tar.gz)                   |
+| scheduler@0.28.0, use-sync-external-store@1.7.0 | [React source](https://github.com/react/react/archive/1d34f91dfde6bba84d08b683aaba164c7194dacb.tar.gz)                   |
+| react-router@8.5.0                              | [React Router source](https://github.com/remix-run/react-router/archive/4fe4525102870a2b21a4a0568a651d118f5e5dbb.tar.gz) |
+| i18next@26.5.10                                 | [i18next source](https://github.com/i18next/i18next/archive/00b6a3f22771e50be732826014d49a6ae2647ef5.tar.gz)             |
+| react-i18next@17.1.8                            | [react-i18next source](https://github.com/i18next/react-i18next/archive/3f0880e218f7d1235f474faf1d695d0fbde94a48.tar.gz) |
+| zod@4.6.7                                       | [Zod source](https://github.com/colinhacks/zod/archive/b500a2ee95134f81d74da7911d7378dd2853d042.tar.gz)                  |
+| chess.js@1.4.0                                  | [chess.js source](https://github.com/jhlywa/chess.js/archive/ce1ff9e9fc342984ff75ca475ab39f37888cb28a.tar.gz)            |
 
 Keep these version mappings current when dependencies change. Release operators
 must keep the corresponding upstream sources accessible while distributing the
