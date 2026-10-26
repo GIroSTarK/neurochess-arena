@@ -5,7 +5,7 @@ import { PageContext, type RouteMetadata, useAppRoute } from "../routing/route-c
 import { RouteEffects } from "../routing/route-effects";
 import { gameRouteTarget } from "../routing/route-navigation";
 import { DocumentMetadata } from "../shell/document-metadata";
-import { StaticScreen } from "../shell/static-screen";
+import { NotFoundScreen } from "../shell/not-found-screen";
 
 function useMetadata(): RouteMetadata {
   const matches = useMatches();
@@ -30,7 +30,7 @@ export function RouteRoot() {
     <PageContext value={page}>
       <DocumentMetadata page={page} />
       <RouteEffects navigation={context.navigation} pendingLabel={t("routing.pending")} />
-      {invalid ? <StaticScreen page="not-found" /> : <Outlet />}
+      {invalid ? <NotFoundScreen /> : <Outlet />}
     </PageContext>
   );
 }

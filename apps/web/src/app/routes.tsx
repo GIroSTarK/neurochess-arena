@@ -14,8 +14,8 @@ import { publicGameLoader, publicGameSetupLoader } from "../public-game/route-da
 import { RoomEntryRoute } from "../rooms/room-entry-route";
 import type { RoomEntryFeature } from "../rooms/route-data";
 import { type AppRouteContext, RouteContext } from "../routing/route-context";
+import { NotFoundScreen } from "../shell/not-found-screen";
 import { RouteNotice } from "../shell/route-notice";
-import { StaticScreen } from "../shell/static-screen";
 
 import { RouteErrorBoundary } from "./route-error-boundary";
 import { RouteRoot } from "./route-root";
@@ -179,7 +179,7 @@ export function createAppRoutes(context: AppRouteContext, rooms?: RoomEntryFeatu
         {
           path: "*",
           handle: { page: "not-found" },
-          element: <StaticScreen page="not-found" />,
+          element: <NotFoundScreen />,
         },
       ],
     },

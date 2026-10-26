@@ -619,11 +619,6 @@ export const en = {
   arena: {
     playArea: "Play area",
     gameDetails: "Game details",
-    status: "In development",
-    headline: "Watch models make their moves.",
-    description:
-      "An arena for observing and comparing AI models playing chess. Model matchups and AI-versus-human games are on the way.",
-    openSandbox: "Open development sandbox",
   },
   details: {
     label: "Game detail tabs",
