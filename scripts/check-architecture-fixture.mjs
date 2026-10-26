@@ -14,6 +14,11 @@ const webProductionFixtures = [
   { path: "apps/web/src/forbidden-test-helper-import.ts", rule: "web-production-no-test-helpers" },
   { path: "apps/web/src/forbidden-test-file-import.ts", rule: "web-production-no-test-helpers" },
   { path: "apps/web/src/forbidden-tsx-test-import.ts", rule: "web-production-no-test-helpers" },
+  { path: "apps/web/src/forbidden-root-test-support.ts", rule: "web-production-no-test-helpers" },
+  {
+    path: "apps/web/src/forbidden-package-test-support.ts",
+    rule: "web-production-no-test-helpers",
+  },
 ].map((fixture) => ({ ...fixture, exclusive: true }));
 const backendFixtures = [
   { path: "apps/api/src/forbidden-scripted-adapter.ts", rule: "api-production-no-test-helpers" },

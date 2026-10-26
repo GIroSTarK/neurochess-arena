@@ -72,7 +72,7 @@ export default {
       comment: "Test modules may use server infrastructure but cannot enter the production graph.",
       severity: "error",
       from: webProductionModules,
-      to: { path: webTestModules },
+      to: { path: firstPartyTestModules },
     },
     {
       name: "analysis-no-controllers-or-api",
