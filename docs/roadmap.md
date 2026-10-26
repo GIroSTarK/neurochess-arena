@@ -213,11 +213,12 @@ Transport contracts, migrations, retry and retention policies, and public endpoi
 
 ## Frontend architecture refactoring
 
-**Status:** T01–T03 complete; T04–T06 pending. T07 remains optional and T08 deferred in the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
+**Status:** T01–T04 complete; T05–T06 pending. T07 remains optional and T08 deferred in the [implementation plan](plans/2026-10-26-frontend-architecture-refactoring.md).
 
 - [x] T01: Correct upstream source mappings, verify exact release archives independently for direct and grouped transitive packages, and check the emitted inventory against installed and locked versions while retaining generated notices and application/engine source packaging.
 - [x] T02: Extend the browser production test-helper guard to first-party test support, with exclusively attributed root/package fixtures and preserved build/config and test exceptions.
 - [x] T03: Specialize the unavailable page as `NotFoundScreen`, remove the unreachable Arena variant and its orphaned copy, and preserve invalid/unknown/disabled route request isolation and navigation.
+- [x] T04: Remove obsolete MatchController availability getters and assert on subscribed snapshot fields, preserving atomic availability publication and existing command and lifetime behavior.
 
 ## Post-MVP candidates
 

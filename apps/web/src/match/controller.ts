@@ -111,16 +111,6 @@ export class MatchController {
   retryControl() {
     return this.commands.retryControl();
   }
-  canMove() {
-    return this.store.get().canMove;
-  }
-  hasPendingMove() {
-    return this.store.get().pendingMove;
-  }
-  hasPendingControl() {
-    return this.store.get().pendingControl;
-  }
-
   loadInvocations() {
     return this.invocations.load();
   }

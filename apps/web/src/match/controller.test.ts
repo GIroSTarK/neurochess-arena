@@ -818,7 +818,7 @@ describe("page-owned Arena orchestration", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(h.api.invocations.mock.calls.length).toBeGreaterThan(reads);
     expect(h.controller.getSnapshot().invocationsError).toBe(true);
-    expect(h.controller.canMove()).toBe(true);
+    expect(h.controller.getSnapshot().canMove).toBe(true);
     await h.controller.loadInvocations();
     expect(h.controller.getSnapshot().invocationsError).toBe(false);
     h.api.invocations.mockResolvedValueOnce({ gameId: crypto.randomUUID(), version: 0, turns: [] });
@@ -865,7 +865,7 @@ describe("page-owned Arena orchestration", () => {
       });
       await h.controller.created(game);
       expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 0 : 1);
-      expect(h.controller.canMove()).toBe(true);
+      expect(h.controller.getSnapshot().canMove).toBe(true);
       await vi.advanceTimersByTimeAsync(6000);
       expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 0 : 1);
       const humanMove = color === "white" ? "f2f3" : "e7e5";
@@ -874,7 +874,7 @@ describe("page-owned Arena orchestration", () => {
       const sending = h.controller.move(humanMove);
       await h.controller.move(humanMove);
       expect(h.api.move).toHaveBeenCalledTimes(1);
-      expect(h.controller.canMove()).toBe(false);
+      expect(h.controller.getSnapshot().canMove).toBe(false);
       expect(h.controller.getSnapshot().details?.snapshot.moves).toHaveLength(moves.length);
       moves.push(humanMove);
       h.store(snapshot(moves));
@@ -883,7 +883,7 @@ describe("page-owned Arena orchestration", () => {
       moves.push(color === "white" ? "e7e5" : "g2g4");
       await vi.advanceTimersByTimeAsync(1500);
       expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 1 : 2);
-      expect(h.controller.canMove()).toBe(true);
+      expect(h.controller.getSnapshot().canMove).toBe(true);
       await vi.advanceTimersByTimeAsync(6000);
       expect(h.api.turn).toHaveBeenCalledTimes(color === "white" ? 1 : 2);
     },
@@ -897,8 +897,8 @@ describe("page-owned Arena orchestration", () => {
     h.api.move.mockRejectedValueOnce(new ApiFailure("network"));
     await h.controller.move("e2e4");
     expect(h.api.snapshot).toHaveBeenCalled();
-    expect(h.controller.hasPendingMove()).toBe(true);
-    expect(h.controller.canMove()).toBe(false);
+    expect(h.controller.getSnapshot().pendingMove).toBe(true);
+    expect(h.controller.getSnapshot().canMove).toBe(false);
     await h.controller.move("d2d4");
     await vi.advanceTimersByTimeAsync(6000);
     expect(h.api.turn).not.toHaveBeenCalled();
@@ -909,7 +909,7 @@ describe("page-owned Arena orchestration", () => {
     });
     await h.controller.retryMove();
     expect(h.api.move.mock.calls[1]?.[0]).toEqual(h.api.move.mock.calls[0]?.[0]);
-    expect(h.controller.hasPendingMove()).toBe(false);
+    expect(h.controller.getSnapshot().pendingMove).toBe(false);
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
     expect(h.api.turn).not.toHaveBeenCalled();
   });
@@ -925,8 +925,8 @@ describe("page-owned Arena orchestration", () => {
     });
     await h.controller.move("e2e4");
     expect(h.controller.getSnapshot().details?.snapshot.moves).toHaveLength(1);
-    expect(h.controller.hasPendingMove()).toBe(false);
-    expect(h.controller.canMove()).toBe(false);
+    expect(h.controller.getSnapshot().pendingMove).toBe(false);
+    expect(h.controller.getSnapshot().canMove).toBe(false);
     expect(h.api.turn).not.toHaveBeenCalled();
     await h.controller.recover();
     expect(h.controller.getSnapshot().details?.snapshot.state).toBe("paused");
@@ -943,7 +943,7 @@ describe("page-owned Arena orchestration", () => {
     await h.controller.step();
     expect(h.api.controller).not.toHaveBeenCalled();
     await h.controller.resume();
-    expect(h.controller.canMove()).toBe(true);
+    expect(h.controller.getSnapshot().canMove).toBe(true);
     expect(h.api.turn).not.toHaveBeenCalled();
   });
 
