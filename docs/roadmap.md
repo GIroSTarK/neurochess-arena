@@ -173,55 +173,6 @@ Deliverables:
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
 
-## Architecture clarity review
-
-**Status:** Complete. T01–T11 integrated and independently reviewed in T12.
-
-- [x] Separate AI outcome policy and shared provider parsing while preserving atomic outcomes, durable retry budgets, paused-step semantics, and credential/authority fences.
-- [x] Split repository capabilities and historical migration scenarios; share equivalent AI parameter predicates without changing migrations or transaction boundaries.
-- [x] Separate public-game API and mode entry from AI orchestration; share the MatchController collaborator composition while retaining feature lifetimes and identity cleanup.
-- [x] Independently review the integrated changes and reconcile the [architecture map](architecture.md) with final module ownership.
-- [x] Confirm targeted regression suites, relevant browser acceptance, and the full configured baseline.
-
-## Architecture clarity top-10 follow-up
-
-**Status:** T01–T10 complete.
-
-- [x] T01: Guard browser production code against Node built-ins, server libraries, and test-helper imports; verify forbidden imports and allowed build/test exceptions with architecture fixtures.
-- [x] T02: Move room-entry acceptance to production routes and remove the alternate waiting flow and its harness, preserving create/join retries, invitation lifetimes, StrictMode handoffs, and the independent Arena setup harness.
-- [x] T03: Make controller acquisition explicit in backend fixtures, keep the real game service unmodified, and pass controller IDs through turn/control builders; retain coverage for missing, mismatched, and expired claims.
-- [x] T04: Share the typed mock AI API while retaining the real MatchController/browser-credential and production-composition/memory-credential harnesses; preserve seeded snapshots and telemetry identity, version conflicts, and fixture isolation.
-- [x] T05: Share neutral command identity and preparation contracts, and distinguish resolved provider request access from credential sources; preserve strict wire schemas, transaction ownership, lock ordering, authority rechecks, and conflict snapshots.
-- [x] T06: Replace boolean AI actions with named creation, resume, and step intents; preserve the transport step flag, atomic paused stepping, pacing, serialization, credential checks, and explicit retry.
-- [x] T07: Share bounded provider JSON reading and transport/cancellation normalization; preserve the 4 MiB byte limit, fatal UTF-8 decoding, stream cleanup, per-page dispatch authorization, provider-specific classifications, and OpenRouter usage/billing without implicit retries.
-- [x] T08: Extract account history reads and AI controller lifecycle from GameService; preserve private cursor pagination, identity and lease fences, locked expiry rechecks, and separate history deletion and controller-presence helpers.
-- [x] T09: Separate AI reservation/rechecks, classified attempt outcomes, and late-result recovery; keep transaction boundaries in the orchestrator, explicit attempt state, durable retry budgets, atomic receipts, and identity/controller/credential fences.
-- [x] T10: Make generation fencing, onboarding invalidation, and profile projection explicit through typed weak result registries; preserve synchronous router-cache cleanup, late-result fences, and same-identity controller lifetime.
-
-## Backend refactoring follow-up
-
-**Status:** Complete. The five-task backend refactor passed integration acceptance and independent review.
-
-- [x] Apply canonical recovery database URL validation and give standalone model discovery its own provider service/routes while preserving authorization and credential lifetimes.
-- [x] Make operational fixture cleanup resilient to partial failures and extend architecture enforcement to production/test boundaries and operational entrypoints.
-- [x] Replace the temporary room writer with deterministic production-route race coverage, preserving deletion, history, receipt, and slot assertions.
-- [x] Pass focused regressions, the full configured baseline, discovery/credential browser smoke, and isolated deployment/recovery rehearsals; verify fixture resource cleanup.
-
-Transport contracts, migrations, retry and retention policies, and public endpoints remain unchanged.
-
-## Frontend architecture refactoring
-
-**Status:** T01–T08 complete.
-
-- [x] T01: Correct upstream source mappings, verify exact release archives independently for direct and grouped transitive packages, and check the emitted inventory against installed and locked versions while retaining generated notices and application/engine source packaging.
-- [x] T02: Extend the browser production test-helper guard to first-party test support, with exclusively attributed root/package fixtures and preserved build/config and test exceptions.
-- [x] T03: Specialize the unavailable page as `NotFoundScreen`, remove the unreachable Arena variant and its orphaned copy, and preserve invalid/unknown/disabled route request isolation and navigation.
-- [x] T04: Remove obsolete MatchController availability getters and assert on subscribed snapshot fields, preserving atomic availability publication and existing command and lifetime behavior.
-- [x] T05: Colocate the Sandbox application suite under `sandbox`, preserving all test cases, the production router harness, StrictMode coverage, and the web/jsdom environment.
-- [x] T06: Colocate the shared archive specification in a focused Node suite, covering replay/PGN validation, independent requests and late settlement while retaining Sandbox creation/access-loss races, Match telemetry/lifetime integration and Room archive wiring.
-- [x] T07: Move shared input utility classes to a neutral UI module, preserving setup and paused-credential recovery styling and behavior.
-- [x] T08: Centralize credential save-attempt transitions in a local discriminated state and pure reducer, preserving exact-UUID retries, metadata reconciliation, explicit consent, conflict feedback, and secret/lifetime cleanup.
-
 ## Post-MVP candidates
 
 - chess clocks and provider-response time limits;
