@@ -4,6 +4,8 @@
 
 **Date:** 2026-10-04
 
+**Scope update (2026-10-27):** [ADR-0018](0018-private-room-lifecycle-and-shared-retention.md) scopes paused recovery below to AI/Sandbox; human rooms synchronize without changing lifecycle. Canonical paths and browser lifetime boundaries remain binding. The [roadmap](../roadmap.md#navigation-and-route-data-migration--before-phase-4) records completion of the staged loader/action migration.
+
 ## Context
 
 Native page navigation and query-addressed games obscure route ownership and couple browser transitions to controller lifetimes. Navigation must preserve private authorization, immediate cleanup during pending transitions, and the credential owner of a newly started game. Optional development routes must retain request and build isolation.
@@ -11,7 +13,7 @@ Native page navigation and query-addressed games obscure route ownership and cou
 ## Decision
 
 - Use one React Router Data-mode router with explicit route objects, `createBrowserRouter` from `react-router`, and `RouterProvider` from `react-router/dom`. Retain React/Vite and static hosting; no Framework-mode plugin, SSR, or backend migration. Pin React Router 8.4.0, verified against the installed React and Node versions.
-- Use `/games/:gameId` and `/sandbox/games/:gameId` for private live play, recovery, and terminal replay. Keep `/` and `/sandbox` for setup/discovery. Follow the [browser route contract](../development.md#browser-routes) for validation, history semantics, and auth returns. Old query-game links become unavailable without redirects or discovery; do not normalize incoming URLs through redirects.
+- Use `/games/:gameId` and `/sandbox/games/:gameId` for private live play, recovery, and terminal replay. Keep `/` and `/sandbox` for setup/discovery. Follow the [browser route contract](../reference/browser.md#browser-routes) for validation, history semantics, and auth returns. Old query-game links become unavailable without redirects or discovery; do not normalize incoming URLs through redirects.
 - This supersedes only the query-string browser pointer in [ADR-0007](0007-lifecycle-recovery-and-private-replay.md). Its command receipts, paused recovery, private replay, and retention decisions remain binding.
 - Keep the root free of unconditional identity requests. Public account observation sits in its own branch; Sandbox, reference fixtures, invalid targets, and unavailable routes stay isolated. Literal Vite gates preserve exclusion and lazy loading of optional branches.
 - Maintain one controller/credential owner per mounted mode layout across entry/game leaves. Register an explicit in-memory handoff before accepted creation navigates. Pending departure ends the old lifetime immediately; cancellation does not restart it. Reopening uses paused recovery. Router cancellation does not prove that an API write or provider request stopped.

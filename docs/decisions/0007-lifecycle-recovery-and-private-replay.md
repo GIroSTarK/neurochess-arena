@@ -3,6 +3,8 @@
 **Status:** Accepted  
 **Date:** 2026-09-03
 
+**Scope update (2026-10-27):** [ADR-0017](0017-data-router-and-canonical-game-paths.md) replaces the query-string game addresses below with canonical paths. [ADR-0018](0018-private-room-lifecycle-and-shared-retention.md) limits paused recovery to AI/Sandbox and adds participant retention for human rooms. The original decision remains below; use the linked records and [current navigation policy](../product.md#navigation-and-guest-access) for those extensions.
+
 ## Context
 
 PR 4 extends ADR-0006's move-only API to pause, resume, abort, and human resignation. Move rows alone cannot deduplicate lifecycle commands. Refresh must preserve repetition history and invalidate outstanding commands without mutating ordinary snapshot reads. Guests also need temporary access to finished games without introducing account history or public links.

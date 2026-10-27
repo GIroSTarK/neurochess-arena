@@ -9,11 +9,14 @@ Neurochess Arena is primarily an arena for observing and comparing LLMs playing 
 Rules below always apply. Before a material change, read the sources and sections relevant to the task, following linked contracts as needed. Do not read every document or ADR by default; reuse guidance already read in this task unless it changed.
 
 - `docs/product.md`: game behavior, permissions, and MVP scope.
-- `docs/architecture.md`: component boundaries, data flow, persistence, and security.
+- `docs/architecture.md`: component boundaries and data map, linking to detailed subsystem contracts in `docs/architecture/`.
 - `docs/design-system.md`: presentation, UI interaction, and accessibility.
-- `docs/development.md`: setup, environment, API usage, migrations, and verification.
+- `docs/development.md`: setup, environment, migrations, and contributor workflow; API, provider, browser, and testing details live in `docs/reference/`.
+- `docs/operations.md`, `docs/recovery.md`, and `docs/credential-rotation.md`: deployment, recovery, and offline credential maintenance.
 - `docs/roadmap.md`: delivery order and milestone status, when planning work or assessing progress.
 - `docs/decisions/README.md`: find and read the accepted ADRs relevant to the affected area.
+
+Use `docs/README.md` to find the canonical guide for a task.
 
 When code and documentation disagree, determine the intended behavior before editing. Correct whichever is wrong; update both when the contract changes. Do not change a requirement merely to match a bug.
 

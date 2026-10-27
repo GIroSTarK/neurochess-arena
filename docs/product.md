@@ -1,7 +1,8 @@
 # Product specification
 
-**Status:** Draft for MVP implementation  
-**Last updated:** 2026-10-10
+**Scope:** Canonical MVP behavior and permissions; see the [roadmap](roadmap.md) for implementation status
+
+**Last updated:** 2026-10-27
 
 ## Vision
 
@@ -127,7 +128,7 @@ If both accounts delete, the final deletion removes the shared record; concurren
 
 When the final account entitlement is removed from a terminal room with no guest participant binding, physically delete the game in that transaction. Guest-bound terminal records instead pass to cleanup after commit and on periodic/startup sweeps: preserve them while the guest remains valid, and delete once no account entitlement or valid guest remains. Cleanup synchronizes with guest renewal before checking expiry; expiry makes the record immediately eligible with no additional retention grace period. API downtime delays physical cleanup, never access denial. Guest expiry alone does not abort an unfinished game or release its slots: the owner can close it, or account deletion can abort it. This chooses shared-room cleanup eligibility, not a production retention period for unrelated solo guest games or external backups.
 
-Clear-history must serialize with room completion by either player, not just the requester. A room becoming terminal before the clear's shared-room/account boundary loses only that account's access; a room finishing after it remains visible. [The lock protocol](architecture.md#shared-room-write-order) defines that boundary. Reads already in progress may finish with their consistent pre-deletion view; subsequent requests cannot regain removed access. Acknowledged deletion clears the requesting browser's cached views, and subscriptions must stop delivering protected data after access is lost. Downloaded PGNs and copies already delivered to another participant cannot be recalled.
+Clear-history must serialize with room completion by either player, not just the requester. A room becoming terminal before the clear's shared-room/account boundary loses only that account's access; a room finishing after it remains visible. [The lock protocol](architecture/rooms.md#shared-room-write-order) defines that boundary. Reads already in progress may finish with their consistent pre-deletion view; subsequent requests cannot regain removed access. Acknowledged deletion clears the requesting browser's cached views, and subscriptions must stop delivering protected data after access is lost. Downloaded PGNs and copies already delivered to another participant cannot be recalled.
 
 ## Saved credential use and revocation
 
@@ -199,21 +200,27 @@ Never put invitations in logs, analytics, referrers, router results/history stat
 
 ### Development sandbox
 
-The [local development sandbox](architecture.md#local-development-sandbox) is a development/test-only flow outside the three public game modes. One guest controls both colors; only explicit Start bootstraps a guest.
+The [local development sandbox](architecture/games.md#local-development-sandbox) is a development/test-only flow outside the three public game modes. One guest controls both colors; only explicit Start bootstraps a guest.
 
 Sandbox has an independent limit of one active or paused game per guest session. A session may therefore keep one unfinished public-mode game and one unfinished Sandbox game at the same time. Creation conflicts and unfinished-game recovery stay within their respective group; Sandbox actions do not change the public-mode game.
 
-Arena is the default page at `/`, with AI-versus-AI observation, AI-versus-human play with either color, and private game recovery at `/games/<uuid>`. The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox/games/<uuid>`.
-
-The same private game path covers live play, paused recovery, and completed/aborted replay. A game UUID grants no access. Old `/?game=<uuid>` and `/sandbox?game=<uuid>` links intentionally show Page unavailable without redirects, guest bootstrap, or unfinished-game discovery, including empty or duplicate `game` values. A `game` query also invalidates a game path. Entry URLs without that parameter keep unfinished-game discovery. Opening a game through the wrong mode preserves the authorized explanation and explicit link; it does not automatically change modes.
-
-In-app links and Back/Forward keep the document open. Leaving a game stops its controller and clears page-owned keys immediately, including while the destination loads; canceling a departure requires explicit recovery. Successful Start preserves its controller and keys while changing to the canonical game path. AI games and Sandbox use paused recovery on reload or return; the human-room flow synchronizes without changing lifecycle.
+The development flow lives at `/sandbox`, with its own navigation item only when `SANDBOX_ENABLED=true`. Disabled Sandbox URLs show an unavailable page without starting sandbox requests. Game links use `/sandbox/games/<uuid>` and follow the [shared navigation policy](#navigation-and-guest-access).
 
 - Pause and Resume preserve the position and history. Abort stops play without awarding a win or loss. Resign White and Resign Black award the opposite color a win, including while paused or off-turn. Abortion and resignation require confirmation.
 - Refresh or reopening recovers unfinished games as paused, preserving move history and draw counters; Resume is explicit. Uncertain commands preserve the accepted position and block further commands until synchronization or an explicit retry of the identical command.
 - Completed and aborted games show the result and reason, read-only replay starting at the final position, and private PGN copy/download. New game does not delete the previous record; its URL remains accessible only to the owning guest session until access expires. There is no guest history list.
 
-The [sandbox walkthrough](development.md#sandbox-ui) documents controls, URL navigation, and configurable access expiry. Production guest access uses a 24-hour sliding expiry. Existing shared-room cleanup remains unchanged; physical retention and automated purging of expired solo guest records remain separate decisions. The [recovery policy](recovery.md#retention-and-ownership) defines backup retention and its deletion limitations. Implementation progress belongs in the [roadmap](roadmap.md).
+The [sandbox walkthrough](reference/browser.md#sandbox-ui) documents controls and configurable development access expiry.
+
+## Navigation and guest access
+
+Arena is the default page at `/`, with AI-versus-AI observation and AI-versus-human play with either color. Public games use `/games/<uuid>`; private room entry follows the [invitation policy](#invitations-and-entry).
+
+The same private game path covers live play, recovery, and completed/aborted replay. A game UUID grants no access. Old `/?game=<uuid>` and `/sandbox?game=<uuid>` links intentionally show Page unavailable without redirects, guest bootstrap, or unfinished-game discovery, including empty or duplicate `game` values. A `game` query also invalidates a game path. Entry URLs without that parameter keep unfinished-game discovery. Opening a game through the wrong mode preserves the authorized explanation and explicit link; it does not automatically change modes.
+
+In-app links and Back/Forward keep the document open. Leaving a game stops its controller and clears page-owned keys immediately, including while the destination loads; canceling a departure requires explicit recovery. Successful Start preserves its controller and keys while changing to the canonical game path. AI games and Sandbox use paused recovery on reload or return; the human-room flow synchronizes without changing lifecycle.
+
+Production guest access uses a 24-hour sliding expiry. The [shared-room cleanup policy](#shared-room-retention) applies when guest participation ends; physical retention and automated purging of expired solo guest records remain separate decisions. The [recovery policy](recovery.md#retention-and-ownership) defines backup retention and its deletion limitations.
 
 ## Chess and AI behavior
 
@@ -313,16 +320,21 @@ Scores favor White when positive and Black when negative; mate names the benefit
 
 Accounts automatically retain their own client-computed samples with each authorized public game; room participants never receive each other's samples and may see different scores. Guests and Sandbox keep analysis only in page memory. Reloading may recompute missing samples, and signing in does not transfer guest analysis. Removing a participant's retained room access removes that account's samples while preserving the opponent's access and samples; solo game/account deletion removes the corresponding analysis. Existing backup and already-delivered-copy limitations still apply.
 
-Analysis has its own availability and Retry control. Retrying analysis neither retries an AI turn nor resumes a game. Locally computed but unsaved results stay visibly unsaved after a persistence failure. The [accepted policy](decisions/0019-browser-analysis-and-private-samples.md) and [architecture](architecture.md#stockfish-worker) define limits, replacement, and privacy boundaries.
+Analysis has its own availability and Retry control. Retrying analysis neither retries an AI turn nor resumes a game. Locally computed but unsaved results stay visibly unsaved after a persistence failure. The [accepted policy](decisions/0019-browser-analysis-and-private-samples.md) and [architecture](architecture/analysis.md#stockfish-worker) define limits, replacement, and privacy boundaries.
 
 ## Game lifecycle
 
-The canonical game states are `configuring`, `active`, `paused`, `completed`, and `aborted`. The existing AI/Sandbox flow is:
+The canonical game states are `configuring`, `active`, `paused`, `completed`, and `aborted`. AI games and Sandbox use these transitions:
 
-```text
-configuring -> active <-> paused -> completed
-                    \-----------> aborted
-```
+| From                 | To          | Trigger                                                                                   |
+| -------------------- | ----------- | ----------------------------------------------------------------------------------------- |
+| `configuring`        | `active`    | Start                                                                                     |
+| `active`             | `paused`    | Pause or recovery; AI games also pause on provider failure or controller loss             |
+| `paused`             | `active`    | Explicit Resume                                                                           |
+| `active` or `paused` | `completed` | A terminal chess move, human resignation, or model technical loss, where the mode permits |
+| `active` or `paused` | `aborted`   | Confirmed Stop/Abort                                                                      |
+
+Next move executes one AI turn while paused and leaves the game paused unless that turn completes it. Terminal states have no outgoing transitions. Human rooms use the separate [room lifecycle](#room-lifecycle-and-permissions).
 
 `completed` includes normal chess results and technical losses. The termination reason distinguishes checkmate, draw type, human resignation, and model technical loss.
 
@@ -341,7 +353,7 @@ The [design system](design-system.md) defines the refined sci-fi visual language
 
 The MVP is ready when:
 
-1. All three game modes work end to end on supported desktop and mobile browsers.
+1. All three game modes work end to end on the [supported desktop and mobile browsers](reference/testing.md#supported-browsers-and-version-policy).
 2. OpenAI, Anthropic, Google, and OpenRouter can list models and complete legal turns through a shared provider contract.
 3. AI-versus-AI supports independent White and Black configuration and all live controls.
 4. Authentication, private rooms, invitation joining, reconnection, and private history work as specified.
@@ -350,10 +362,12 @@ The MVP is ready when:
 7. Automated tests cover the critical chess, provider, authorization, persistence, and realtime flows.
 8. The application has a polished, coherent, accessible dark UI and no known release-blocking defects.
 
+The [release acceptance checklist](operations.md#mvp-release-acceptance) maps these criteria to automated evidence and live/manual checks for an identified release candidate.
+
 ## Open product decisions
 
 - Physical retention and automatic purging of expired solo guest records
-- Exact supported parameter matrix for each provider and model
+- Whether to extend the shared capability descriptor to express conditional parameter dependencies. Current discovery, capability annotations, and conservative parameter filtering follow the [provider boundary](architecture/providers.md#ai-provider-boundary); a universal fixed provider/model matrix is not required.
 
 The deployment platform and region are selected in [ADR-0020](decisions/0020-single-host-production-deployment.md); live provisioning and release verification remain separate gates.
 

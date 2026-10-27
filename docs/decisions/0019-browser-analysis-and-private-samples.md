@@ -3,13 +3,15 @@
 **Status:** Accepted  
 **Date:** 2026-10-10
 
+**Profile update (2026-10-27):** The [current engine/profile contract](../architecture/analysis.md#engine-and-analysis-profile) uses Stockfish 19.0.1 with profile `sf19-lite-single-v2` and retains readable v1 samples. The 19.0.0 selection below records the original profile; the browser execution, bounded analysis, private samples and distribution policies remain binding.
+
 ## Context
 
 All three public modes require live evaluation and private post-game graphs. Browser analysis can finish after another move, identity change, or deletion; room participants can submit different evaluations. Engine output must remain outside chess authority and model prompts. The worker and persistence implementations need one policy before either ships.
 
 ## Decision
 
-The [analysis architecture](../architecture.md#stockfish-worker) owns the profile, resource limits, sample contract, scheduling, and deletion protocol. The [product policy](../product.md#stockfish-analysis) and [presentation rules](../design-system.md#stockfish-analysis) define what viewers see.
+The [analysis architecture](../architecture/analysis.md#stockfish-worker) owns the profile, resource limits, sample contract, scheduling, and deletion protocol. The [product policy](../product.md#stockfish-analysis) and [presentation rules](../design-system.md#stockfish-analysis) define what viewers see.
 
 - Self-host the pinned `stockfish@19.0.0` lite single-threaded WASM distribution, lazily loaded in at most one worker per mounted game view. Use one fixed, versioned profile across devices; no CDN execution, server analysis, threaded fallback, or automatic full-engine download. The maintainer describes the lite single-threaded build as smaller and independent of cross-origin isolation, with weaker analysis than the full engine. This is a compatibility choice, not measured Arena performance evidence. [Build guidance](https://github.com/nmrugg/stockfish.js#the-engines)
 - Analyze the initial position and every accepted move prefix asynchronously, prioritizing the displayed position while reserving bounded work for historical gaps. Analysis failure cannot block rendering, commands, recovery, or replay. Never feed scores, lines, or engine moves to an LLM or the command service.

@@ -3,6 +3,8 @@
 **Status:** Accepted  
 **Date:** 2026-09-21
 
+**Scope update (2026-10-27):** [ADR-0013](0013-server-derived-principals-and-account-lifecycle.md) extends identity handling to accounts, and [ADR-0018](0018-private-room-lifecycle-and-shared-retention.md) extends public slots to both room participants. The independent Sandbox limit remains binding; the guest-owner index below records the original implementation.
+
 ## Context
 
 ADR-0006 introduced one unfinished owned game per guest while Sandbox was the only creation flow. Ordinary AI games reused that slot. Starting Sandbox with a paused AI game therefore returned the AI snapshot as a creation conflict; Sandbox then offered controls without the AI controller required for Resume. Ordinary discovery could also return Sandbox instead of allowing AI setup.

@@ -1,0 +1,104 @@
+{
+  "bootstrapGuest": {},
+  "discoverModels": {
+    "provider": "openai",
+    "credentialId": "11111111-1111-4111-8111-111111111111"
+  },
+  "createAiGame": {
+    "mode": "ai_vs_ai",
+    "seats": {
+      "white": {
+        "type": "ai",
+        "provider": "openai",
+        "modelId": "discovered-model-id",
+        "parameters": {}
+      },
+      "black": {
+        "type": "ai",
+        "provider": "openai",
+        "modelId": "discovered-model-id",
+        "parameters": {}
+      }
+    }
+  },
+  "createAiHumanGame": {
+    "mode": "ai_vs_human",
+    "seats": {
+      "white": {
+        "type": "human"
+      },
+      "black": {
+        "type": "ai",
+        "provider": "openai",
+        "modelId": "discovered-model-id",
+        "parameters": {}
+      }
+    }
+  },
+  "acquireController": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "controllerId": "33333333-3333-4333-8333-333333333333",
+    "action": "acquire",
+    "expectedVersion": 0
+  },
+  "heartbeat": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "controllerId": "33333333-3333-4333-8333-333333333333",
+    "action": "heartbeat"
+  },
+  "activeTurn": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "expectedVersion": 0,
+    "commandId": "44444444-4444-4444-8444-444444444441",
+    "controllerId": "33333333-3333-4333-8333-333333333333",
+    "credentialId": "11111111-1111-4111-8111-111111111111"
+  },
+  "pause": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "action": "pause",
+    "expectedVersion": 1,
+    "commandId": "44444444-4444-4444-8444-444444444442",
+    "controllerId": "33333333-3333-4333-8333-333333333333"
+  },
+  "resume": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "action": "resume",
+    "expectedVersion": 2,
+    "commandId": "44444444-4444-4444-8444-444444444443",
+    "controllerId": "33333333-3333-4333-8333-333333333333"
+  },
+  "pausedStep": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "expectedVersion": 2,
+    "commandId": "44444444-4444-4444-8444-444444444444",
+    "controllerId": "33333333-3333-4333-8333-333333333333",
+    "step": true,
+    "credentialId": "11111111-1111-4111-8111-111111111111"
+  },
+  "recoverPause": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "action": "pause",
+    "expectedVersion": 2,
+    "commandId": "44444444-4444-4444-8444-444444444445"
+  },
+  "acquireRecoveredController": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "controllerId": "55555555-5555-4555-8555-555555555555",
+    "action": "acquire",
+    "expectedVersion": 3
+  },
+  "resumeRecoveredGame": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "action": "resume",
+    "expectedVersion": 3,
+    "commandId": "44444444-4444-4444-8444-444444444446",
+    "controllerId": "55555555-5555-4555-8555-555555555555"
+  },
+  "abort": {
+    "gameId": "22222222-2222-4222-8222-222222222222",
+    "action": "abort",
+    "expectedVersion": 4,
+    "commandId": "44444444-4444-4444-8444-444444444447",
+    "controllerId": "55555555-5555-4555-8555-555555555555"
+  }
+}

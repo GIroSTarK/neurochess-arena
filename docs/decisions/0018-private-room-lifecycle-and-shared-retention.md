@@ -11,7 +11,7 @@ The product already requires private invitation joining, owner-selected color, r
 
 ## Decision
 
-The canonical [product policies](../product.md#human-versus-human), [shared retention rules](../product.md#shared-room-retention), [architecture protocol](../architecture.md#realtime-rooms), and [interaction guidance](../design-system.md#private-room-interaction) contain the detailed matrices and boundaries. These decisions apply together:
+The canonical [product policies](../product.md#human-versus-human), [shared retention rules](../product.md#shared-room-retention), [architecture protocol](../architecture/rooms.md#realtime-rooms), and [interaction guidance](../design-system.md#private-room-interaction) contain the detailed matrices and boundaries. These decisions apply together:
 
 | Area                           | Decision                                                                                                                                        | Consequence                                                                                               |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -28,7 +28,7 @@ The canonical [product policies](../product.md#human-versus-human), [shared rete
 
 Separate three responsibilities: database-unique slots reserve unfinished participation; the owner administers the room; retained access permits terminal history/replay. Establish account entitlements at seating so completion never needs to insert a peer identity reference. Removing access cannot be bypassed through ownership, old receipts, or invitations.
 
-The [lock protocol](../architecture.md#shared-room-write-order) uses one transaction-scoped PostgreSQL gate before requester identity and ordered game locks. Account deletion must acquire it before the existing outer auth-user lock, preserving that connection, authoritative session/freshness checks, and atomic rollback. Never acquire peer locks after requester/game locks. Solo writers keep their existing order and never acquire the gate afterward. This avoids opposing deletion cycles while database uniqueness handles cross-mode slot races.
+The [lock protocol](../architecture/rooms.md#shared-room-write-order) uses one transaction-scoped PostgreSQL gate before requester identity and ordered game locks. Account deletion must acquire it before the existing outer auth-user lock, preserving that connection, authoritative session/freshness checks, and atomic rollback. Never acquire peer locks after requester/game locks. Solo writers keep their existing order and never acquire the gate afterward. This avoids opposing deletion cycles while database uniqueness handles cross-mode slot races.
 
 Deletion covers every account association, including hidden history, and removes identity bindings without a deleted-account tombstone. Only terminal human rooms may become ownerless. Guest-bound cleanup runs separately with gate → guest → game locks so expiry cannot race renewal; account-only last-access removal purges in its transaction. The [retention policy](../product.md#shared-room-retention) defines both-account deletion, guest-only access, and physical cleanup.
 
@@ -36,9 +36,9 @@ Deletion covers every account association, including hidden history, and removes
 
 The [invitation policy](../product.md#invitations-and-entry) defines digest-only admission, bounded status resolution, `/rooms` and `/rooms/join#invite=…`, secret scrubbing, and explicit reopening after sign-in. The canonical game address remains `/games/:gameId`; neither UUIDs nor invitations grant spectator access.
 
-Creation operations have a separate lifetime from invitations and games. The [persistence contract](../architecture.md#shared-room-persistence-and-access) retains one ten-minute pending/consumed operation per account outside game cascades. A deleted result becomes unavailable; unknown, expired, or replaced operations are rejected, never treated as fresh creation. Account deletion removes the operation. This prevents a delayed retry from recreating a physically deleted room without retaining unbounded receipts or expiring waiting rooms.
+Creation operations have a separate lifetime from invitations and games. The [persistence contract](../architecture/rooms.md#shared-room-persistence-and-access) retains one ten-minute pending/consumed operation per account outside game cascades. A deleted result becomes unavailable; unknown, expired, or replaced operations are rejected, never treated as fresh creation. Account deletion removes the operation. This prevents a delayed retry from recreating a physically deleted room without retaining unbounded receipts or expiring waiting rooms.
 
-The [transport contract](../architecture.md#room-transport-and-browser-entry) uses cookie authority plus subscription identity expectations, continuing authorization, and revision reconciliation. Expectations reject mismatches; they cannot grant identity. Human recovery synchronizes without AI leases, credentials, or Pause/Resume. Lost publication after commit must remain recoverable even without a later move.
+The [transport contract](../architecture/rooms.md#room-transport-and-browser-entry) uses cookie authority plus subscription identity expectations, continuing authorization, and revision reconciliation. Expectations reject mismatches; they cannot grant identity. Human recovery synchronizes without AI leases, credentials, or Pause/Resume. Lost publication after commit must remain recoverable even without a later move.
 
 ### Relationship to accepted decisions
 

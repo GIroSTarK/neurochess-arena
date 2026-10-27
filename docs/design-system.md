@@ -55,7 +55,7 @@ Hover and pressed states add a neutral surface or an inset contrasting keyline. 
 | Interface and commentary  | `--font-ui`      | `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` |
 | Notation and measurements | `--font-mono`    | `ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace`                     |
 
-Orbitron and Inter are bundled locally by the sandbox app. The families map to `font-display`, `font-ui`, and `font-mono`; the size tokens map to `text-caption` through `text-display` and carry their line height. Keep body copy and control labels in the UI family. The base layer sets `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
+Orbitron and Inter are bundled locally by the web app. The families map to `font-display`, `font-ui`, and `font-mono`; the size tokens map to `text-caption` through `text-display` and carry their line height. Keep body copy and control labels in the UI family. The base layer sets `font-variant-numeric: tabular-nums` for changing telemetry and aligned values.
 
 | Style / size token | Size / line height   | Weight | Application                                   |
 | ------------------ | -------------------- | ------ | --------------------------------------------- |
@@ -83,7 +83,7 @@ Sizes assume a 16px browser default and scale with user preferences. Reserve upp
 
 Use a single chamfered arena frame as the signature motif. Buttons, forms, rows, and menus use the ordinary corner tokens. Frame geometry must not clip content, focus rings, menus, or pointer targets; apply decorative clipping to a separate non-interactive layer.
 
-Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus, except the conventional dialog close icon, which uses an accessible name without a tooltip. Its hover and pressed background must contrast with the dialog surface. Use an existing text wordmark; a new logo and provider-logo asset collection are outside this milestone.
+Use outline SVG icons with consistent caps, joins, optical size, and stroke. Icon-only buttons have an accessible name and a tooltip that also opens on focus, except the conventional dialog close icon, which uses an accessible name without a tooltip. Its hover and pressed background must contrast with the dialog surface. Use the existing text wordmark; a new logo and provider-logo asset collection are outside the MVP presentation scope.
 
 Use restrained shadow only for overlays; ordinary panels separate through surfaces and spacing. Keep glow outside the board and away from reading surfaces. Animate accepted moves and state changes briefly. Apply transitions and animations only through `motion-safe:` variants so `prefers-reduced-motion: reduce` removes movement and pulsing while a static activity label remains. Do not fabricate progress percentages or countdowns for provider requests.
 
@@ -113,13 +113,13 @@ On desktop, the AI rail ends with the board's primary controls (the live Delay b
 
 Background refresh keeps already received commentary, measurements, and events visible. New-move details stay pending until records for that move arrive, without borrowing the preceding move's explanation or usage. Analysis totals retain the history boundary of their last successful read; Analysis and Events label refreshing or failed refreshes explicitly. Leaving a game or losing access clears retained private data.
 
-Follow the [telemetry accounting contract](architecture.md#telemetry-and-cost): label costs as USD estimates and identify all-attempt totals separately from accepted-call measurements. Show concise unavailable reasons, partial coverage and a clearly labeled known estimate subtotal when available. Complete-game and seat totals remain independent of replay selection; per-move details follow the selected ply. Events keep known failed/discarded calls and turns without an accepted move inspectable.
+Follow the [telemetry accounting contract](architecture/providers.md#telemetry-and-cost): label costs as USD estimates and identify all-attempt totals separately from accepted-call measurements. Show concise unavailable reasons, partial coverage and a clearly labeled known estimate subtotal when available. Complete-game and seat totals remain independent of replay selection; per-move details follow the selected ply. Events keep known failed/discarded calls and turns without an accepted move inspectable.
 
 Forms use two equal seat columns on desktop and stacked White then Black sections on mobile. Keep the provider, credential, and model fields together; advanced parameters start collapsed. Overlays center on desktop and become scrollable sheets on mobile. Opening the keyboard must leave the focused field and recovery action reachable.
 
 ## Component specifications
 
-The names below identify component families for future implementation in the web app. Presentation state and localized strings belong in the web layer; shared transport contracts remain in `packages/contracts` as required by the architecture.
+The names below identify the web app's component families and their presentation contracts. Presentation state and localized strings belong in the web layer; shared transport contracts remain in `packages/contracts` as required by the architecture.
 
 ### Core controls
 
@@ -318,16 +318,16 @@ Review the following before accepting an implementation:
 3. Distinguish all three attempts, provider pauses, refresh key loss, missing commentary/metrics, stale commands, human disconnects, checkmate, draws, technical loss, and aborted games.
 4. Confirm identical-model matches remain distinguishable, both colors receive equal space, and a guest cannot see saved-key or room-creation controls as available actions.
 5. Check each rendered screen against this guide for copy, hierarchy, typography, tokens, geometry, and board readability. Validate legal positions independently; visual appeal cannot excuse a wrong square or piece.
-6. Run the configured formatting, lint, typecheck, test, and build baseline. Add behavior tests when components are implemented and verify runtime accessibility and game correctness.
+6. Run the configured formatting, lint, typecheck, test, and build baseline. Add or update tests for behavior changes and verify runtime accessibility and game correctness.
 
 Record actual commands, results, the tested revision/environment, and retained evidence in the change summary, PR, or CI. Never include credential-bearing artifacts. Apply this guide to each delivered flow and track milestone completion only in the [roadmap](roadmap.md).
 
 ### Validation limits
 
-- DOM semantics, focus tests and automated accessibility checks do not establish actual screen-reader speech or full accessibility conformance. Use the [physical browser release matrix](development.md#physical-browser-release-matrix) for reader checks through authentication, setup/recovery, board/promotion, rooms, dialogs, graph/table selection, history and export.
+- DOM semantics, focus tests and automated accessibility checks do not establish actual screen-reader speech or full accessibility conformance. Use the [physical browser release matrix](reference/testing.md#physical-browser-release-matrix) for reader checks through authentication, setup/recovery, board/promotion, rooms, dialogs, graph/table selection, history and export.
 - Bundled engines, touch emulation, keyboard scrolling and root-text enlargement do not establish branded-browser or physical Safari/iOS/Android behavior, browser/OS zoom, on-screen keyboards or native swipe/scroll chaining. These require the physical release matrix for the candidate being accepted.
-- Automated keyboard acceptance uses the Ubuntu 24.04 browser baseline. The pinned Windows WebKit port skips links during native Tab traversal, so Windows runs use the [matching Linux browser server](development.md#running-acceptance). Real Safari keyboard preferences and platform behavior require physical checks.
-- The [production lab budgets](development.md#responsive-layouts-and-performance-budgets) cover Chromium desktop/touch emulation, bundle/engine loading, sampled worker resources, 200-ply replay and injected lifecycle events. They do not establish device-wide memory use, low-memory phone behavior, OS background throttling, safe-area hardware or field-performance baselines.
+- Automated keyboard acceptance uses the Ubuntu 24.04 browser baseline. The pinned Windows WebKit port skips links during native Tab traversal, so Windows runs use the [matching Linux browser server](reference/testing.md#running-acceptance). Real Safari keyboard preferences and platform behavior require physical checks.
+- The [production lab budgets](reference/browser.md#responsive-layouts-and-performance-budgets) cover Chromium desktop/touch emulation, bundle/engine loading, sampled worker resources, 200-ply replay and injected lifecycle events. They do not establish device-wide memory use, low-memory phone behavior, OS background throttling, safe-area hardware or field-performance baselines.
 - Token contrast alone does not establish rendered contrast. Bundled-engine checks sample actual piece/square colors, board state and focus keylines, graph marks/text, control focus and disabled labels alongside axe and visual inspection. System color overrides and assistive display settings remain outside this coverage.
 
 Update this section only when a coverage gap or verification boundary changes; do not append run logs.

@@ -4,6 +4,8 @@
 
 **Date:** 2026-09-30
 
+**Scope update (2026-10-27):** [ADR-0018](0018-private-room-lifecycle-and-shared-retention.md) resolves the room-participant slot and shared-retention prerequisites below and adds the shared-room gate before identity locks for affected writes. The principal and guest/account separation decisions remain binding; [current room write ordering](../architecture/rooms.md#shared-room-write-order) defines the extended lock protocol.
+
 ## Context
 
 Guest cookie authentication, game authorization, expiry checks, and controller cleanup currently share guest-specific assumptions. Account support must not make a client ID an identity, combine account and guest authority, reset concurrency fences, or disable cleanup when a session expires. ADRs 0006, 0007, 0010, 0011, and 0012 remain binding.

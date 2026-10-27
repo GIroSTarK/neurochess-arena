@@ -4,6 +4,8 @@
 
 **Date:** 2026-10-01
 
+**Operational follow-up (2026-10-27):** The [offline rotation runbook](../credential-rotation.md) provides the writer-stop, atomic re-encryption, verification and reversal procedure. The runtime continues to accept one configured key; automatic rotation and a multi-key service remain outside this decision.
+
 ## Context
 
 [ADR-0004](0004-bring-your-own-key-security.md) requires optional account-owned encrypted storage, safe metadata-only reads, server-side cryptography and deployment-managed secrets. The persisted format must detect ciphertext substitution between records, owners or providers and support deliberate future rotation. Management must remain possible after key loss.
@@ -21,7 +23,7 @@
 
 Database read access alone does not reveal plaintext, and copying an envelope to another context fails authentication. This does not defend against an attacker controlling the running API and deployment secrets. Labels/suffixes remain untrusted, strictly bounded metadata; they are not evidence that a provider accepted the key.
 
-Key loss makes existing envelopes unrecoverable. Users can still list/delete records and explicitly save replacements. This version supports one configured key, not automatic multi-key rotation. Before production, establish separate key backup/recovery and a reviewed writer-stop re-encryption procedure described in [development](../development.md#saved-credential-api). Never reuse an ID for different key material. Retain old keys as needed to restore older backups; deletion of live rows makes no backup-erasure claim.
+Key loss makes existing envelopes unrecoverable. Users can still list/delete records and explicitly save replacements. This version supports one configured key, not automatic multi-key rotation. Before production, establish separate key backup/recovery and a reviewed writer-stop re-encryption procedure described in [development](../reference/http-api.md#saved-credential-api). Never reuse an ID for different key material. Retain old keys as needed to restore older backups; deletion of live rows makes no backup-erasure claim.
 
 Saved credentials confer no game/controller authority. Provider operations remain session-only until the separate integration. The [open decision](../product.md#open-product-decisions) about completion of already-dispatched work after revocation must be resolved before that integration ships.
 

@@ -11,6 +11,7 @@
     "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": [
+    "scripts/check-docs.ts",
     "scripts/monitoring/**/*.ts",
     "scripts/recovery/**/*.ts",
     "vitest.recovery.config.ts",

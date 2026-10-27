@@ -4,6 +4,8 @@
 
 **Date:** 2026-10-03
 
+**Scope update (2026-10-27):** [ADR-0018](0018-private-room-lifecycle-and-shared-retention.md) adds the shared-room exception to owned-game physical deletion and prepends the room gate to deletion's lock order. The atomic deletion and fresh-session requirements remain binding. Follow the [current retention policy](../product.md#shared-room-retention) and [write ordering](../architecture/rooms.md#shared-room-write-order) for human rooms; the original decision is preserved below.
+
 ## Context
 
 Auth-user deletion alone neither removes account-owned games nor cleans recovery records without foreign keys. Provider outcomes, commands and authentication operations may already be in flight. Email-only verification JWTs could verify a newly registered account after the original account is deleted.

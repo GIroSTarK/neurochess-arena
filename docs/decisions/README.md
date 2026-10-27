@@ -30,6 +30,8 @@ Architecture decision records (ADRs) capture decisions that are consequential, c
 
 ## Status values
 
+An accepted record may retain historical implementation details or have part of its scope extended by a later ADR. Follow its dated scope notes and links to the current canonical contract; retain the original decision text. Mark an entire record `Superseded` only when its decision is replaced as a whole.
+
 - `Proposed`: under discussion and not yet binding.
 - `Accepted`: current direction for implementation.
 - `Superseded`: replaced by a later ADR; retain the historical record.

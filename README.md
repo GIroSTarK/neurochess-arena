@@ -24,6 +24,14 @@ Copy-Item .env.example .env
 
 On macOS or Linux, use `cp .env.example .env` instead of `Copy-Item`.
 
+Set `BETTER_AUTH_SECRET` in `.env` to at least 32 cryptographically random characters before starting the API. This cross-platform command fills the empty example value without printing the secret or replacing an existing one:
+
+```text
+node --input-type=module -e "import { randomBytes } from 'node:crypto'; import { readFileSync, writeFileSync } from 'node:fs'; const path = '.env'; const text = readFileSync(path, 'utf8'); if (/^BETTER_AUTH_SECRET=(?=\r?$)/m.test(text) === false) throw new Error('Expected an empty BETTER_AUTH_SECRET'); writeFileSync(path, text.replace(/^BETTER_AUTH_SECRET=(?=\r?$)/m, 'BETTER_AUTH_SECRET=' + randomBytes(32).toString('base64')));"
+```
+
+Keep this value stable across restarts. See the [environment contract](docs/development.md#environment-contract) for optional sign-in, email, and saved-credential configuration.
+
 Start PostgreSQL, apply migrations, and run both applications:
 
 ```text
@@ -40,15 +48,20 @@ The development services are available at:
 
 `npm run infra:down` stops PostgreSQL but preserves its named data volume.
 
-The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env` and restart the API. See the [sandbox walkthrough](docs/development.md#sandbox-ui) for play, paused recovery, lifecycle controls, and private replay/export. Production cannot enable it.
+The development sandbox is disabled by default. Set `SANDBOX_ENABLED=true` in your local `.env` and restart the API. See the [sandbox walkthrough](docs/reference/browser.md#sandbox-ui) for play, paused recovery, lifecycle controls, and private replay/export. Production cannot enable it.
 
 ## Verification
 
-`npm test` includes real PostgreSQL integration tests. Ensure `.env` contains the explicit `TEST_DATABASE_URL` from `.env.example`, then run the complete local baseline:
+`npm test` includes real PostgreSQL integration tests. Ensure `.env` contains the explicit `TEST_DATABASE_URL` from `.env.example`, then run the local baseline:
 
 ```text
 npm run infra:test:up
 npm run verify
+```
+
+Run browser acceptance separately. On Windows, first follow the [Linux browser-server instructions](docs/reference/testing.md#running-acceptance): native Windows WebKit does not cover the required keyboard journey. On Linux, install the browser system dependencies as described in that guide.
+
+```text
 npm exec playwright -- install chromium firefox webkit
 npm run test:e2e
 ```
@@ -66,7 +79,7 @@ After a successful build, `npm start` runs the compiled API and the Vite product
 
 Use `npm run test:unit` for database-free checks. The separate test service uses disposable storage on port 5433; it does not share the development database volume.
 
-The [browser suite](docs/development.md#browser-tests) starts isolated Fastify/Vite services on localhost ports 3101/5174. It covers desktop and mobile touch gameplay, promotion, keyboard navigation, responsive layouts, and automated accessibility. Browser traces are disabled to avoid recording guest cookie headers.
+The [browser suite](docs/reference/testing.md#browser-tests) starts isolated Fastify/Vite services on localhost ports 3101/5174. It covers desktop and mobile touch gameplay, promotion, keyboard navigation, responsive layouts, and automated accessibility. Browser traces are disabled to avoid recording guest cookie headers.
 
 ## Database workflow
 
@@ -100,15 +113,19 @@ Automated architecture checks keep the browser out of API and database code, pre
 
 Environment files are ignored by Git. API startup validates configuration without printing values, request logging strips URL queries and redacts credential-like fields, and errors use a safe public response contract.
 
-Raw provider keys must never be committed, logged, included in analytics, or stored in browser persistence. See [ADR-0004](docs/decisions/0004-bring-your-own-key-security.md) for the complete future credential lifecycle.
+Raw provider keys must never be committed, logged, included in analytics, or stored in browser persistence. See [ADR-0004](docs/decisions/0004-bring-your-own-key-security.md) for the credential policy and the [rotation runbook](docs/credential-rotation.md) for offline maintenance.
 
 ## Project documentation
+
+Start with the [documentation index](docs/README.md) for task-based reading paths and reference ownership.
 
 - [Product specification](docs/product.md)
 - [Design system](docs/design-system.md)
 - [Architecture](docs/architecture.md)
 - [MVP roadmap](docs/roadmap.md)
 - [Development guide](docs/development.md)
+- [Production operations](docs/operations.md)
+- [Backup and recovery](docs/recovery.md)
 - [Architecture decisions](docs/decisions/README.md)
 - [Instructions for coding agents](AGENTS.md)
 
