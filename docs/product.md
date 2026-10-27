@@ -335,7 +335,7 @@ Under the [room lifecycle](#room-lifecycle-and-permissions), waiting reserves th
 
 English is the only shipped MVP locale, but user-facing strings must use a localization layer from the beginning. The interface is desktop-first and fully usable on smartphones. The visual direction is a dark, futuristic AI arena with a highly legible chessboard and accessible controls.
 
-The [design system](design-system.md) defines the refined sci-fi visual language, semantic tokens, component states, accessibility rules, and [desktop/mobile core journey concepts](design-system/concepts/README.md). It guides implementation of the existing MVP scope; the concepts use fictional models and illustrative telemetry.
+The [design system](design-system.md) defines the refined sci-fi visual language, semantic tokens, component states, responsive layouts, and accessibility rules. It guides implementation of the existing MVP scope.
 
 ## MVP acceptance criteria
 

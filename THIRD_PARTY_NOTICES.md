@@ -24,8 +24,7 @@ vendored materials.
 
 The application's chess-piece silhouettes are original source assets in
 `apps/web/src/board/piece-icon.tsx`. They are separate from the Wikipedia images
-inside the Stockfish example archive. Design concept images are generated
-references; no third-party ownership is claimed for them.
+inside the Stockfish example archive.
 
 ## Upstream JavaScript sources
 

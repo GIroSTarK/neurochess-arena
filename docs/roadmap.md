@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–5 completed; MVP release accepted by the deployment owner.
 
-**Last updated:** 2026-10-26
+**Last updated:** 2026-10-27
 
 The MVP contains all three game modes. The phases below are implementation checkpoints, not separate product editions.
 
@@ -24,7 +24,7 @@ Exit condition: a clean clone can install, start, test, and build the empty web/
 
 ## Phase 1 — Chess vertical slice
 
-**Status:** Completed. See the [sandbox walkthrough](development.md#sandbox-ui) for usage and [verification strategy](architecture.md#verification-strategy) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system/validation.md) and Phase 5 below.
+**Status:** Completed. See the [sandbox walkthrough](development.md#sandbox-ui) for usage and [verification strategy](architecture.md#verification-strategy) for acceptance criteria. Remaining cross-browser, assistive-technology, and performance work is tracked in the [validation limits](design-system.md#validation-limits) and Phase 5 below.
 
 Build the human-command path first. A [local development sandbox](architecture.md#local-development-sandbox) lets one guest session play both colors through the real API, database, and chess rules.
 
@@ -49,15 +49,15 @@ Exit condition: one guest in the development sandbox can complete and replay a d
 
 **Status:** Completed
 
-Use the [selected Sandbox concepts](design-system/concepts/sandbox-v1/README.md) to establish the shared presentation foundation for the three public modes.
+Use the [design system](design-system.md) to establish the shared presentation foundation for the three public modes.
 
-- [x] select coordinated entry, live, recovery, and replay concepts for desktop and mobile;
+- [x] define shared entry, live, recovery, and replay patterns for desktop and mobile;
 - [x] extract the shared shell, arena layout, participant and game panels behind Sandbox adapters, with an enforced presentation boundary;
 - [x] apply the live composition and board-toolbar action hierarchy;
 - [x] apply the entry, recovery, and result/replay compositions;
 - [x] separate the Arena placeholder from flag-gated Sandbox navigation;
 - [x] exercise the shared presentation with explicit human/AI reference scenarios and future panel slots;
-- [x] complete concept-to-browser comparison and responsive, keyboard, recovery, and replay acceptance.
+- [x] verify design-system consistency and responsive, keyboard, recovery, and replay acceptance.
 
 Exit condition: Sandbox uses the selected arena design, and the same presentation components can serve the upcoming modes through their own data and actions.
 

@@ -677,7 +677,7 @@ must terminate workers and resume missing work through access revalidation, with
 accumulating workers or queues. Headless visibility events exercise the application
 handler; actual OS backgrounding, low-memory phones, browser zoom, safe-area hardware
 and on-screen keyboards remain manual release checks. See the [current validation
-limits](design-system/validation.md).
+limits](design-system.md#validation-limits).
 
 ## Unit test environments
 
@@ -763,7 +763,7 @@ status is tracked in the [roadmap](roadmap.md#phase-5--analysis-polish-and-relea
 | Desktop Chrome/Edge/Firefox | Current branded versions, real zoom and keyboard journeys, available NVDA/JAWS/Narrator checks on Windows                                                                                                     |
 
 Use the [accessibility acceptance checklist](design-system.md#accessibility-and-acceptance)
-and [validation limits](design-system/validation.md). Mobile engine emulation and root-text
+and [validation limits](design-system.md#validation-limits). Mobile engine emulation and root-text
 enlargement do not verify Safari/iOS hardware, OS zoom or virtual keyboards. Live OAuth,
 SMTP and production TLS/proxy checks remain separate release gates.
 
@@ -844,7 +844,7 @@ Playwright global setup forks the actual Fastify guest/game services and Vite ap
 
 All five engine/device projects create a game, play part of Fool's Mate, refresh into paused recovery, explicitly resume, complete checkmate, navigate every replay position, copy/download PGN, start another game, and reopen the previous private URL. Downloaded text must exactly equal persisted PGN. Every engine must complete a native clipboard write with the canonical text; Chromium and WebKit also read it back, normalizing Windows CRLF conversion. Firefox does not expose the clipboard-read permission grant, so its check observes the text only after the native write succeeds. Denied invitation copying still verifies the selectable fallback. Further cases cover both resignation colors, neutral abortion, isolated-guest access denial, Sandbox-entry recovery, private game URLs, enabled/disabled navigation, and White knight/Black rook underpromotions through legal moves from the standard position.
 
-Accessibility and layout checks cover keyboard directions, castling, en passant and Tab order, modal focus containment/return, readable control labels, 44px controls, reduced motion, stable move-history placement during commands, and axe checks. Entry, live, recovery, and replay use the concept positions at 320/390/768/1024/1440px, also with 200% text and 50% expanded test resources; promotion choices remain reachable with enlarged text at every width. Expansion is injected by the test into the dev module; it is not a product locale or flag. Uncertain move, pause, and recovery commands verify locked controls and identical explicit retries; committed and conflicting moves verify complete snapshot adoption without duplicate submission.
+Accessibility and layout checks cover keyboard directions, castling, en passant and Tab order, modal focus containment/return, readable control labels, 44px controls, reduced motion, stable move-history placement during commands, and axe checks. Entry, live, recovery, and replay use legal sample positions at 320/390/768/1024/1440px, also with 200% text and 50% expanded test resources; promotion choices remain reachable with enlarged text at every width. Expansion is injected by the test into the dev module; it is not a product locale or flag. Uncertain move, pause, and recovery commands verify locked controls and identical explicit retries; committed and conflicting moves verify complete snapshot adoption without duplicate submission.
 
 In `arena-states.spec.ts`, entry/live/recovery geometry runs at 1024/1440px in each desktop project and 320/390/768/1024px in each mobile project, with both text sizes in each assigned width. The shared 1024px boundary retains coverage with both device settings. State transitions, focus, touch, and axe checks still run at each project's default viewport. Replay and `ai-setup.spec.ts` retain the full width/text matrix in all projects because native scrollbar gutters change their geometry. The separate telemetry and move-history specs retain their additional layout boundaries, including 1025px.
 
@@ -871,7 +871,7 @@ To reproduce an E2E shard, run `npm run test:e2e -- --project=firefox-desktop --
 
 Each E2E matrix job uses its own runner-temporary output directory including the project and shard. Completed browser runs upload `e2e-durations-<project>-shard-<shard>`; failed runs also upload `e2e-failures-<project>-shard-<shard>` with only failure PNGs and the duration report. Performance jobs retain `performance-<project>` with `measurements.json`, `long-replay.json`, `wasm-memory.json`, and `lifetimes.json`. All artifacts expire after seven days. Raw logs, failure-context files, downloads and authentication state are excluded from uploads.
 
-Automated checks do not certify screen-reader behavior, physical devices or branded Safari/Edge installations. Consult the [current validation limits](design-system/validation.md) for remaining coverage gaps. Report each run in the change summary, PR, or CI; update that document only when a gap changes.
+Automated checks do not certify screen-reader behavior, physical devices or branded Safari/Edge installations. Consult the [current validation limits](design-system.md#validation-limits) for remaining coverage gaps. Report each run in the change summary, PR, or CI; update that section only when a gap changes.
 
 ### Account lifecycle acceptance
 

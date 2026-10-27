@@ -1,10 +1,10 @@
 # Neurochess Arena design system
 
-**Version:** 1.4
+**Version:** 1.5
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-27
 
 ## Purpose and authority
 
@@ -12,9 +12,9 @@ An arena for understanding LLM chess decisions: the board is the focal point, th
 
 The direction is **refined sci-fi**: deep navy, precise cyan accents, a restrained angular frame, and readable conventional chess pieces. Use visual emphasis to communicate the next action or a change in state.
 
-[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation; concepts are not evidence of implemented features.
+[Product behavior](product.md), [architecture](architecture.md), and the [accepted ADRs](decisions/README.md) remain authoritative for domain rules, permissions, and data flow. This guide defines presentation.
 
-Use the [screen concepts](design-system/concepts/README.md) when reviewing composition and their [fixtures](design-system/fixtures.md) when checking sample copy or positions. The token values, interaction rules, and text in this guide are the implementation reference. [Validation limits](design-system/validation.md) track current coverage gaps and reference limitations.
+This file is the design-system reference for tokens, layout, interaction, copy, and accessibility. [Validation limits](#validation-limits) describe current verification boundaries.
 
 ## Foundations
 
@@ -97,11 +97,11 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 
 Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adjustments, `md` (768px) widens the gutters, and `lg` (1025px) places the board beside the rail. The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
 
-The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest concepts show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
+The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest views show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
 
 The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. Arena hosts independent AI seat setup and the live/replay views for both AI modes; it links to the development Sandbox only when enabled.
 
-The development Sandbox uses the [selected live composition](design-system/concepts/sandbox-v1/README.md): turn/lifecycle in the page header, both participants above the board, and game controls directly below it. Service readiness sits in the footer. The live rail begins with Moves; guidance and routine feedback share a reserved text area below it. Desktop toolbar rows use three equal-width columns. The primary pair fills its columns; compact lower actions share the column starts, with equal resignation widths and equal gaps between buttons. Each button centers its icon and label. The toolbar reflows to two columns when its own width or enlarged text makes the desktop row too narrow. Keep keyboard order consistent, with orientation and inspection before the final abort action.
+The development Sandbox shows turn/lifecycle in the page header, both participants above the board, and game controls directly below it. Service readiness sits in the footer. The live rail begins with Moves; guidance and routine feedback share a reserved text area below it. Desktop toolbar rows use three equal-width columns. The primary pair fills its columns; compact lower actions share the column starts, with equal resignation widths and equal gaps between buttons. Each button centers its icon and label. The toolbar reflows to two columns when its own width or enlarged text makes the desktop row too narrow. Keep keyboard order consistent, with orientation and inspection before the final abort action.
 
 With further text enlargement, stack live controls in one column and allow participant icons to wrap above their identity. Preserve equal seat widths and wrap short labels between words instead of forcing narrow fragments.
 
@@ -240,7 +240,7 @@ All reference copy uses the localization layer. Invitation secrets remain only i
 - Session-only is the default. Label it **Use for this tab** with **Cleared when you refresh or close this tab.** Keep raw values only in page memory and the minimum backend request scope described in [ADR-0004](decisions/0004-bring-your-own-key-security.md).
 - Authenticated users may explicitly select an existing saved credential or check **Save this key to my account**. Explain persistence before submission. Never preselect the save checkbox, imply guests can save, or claim a key stays only on the user's device.
 - On refresh, show which seats/providers need keys. Accounts may choose a saved key explicitly for each seat; never preselect one or restore its previous selection. Dismissing recovery leaves a persistent banner. Preserve configuration and accepted position, but never restore raw keys from browser storage.
-- Ordinary Pause keeps the available keys and shows commentary and detail tabs without a key-editing action. Missing keys replace the rail contents with the recovery card from the [recovery concept](design-system/concepts/05-recovery-desktop.png): named AI-seat fields, reveal controls, the session-only explanation, gated Resume, and Return to game. Authentication failures open the same card for the rejected seat. Keep fields visible while typing; only explicit continuation resumes play. Return to game restores details and leaves a persistent re-entry action while paused. On mobile the card replaces details below the board and controls.
+- Ordinary Pause keeps the available keys and shows commentary and detail tabs without a key-editing action. Missing keys replace the rail contents with a recovery card: named AI-seat fields, reveal controls, the session-only explanation, gated Resume, and Return to game. Authentication failures open the same card for the rejected seat. Keep fields visible while typing; only explicit continuation resumes play. Return to game restores details and leaves a persistent re-entry action while paused. On mobile the card replaces details below the board and controls.
 - Use **Estimated cost** or **Est. cost** in compact rows. Unknown usage or pricing displays **Unavailable**, with a concise reason where available. Do not substitute zero or sum incomplete data as a complete total. Keep per-move details available even when an aggregate is unavailable.
 - “Latency” is measured response duration; it is not a countdown. All provider names, model names, usernames, avatars, commentary, and error details are untrusted rendering inputs.
 
@@ -296,7 +296,7 @@ Route strings through the localization layer from the first component implementa
 
 Copy should identify the condition and the useful next action. Avoid technical error dumps, claims of model understanding, or promises about provider response time. Allow at least 50% text expansion in review fixtures and complete wrap for long model identifiers.
 
-## Screen reference contract
+## Core screen patterns
 
 | Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                   |
 | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -304,8 +304,6 @@ Copy should identify the condition and the useful next action. Avoid technical e
 | Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                            |
 | Recovery | Same accepted position and player identities; key re-entry card replaces details, Resume gated on missing inputs           | Recovery card replaces details below the board, with required provider fields and reachable actions |
 | Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow    |
-
-The eight concepts share the same palette, typography, frame, controls, and sample game. Reference images contain fictional model labels and explicitly illustrative telemetry. They are not provider performance claims or live provider output.
 
 ## Accessibility and acceptance
 
@@ -319,7 +317,17 @@ Review the following before accepting an implementation:
 2. Operate setup, tabs, dialogs, board selection, castling, en passant, promotion/underpromotion, replay, and export by keyboard. Check focus return and reduced motion.
 3. Distinguish all three attempts, provider pauses, refresh key loss, missing commentary/metrics, stale commands, human disconnects, checkmate, draws, technical loss, and aborted games.
 4. Confirm identical-model matches remain distinguishable, both colors receive equal space, and a guest cannot see saved-key or room-creation controls as available actions.
-5. Compare each rendered screen to its concept for copy, hierarchy, typography, tokens, geometry, and board position. Validate legal positions independently; visual appeal cannot excuse a wrong square or piece.
-6. Run the configured formatting, lint, typecheck, test, and build baseline. Add behavior tests when components are implemented; static concept images do not establish runtime accessibility or game correctness.
+5. Check each rendered screen against this guide for copy, hierarchy, typography, tokens, geometry, and board readability. Validate legal positions independently; visual appeal cannot excuse a wrong square or piece.
+6. Run the configured formatting, lint, typecheck, test, and build baseline. Add behavior tests when components are implemented and verify runtime accessibility and game correctness.
 
-Record change-specific verification results in the change summary, PR, or CI. Update [validation limits](design-system/validation.md) only when a coverage gap or reference limitation changes; do not append run logs. Apply this guide to each delivered flow and track milestone completion only in the [roadmap](roadmap.md).
+Record actual commands, results, the tested revision/environment, and retained evidence in the change summary, PR, or CI. Never include credential-bearing artifacts. Apply this guide to each delivered flow and track milestone completion only in the [roadmap](roadmap.md).
+
+### Validation limits
+
+- DOM semantics, focus tests and automated accessibility checks do not establish actual screen-reader speech or full accessibility conformance. Use the [physical browser release matrix](development.md#physical-browser-release-matrix) for reader checks through authentication, setup/recovery, board/promotion, rooms, dialogs, graph/table selection, history and export.
+- Bundled engines, touch emulation, keyboard scrolling and root-text enlargement do not establish branded-browser or physical Safari/iOS/Android behavior, browser/OS zoom, on-screen keyboards or native swipe/scroll chaining. These require the physical release matrix for the candidate being accepted.
+- Automated keyboard acceptance uses the Ubuntu 24.04 browser baseline. The pinned Windows WebKit port skips links during native Tab traversal, so Windows runs use the [matching Linux browser server](development.md#running-acceptance). Real Safari keyboard preferences and platform behavior require physical checks.
+- The [production lab budgets](development.md#responsive-layouts-and-performance-budgets) cover Chromium desktop/touch emulation, bundle/engine loading, sampled worker resources, 200-ply replay and injected lifecycle events. They do not establish device-wide memory use, low-memory phone behavior, OS background throttling, safe-area hardware or field-performance baselines.
+- Token contrast alone does not establish rendered contrast. Bundled-engine checks sample actual piece/square colors, board state and focus keylines, graph marks/text, control focus and disabled labels alongside axe and visual inspection. System color overrides and assistive display settings remain outside this coverage.
+
+Update this section only when a coverage gap or verification boundary changes; do not append run logs.

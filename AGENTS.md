@@ -104,7 +104,7 @@ Do not claim a command passed if it is not configured or was not run.
 - Update the relevant canonical document only when its contract or instructions change, or a documented claim needs correction. A fix that restores already-documented behavior does not require a documentation edit.
 - Keep implementation progress in `docs/roadmap.md`, updating it at milestones. Other documents link there instead of repeating status or per-PR implementation checkpoints.
 - Add an ADR for a consequential, difficult-to-reverse decision; do not rewrite an accepted ADR as though the old decision never existed.
-- Keep `docs/design-system/validation.md` limited to current coverage gaps and reference limitations; update it only when those change. Record per-change commands, results, and evidence in the change summary, PR, or CI, not as an accumulating documentation log.
+- Keep the validation limits section in `docs/design-system.md` limited to current coverage gaps and verification boundaries; update it only when those change. Record per-change commands, results, and evidence in the change summary, PR, or CI, not as an accumulating documentation log.
 - Keep docs concise and current. Link to a canonical explanation instead of duplicating it.
 
 ## MVP exclusions
