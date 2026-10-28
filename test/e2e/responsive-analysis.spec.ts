@@ -64,6 +64,19 @@ async function inspectLayouts(
       await action.focus();
       await expect(action).toBeFocused();
       await expect(action).toBeInViewport();
+      if (flow === "live-analysis") {
+        const indicator = page.getByRole("region", { name: /^Stockfish evaluation/ });
+        const disclosure = indicator.locator("summary");
+        await disclosure.focus();
+        await expect(disclosure).toBeInViewport();
+        expect((await disclosure.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await disclosure.press("Enter");
+        await expect(indicator.locator("details")).toHaveAttribute("open");
+        await expect(indicator.getByText(/Depth \d+/)).toBeVisible();
+        await disclosure.press("Enter");
+        await expect(indicator.locator("details")).not.toHaveAttribute("open");
+        await expect(indicator.getByTestId("evaluation-score")).toBeVisible();
+      }
     }
   }
   await page.screenshot({ path: info.outputPath(`${flow}-expanded.png`), fullPage: true });

@@ -34,6 +34,7 @@ export const en = {
     mate_other: "{{color}} mates in {{count}} moves",
     checkmate: "{{color}} delivered checkmate",
     provenance: "{{profile}} · Depth {{depth}}",
+    provenanceDetails: "Details",
     older: "Older profile · awaiting current analysis",
     initial: "Initial position · Ply 0",
     ply: "Ply {{ply}} · {{move}}",
@@ -848,6 +849,7 @@ export const en = {
     text: "PGN text",
   },
   board: {
+    tools: "Board tools",
     label: "Chessboard",
     instructions:
       "Use arrow keys to inspect squares. Enter or Space selects a piece or destination. Escape cancels selection. Home and End move along a row; Control with Home or End moves to a board corner. Tab leaves the board.",

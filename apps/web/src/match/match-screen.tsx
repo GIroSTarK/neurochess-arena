@@ -7,6 +7,7 @@ import type { PublicIdentity } from "../api/identity";
 import { ArenaLayout } from "../arena/arena-layout";
 import { BoardTools } from "../arena/board-tools";
 import { EvaluationIndicator } from "../arena/panels/evaluation-indicator";
+import { StatusSummary } from "../arena/status-summary";
 import { AccountAccess } from "../auth/account-access";
 import { useAccount } from "../auth/context";
 import type { ChessboardHandle } from "../board/chessboard";
@@ -22,6 +23,7 @@ import { Button } from "../ui/button";
 import { TextLink } from "../ui/text-link";
 
 import type { MatchController } from "./controller";
+import { AiPacing } from "./panels/ai-pacing";
 import { MatchBoard } from "./panels/match-board";
 import { MatchDetails } from "./panels/match-details";
 import { MatchHeader } from "./panels/match-header";
@@ -167,10 +169,12 @@ export function MatchScreen({
           playAreaLabel={t("arena.playArea")}
           detailsLabel={t("arena.gameDetails")}
           constrainDetails
+          notice={view.header.status ? <StatusSummary {...view.header.status} /> : undefined}
           boardTools={
             <div className="min-w-0">
-              <div className="mt-3">
+              <div className="my-3">
                 <EvaluationIndicator
+                  density="compact"
                   state={evaluation.view.plies[evaluationPly]}
                   onRetry={() => evaluation.onRetry(evaluationPly)}
                   suspended={evaluation.view.suspended}
@@ -178,6 +182,12 @@ export function MatchScreen({
                   accessError={evaluation.view.accessError}
                 />
               </div>
+              {!view.terminal ? (
+                <AiPacing
+                  speed={view.controls.speed}
+                  onSpeed={(speed) => controller.setSpeed(speed)}
+                />
+              ) : null}
               <BoardTools
                 helpId={helpId}
                 orientation={orientation}

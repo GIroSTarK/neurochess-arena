@@ -62,6 +62,11 @@ test("long history stays inside the inspector above the next action across the a
     }, enlarged);
     for (const width of [1024, 1025, transition - 1, transition, transition + 1, 1440]) {
       await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      // Wide and stacked inspectors remember their selections independently.
+      await page.getByRole("tab", { name: "Moves", exact: true }).click();
       const historyBounds = await bounds(history);
       expect(historyBounds.bottom).toBeLessThanOrEqual((await bounds(panel)).bottom + 1);
       expect(historyBounds.bottom).toBeLessThan(

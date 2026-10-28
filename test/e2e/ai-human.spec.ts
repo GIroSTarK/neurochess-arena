@@ -2,7 +2,8 @@ import AxeBuilder from "@axe-core/playwright";
 import type { MoveCommand } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
-import { API_ORIGIN } from "./environment";
+import { createAccount } from "./account-helpers";
+import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import {
   acceptedMove,
   activate,
@@ -387,23 +388,63 @@ test("human mode and color selection work by keyboard with expanded mobile setup
   }
 });
 
-test("human controls fit mobile and expanded text", async ({ page }, testInfo) => {
-  await start(page, "white");
-  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
-  await setPseudoLocalization(page, true);
-  await page.evaluate(() => {
-    document.documentElement.style.fontSize = "200%";
+for (const human of ["white", "black"] as const) {
+  test(`${human} human controls fit mobile and expanded text without dispatching turns`, async ({
+    page,
+  }, testInfo) => {
+    await createAccount(page.request);
+    const username = "Long_" + crypto.randomUUID().replaceAll("-", "").slice(0, 19);
+    expect(
+      (
+        await page.request.post(`${API_ORIGIN}/profile`, {
+          headers: { origin: WEB_ORIGIN },
+          data: { username },
+        })
+      ).ok(),
+    ).toBe(true);
+    let turns = 0;
+    page.on("request", (request) => {
+      if (request.url().endsWith("/ai-turn")) turns++;
+    });
+    const game = await start(page, human);
+    await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+    await expect(
+      page.getByRole("button", { name: new RegExp(`identity: ${username}`) }),
+    ).toBeVisible();
+    const before = await readSnapshot(page, game.gameId);
+    const turnCount = turns;
+    await setPseudoLocalization(page, true);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+    });
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      const resignButton = page.getByRole("button", {
+        name: human === "white" ? /^Resign White/ : /^Resign Black/,
+      });
+      await resignButton.scrollIntoViewIfNeeded();
+      await resignButton.focus();
+      await expect(resignButton).toBeFocused();
+      await expect(resignButton).toBeInViewport();
+      await expect(page.getByRole("button", { name: /^Next move/ })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      const pacing = page.getByRole("combobox", { name: /^Delay between moves/ });
+      await pacing.selectOption("500");
+      await expect(pacing).toHaveValue("500");
+      expect((await resignButton.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await expect(
+        page.getByRole("region", { name: /^Game controls/ }).getByRole("combobox"),
+      ).toHaveCount(0);
+    }
+    expect(turns).toBe(turnCount);
+    expect(await readSnapshot(page, game.gameId)).toEqual(before);
+    await page.screenshot({ path: testInfo.outputPath("human-expanded.png"), fullPage: true });
+    await setPseudoLocalization(page, false);
+    await resign(page, human);
   });
-  for (const width of [320, 390, 768, 1024, 1440]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true);
-    const resignButton = page.getByRole("button", { name: /^Resign White/ });
-    await resignButton.focus();
-    await expect(resignButton).toBeInViewport();
-  }
-  await page.screenshot({ path: testInfo.outputPath("human-expanded.png"), fullPage: true });
-  await setPseudoLocalization(page, false);
-  await resign(page, "white");
-});
+}

@@ -20,6 +20,8 @@ describe("replay board inspection", () => {
       const flip = screen.getByRole("button", { name: "Flip board" });
       const help = screen.getByRole("button", { name: "Keyboard controls" });
       const instructions = document.getElementById("replay-help");
+      const tools = screen.getByRole("group", { name: "Board tools" });
+      expect(within(tools).getAllByRole("button")).toEqual([flip, help]);
       expect(screen.getAllByRole("button")).toEqual([flip, help]);
       expect(flip).toHaveAccessibleDescription(description);
       expect(help).toHaveAttribute("aria-controls", "replay-help");

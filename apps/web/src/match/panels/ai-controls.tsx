@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { resignationConfirmation } from "../../arena/resignation";
 import { Button } from "../../ui/button";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
-import { Select } from "../../ui/select";
 import { StableText } from "../../ui/stable-text";
 
 export function AiControls({
@@ -14,12 +13,10 @@ export function AiControls({
   canContinue,
   canStep,
   epoch,
-  speed,
   onPause,
   onResume,
   onStep,
   onStop,
-  onSpeed,
   resignation,
 }: {
   readonly paused: boolean;
@@ -27,12 +24,10 @@ export function AiControls({
   readonly canContinue: boolean;
   readonly canStep: boolean;
   readonly epoch: string;
-  readonly speed: number;
   readonly onPause: () => void;
   readonly onResume: () => void;
   readonly onStep: () => void;
   readonly onStop: () => void;
-  readonly onSpeed: (speed: number) => void;
   readonly resignation?: { color: ChessColor; disabled: boolean; onResign: () => void } | undefined;
 }) {
   const { t } = useTranslation();
@@ -80,14 +75,6 @@ export function AiControls({
           {t("match.stop")}
         </Button>
       </div>
-      <label className="grid min-w-0 gap-2 text-label sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center">
-        {t("match.speed")}
-        <Select value={speed} onChange={(event) => onSpeed(Number(event.target.value))}>
-          <option value={500}>{t("match.fast")}</option>
-          <option value={1500}>{t("match.normal")}</option>
-          <option value={5000}>{t("match.slow")}</option>
-        </Select>
-      </label>
       {confirming ? (
         <ConfirmDialog
           {...(resigning && resignation

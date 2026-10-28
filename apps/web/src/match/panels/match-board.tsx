@@ -86,7 +86,6 @@ export function MatchBoard({
           onStop={() => {
             void controller.lifecycle("abort");
           }}
-          onSpeed={(speed) => controller.setSpeed(speed)}
           resignation={
             view.controls.resignation
               ? {

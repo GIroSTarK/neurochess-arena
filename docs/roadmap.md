@@ -202,7 +202,8 @@ Presentation follow-up to the completed MVP, tracked in the [approved implementa
 
 - [x] Task 1: shared container-based geometry, a board that retains its size when the rail appears, compact equal player identities with full-name dialogs, and preserved focus and component state across resizing.
 - [x] Task 2: responsive inspector with separate wide/stacked selections, stable commentary dialogs, and preserved move-history scrolling.
-- [ ] Tasks 3–6: control grouping, recovery presentation, room composition, replay refinements, and complete redesign acceptance.
+- [x] Task 3: near-board AI status, primary lifecycle controls, separate pacing, and compact evaluation with accessible provenance and independent analysis retry.
+- [ ] Tasks 4–6: recovery presentation, room composition, replay refinements, and complete redesign acceptance.
 
 ## Post-MVP candidates
 

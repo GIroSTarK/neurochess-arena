@@ -7,6 +7,7 @@ import {
   GAME_ID,
   jsonResponse,
   OTHER_GAME_ID,
+  requestBody,
   requestPath,
   snapshot,
 } from "../test/fixtures";
@@ -37,6 +38,30 @@ describe("committed Arena route data", () => {
   afterEach(() => {
     http.assertNoUnexpectedRequests();
     sessionStorage.clear();
+  });
+
+  it("retries compact analysis without resuming or dispatching a provider turn", async () => {
+    let stored = snapshot([], { state: "paused", legalMoves: [] });
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      [`GET ${gamePath}/details`]: () => jsonResponse({ snapshot: stored, configuration }),
+      [`GET ${gamePath}/invocations`]: () =>
+        jsonResponse({ gameId: GAME_ID, version: stored.version, turns: [] }),
+      [`POST ${gamePath}/lifecycle`]: (init) => {
+        expect(JSON.parse(requestBody(init))).toMatchObject({ action: "pause" });
+        stored = { ...stored, version: stored.version + 1 };
+        return jsonResponse(stored);
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderApp(options, { initialEntries: [gamePath] });
+    const retry = await screen.findByRole("button", { name: "Retry analysis" });
+    await userEvent.type(await screen.findByLabelText("Black · OpenAI · API key"), "fixture-key");
+    await userEvent.click(retry);
+    expect(await screen.findByRole("button", { name: "Retry analysis" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Game paused" })).toBeVisible();
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", stored.fen);
+    expect(http.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
 
   it("shows authorized wrong-mode guidance without reading account credentials", async () => {

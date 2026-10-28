@@ -52,6 +52,58 @@ async function stop(page: Page) {
   await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
 }
 
+test("compact controls keep status near the board and pacing changes never resume paused play", async ({
+  page,
+}, info) => {
+  let turns = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/ai-turn")) turns++;
+  });
+  const game = await start(page, "slow-fixture");
+  await expect(page.getByRole("button", { name: "Next move", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  const paused = await read(page, game.gameId);
+  const pausedTurns = turns;
+  const pacing = page.getByRole("combobox", { name: "Delay between moves" });
+  expect(
+    await pacing
+      .getByRole("option")
+      .evaluateAll((options) => options.map((option) => option.getAttribute("value"))),
+  ).toEqual(["500", "1500", "5000"]);
+  for (const value of ["500", "5000", "1500"]) {
+    await pacing.selectOption(value);
+    await expect(pacing).toHaveValue(value);
+  }
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(pacing).toHaveValue("1500");
+    await page.screenshot({ path: info.outputPath(`controls-${width}.png`), fullPage: true });
+  }
+  expect(turns).toBe(pausedTurns);
+  expect(await read(page, game.gameId)).toEqual(paused);
+  const play = page.getByRole("region", { name: "Play area", exact: true });
+  await expect(play.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await expect(play.getByRole("button", { name: /^Resign / })).toHaveCount(0);
+  const controls = play.getByRole("region", { name: "Game controls", exact: true });
+  await expect(controls.getByRole("combobox")).toHaveCount(0);
+  const evaluation = play.getByRole("region", { name: "Stockfish evaluation", exact: true });
+  await expect(evaluation.locator("summary")).toHaveText("Details");
+  await expect(evaluation.locator("details")).not.toHaveAttribute("open");
+  const positions = await Promise.all(
+    [play.getByRole("grid"), controls, evaluation, pacing].map((item) => item.boundingBox()),
+  );
+  for (let index = 1; index < positions.length; index++) {
+    expect(positions[index]!.y).toBeGreaterThanOrEqual(
+      positions[index - 1]!.y + positions[index - 1]!.height,
+    );
+  }
+  await stop(page);
+});
+
 test("public Arena completes a match, exposes private replay and PGN, and keeps the previous URL", async ({
   page,
   newContext,
