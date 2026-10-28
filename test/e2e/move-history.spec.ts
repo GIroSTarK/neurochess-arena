@@ -2,7 +2,7 @@ import { gameSnapshotSchema } from "@neurochess/contracts";
 
 import type * as webI18n from "../../apps/web/src/i18n";
 
-import { expectArenaLayout } from "./arena-layout";
+import { expectArenaLayout, expectArenaTransition } from "./arena-layout";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { acceptedMove, activate, expect, playMove, square, startSandbox, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
@@ -10,6 +10,8 @@ import { setPseudoLocalization } from "./text-layout";
 const longGameMoves = [
   "a2a3 a7a6 b2b3 b7b6 c2c3 c7c6 d2d3 d7d6 e2e3 e7e6 f2f3 f7f6 g2g3 g7g6 h2h3 h7h6",
   "a3a4 a6a5 b3b4 b6b5 c3c4 c6c5 d3d4 d6d5 e3e4 e6e5 f3f4 f6f5 g3g4 g6g5 h3h4 h6h5",
+  // A 640px board leaves enough rail space for the original 32 plies; keep scroll tests overflowing.
+  "b1c3 b8c6 g1f3 g8f6 d1c2 d8c7 c1e3 c8e6 f1d3 f8d6 e1c1 e8c8 h1e1 h8e8 d3e2 d6e7",
 ]
   .join(" ")
   .split(" ");
@@ -70,7 +72,8 @@ test("uses available rail height without letting move rows grow the arena", asyn
   );
   if (!touch) {
     expect(await arenaHeight()).toBeCloseTo(initialHeight, 0);
-    for (const width of [1100, 1440]) {
+    const transition = await expectArenaTransition(page);
+    for (const width of [transition, 1440]) {
       await page.setViewportSize({ width, height: 1080 });
       await checkRailHeight();
     }

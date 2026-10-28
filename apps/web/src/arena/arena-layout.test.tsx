@@ -1,12 +1,20 @@
-import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderLocalized } from "../test/render";
 
 import { ArenaLayout } from "./arena-layout";
+import { useArenaLayoutMode } from "./layout-mode";
 import type { PlayerSummaryData } from "./panels/player-summary";
 
 const activity = { label: "Waiting", variants: ["Waiting", "To move"], isTurn: false };
+
+function LayoutReader() {
+  return <output aria-label="Layout mode">{useArenaLayoutMode()}</output>;
+}
+
+afterEach(() => vi.unstubAllGlobals());
 
 function renderPlayers(white: PlayerSummaryData, black: PlayerSummaryData) {
   return renderLocalized(
@@ -21,6 +29,87 @@ function renderPlayers(white: PlayerSummaryData, black: PlayerSummaryData) {
 }
 
 describe("shared arena composition", () => {
+  it("preserves the board node when layout mode changes", async () => {
+    let notify = () => undefined;
+    let marker: Element | undefined;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => undefined) {
+          notify = callback;
+        }
+        observe(element: Element) {
+          marker = element;
+        }
+        disconnect = disconnect;
+      },
+    );
+    const { unmount } = renderLocalized(
+      <ArenaLayout
+        players={{
+          white: { identity: { kind: "human", name: "Alice" }, activity },
+          black: { identity: { kind: "human", name: "Bob" }, activity },
+        }}
+        playAreaLabel="Play area"
+        detailsLabel="Game details"
+        board={<input aria-label="Board selection" />}
+        details={
+          <>
+            <LayoutReader />
+            <input aria-label="Panel selection" />
+          </>
+        }
+      />,
+    );
+    const board = screen.getByRole("textbox", { name: "Board selection" });
+    const panel = screen.getByRole("textbox", { name: "Panel selection" });
+    await userEvent.type(panel, "Earlier move");
+    await userEvent.type(board, "e2");
+    expect(marker).toBeInstanceOf(HTMLElement);
+    for (const mode of ["wide", "stacked", "wide"]) {
+      act(() => {
+        (marker as HTMLElement).style.setProperty("--arena-layout", mode);
+        notify();
+      });
+      expect(screen.getByLabelText("Layout mode")).toHaveTextContent(mode);
+      expect(screen.getByRole("textbox", { name: "Board selection" })).toBe(board);
+      expect(board).toHaveValue("e2");
+      expect(board).toHaveFocus();
+      expect(panel).toHaveValue("Earlier move");
+    }
+    unmount();
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("defaults isolated presentation to stacked mode", () => {
+    renderLocalized(<LayoutReader />);
+    expect(screen.getByLabelText("Layout mode")).toHaveTextContent("stacked");
+  });
+
+  it("places notices before the board without replacing it", () => {
+    const props = {
+      players: {
+        white: { identity: { kind: "human", name: "Alice" } as const, activity },
+        black: { identity: { kind: "human", name: "Bob" } as const, activity },
+      },
+      playAreaLabel: "Play area",
+      detailsLabel: "Game details",
+      board: <button type="button">Board content</button>,
+      details: <p>Details</p>,
+    };
+    const { rerender } = renderLocalized(<ArenaLayout {...props} />);
+    const board = screen.getByRole("button", { name: "Board content" });
+    board.focus();
+    rerender(<ArenaLayout {...props} notice={<p>Connection recovery</p>} />);
+    expect(
+      screen.getByText("Connection recovery").compareDocumentPosition(board) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByRole("button", { name: "Board content" })).toBe(board);
+    expect(board).toHaveFocus();
+  });
+
   it("places the entry introduction before play and preserves the board when it is removed", () => {
     const props = {
       players: {

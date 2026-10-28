@@ -39,7 +39,7 @@ export async function expectUnbrokenWords(locator: Locator) {
         const parent = node.parentElement;
         if (
           !parent?.checkVisibility({ visibilityProperty: true }) ||
-          parent.closest('[aria-hidden="true"]')
+          parent.closest('[aria-hidden="true"], [data-player-name]')
         ) {
           continue;
         }

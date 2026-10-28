@@ -1,15 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 
-import { expectArenaLayout } from "./arena-layout";
+import { expectArenaLayout, isArenaWide } from "./arena-layout";
 import { API_ORIGIN } from "./environment";
 import { activate, expect, playMove, readSnapshot, square, startSandbox, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
 
-const widths = [320, 390, 768, 1024, 1440];
-// Keep the 1024px boundary in both device contexts; interaction still uses each default viewport.
-const desktopWidths = [1024, 1440];
-const mobileWidths = [320, 390, 768, 1024];
+const widths = [320, 390, 768, 1024, 1025, 1440];
+// Retain the former viewport boundary as regression samples in both contexts.
+const desktopWidths = [1024, 1025, 1440];
+const mobileWidths = [320, 390, 768, 1024, 1025];
 const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 async function bounds(locator: Locator) {
@@ -125,8 +125,8 @@ test("entry previews standard chess without creating a guest and places one Star
   await checkLayouts(page, testInfo, "entry", async (width) => {
     const play = await bounds(page.getByRole("region", { name: "Play area" }));
     const action = await bounds(start);
-    if (width <= 1024) expect(action.bottom).toBeLessThan(play.top);
-    else expect(action.left).toBeGreaterThan(play.right);
+    if (await isArenaWide(page)) expect(action.left).toBeGreaterThan(play.right);
+    else expect(action.bottom).toBeLessThan(play.top);
     if (width === 320) expect((await bounds(board)).width).toBeCloseTo(288, 0);
   });
   expect(writes).toEqual([]);
@@ -154,13 +154,13 @@ test("recovery and result retain the arena composition, explicit Resume and fina
     "data-fen",
     "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
   );
-  await checkLayouts(page, testInfo, "live", async (width) => {
+  await checkLayouts(page, testInfo, "live", async () => {
     const board = await bounds(page.getByRole("grid"));
     const controls = await bounds(page.getByRole("group", { name: "Game controls" }));
     const moves = await bounds(page.getByRole("region", { name: "Moves", exact: true }));
     expect(controls.top).toBeGreaterThan(board.bottom);
-    if (width <= 1024) expect(moves.top).toBeGreaterThan(controls.bottom);
-    else expect(moves.left).toBeGreaterThan(board.right);
+    if (await isArenaWide(page)) expect(moves.left).toBeGreaterThan(board.right);
+    else expect(moves.top).toBeGreaterThan(controls.bottom);
   });
   await page.reload();
   const resume = page.getByRole("button", { name: "Resume", exact: true });
@@ -172,10 +172,10 @@ test("recovery and result retain the arena composition, explicit Resume and fina
   const recovered = page.getByRole("heading", { name: "Game recovered", exact: true });
   await expect(recovered).toHaveCount(1);
   await expect(square(page, "e2")).not.toBeFocused();
-  await checkLayouts(page, testInfo, "recovery", async (width) => {
+  await checkLayouts(page, testInfo, "recovery", async () => {
     const recovery = await bounds(recovered);
     const history = await bounds(page.getByRole("region", { name: "Move history" }));
-    if (width <= 1024) {
+    if (!(await isArenaWide(page))) {
       expect(recovery.top).toBeGreaterThan((await bounds(board)).bottom);
       expect(recovery.bottom).toBeLessThan((await bounds(resume)).top);
     } else {

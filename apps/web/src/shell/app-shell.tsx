@@ -24,7 +24,7 @@ export function AppShell({
 }: AppShellProps) {
   const { t } = useTranslation();
   return (
-    <div className="mx-auto w-[min(1280px,calc(100%_-_2rem))] pb-[max(1.5rem,env(safe-area-inset-bottom))] md:w-[min(1280px,calc(100%_-_3rem))] lg:w-[min(1280px,calc(100%_-_4rem))]">
+    <div className="mx-auto w-full max-w-[1344px] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] md:pr-[max(1.5rem,env(safe-area-inset-right))] md:pl-[max(1.5rem,env(safe-area-inset-left))] lg:pr-[max(2rem,env(safe-area-inset-right))] lg:pl-[max(2rem,env(safe-area-inset-left))]">
       <a
         className="fixed top-3 left-4 z-10 -translate-y-[200%] rounded-control bg-accent p-3 text-on-accent focus:translate-y-0"
         href={`#${mainId}`}

@@ -1,10 +1,118 @@
 import AxeBuilder from "@axe-core/playwright";
 
+import type * as webI18n from "../../apps/web/src/i18n";
 import { createReferenceGame } from "../../apps/web/src/reference/scenarios";
 
+import { expectArenaLayout, expectArenaTransition } from "./arena-layout";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { activate, expect, startSandbox, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
+import { setPseudoLocalization } from "./text-layout";
+
+test("resizing retains inspected moves, player dialogs and readable compact identities", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await page.goto("/dev/arena");
+  await page.getByLabel("Test scenario").selectOption("identical");
+  await page.getByLabel("Reference state").selectOption("replay");
+  await page.getByRole("button", { name: "View ply 2: e5", exact: true }).click();
+  const board = page.getByRole("grid");
+  const boardNode = await board.elementHandle();
+  const fen = await board.getAttribute("data-fen");
+  const transition = await expectArenaTransition(page);
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  const panel = page.getByRole("tabpanel", { name: "Events", exact: true });
+  const panelNode = await panel.elementHandle();
+  const trigger = page.getByRole("button", { name: /^View White identity:/ });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "White player", exact: true });
+  const text = await dialog.textContent();
+  const close = dialog.getByRole("button", { name: "Close player identity" });
+  for (const width of [
+    320,
+    390,
+    768,
+    1024,
+    1025,
+    transition - 1,
+    transition,
+    transition + 1,
+    1440,
+  ]) {
+    const dialogNode = await dialog.elementHandle();
+    await page.setViewportSize({ width, height: width === 1440 ? 600 : 900 });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    expect(await dialog.evaluate((current, original) => current === original, dialogNode)).toBe(
+      true,
+    );
+    expect(await dialog.textContent()).toBe(text);
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await expectArenaLayout(page);
+    expect(await board.evaluate((current, original) => current === original, boardNode)).toBe(true);
+    expect(await panel.evaluate((current, original) => current === original, panelNode)).toBe(true);
+    await expect(board).toHaveAttribute("data-fen", fen!);
+    await expect(page.getByText("Ply 2 of 4", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Events", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const alignment = await page.evaluate(() => ({
+      title: document.querySelector("h1")!.getBoundingClientRect().left,
+      board: document.querySelector('[role="grid"]')!.getBoundingClientRect().left,
+      names: [...document.querySelectorAll("[data-player-name]")].map((name) => ({
+        height: name.getBoundingClientRect().height,
+        line: Number.parseFloat(getComputedStyle(name).lineHeight),
+      })),
+    }));
+    expect(Math.abs(alignment.title - alignment.board)).toBeLessThanOrEqual(1);
+    for (const name of alignment.names) expect(name.height).toBeLessThanOrEqual(name.line * 2 + 1);
+    await page.screenshot({ path: testInfo.outputPath(`identity-${width}.png`), fullPage: true });
+    await trigger.click();
+  }
+  await page.keyboard.press("Escape");
+  for (const scenario of ["identical", "humanHuman"]) {
+    await page.getByLabel("Test scenario").selectOption(scenario);
+    // Exercise maximum-length human names without adding production fixture behavior.
+    await page.evaluate(async () => {
+      const path = "/src/i18n/index.ts";
+      const { i18n } = (await import(/* @vite-ignore */ path)) as typeof webI18n;
+      i18n.addResourceBundle(
+        "en",
+        "translation",
+        { reference: { humanWhite: "W".repeat(50), humanBlack: "B".repeat(50) } },
+        true,
+        true,
+      );
+    });
+    await setPseudoLocalization(page, true);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+    });
+    for (const width of [320, 390, 768, 1024, 1025, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectArenaLayout(page);
+      for (const color of ["White", "Black"]) {
+        const identity = page.locator(`[data-seat="${color.toLowerCase()}"]`).getByRole("button");
+        await identity.click();
+        const full = page.getByRole("dialog");
+        await expect(full).toBeVisible();
+        expect(await full.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+          true,
+        );
+        await page.keyboard.press("Escape");
+        await expect(identity).toBeFocused();
+      }
+    }
+    await setPseudoLocalization(page, false);
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "";
+    });
+  }
+});
 
 test("shared arena reference: mixed seats, live and replay", async ({ page }, testInfo) => {
   const touch = Boolean(testInfo.project.use.hasTouch);
@@ -94,6 +202,7 @@ test("reference geometry keeps human controls aligned and identical long names r
   });
   await page.goto("/dev/arena");
   await page.getByLabel("Test scenario").selectOption("humanHuman");
+  await expectArenaTransition(page);
   if (!testInfo.project.use.isMobile) {
     const flip = await page.getByRole("button", { name: "Flip board" }).boundingBox();
     const board = await page.getByRole("grid").boundingBox();

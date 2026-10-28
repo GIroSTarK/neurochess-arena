@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { gameInvocationsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
+import { isArenaWide } from "./arena-layout";
 import { API_ORIGIN } from "./environment";
 import { activate, expect, square, test } from "./fixtures";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
@@ -417,7 +418,7 @@ test("live details stay within the primary controls across tabs and long comment
     const controlsBounds = await controls.boundingBox();
     expect(railBounds).not.toBeNull();
     expect(controlsBounds).not.toBeNull();
-    if (desktop) {
+    if (await isArenaWide(page)) {
       expect(railBounds!.y + railBounds!.height).toBeCloseTo(
         controlsBounds!.y + controlsBounds!.height,
         0,

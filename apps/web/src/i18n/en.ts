@@ -736,6 +736,9 @@ export const en = {
     paused: "Paused",
     thinking: "Choosing a move…",
     label: "{{color}} player",
+    viewIdentity: "View {{color}} identity: {{name}}",
+    closeIdentity: "Close player identity",
+    human: "Human player",
   },
   game: {
     beforeStart: "Ready when you are",

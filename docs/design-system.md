@@ -1,10 +1,10 @@
 # Neurochess Arena design system
 
-**Version:** 1.5
+**Version:** 1.6
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-28
 
 ## Purpose and authority
 
@@ -89,15 +89,19 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 
 ## Layout and hierarchy
 
-| Width        | Composition                                                                                                                                               |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Above 1024px | Centered shell, maximum 1280px; 24–32px outer gutters; dominant board region beside a 320–400px information rail with a 24–32px gap. Board maximum 640px. |
-| 768–1024px   | One column, 24px gutters, board centered and capped at 640px; supporting content follows it.                                                              |
-| 320–767px    | One column, 16px gutters; equal-width compact player summaries, full-width square board, controls, commentary, then detail tabs.                          |
+| Available arena width | Composition                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| At least `65rem`      | Centered frame with 16px insets, a 640px board, 24px gap, and approximately 344px information rail at default text size.          |
+| Below `65rem`         | One column, board centered and capped at 640px; controls and supporting content follow in normal page flow.                       |
+| Compact phones        | 16px shell gutters and a full available-width square board, equal-width player summaries, controls, commentary, then detail tabs. |
 
-Tailwind breakpoints encode these tiers: `sm` (481px) ends the compact-phone adjustments, `md` (768px) widens the gutters, and `lg` (1025px) places the board beside the rail. The reference desktop canvas is approximately 1440px wide; mobile targets 390px. A 320px viewport leaves a 288px board with 36px squares. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling and account for safe-area insets.
+The semantic `arena-wide` container query determines the arena columns and its shared layout-mode context. Shell gutters are additional: 16px on phones, 24px from `md` (768px), and 32px from `lg` (1025px), with safe-area insets respected. The shell content is capped at 1280px. The global `lg` breakpoint still applies to unrelated screens; it does not select the arena composition. At default text size the arena becomes wide at 1040px of available container width. Introducing the rail must not shrink an already 640px board. Enlarged text can return the arena to one column.
+
+Align the compact match header, player strip and board on shared edges without viewport-dependent board indentation. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling. Layout changes retain the board, its keyboard handle, orientation and pending promotion, as well as mounted detail state and open identity dialogs. The optional near-board notice slot precedes the board in reading order and does not replace it.
 
 The shell contains the wordmark, Arena, and authentication/account access. Registered users also have History. Guest views show “Guest session” and “Sign in”. Both player summaries have equal space and always include color, provider/model or human identity, and applicable activity.
+
+Player names use at most two lines in the compact strip. Activating a name opens a seat-labeled dialog containing the complete human name or provider/model identity as text. The trigger includes the seat and full name in its accessible label; it supports pointer, touch and keyboard activation. Focus stays inside the dialog, and Escape or Close returns focus to the trigger. Text enlargement grows the strip and its controls rather than clipping them to a fixed height; long identifiers may wrap within words. Human seats omit AI-only metadata.
 
 The development Sandbox has its own conditional navigation item, separate from Arena. Navigation remains visible on mobile, wrapping beneath the wordmark and context, and marks the current page with `aria-current`. Arena hosts independent AI seat setup and the live/replay views for both AI modes; it links to the development Sandbox only when enabled.
 

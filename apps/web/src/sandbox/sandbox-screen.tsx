@@ -116,7 +116,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
           <span
             className={cx(
               "max-w-full items-center gap-2 text-label text-text-secondary",
-              view.board ? "flex" : "hidden lg:flex",
+              view.board ? "flex" : "hidden @arena-wide/arena:flex",
             )}
           >
             <Icon path="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5zM12 14v3" />
@@ -183,7 +183,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
             ) : view.live ? (
               <>
                 {view.recovery ? (
-                  <div className="mt-4 lg:hidden">
+                  <div className="mt-4 @arena-wide/arena:hidden">
                     <RecoveryNotice {...view.recovery} />
                   </div>
                 ) : null}
@@ -227,7 +227,7 @@ export function SandboxScreen({ apiBaseUrl }: { readonly apiBaseUrl: string }) {
                 ) : (
                   <>
                     {view.recovery ? (
-                      <div className="hidden lg:block">
+                      <div className="hidden @arena-wide/arena:block">
                         <RecoveryNotice {...view.recovery} />
                       </div>
                     ) : null}

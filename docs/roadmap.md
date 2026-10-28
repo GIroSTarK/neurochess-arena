@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–5 completed; MVP release accepted by the deployment owner.
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-28
 
 The MVP contains all three game modes. The phases below are completed implementation checkpoints, not separate product editions. Their acceptance summaries describe evidence at phase closure; the current [release checklist](operations.md#mvp-release-acceptance) governs each new release candidate.
 
@@ -195,6 +195,14 @@ Deliverables:
 - [x] complete release acceptance, including physical browsers/accessibility, live services, licensing and operational verification.
 
 Exit condition: every MVP acceptance criterion in `docs/product.md` is verified and no release-blocking defect remains.
+
+## Board-first arena redesign
+
+Presentation follow-up to the completed MVP, tracked in the [approved implementation plan](superpowers/plans/2026-10-28-board-first-arena-redesign.md).
+
+- [x] Task 1: shared container-based geometry, a board that retains its size when the rail appears, compact equal player identities with full-name dialogs, and preserved focus and component state across resizing.
+- [ ] Task 2: responsive inspector and stable commentary composition.
+- [ ] Tasks 3–6: control grouping, recovery presentation, room composition, replay refinements, and complete redesign acceptance.
 
 ## Post-MVP candidates
 

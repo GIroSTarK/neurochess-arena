@@ -62,6 +62,9 @@
   --breakpoint-md: 48rem;
   --breakpoint-lg: 64.0625rem;
 
+  /* A 640px board, 344px rail, 24px gap and 16px frame insets fit at default text size. */
+  --container-arena-wide: 65rem;
+
   --ease-arena: cubic-bezier(0.2, 0, 0, 1);
 
   --animate-activity-pulse: activity-pulse 1.3s ease-in-out infinite;

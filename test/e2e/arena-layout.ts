@@ -3,6 +3,52 @@ import type { Page } from "@playwright/test";
 import { expect } from "./fixtures";
 import { expectUnbrokenWords } from "./text-layout";
 
+export async function isArenaWide(page: Page) {
+  return page.getByTestId("arena-frame").evaluate((frame) => {
+    const play = frame.querySelector(":scope > section")!.getBoundingClientRect();
+    const details = frame.querySelector("aside")!.getBoundingClientRect();
+    return details.left >= play.right;
+  });
+}
+
+export async function arenaTransitionWidth(page: Page) {
+  const viewport = page.viewportSize()!;
+  let stacked = 768;
+  let wide = 1440;
+  await page.setViewportSize({ ...viewport, width: stacked });
+  expect(await isArenaWide(page)).toBe(false);
+  await page.setViewportSize({ ...viewport, width: wide });
+  expect(await isArenaWide(page)).toBe(true);
+  while (wide - stacked > 1) {
+    const width = Math.floor((stacked + wide) / 2);
+    await page.setViewportSize({ ...viewport, width });
+    if (await isArenaWide(page)) wide = width;
+    else stacked = width;
+  }
+  return wide;
+}
+
+export async function expectArenaTransition(page: Page) {
+  const viewport = page.viewportSize()!;
+  const transition = await arenaTransitionWidth(page);
+  let previousBoardWidth = 0;
+  for (const width of [transition - 1, transition, transition + 1]) {
+    await page.setViewportSize({ ...viewport, width });
+    await expectArenaLayout(page);
+    const boardWidth = await page
+      .getByRole("grid")
+      .evaluate((board) => board.getBoundingClientRect().width);
+    expect(boardWidth, `Board shrank at viewport ${width}px`).toBeGreaterThanOrEqual(
+      previousBoardWidth - 1,
+    );
+    expect(boardWidth).toBeCloseTo(640, 0);
+    previousBoardWidth = boardWidth;
+    expect(await isArenaWide(page)).toBe(width >= transition);
+  }
+  await page.setViewportSize(viewport);
+  return transition;
+}
+
 export async function expectArenaLayout(page: Page) {
   const controlSelector = "button:not([data-square]), summary";
   const layout = await page.evaluate((controlSelector) => {
