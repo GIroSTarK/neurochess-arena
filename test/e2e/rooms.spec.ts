@@ -79,6 +79,18 @@ for (const ownerColor of ["White", "Black"] as const) {
       if (kind === "account") await createAccount(guest.request);
       guest.on("request", (request) => inspect(request.url()));
       await joinRoom(guest, invitation, gameId, kind);
+      for (const player of [page, guest]) {
+        const play = player.getByRole("region", { name: "Play area", exact: true });
+        await expect(play.getByText("White to move", { exact: true })).toBeVisible();
+        await expect(play.getByTestId("room-connection")).toHaveText("Room connected");
+        await expect(
+          player.getByRole("button", {
+            name: /^(Pause|Resume|Next move|Restore keys|Invite opponent)$/,
+          }),
+        ).toHaveCount(0);
+        await expect(player.getByRole("combobox")).toHaveCount(0);
+        await expect(player.getByRole("tab")).toHaveText(["Moves", "Analysis"]);
+      }
       await expect(page.getByRole("grid").locator("[data-square]").first()).toHaveAttribute(
         "data-square",
         ownerColor === "Black" ? "h1" : "a8",
@@ -196,6 +208,9 @@ test("uncertain human moves freeze submissions and explicit retry reuses the com
     "false",
   );
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  const play = page.getByRole("region", { name: "Play area", exact: true });
+  await expect(play.getByRole("alert")).toContainText("acknowledgement was lost");
+  await expect(play.getByRole("button", { name: "Retry same move", exact: true })).toBeVisible();
   expect((await readSnapshot(page, gameId)).moves).toHaveLength(0);
   await page.getByRole("button", { name: "Retry same move", exact: true }).click();
   await expect(guest.getByRole("status")).toContainText("e4");
@@ -294,6 +309,10 @@ test("room controls, live announcements and expanded text stay accessible on des
   await playMove(guest, await readSnapshot(guest, gameId), "e2e4", false);
   await expect(page.getByRole("button", { name: "Close room", exact: true })).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("room-live.png"), fullPage: true });
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: testInfo.outputPath(`room-live-${width}.png`), fullPage: true });
+  }
   await setPseudoLocalization(page, true);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "200%";

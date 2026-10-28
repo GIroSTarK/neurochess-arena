@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
 import { createAccount } from "./account-helpers";
+import { expectArenaLayout, expectArenaTransition } from "./arena-layout";
 import { expectClipboardCopy } from "./clipboard";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
@@ -10,6 +11,67 @@ import { setPseudoLocalization } from "./text-layout";
 
 const entryPath = "/rooms";
 const joinPath = entryPath + "/join";
+
+test("waiting room keeps board-first invitation access across desktop tablet and phone layouts", async ({
+  page,
+}, testInfo) => {
+  await createRoom(page, "Black");
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expectArenaLayout(page);
+    await page.screenshot({ path: testInfo.outputPath(`waiting-${width}.png`), fullPage: true });
+  }
+  await expectArenaTransition(page);
+  const play = page.getByRole("region", { name: /^Play area/ });
+  const sharing = page.getByRole("region", { name: /^Share invitation/ });
+  const originalUrl = page.url();
+  const invitation = await page
+    .getByRole("textbox", { name: "Invitation link", exact: true })
+    .inputValue();
+  let gameplayWrites = 0;
+  let sockets = 0;
+  page.on("websocket", () => sockets++);
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      /\/(moves|lifecycle|invitation)$/.test(new URL(request.url()).pathname)
+    ) {
+      gameplayWrites++;
+    }
+  });
+  for (const enlarged of [false, true]) {
+    await setPseudoLocalization(page, enlarged);
+    await page.evaluate((enlarged) => {
+      document.documentElement.style.fontSize = enlarged ? "200%" : "";
+    }, enlarged);
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 700 : 900 });
+      const invite = play.getByRole("button", { name: /^Invite opponent/ });
+      await invite.focus();
+      await page.keyboard.press("Enter");
+      await expect(sharing).toBeFocused();
+      const focus = await sharing.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { width: Number.parseFloat(style.outlineWidth), style: style.outlineStyle };
+      });
+      expect(focus.style).not.toBe("none");
+      expect(focus.width).toBeGreaterThanOrEqual(2);
+      await expect(sharing.getByRole("heading", { name: /^Share invitation/ })).toBeInViewport();
+      await expect(sharing.getByRole("textbox", { name: /^Invitation code/ })).toHaveValue(
+        new URL(invitation).hash.slice("#invite=".length),
+      );
+      await expect(sharing.getByRole("button", { name: /^Replace invitation/ })).toBeVisible();
+      await expect(sharing.getByRole("button", { name: /^Revoke invitation/ })).toBeVisible();
+      await expect(play.getByRole("button", { name: /^Close room/ })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      expect(page.url()).toBe(originalUrl);
+    }
+  }
+  expect(gameplayWrites).toBe(0);
+  expect(sockets).toBe(0);
+});
 
 test("same-document invitation fragments are consumed before routing and cannot return through history", async ({
   page,

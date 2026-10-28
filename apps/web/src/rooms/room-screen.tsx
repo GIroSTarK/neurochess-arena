@@ -1,4 +1,4 @@
-import { useId, useSyncExternalStore } from "react";
+import { useId, useRef, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { PublicIdentity } from "../api/identity";
@@ -24,7 +24,7 @@ import { TextLink } from "../ui/text-link";
 
 import type { RoomController } from "./controller";
 import { InvitationShare } from "./invitation-share";
-import { RoomControls } from "./room-controls";
+import { RoomControls, RoomInvitationControls } from "./room-controls";
 import type { RoomState } from "./state";
 
 const analysisPosition = (state: RoomState) =>
@@ -48,6 +48,8 @@ export function RoomScreen({
 }) {
   const { t } = useTranslation();
   const helpId = useId();
+  const invitationHeadingId = useId();
+  const invitationRef = useRef<HTMLElement>(null);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const evaluation = useGameAnalysis(
     controller,
@@ -60,6 +62,8 @@ export function RoomScreen({
   const room = state.room;
   const snapshot = room?.snapshot;
   const terminal = snapshot && isTerminal(snapshot);
+  const showInvitation =
+    room?.state === "waiting" && !terminal && room.capabilities.canManageInvitation;
   const title = terminal
     ? resultTitle(snapshot, t)
     : room?.state === "waiting"
@@ -85,14 +89,19 @@ export function RoomScreen({
       player?.kind === "account"
         ? player.username
         : t(`history.players.${player?.kind ?? "unassigned"}`);
-    const label = state.online
-      ? t(state.online[color] ? "rooms.online" : "rooms.offline")
-      : t("rooms.presenceUnknown");
+    const unassigned = player?.kind === "unassigned";
+    const label = unassigned
+      ? t("rooms.waiting")
+      : state.online
+        ? t(state.online[color] ? "rooms.online" : "rooms.offline")
+        : t("rooms.presenceUnknown");
     return {
       identity: { kind: "human", name },
       activity: {
         label,
-        variants: [t("rooms.online"), t("rooms.offline"), t("rooms.presenceUnknown")],
+        variants: unassigned
+          ? [t("rooms.waiting")]
+          : [t("rooms.online"), t("rooms.offline"), t("rooms.presenceUnknown")],
         isTurn: !terminal && room?.state === "joined" && snapshot?.turn === color,
       },
     };
@@ -150,6 +159,50 @@ export function RoomScreen({
           players={players}
           playAreaLabel={t("arena.playArea")}
           detailsLabel={t("arena.gameDetails")}
+          notice={
+            <div className="grid min-w-0 gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-section font-semibold">{status}</p>
+                  <p className="text-label text-text-secondary" data-testid="room-connection">
+                    {connection}
+                  </p>
+                </div>
+                {showInvitation ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      invitationRef.current?.focus({ preventScroll: true });
+                      invitationRef.current?.scrollIntoView({ block: "start" });
+                    }}
+                  >
+                    {t("rooms.inviteOpponent")}
+                  </Button>
+                ) : null}
+              </div>
+              {state.issue ? <p role="alert">{t(`rooms.playErrors.${state.issue}`)}</p> : null}
+              {state.connection === "failed" || state.pendingMove ? (
+                <div className="flex flex-wrap gap-3">
+                  {state.connection === "failed" ? (
+                    <Button variant="secondary" onClick={() => controller.reconnect()}>
+                      {t("rooms.reconnect")}
+                    </Button>
+                  ) : null}
+                  {state.pendingMove ? (
+                    <Button
+                      variant="secondary"
+                      aria-disabled={state.busy || state.connection !== "synchronized"}
+                      onClick={() => {
+                        void controller.retryMove();
+                      }}
+                    >
+                      {t("rooms.retryMove")}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          }
           board={
             <>
               <Chessboard
@@ -166,7 +219,11 @@ export function RoomScreen({
               <p id={helpId} className="mt-3 text-caption text-text-secondary">
                 {t(terminal ? "rooms.replayHint" : "rooms.boardHint")}
               </p>
-              <RoomControls controller={controller} state={state} />
+              {!terminal ? (
+                <div className="mt-3">
+                  <RoomControls controller={controller} state={state} />
+                </div>
+              ) : null}
               {terminal ? (
                 <>
                   <ReplayControls
@@ -203,6 +260,7 @@ export function RoomScreen({
               ) : null}
               <div className="mt-3">
                 <EvaluationIndicator
+                  density="compact"
                   state={evaluation.view.plies[evaluationPly]}
                   onRetry={() => evaluation.onRetry(evaluationPly)}
                   suspended={evaluation.view.suspended}
@@ -214,36 +272,25 @@ export function RoomScreen({
           }
           details={
             <>
-              <p className="text-section font-semibold">{status}</p>
-              <p className="text-label text-text-secondary" data-testid="room-connection">
-                {connection}
-              </p>
-              {state.connection === "failed" ? (
-                <Button variant="secondary" onClick={() => controller.reconnect()}>
-                  {t("rooms.reconnect")}
-                </Button>
-              ) : null}
-              {state.issue ? <p role="alert">{t(`rooms.playErrors.${state.issue}`)}</p> : null}
-              {state.pendingMove ? (
-                <Button
-                  variant="secondary"
-                  aria-disabled={state.busy || state.connection !== "synchronized"}
-                  onClick={() => {
-                    void controller.retryMove();
-                  }}
+              {showInvitation ? (
+                <section
+                  ref={invitationRef}
+                  tabIndex={-1}
+                  aria-labelledby={invitationHeadingId}
+                  className="grid min-w-0 scroll-mt-4 gap-3 border-b border-divider pb-6 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-focus"
                 >
-                  {t("rooms.retryMove")}
-                </Button>
-              ) : null}
-              {room.state === "waiting" && !terminal ? (
-                <div className="grid min-w-0 gap-4">
+                  <h2 id={invitationHeadingId} className="text-section font-semibold">
+                    {t("rooms.shareInvitation")}
+                  </h2>
+                  <p className="text-label text-text-secondary">{t("rooms.shareHint")}</p>
                   {state.invitation ? (
                     <InvitationShare key={state.invitation} invitation={state.invitation} />
                   ) : (
                     <p>{t("rooms.replaceHint")}</p>
                   )}
                   {!room.invitationAvailable ? <p>{t("rooms.revoked")}</p> : null}
-                </div>
+                  <RoomInvitationControls controller={controller} state={state} />
+                </section>
               ) : null}
               <ArenaDetails
                 initialTab={terminal ? "analysis" : "moves"}

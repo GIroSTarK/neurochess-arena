@@ -10,13 +10,43 @@ import type { RoomController } from "./controller";
 import type { RoomState } from "./state";
 
 type Action = "resign" | "close" | "replace" | "revoke";
-export function RoomControls({
-  controller,
-  state,
-}: {
+interface RoomControlsProps {
   readonly controller: RoomController;
   readonly state: RoomState;
-}) {
+}
+
+export function RoomControls(props: RoomControlsProps) {
+  const capabilities = props.state.room?.capabilities;
+  return (
+    <RoomActions
+      {...props}
+      actions={[
+        ...(capabilities?.canResign ? (["resign"] as const) : []),
+        ...(capabilities?.canClose ? (["close"] as const) : []),
+      ]}
+    />
+  );
+}
+
+export function RoomInvitationControls(props: RoomControlsProps) {
+  const room = props.state.room;
+  return (
+    <RoomActions
+      {...props}
+      actions={
+        room?.capabilities.canManageInvitation
+          ? ["replace", ...(room.invitationAvailable ? (["revoke"] as const) : [])]
+          : []
+      }
+    />
+  );
+}
+
+function RoomActions({
+  controller,
+  state,
+  actions,
+}: RoomControlsProps & { readonly actions: readonly Action[] }) {
   const { t } = useTranslation();
   const [decision, setDecision] = useState<{
     action: Action;
@@ -24,15 +54,8 @@ export function RoomControls({
     epoch: number;
   } | null>(null);
   const room = state.room;
-  if (!room || isTerminal(room.snapshot)) return null;
+  if (!room || isTerminal(room.snapshot) || actions.length === 0) return null;
   const blocked = state.connection !== "synchronized" || state.busy || state.pendingMove !== null;
-  const actions: Action[] = [
-    ...(room.capabilities.canManageInvitation
-      ? (["replace", ...(room.invitationAvailable ? ["revoke"] : [])] as Action[])
-      : []),
-    ...(room.capabilities.canResign ? (["resign"] as const) : []),
-    ...(room.capabilities.canClose ? (["close"] as const) : []),
-  ];
   const current =
     decision?.version === room.snapshot.version &&
     decision.epoch === state.interactionRevision &&
@@ -40,7 +63,7 @@ export function RoomControls({
       ? decision
       : null;
   return (
-    <div className="mt-4 flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-3">
       {actions.map((action) => (
         <Button
           key={action}

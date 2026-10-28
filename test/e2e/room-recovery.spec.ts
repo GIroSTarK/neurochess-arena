@@ -5,6 +5,46 @@ import { API_ORIGIN } from "./environment";
 import { expect, playMove, readSnapshot, square, test } from "./fixtures";
 import { confirm, createRoom, expectSharedResult, joinRoom, playRoomLine } from "./room-helpers";
 
+test("persistent socket failure offers near-board reconnect without changing room authority", async ({
+  page,
+  newContext,
+}) => {
+  let blocked = false;
+  let connection: WebSocketRoute | undefined;
+  await page.routeWebSocket(API_ORIGIN.replace(/^http/, "ws") + "/rooms/realtime", (route) => {
+    connection = route;
+    if (blocked) void route.close();
+    else route.connectToServer();
+  });
+  const { invitation, gameId } = await createRoom(page, "White");
+  const opponent = await (await newContext()).newPage();
+  await joinRoom(opponent, invitation, gameId);
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  const before = await readSnapshot(page, gameId);
+  blocked = true;
+  await connection!.close();
+  const play = page.getByRole("region", { name: "Play area", exact: true });
+  await expect(play.getByTestId("room-connection")).toContainText("Connection unavailable", {
+    timeout: 25_000,
+  });
+  await expect(play.getByRole("button", { name: "Retry connection", exact: true })).toBeVisible();
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", before.fen);
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  for (const action of ["Resign", "Close room"]) {
+    await expect(play.getByRole("button", { name: action, exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  }
+  blocked = false;
+  await play.getByRole("button", { name: "Retry connection", exact: true }).click();
+  await expect(play.getByTestId("room-connection")).toHaveText("Room connected");
+  await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
+  expect(await readSnapshot(page, gameId)).toEqual(before);
+  await playMove(page, before, "e2e4", false);
+  await expect(opponent.getByRole("status")).toContainText("e4");
+});
+
 test("both account browsers recover multiple moves after every tab disconnects without changing the game", async ({
   page,
   newContext,
@@ -180,6 +220,9 @@ test("a lost post-commit acknowledgement with a disconnected socket synchronizes
   await expect(opponent.getByRole("status")).toContainText("e4");
   await expect(page.getByTestId("room-connection")).not.toHaveText("Room connected");
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  const play = page.getByRole("region", { name: "Play area", exact: true });
+  await expect(play.getByTestId("room-connection")).not.toHaveText("Room connected");
+  await expect(play.getByRole("button", { name: "Retry same move", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry same move", exact: true })).toHaveAttribute(
     "aria-disabled",
     "true",

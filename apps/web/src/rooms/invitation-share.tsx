@@ -53,6 +53,20 @@ export function InvitationShare({ invitation }: { readonly invitation: string })
       {copied ? (
         <p role="status">{t(copied === "success" ? "rooms.copied" : "rooms.copyFallback")}</p>
       ) : null}
+      <label htmlFor="room-invitation-code" className="text-label font-semibold">
+        {t("rooms.invitationCode")}
+      </label>
+      <textarea
+        id="room-invitation-code"
+        value={invitation}
+        readOnly
+        rows={2}
+        autoComplete="off"
+        spellCheck={false}
+        onFocus={(event) => event.target.select()}
+        onClick={(event) => event.currentTarget.select()}
+        className="min-h-target w-full min-w-0 resize-y rounded-control border border-control-border bg-canvas px-3 py-2 font-mono text-label text-text"
+      />
     </div>
   );
 }

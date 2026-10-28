@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RouteObject } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,6 +40,7 @@ class Socket extends EventTarget {
   }
 }
 afterEach(() => {
+  vi.useRealTimers();
   Socket.instances = [];
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -68,6 +69,25 @@ describe("production private room routes", () => {
     await screen.findByRole("textbox", { name: /^Invitation link$/ });
     await waitFor(() => expect(Socket.instances.length).toBe(1));
     act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: waiting }));
+    const board = screen.getByRole("grid");
+    const requestCount = http.fetch.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Invite opponent" }));
+    const sharing = screen.getByRole("region", { name: "Share invitation" });
+    expect(sharing).toHaveFocus();
+    expect(screen.getByRole("grid")).toBe(board);
+    expect(Socket.instances).toHaveLength(1);
+    expect(http.fetch.mock.calls).toHaveLength(requestCount);
+    expect(within(sharing).getByRole("textbox", { name: "Invitation code" })).toHaveValue(
+      INVITATION,
+    );
+    expect(within(sharing).getByRole("button", { name: "Replace invitation" })).toBeVisible();
+    expect(within(sharing).getByRole("button", { name: "Revoke invitation" })).toBeVisible();
+    expect(within(sharing).queryByRole("button", { name: "Close room" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Play area" })).getByRole("button", {
+        name: "Close room",
+      }),
+    ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Copy invitation" }));
     expect(await screen.findByText(/select and copy the invitation/i)).toBeVisible();
     const link = screen.getByRole("textbox", { name: "Invitation link" });
@@ -101,6 +121,228 @@ describe("production private room routes", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(closures()).toHaveLength(1);
+    http.assertNoUnexpectedRequests();
+  });
+  it.each(["white", "black"] as const)(
+    "labels the unassigned opponent for a %s owner without implying offline presence",
+    async (color) => {
+      const waiting = waitingRoom(color);
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(roomSession),
+        "GET /profile": () => jsonResponse(roomProfile),
+        [`GET /games/${GAME_ID}/details`]: () =>
+          jsonResponse({ snapshot: waiting.snapshot, configuration }),
+        [`GET /rooms/${GAME_ID}`]: () => jsonResponse(waiting),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      vi.stubGlobal("WebSocket", Socket);
+      renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+      await screen.findByRole("grid");
+      await waitFor(() => expect(Socket.instances).toHaveLength(1));
+      act(() => {
+        Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: waiting });
+        Socket.instances[0]!.frame({
+          protocol: 1,
+          type: "presence",
+          gameId: GAME_ID,
+          sequence: 1,
+          online: { white: color === "white", black: color === "black" },
+        });
+      });
+      const opposite = color === "white" ? "black" : "white";
+      const emptySeat = document.querySelector(`[data-seat="${opposite}"]`)!;
+      expect(emptySeat).toHaveTextContent("Waiting for opponent");
+      expect(emptySeat).not.toHaveTextContent(/Offline|Online|Connecting/);
+      const play = screen.getByRole("region", { name: "Play area" });
+      expect(
+        within(play).getByText(`Waiting for ${opposite === "white" ? "White" : "Black"}`),
+      ).toBeVisible();
+      expect(within(play).getByTestId("room-connection")).toHaveTextContent("Room connected");
+      expect(screen.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+      expect(screen.queryByRole("button", { name: "Resign" })).not.toBeInTheDocument();
+      http.assertNoUnexpectedRequests();
+    },
+  );
+  it.each([
+    { color: "white", kind: "guest" },
+    { color: "white", kind: "account" },
+    { color: "black", kind: "guest" },
+    { color: "black", kind: "account" },
+  ] as const)(
+    "keeps $color owner permissions independent of $kind opponent presence",
+    async ({ color, kind }) => {
+      const user = userEvent.setup();
+      const opposite = color === "white" ? "black" : "white";
+      const joined = {
+        ...waitingRoom(color),
+        state: "joined" as const,
+        invitationAvailable: false,
+        snapshot: snapshot([], { version: 1 }),
+        players: {
+          ...waitingRoom(color).players,
+          [opposite]:
+            kind === "guest"
+              ? { kind: "guest" as const }
+              : { kind: "account" as const, username: "Opponent" },
+        },
+        capabilities: {
+          canMove: color === "white",
+          canResign: true,
+          canClose: true,
+          canManageInvitation: false,
+        },
+      };
+      const http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(roomSession),
+        "GET /profile": () => jsonResponse(roomProfile),
+        [`GET /games/${GAME_ID}/details`]: () =>
+          jsonResponse({ snapshot: joined.snapshot, configuration }),
+        [`GET /rooms/${GAME_ID}`]: () => jsonResponse(joined),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      vi.stubGlobal("WebSocket", Socket);
+      renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+      const board = await screen.findByRole("grid");
+      expect(board).toHaveAttribute("aria-readonly", "true");
+      await waitFor(() => expect(Socket.instances).toHaveLength(1));
+      act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: joined }));
+      const play = screen.getByRole("region", { name: "Play area" });
+      const turn = within(play).getByText("White to move");
+      expect(turn.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      for (const [index, online] of [false, true, false].entries()) {
+        act(() =>
+          Socket.instances[0]!.frame({
+            protocol: 1,
+            type: "presence",
+            gameId: GAME_ID,
+            sequence: index + 1,
+            online: { white: color === "white" || online, black: color === "black" || online },
+          }),
+        );
+        expect(
+          within(document.querySelector<HTMLElement>(`[data-seat="${opposite}"]`)!).getByText(
+            online ? "Online" : "Offline",
+            { exact: true },
+          ),
+        ).toHaveAttribute("aria-hidden", "false");
+        expect(board).toHaveAttribute("aria-readonly", String(color !== "white"));
+        expect(screen.getByRole("button", { name: "Resign" })).toHaveAttribute(
+          "aria-disabled",
+          "false",
+        );
+        expect(screen.getByRole("button", { name: "Close room" })).toHaveAttribute(
+          "aria-disabled",
+          "false",
+        );
+      }
+      const opponent = document.querySelector(`[data-seat="${opposite}"]`)!;
+      expect(opponent).toHaveTextContent(kind === "guest" ? "Guest" : "Opponent");
+      expect(opponent).toHaveTextContent("Offline");
+      expect(opponent).not.toHaveTextContent("Waiting for opponent");
+      await user.click(screen.getByRole("button", { name: "Resign" }));
+      expect(screen.getByRole("dialog")).toHaveAccessibleName(
+        `Resign ${color === "white" ? "White" : "Black"}?`,
+      );
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+      await user.keyboard("{Escape}");
+      expect(screen.getByRole("button", { name: "Resign" })).toHaveFocus();
+      expect(
+        screen.queryByRole("button", {
+          name: /^(Pause|Resume|Next move|Restore keys|Invite opponent)$/,
+        }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "Moves",
+        "Analysis",
+      ]);
+      expect(http.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+      http.assertNoUnexpectedRequests();
+    },
+  );
+  it("keeps failed connection recovery beside the retained board and locks commands until a fresh snapshot", async () => {
+    const joined = joinedRoom();
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(roomSession),
+      "GET /profile": () => jsonResponse(roomProfile),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({ snapshot: joined.snapshot, configuration }),
+      [`GET /rooms/${GAME_ID}`]: () => jsonResponse(joined),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    vi.stubGlobal("WebSocket", Socket);
+    renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+    const board = await screen.findByRole("grid");
+    await waitFor(() => expect(Socket.instances).toHaveLength(1));
+    act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: joined }));
+    vi.useFakeTimers();
+    for (const delay of [250, 1_000, 2_000, 5_000, 10_000]) {
+      act(() => {
+        Socket.instances.at(-1)!.dispatchEvent(new Event("close"));
+      });
+      expect(screen.getByTestId("room-connection")).toHaveTextContent("Reconnecting");
+      expect(board).toHaveAttribute("aria-readonly", "true");
+      expect(screen.getByRole("button", { name: "Resign" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      await act(() => vi.advanceTimersByTimeAsync(delay));
+    }
+    act(() => {
+      Socket.instances.at(-1)!.dispatchEvent(new Event("close"));
+    });
+    vi.useRealTimers();
+    const play = screen.getByRole("region", { name: "Play area" });
+    expect(within(play).getByTestId("room-connection")).toHaveTextContent("Connection unavailable");
+    await userEvent.click(within(play).getByRole("button", { name: "Retry connection" }));
+    await waitFor(() => expect(Socket.instances).toHaveLength(7));
+    expect(board).toHaveAttribute("aria-readonly", "true");
+    act(() => Socket.instances.at(-1)!.frame({ protocol: 1, type: "snapshot", room: joined }));
+    expect(screen.getByRole("grid")).toBe(board);
+    expect(board).toHaveAttribute("aria-readonly", "false");
+    expect(screen.queryByRole("button", { name: "Close room" })).not.toBeInTheDocument();
+    expect(http.fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+    http.assertNoUnexpectedRequests();
+  });
+  it("keeps uncertain move recovery near the board and retries only the identical pending command", async () => {
+    const user = userEvent.setup();
+    const joined = joinedRoom();
+    let attempts = 0;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(roomSession),
+      "GET /profile": () => jsonResponse(roomProfile),
+      [`GET /games/${GAME_ID}/details`]: () =>
+        jsonResponse({ snapshot: joined.snapshot, configuration }),
+      [`GET /rooms/${GAME_ID}`]: () => jsonResponse(joined),
+      [`POST /games/${GAME_ID}/moves`]: () => {
+        if (++attempts === 1) throw new Error("lost acknowledgement");
+        return jsonResponse(snapshot(["e2e4"], { version: 2 }));
+      },
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    vi.stubGlobal("WebSocket", Socket);
+    renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+    const board = await screen.findByRole("grid");
+    await waitFor(() => expect(Socket.instances).toHaveLength(1));
+    act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: joined }));
+    await user.click(board.querySelector('[data-square="e2"]')!);
+    await user.click(board.querySelector('[data-square="e4"]')!);
+    await screen.findByText(/The acknowledgement was lost/);
+    const play = screen.getByRole("region", { name: "Play area" });
+    expect(within(play).getByRole("alert")).toHaveTextContent("The acknowledgement was lost");
+    expect(board).toHaveAttribute("aria-readonly", "true");
+    expect(screen.getByRole("button", { name: "Resign" })).toHaveAttribute("aria-disabled", "true");
+    act(() => Socket.instances[0]!.frame({ protocol: 1, type: "snapshot", room: joined }));
+    expect(attempts).toBe(1);
+    await user.click(within(play).getByRole("button", { name: "Retry same move" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Retry same move" })).not.toBeInTheDocument(),
+    );
+    const commands = http.fetch.mock.calls.filter(([url]) => requestPath(url).endsWith("/moves"));
+    expect(commands).toHaveLength(2);
+    expect(requestBody(commands[1]![1])).toBe(requestBody(commands[0]![1]));
+    expect(screen.getByRole("status")).toHaveTextContent("e4");
     http.assertNoUnexpectedRequests();
   });
   it("offers replacement on re-entry and retains a waiting room after invitation revocation", async () => {
