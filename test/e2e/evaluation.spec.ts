@@ -54,14 +54,14 @@ test("account AI observation persists every prefix and replays saved analysis wi
   await page.keyboard.press("Home");
   await expect(page.getByRole("grid")).toHaveAttribute("data-fen", details.snapshot.fen);
   await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "0");
-  await expect(page.getByRole("region", { name: "Commentary & move details" })).toContainText(
-    "Initial position · no move selected.",
-  );
+  await expect(
+    page.getByRole("region", { name: "Commentary & move details", includeHidden: true }),
+  ).toContainText("Initial position · no move selected.");
   await page.keyboard.press("ArrowRight");
   await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "1");
-  await expect(page.getByRole("region", { name: "Commentary & move details" })).toContainText(
-    "Viewer note",
-  );
+  await expect(
+    page.getByRole("region", { name: "Commentary & move details", includeHidden: true }),
+  ).toContainText("Viewer note");
   await page.getByText("Evaluation values", { exact: true }).first().click();
   await page
     .getByRole("table", { name: "Evaluation values" })
@@ -134,7 +134,9 @@ for (const human of ["white", "black"] as const) {
     await page.getByRole("button", { name: "First", exact: true }).click();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "1");
-    await expect(page.getByRole("region", { name: "Commentary & move details" })).toContainText(
+    await expect(
+      page.getByRole("region", { name: "Commentary & move details", includeHidden: true }),
+    ).toContainText(
       human === "white" ? "Human move · no model invocation." : "No commentary provided",
     );
     expect(storageCalls).toBe(0);

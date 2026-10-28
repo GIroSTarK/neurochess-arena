@@ -129,6 +129,8 @@ for (const human of ["white", "black"] as const) {
     await page.getByRole("button", { name: "First", exact: true }).click();
     await expect(page.getByRole("grid")).toHaveAttribute("data-fen", game.fen);
     const commentary = page.getByRole("region", { name: "Commentary & move details" });
+    const commentaryTab = page.getByRole("tab", { name: "Commentary", exact: true });
+    if (await commentaryTab.count()) await commentaryTab.click();
     await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(

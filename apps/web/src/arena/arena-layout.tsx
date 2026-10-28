@@ -98,9 +98,7 @@ export function ArenaLayout({
               Boolean(introduction) &&
                 "@arena-wide/arena:col-start-2 @arena-wide/arena:row-start-2",
               separateToolsRow && "@arena-wide/arena:col-start-2 @arena-wide/arena:row-start-1",
-              constrainDetails
-                ? "gap-4 @arena-wide/arena:[scrollbar-gutter:stable] @arena-wide/arena:overflow-y-auto @arena-wide/arena:pr-2 @arena-wide/arena:pb-2 @arena-wide/arena:contain-size"
-                : "gap-6",
+              constrainDetails ? "gap-4 @arena-wide/arena:pb-2" : "gap-6",
             )}
             aria-label={detailsLabel}
           >

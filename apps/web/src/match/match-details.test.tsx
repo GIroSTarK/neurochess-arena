@@ -2,6 +2,8 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { ArenaDetails } from "../arena/arena-details";
+import { ArenaLayoutContext, type ArenaLayoutMode } from "../arena/layout-mode";
 import { invocationRecords, telemetryDetails, viewerCommentary } from "../test/ai-invocations";
 import { snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
@@ -11,6 +13,46 @@ import { InvocationEvents } from "./invocation-events";
 import { TelemetryPanel } from "./telemetry-panel";
 
 describe("minimal Arena telemetry panels", () => {
+  it("retains commentary dialog text and focus across resize", async () => {
+    const user = userEvent.setup();
+    const renderDetails = (mode: ArenaLayoutMode, updated = false) => (
+      <ArenaLayoutContext value={mode}>
+        <ArenaDetails
+          moves={<p>Accepted moves</p>}
+          commentary={
+            <CommentaryPanel
+              details={
+                updated
+                  ? { ...telemetryDetails, snapshot: snapshot(["e2e4", "e7e5", "g1f3"]) }
+                  : telemetryDetails
+              }
+              records={invocationRecords()}
+              selectedPly={null}
+              loading={updated}
+            />
+          }
+          analysis={<p>Analysis content</p>}
+        />
+      </ArenaLayoutContext>
+    );
+    const { rerender } = renderLocalized(renderDetails("wide"));
+    await user.click(screen.getByRole("button", { name: "Read full commentary: White · 1. e4" }));
+    const dialog = screen.getByRole("dialog");
+    const close = within(dialog).getByRole("button", { name: "Close commentary" });
+    for (const mode of ["stacked", "wide", "stacked"] as const) {
+      rerender(renderDetails(mode, true));
+      expect(screen.getByRole("dialog")).toBe(dialog);
+      expect(within(dialog).getByText(viewerCommentary)).toBeVisible();
+      expect(close).toHaveFocus();
+      await user.keyboard("{Tab}");
+      expect(close).toHaveFocus();
+    }
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Commentary" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("renders both latest AI moves as plain text, then synchronizes details to replay selection", () => {
     const props = { details: telemetryDetails, records: invocationRecords() };
     const view = renderLocalized(<CommentaryPanel {...props} selectedPly={null} />);
@@ -20,6 +62,8 @@ describe("minimal Arena telemetry panels", () => {
     view.rerender(<CommentaryPanel {...props} selectedPly={1} />);
     expect(screen.queryByText("No commentary provided")).not.toBeInTheDocument();
     expect(screen.getByText("300 ms")).toBeVisible();
+    expect(screen.getByText("Accepted on attempt 3")).toBeVisible();
+    expect(screen.getByText("All-attempt estimate")).toBeVisible();
     expect(screen.getByText("Input tokens")).toBeVisible();
     expect(screen.getByText("Output tokens")).toBeVisible();
     expect(screen.queryByText("Total tokens")).not.toBeInTheDocument();

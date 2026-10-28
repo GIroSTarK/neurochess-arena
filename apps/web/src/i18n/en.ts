@@ -622,6 +622,7 @@ export const en = {
   },
   details: {
     label: "Game detail tabs",
+    commentary: "Commentary",
     analysis: "Analysis",
     events: "Events",
   },
@@ -646,7 +647,7 @@ export const en = {
     longModel: "Model-A-Experimental-LongContext-Reasoning-Configuration-2026-09 (fictional)",
     providerA: "Example provider A",
     providerB: "Example provider B",
-    commentary: "Commentary",
+    commentary: "Illustrative commentary",
     commentarySeat: "{{color}} commentary",
     commentaryMove: "{{color}} · {{model}} · {{move}}",
     noCommentary: "No commentary provided",

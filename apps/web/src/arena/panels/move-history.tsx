@@ -30,6 +30,7 @@ export function MoveHistory({
   const tableHead = useRef<HTMLTableSectionElement>(null);
   const selectedMove = useRef<HTMLButtonElement>(null);
   const followLatest = useRef(true);
+  const lastScrolled = useRef<{ count: number; ply: number | undefined } | null>(null);
   const rows = [];
   for (let index = 0; index < moves.length; index += 2) {
     rows.push({ number: index / 2 + 1, white: moves[index], black: moves[index + 1] });
@@ -37,6 +38,11 @@ export function MoveHistory({
   useLayoutEffect(() => {
     const element = scroller.current;
     if (!element) return;
+    // Revealing an unchanged tab must preserve a reader's own scroll position.
+    if (lastScrolled.current?.count === moves.length && lastScrolled.current.ply === selectedPly) {
+      return;
+    }
+    lastScrolled.current = { count: moves.length, ply: selectedPly };
     if (selectedPly === undefined) {
       if (followLatest.current) element.scrollTop = element.scrollHeight;
       return;

@@ -7,7 +7,13 @@ import { expect, submitGame, test } from "./fixtures";
 import { confirm, createRoom } from "./room-helpers";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
 
-async function inspectLayouts(page: Page, info: TestInfo, flow: string, action: Locator) {
+async function inspectLayouts(
+  page: Page,
+  info: TestInfo,
+  flow: string,
+  action: Locator,
+  selectedTab?: "Analysis" | "Events",
+) {
   const widths = info.project.use.isMobile ? [320, 390] : [768, 1024, 1440];
   for (const width of widths) {
     for (const enlarged of [false, true]) {
@@ -18,6 +24,9 @@ async function inspectLayouts(page: Page, info: TestInfo, flow: string, action: 
         await document.fonts.ready;
         await new Promise(requestAnimationFrame);
       }, enlarged);
+      if (selectedTab) {
+        await page.getByRole("tab", { name: new RegExp(`^${selectedTab}`) }).click();
+      }
       const overflow = await page.evaluate(() => {
         const viewport = document.documentElement.clientWidth;
         return {
@@ -82,13 +91,16 @@ test("entry, live analysis, recovery and replay keep expanded telemetry and acti
   const { details } = await submitGame(page);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const commentaryTab = page.getByRole("tab", { name: "Commentary", exact: true });
+  if (await commentaryTab.count()) await commentaryTab.click();
   await expect(page.getByRole("term").filter({ hasText: "All-attempt estimate" })).toHaveCount(2);
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   await inspectLayouts(
     page,
     info,
     "live-analysis",
     page.getByRole("button", { name: /^Refresh details/ }),
+    "Analysis",
   );
   await page.reload();
   await expect(page.getByRole("button", { name: "Resume game", exact: true })).toBeVisible();
@@ -107,6 +119,7 @@ test("entry, live analysis, recovery and replay keep expanded telemetry and acti
     info,
     "replay-analysis",
     page.getByRole("button", { name: /^Refresh details/ }),
+    "Analysis",
   );
   await page.getByRole("tab", { name: "Events", exact: true }).click();
   await inspectLayouts(
@@ -114,6 +127,7 @@ test("entry, live analysis, recovery and replay keep expanded telemetry and acti
     info,
     "replay-events",
     page.getByRole("button", { name: /^New game/ }),
+    "Events",
   );
   await page.goto("/history");
   await expect(page.getByRole("link", { name: /Open replay/ })).toHaveAttribute(

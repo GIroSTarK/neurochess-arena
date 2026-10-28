@@ -2,10 +2,16 @@ import AxeBuilder from "@axe-core/playwright";
 import { gameInvocationsSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
-import { isArenaWide } from "./arena-layout";
+import { expectArenaTransition, isArenaWide } from "./arena-layout";
 import { API_ORIGIN } from "./environment";
 import { activate, expect, square, test } from "./fixtures";
 import { expectUnbrokenWords, setPseudoLocalization } from "./text-layout";
+
+async function showCommentary(page: Page) {
+  const tab = page.getByRole("tab", { name: /^Commentary/ });
+  if (await isArenaWide(page)) await expect(tab).toHaveCount(0);
+  else await tab.click();
+}
 
 async function start(page: Page, key: string, human?: "white" | "black") {
   await page.goto("/");
@@ -36,6 +42,125 @@ async function start(page: Page, key: string, human?: "white" | "black") {
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
 
+test("responsive inspector retains one commentary dialog, separate selections and data lifetimes", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await start(page, "telemetry-fixture");
+  await page.getByLabel("Delay between moves").selectOption("5000");
+  const commentary = page.getByRole("region", {
+    name: "Commentary & move details",
+    includeHidden: true,
+  });
+  const read = commentary.getByRole("button", {
+    name: "Read full commentary: White · 1. f3",
+    exact: true,
+  });
+  await expect(read).toHaveAttribute("aria-disabled", "false");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
+    "aria-disabled",
+    "false",
+  );
+  const transition = await expectArenaTransition(page);
+  const board = page.getByRole("grid");
+  const boardNode = await board.elementHandle();
+  const commentaryNode = await commentary.elementHandle();
+  const fen = await board.getAttribute("data-fen");
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const refresh = page.getByRole("button", { name: "Refresh details", exact: true });
+  await expect(refresh).toHaveAttribute("aria-disabled", "false");
+  let release: (() => void) | undefined;
+  const updated = "New commentary received while the reader keeps the original move open.";
+  await page.route("**/invocations", async (route) => {
+    const response = await route.fetch();
+    const records = gameInvocationsSchema.parse(await response.json());
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await route.fulfill({
+      response,
+      json: {
+        ...records,
+        turns: records.turns.map((turn) => ({
+          ...turn,
+          attempts: turn.attempts.map((attempt) => ({
+            ...attempt,
+            commentary: attempt.outcome === "accepted" ? updated : attempt.commentary,
+          })),
+        })),
+      },
+    });
+  });
+  await refresh.click();
+  await expect.poll(() => Boolean(release)).toBe(true);
+  await read.click();
+  const dialog = page.getByRole("dialog", { name: "Commentary · White · 1. f3" });
+  const dialogNode = await dialog.elementHandle();
+  const frozen = await dialog.textContent();
+  let reads = 0;
+  let turns = 0;
+  let workers = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/invocations")) reads++;
+    if (request.url().endsWith("/ai-turn")) turns++;
+  });
+  page.on("worker", () => {
+    workers++;
+  });
+  for (const width of [
+    320,
+    390,
+    768,
+    1024,
+    1025,
+    transition - 1,
+    transition,
+    transition + 1,
+    1440,
+  ]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 600 : 900 });
+    await expect(dialog.getByRole("button", { name: "Close commentary" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Close commentary" })).toBeFocused();
+    expect(await dialog.evaluate((node, original) => node === original, dialogNode)).toBe(true);
+    expect(await dialog.textContent()).toBe(frozen);
+    expect(await commentary.evaluate((node, original) => node === original, commentaryNode)).toBe(
+      true,
+    );
+    expect(await board.evaluate((node, original) => node === original, boardNode)).toBe(true);
+    await expect(board).toHaveAttribute("data-fen", fen!);
+    await expect(
+      page.getByRole("region", { name: "Commentary & move details", includeHidden: true }),
+    ).toHaveCount(1);
+  }
+  expect({ reads, turns, workers }).toEqual({ reads: 0, turns: 0, workers: 0 });
+  release!();
+  await expect(commentary.getByText(updated, { exact: true })).toBeVisible();
+  expect(await dialog.textContent()).toBe(frozen);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("tab", { name: "Commentary", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tab", { name: "Commentary", exact: true })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await showCommentary(page);
+  await expect(commentary.getByText(updated, { exact: true })).toBeVisible();
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(
+      page.getByRole("tab", { name: width === 1440 ? "Analysis" : "Commentary", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({
+      path: testInfo.outputPath(`responsive-inspector-${width}.png`),
+      fullPage: true,
+    });
+  }
+});
+
 test("stored estimates compare identical seats, include retries and follow live and saved replay", async ({
   page,
 }, testInfo) => {
@@ -50,7 +175,11 @@ test("stored estimates compare identical seats, include retries and follow live 
   await page.getByLabel("Delay between moves").selectOption("5000");
   await expect.poll(() => Boolean(release)).toBe(true);
   release!();
-  const commentary = page.getByRole("region", { name: "Commentary & move details" });
+  await showCommentary(page);
+  const commentary = page.getByRole("region", {
+    name: "Commentary & move details",
+    includeHidden: true,
+  });
   await expect(commentary.getByText("$0.0024", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
@@ -84,9 +213,12 @@ test("stored estimates compare identical seats, include retries and follow live 
     ),
   ).toEqual(["0.001200000000", "0.001200000000", "0.000000000000"]);
   await page.getByRole("button", { name: "First", exact: true }).click();
+  await showCommentary(page);
   await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   await expect(game.getByText("$0.006", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next", exact: true }).click();
+  await showCommentary(page);
   await expect(commentary.getByText("$0.0024", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Events", exact: true }).click();
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
@@ -119,9 +251,10 @@ test("incomplete billing keeps known details while game and seat estimates are u
   ).toBeVisible();
   await page.getByRole("button", { name: "First", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
+  await showCommentary(page);
   await expect(
     page
-      .getByRole("region", { name: "Commentary & move details" })
+      .getByRole("region", { name: "Commentary & move details", includeHidden: true })
       .getByText("Usage incomplete", { exact: true }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Events", exact: true }).click();
@@ -196,20 +329,26 @@ for (const human of [undefined, "white", "black"] as const) {
     await page.getByLabel("Delay between moves").selectOption("5000");
     await page.evaluate(() => document.fonts.ready);
     const rail = page.getByRole("complementary", { name: "Game details" });
-    const commentary = page.getByRole("region", { name: "Commentary & move details" });
+    const commentary = page.getByRole("region", {
+      name: "Commentary & move details",
+      includeHidden: true,
+    });
+    await showCommentary(page);
     const geometry = () =>
       rail.evaluate((element) => {
         const top = element.getBoundingClientRect().top;
         return [
           element.querySelector('[role="tablist"]')!.getBoundingClientRect().top - top,
-          ...[...element.querySelectorAll("article")].flatMap((card) => {
-            const rect = card.getBoundingClientRect();
-            return [
-              rect.top - top,
-              rect.height,
-              card.querySelector("dl")!.getBoundingClientRect().top - top,
-            ];
-          }),
+          ...[...element.querySelectorAll("article")]
+            .filter((card) => card.checkVisibility())
+            .flatMap((card) => {
+              const rect = card.getBoundingClientRect();
+              return [
+                rect.top - top,
+                rect.height,
+                card.querySelector("dl")!.getBoundingClientRect().top - top,
+              ];
+            }),
         ];
       });
     const before = await geometry();
@@ -256,6 +395,7 @@ for (const human of [undefined, "white", "black"] as const) {
       .getByRole("region", { name: "Game totals", exact: true })
       .getByText(/^Recorded attempts:/);
     await expect(count).toBeVisible();
+    const analysisGeometry = await geometry();
     const recordedCount = await count.textContent();
     await expect(
       page.getByRole("button", { name: "Refresh details", exact: true }),
@@ -266,16 +406,19 @@ for (const human of [undefined, "white", "black"] as const) {
     await page.getByRole("button", { name: "Refresh details", exact: true }).click();
     await expect.poll(() => Boolean(releaseRecords)).toBe(true);
     await expect(count).toHaveText(recordedCount!);
-    await expect(commentary.getByText("Controls the center.", { exact: true })).toBeVisible();
-    expect(await geometry()).toEqual(before);
+    await expect(commentary.getByText("Controls the center.", { exact: true })).toHaveCount(1);
+    expect(await geometry()).toEqual(analysisGeometry);
     hold = false;
     releaseRecords!();
-    await expect(commentary.getByText(longCommentary, { exact: true })).toBeVisible();
-    expect(await geometry()).toEqual(before);
+    await expect(commentary.getByText(longCommentary, { exact: true })).toHaveCount(1);
+    expect(await geometry()).toEqual(analysisGeometry);
     await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    await showCommentary(page);
+    await expect(commentary.getByText(longCommentary, { exact: true })).toBeVisible();
+    expect(await geometry()).toEqual(before);
   });
 }
 
@@ -300,7 +443,11 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   );
   const response = await page.request.get(`${API_ORIGIN}/games/${gameId}/invocations`);
   const records = gameInvocationsSchema.parse(await response.json());
-  const commentary = page.getByRole("region", { name: "Commentary & move details" });
+  const commentary = page.getByRole("region", {
+    name: "Commentary & move details",
+    includeHidden: true,
+  });
+  await showCommentary(page);
   await expect(commentary.getByText("No commentary provided", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "First", exact: true }).click();
   await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
@@ -322,6 +469,10 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   const movesTab = page.getByRole("tab", { name: "Moves", exact: true });
   await movesTab.focus();
   await movesTab.press("ArrowRight");
+  if (!(await isArenaWide(page))) {
+    await expect(page.getByRole("tab", { name: "Commentary", exact: true })).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+  }
   await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tabpanel", { name: "Analysis", exact: true })).toBeVisible();
@@ -340,6 +491,7 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   });
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
+    await page.getByRole("tab", { name: /^Analysis/ }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
@@ -368,9 +520,10 @@ test("provider pause keeps the invalid budget and attempt history through manual
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await page.getByRole("button", { name: "Stop game", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
+  await showCommentary(page);
   await expect(
     page
-      .getByRole("region", { name: "Commentary & move details" })
+      .getByRole("region", { name: "Commentary & move details", includeHidden: true })
       .getByText("No commentary provided", { exact: true }),
   ).toBeVisible();
   const previousUrl = page.url();
@@ -404,7 +557,11 @@ test("live details stay within the primary controls across tabs and long comment
 }, testInfo) => {
   await start(page, "telemetry-fixture");
   await page.getByLabel("Delay between moves").selectOption("5000");
-  const commentary = page.getByRole("region", { name: "Commentary & move details" });
+  const commentary = page.getByRole("region", {
+    name: "Commentary & move details",
+    includeHidden: true,
+  });
+  await showCommentary(page);
   await expect(commentary.getByRole("heading", { name: "Black · 1. e5" })).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
@@ -412,17 +569,17 @@ test("live details stay within the primary controls across tabs and long comment
   const widths = desktop ? [1025, 1280, 1440, 1920] : [320, 390, 768, 1024];
   const rail = page.getByRole("complementary", { name: "Game details" });
   const controls = page.getByRole("region", { name: "Game controls" });
-  const anchors = new Map<number, { tabs: number; cards: number[] }>();
+  const anchors = new Map<string, { tabs: number; cards: number[] }>();
   async function checkRail() {
     const railBounds = await rail.boundingBox();
     const controlsBounds = await controls.boundingBox();
     expect(railBounds).not.toBeNull();
     expect(controlsBounds).not.toBeNull();
     if (await isArenaWide(page)) {
-      expect(railBounds!.y + railBounds!.height).toBeCloseTo(
-        controlsBounds!.y + controlsBounds!.height,
-        0,
+      expect(railBounds!.y + railBounds!.height).toBeGreaterThanOrEqual(
+        controlsBounds!.y + controlsBounds!.height - 1,
       );
+      expect((await page.getByRole("tabpanel").boundingBox())!.height).toBeGreaterThanOrEqual(320);
       expect(
         await rail.evaluate((element) => element.scrollHeight - element.clientHeight),
       ).toBeLessThanOrEqual(1);
@@ -436,15 +593,15 @@ test("live details stay within the primary controls across tabs and long comment
       const top = element.getBoundingClientRect().top;
       return {
         tabs: element.querySelector('[role="tablist"]')!.getBoundingClientRect().top - top,
-        cards: [...element.querySelectorAll("article")].map(
-          (card) => card.getBoundingClientRect().height,
-        ),
+        cards: [...element.querySelectorAll("article")]
+          .filter((card) => card.checkVisibility())
+          .map((card) => card.getBoundingClientRect().height),
       };
     });
-    const width = page.viewportSize()!.width;
-    const previous = anchors.get(width);
+    const anchor = `${page.viewportSize()!.width}-${await page.getByRole("tab", { selected: true }).innerText()}`;
+    const previous = anchors.get(anchor);
     if (previous) expect(geometry).toEqual(previous);
-    else anchors.set(width, geometry);
+    else anchors.set(anchor, geometry);
     await expectUnbrokenWords(rail.locator("button"));
     const moves = page.getByRole("tabpanel", { name: "Moves", exact: true });
     if (await moves.isVisible()) {
@@ -501,6 +658,7 @@ test("live details stay within the primary controls across tabs and long comment
     });
   });
   await page.getByRole("button", { name: "Refresh details", exact: true }).click();
+  await showCommentary(page);
   await expect(commentary.getByText(longCommentary, { exact: true })).toHaveCount(2);
   const previewSizes = await commentary
     .getByText(longCommentary, { exact: true })
@@ -528,6 +686,7 @@ test("live details stay within the primary controls across tabs and long comment
       await checkRail();
     }
   }
+  await showCommentary(page);
   const read = commentary.getByRole("button", { name: "Read full commentary: Black · 1. e5" });
   // WebKit pointer clicks do not focus buttons; exercise keyboard focus restoration explicitly.
   await read.focus();
@@ -574,7 +733,9 @@ test("live details stay within the primary controls across tabs and long comment
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(read).toBeFocused();
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
   const events = page.getByRole("tabpanel", { name: "Events", exact: true });
+  await events.scrollIntoViewIfNeeded();
   await events.focus();
   await expect(events).toBeFocused();
   for (let step = 0; step < 20; step++) {
@@ -590,6 +751,7 @@ test("live details stay within the primary controls across tabs and long comment
   });
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
+    await showCommentary(page);
     await commentary.getByRole("button", { name: /^Read full commentary: Black/ }).click();
     const expanded = page.getByRole("dialog");
     await expect(expanded.getByRole("button", { name: /^Close commentary/ })).toBeInViewport();

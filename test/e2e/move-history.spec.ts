@@ -4,7 +4,17 @@ import type * as webI18n from "../../apps/web/src/i18n";
 
 import { expectArenaLayout, expectArenaTransition } from "./arena-layout";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
-import { acceptedMove, activate, expect, playMove, square, startSandbox, test } from "./fixtures";
+import {
+  acceptedMove,
+  activate,
+  expect,
+  playMove,
+  readSnapshot,
+  square,
+  startSandbox,
+  test,
+} from "./fixtures";
+import { createRoom, joinRoom } from "./room-helpers";
 import { setPseudoLocalization } from "./text-layout";
 
 const longGameMoves = [
@@ -15,6 +25,119 @@ const longGameMoves = [
 ]
   .join(" ")
   .split(" ");
+
+test("preserves a long inspector history and selected board position across tabs and resizing", async ({
+  page,
+  newContext,
+}) => {
+  const { invitation, gameId } = await createRoom(page, "White");
+  const peer = await (await newContext()).newPage();
+  await joinRoom(peer, invitation, gameId);
+  await page.getByRole("link", { name: "Arena", exact: true }).click();
+  await peer.getByRole("link", { name: "Arena", exact: true }).click();
+  let current = await readSnapshot(page, gameId);
+  for (const move of longGameMoves) {
+    const request = current.turn === "white" ? page.request : peer.request;
+    const response = await request.post(`${API_ORIGIN}/games/${gameId}/moves`, {
+      headers: { Origin: WEB_ORIGIN },
+      data: { gameId, move, expectedVersion: current.version, commandId: crypto.randomUUID() },
+    });
+    expect(response.status()).toBe(200);
+    current = gameSnapshotSchema.parse(await response.json());
+  }
+  await page.goto(`/games/${gameId}`);
+  await page.getByRole("tab", { name: "Moves", exact: true }).click();
+  const liveHistory = page.getByRole("region", { name: "Move history", exact: true });
+  for (const following of [true, false]) {
+    await liveHistory.evaluate((element, following) => {
+      element.scrollTop = following ? element.scrollHeight : 80;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    }, following);
+    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+    for (const move of following ? ["e2d3", "e7d6"] : ["d3e2", "d6e7"]) {
+      const request = current.turn === "white" ? page.request : peer.request;
+      const response = await request.post(`${API_ORIGIN}/games/${gameId}/moves`, {
+        headers: { Origin: WEB_ORIGIN },
+        data: { gameId, move, expectedVersion: current.version, commandId: crypto.randomUUID() },
+      });
+      expect(response.status()).toBe(200);
+      current = gameSnapshotSchema.parse(await response.json());
+    }
+    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", current.fen);
+    await page.getByRole("tab", { name: "Moves", exact: true }).click();
+    if (following) {
+      expect
+        .soft(
+          await liveHistory.evaluate(
+            (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+          ),
+        )
+        .toBeLessThanOrEqual(1);
+    } else {
+      expect(await liveHistory.evaluate((element) => element.scrollTop)).toBe(80);
+    }
+  }
+  const result = await page.request.post(`${API_ORIGIN}/games/${gameId}/lifecycle`, {
+    headers: { Origin: WEB_ORIGIN },
+    data: {
+      gameId,
+      action: "abort",
+      expectedVersion: current.version,
+      commandId: crypto.randomUUID(),
+    },
+  });
+  expect(result.status()).toBe(200);
+  await page.goto(`/games/${gameId}`);
+  await page.getByRole("tab", { name: "Moves", exact: true }).click();
+  await page.getByRole("button", { name: "View ply 2: a6", exact: true }).click();
+  const board = page.getByRole("grid");
+  const node = await board.elementHandle();
+  const history = page.getByRole("region", { name: "Move history", exact: true });
+  const historyNode = await history.elementHandle();
+  const transition = await expectArenaTransition(page);
+  for (const width of [1440, 768, 390, transition - 1, transition, transition + 1]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByRole("tab", { name: "Moves", exact: true }).click();
+    expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+      true,
+    );
+    await history.evaluate((element) => {
+      element.scrollTop = 80;
+    });
+    await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+    await page.getByRole("tab", { name: "Moves", exact: true }).click();
+    expect(await history.evaluate((element) => element.scrollTop)).toBe(80);
+    expect(await history.evaluate((element, original) => element === original, historyNode)).toBe(
+      true,
+    );
+    expect(await board.evaluate((element, original) => element === original, node)).toBe(true);
+    await expect(board).toHaveAttribute("data-fen", current.moves[1]!.fen);
+    await expect(
+      history.getByRole("button", { name: "View ply 2: a6", exact: true }),
+    ).toHaveAttribute("aria-current", "step");
+  }
+  await history.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const position = page.getByLabel("Replay position", { exact: true });
+  await position.focus();
+  await page.keyboard.press("End");
+  await expect(board).toHaveAttribute("data-fen", current.fen);
+  await page.getByRole("tab", { name: "Moves", exact: true }).click();
+  await expect
+    .poll(() =>
+      history.locator('[aria-current="step"]').evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const panel = element.closest('[role="region"]')!;
+        return Math.max(
+          panel.querySelector("thead")!.getBoundingClientRect().bottom - bounds.top,
+          bounds.bottom - panel.getBoundingClientRect().bottom,
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(1);
+});
 
 test("uses available rail height without letting move rows grow the arena", async ({
   page,

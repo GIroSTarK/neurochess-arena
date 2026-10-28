@@ -52,7 +52,10 @@ export function Dialog({ title, description, onCancel, closeLabel, children }: D
       dialog.close();
       // Browsers restore focus on close; the jsdom polyfill does not. Never scroll the page for it.
       if (trigger instanceof HTMLElement && trigger.isConnected) {
-        trigger.focus({ preventScroll: true });
+        const hiddenPanel = trigger.closest('[role="tabpanel"][hidden]');
+        const tabId = hiddenPanel?.getAttribute("aria-labelledby");
+        const target = tabId ? document.getElementById(tabId) : trigger;
+        target?.focus({ preventScroll: true });
       }
     };
   }, []);

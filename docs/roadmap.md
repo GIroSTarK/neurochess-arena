@@ -201,7 +201,7 @@ Exit condition: every MVP acceptance criterion in `docs/product.md` is verified 
 Presentation follow-up to the completed MVP, tracked in the [approved implementation plan](superpowers/plans/2026-10-28-board-first-arena-redesign.md).
 
 - [x] Task 1: shared container-based geometry, a board that retains its size when the rail appears, compact equal player identities with full-name dialogs, and preserved focus and component state across resizing.
-- [ ] Task 2: responsive inspector and stable commentary composition.
+- [x] Task 2: responsive inspector with separate wide/stacked selections, stable commentary dialogs, and preserved move-history scrolling.
 - [ ] Tasks 3–6: control grouping, recovery presentation, room composition, replay refinements, and complete redesign acceptance.
 
 ## Post-MVP candidates

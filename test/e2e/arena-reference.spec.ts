@@ -3,7 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type * as webI18n from "../../apps/web/src/i18n";
 import { createReferenceGame } from "../../apps/web/src/reference/scenarios";
 
-import { expectArenaLayout, expectArenaTransition } from "./arena-layout";
+import { expectArenaLayout, expectArenaTransition, isArenaWide } from "./arena-layout";
 import { API_ORIGIN, DISABLED_WEB_ORIGIN } from "./environment";
 import { activate, expect, startSandbox, test } from "./fixtures";
 import { expectSelectArrowSpacing } from "./select-controls";
@@ -21,7 +21,10 @@ test("resizing retains inspected moves, player dialogs and readable compact iden
   const boardNode = await board.elementHandle();
   const fen = await board.getAttribute("data-fen");
   const transition = await expectArenaTransition(page);
-  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByRole("tab", { name: "Events", exact: true }).click();
+  }
   const panel = page.getByRole("tabpanel", { name: "Events", exact: true });
   const panelNode = await panel.elementHandle();
   const trigger = page.getByRole("button", { name: /^View White identity:/ });
@@ -134,8 +137,12 @@ test("shared arena reference: mixed seats, live and replay", async ({ page }, te
   await expect(board.getByRole("gridcell")).toHaveCount(64);
   await expect(page.getByRole("button", { name: /^Resign / })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Resign Black" })).toBeVisible();
+  if (!(await isArenaWide(page))) {
+    await page.getByRole("tab", { name: "Commentary", exact: true }).click();
+  }
   await expect(page.getByRole("group", { name: /^(White|Black) commentary$/ })).toHaveCount(1);
   await expect(page.getByRole("group", { name: /^(White|Black) telemetry$/ })).toHaveCount(1);
+  await page.getByRole("tab", { name: "Moves", exact: true }).click();
   const white = await page.getByLabel("White player").boundingBox();
   const black = await page.getByLabel("Black player").boundingBox();
   expect(white).not.toBeNull();
@@ -153,8 +160,12 @@ test("shared arena reference: mixed seats, live and replay", async ({ page }, te
   await expect(board).toHaveAttribute("data-fen", createReferenceGame(true).snapshot().fen);
   await activate(page.getByRole("button", { name: "First", exact: true }), touch);
   await expect(page.getByText("Ply 0 of 4")).toBeVisible();
+  if (!(await isArenaWide(page))) {
+    await page.getByRole("tab", { name: "Commentary", exact: true }).click();
+  }
   await expect(page.getByText("No commentary provided", { exact: true })).toHaveCount(1);
   await expect(page.getByText("Unavailable", { exact: true })).toHaveCount(3);
+  await page.getByRole("tab", { name: "Moves", exact: true }).click();
   await activate(page.getByRole("button", { name: "View ply 2: e5", exact: true }), touch);
   await expect(page.getByText("Ply 2 of 4")).toBeVisible();
   await expect(board).toHaveAttribute(
@@ -164,6 +175,10 @@ test("shared arena reference: mixed seats, live and replay", async ({ page }, te
   const movesTab = page.getByRole("tab", { name: "Moves", exact: true });
   await movesTab.focus();
   await page.keyboard.press("ArrowRight");
+  if (!(await isArenaWide(page))) {
+    await expect(page.getByRole("tab", { name: "Commentary", exact: true })).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+  }
   await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toBeFocused();
   await expect(movesTab).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");

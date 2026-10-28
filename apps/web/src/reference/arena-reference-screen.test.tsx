@@ -31,6 +31,7 @@ describe("shared arena reference scenarios", () => {
     const resignations = screen.queryAllByRole("button", { name: /^Resign / });
     expect(resignations).toHaveLength(scenario.human ? 1 : 0);
     if (scenario.human) expect(resignations[0]).toHaveTextContent("Resign " + scenario.human);
+    if (scenario.models > 0) await user.click(screen.getByRole("tab", { name: "Commentary" }));
     expect(screen.queryAllByRole("group", { name: /^(White|Black) commentary$/ })).toHaveLength(
       scenario.models,
     );
@@ -38,6 +39,7 @@ describe("shared arena reference scenarios", () => {
       scenario.models,
     );
     expect(screen.queryByRole("tablist") !== null).toBe(scenario.models > 0);
+    if (scenario.models > 0) await user.click(screen.getByRole("tab", { name: "Moves" }));
     for (const color of ["White", "Black"]) {
       expect(screen.getByLabelText(`${color} player`)).toBeVisible();
     }

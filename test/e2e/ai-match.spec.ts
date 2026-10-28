@@ -154,6 +154,8 @@ test("ordinary Pause preserves keys and details without credential replacement c
     "false",
   );
   await expect(page.getByRole("button", { name: /Change API keys|Hide API keys/ })).toHaveCount(0);
+  const commentaryTab = page.getByRole("tab", { name: "Commentary", exact: true });
+  if (await commentaryTab.count()) await commentaryTab.click();
   await expect(page.getByRole("region", { name: "Commentary & move details" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Moves", exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("ordinary-pause.png"), fullPage: true });

@@ -52,9 +52,9 @@ export function CommentaryPanel({
       : [selected ? plyColor(selected.ply) : null];
   const pending = !error && (loading || !records || records.version < details.snapshot.version);
   return (
-    <section aria-label={t("telemetry.commentary")} className="grid min-w-0 shrink-0 gap-3">
+    <section aria-label={t("telemetry.commentary")} className="grid min-w-0 shrink-0 gap-2">
       <h2 className="font-display text-section">{t("telemetry.commentary")}</h2>
-      <div className="grid auto-rows-fr gap-3">
+      <div className="grid auto-rows-fr gap-2">
         {colors.map((color) => {
           const move = selected ?? moves.findLast((move) => plyColor(move.ply) === color);
           const attempt = move ? acceptedAttempt(records, move.ply) : undefined;
@@ -82,7 +82,7 @@ export function CommentaryPanel({
           return (
             <article
               key={color ?? "initial"}
-              className="@container grid min-w-0 gap-2 border-l-2 border-divider pl-3"
+              className="@container grid min-w-0 gap-1 border-b border-divider pb-2 last:border-0 last:pb-0"
             >
               <div className="grid min-h-target grid-cols-1 items-center gap-x-2 @min-[16rem]:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0">
@@ -102,8 +102,9 @@ export function CommentaryPanel({
                   aria-label={t("telemetry.readCommentary", { move: moveLabel })}
                   aria-haspopup="dialog"
                   aria-disabled={!ai || !commentary}
-                  onClick={() => {
+                  onClick={(event) => {
                     if (commentary && ai) {
+                      event.currentTarget.focus({ preventScroll: true });
                       setReading({
                         gameId: details.snapshot.gameId,
                         move: moveLabel,
@@ -116,7 +117,7 @@ export function CommentaryPanel({
                   {t("telemetry.read")}
                 </Button>
               </div>
-              <div className="grid min-h-[2lh] min-w-0 text-body wrap-anywhere whitespace-pre-wrap text-text-secondary">
+              <div className="grid min-h-[2lh] min-w-0 text-label wrap-anywhere whitespace-pre-wrap text-text-secondary">
                 {/* Translated empty/loading messages must fit without changing the preview's height. */}
                 {previewMessages.map((message) => (
                   <span
@@ -135,7 +136,7 @@ export function CommentaryPanel({
               <dl
                 aria-hidden={!ai}
                 className={cx(
-                  "grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-2 text-label",
+                  "grid grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))] gap-x-2 gap-y-1 text-label",
                   !ai && "invisible",
                 )}
               >

@@ -1,12 +1,65 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { renderLocalized } from "../test/render";
 
 import { DetailTabs } from "./detail-tabs";
 
 describe("detail tabs", () => {
+  it("uses controlled selection and skips pinned panels during keyboard navigation", async () => {
+    const user = userEvent.setup();
+    const onSelectTab = vi.fn();
+    const tabs = [
+      { id: "moves", label: "Moves", content: <p>Moves content</p> },
+      { id: "commentary", label: "Commentary", content: <input aria-label="Reader note" /> },
+      { id: "analysis", label: "Analysis", content: <p>Analysis content</p> },
+    ] as const;
+    const { rerender } = renderLocalized(
+      <DetailTabs
+        label="Details"
+        tabs={tabs}
+        selectedTab="analysis"
+        onSelectTab={onSelectTab}
+        pinnedTabIds={["commentary"]}
+      />,
+    );
+    const pinned = screen.getByRole("region", { name: "Commentary" });
+    expect(screen.getByRole("tab", { name: "Analysis" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("tabindex", "-1");
+    expect(
+      pinned.compareDocumentPosition(screen.getByRole("tablist")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Commentary" })).not.toBeInTheDocument();
+    screen.getByRole("tab", { name: "Moves" }).focus();
+    await user.keyboard("{ArrowRight}{Home}{Enter}");
+    expect(onSelectTab).toHaveBeenCalledExactlyOnceWith("moves");
+    expect(screen.getByRole("tabpanel", { name: "Analysis" })).toBeVisible();
+    rerender(
+      <DetailTabs
+        label="Details"
+        tabs={tabs}
+        selectedTab="moves"
+        onSelectTab={onSelectTab}
+        pinnedTabIds={["commentary"]}
+      />,
+    );
+    expect(screen.getByRole("tabpanel", { name: "Moves" })).toBeVisible();
+  });
+
+  it("recovers focus to a selectable tab when the focused tab becomes pinned", async () => {
+    const tabs = [
+      { id: "moves", label: "Moves", content: <p>Moves content</p> },
+      { id: "commentary", label: "Commentary", content: <input aria-label="Reader note" /> },
+    ] as const;
+    const { rerender } = renderLocalized(<DetailTabs label="Details" tabs={tabs} />);
+    await userEvent.setup().click(screen.getByRole("tab", { name: "Commentary" }));
+    rerender(<DetailTabs label="Details" tabs={tabs} pinnedTabIds={["commentary"]} />);
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveFocus();
+    expect(screen.getByRole("region", { name: "Commentary" })).toBeVisible();
+  });
+
   it("moves focus with arrows and Home/End, activates explicitly, and preserves panel state", async () => {
     const user = userEvent.setup();
     renderLocalized(
