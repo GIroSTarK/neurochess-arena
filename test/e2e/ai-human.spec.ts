@@ -178,14 +178,17 @@ for (const human of ["white", "black"] as const) {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
     expect((await readSnapshot(page, game.gameId)).moves).toEqual(before.moves);
-    const input = page.getByLabel(/· OpenAI · API key/, { exact: false });
-    await expect(input).toHaveCount(1);
-    await expect(input).toHaveValue("");
     await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
+    const input = page.getByLabel(/· OpenAI · API key/, { exact: false });
+    await expect(input).toHaveCount(1);
+    await expect(input).toHaveValue("");
     await input.fill("slow-fixture");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Restore keys", exact: true })).toBeFocused();
     await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
     await expect(page.getByRole("button", { name: "Next move", exact: true })).toHaveAttribute(
       "aria-disabled",
@@ -225,8 +228,10 @@ for (const human of ["white", "black"] as const) {
     await expect(square(page, human === "white" ? "f4" : "d4")).toBeFocused();
     await page.getByRole("button", { name: /Flip board/ }).click();
     await page.reload();
-    await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toBeVisible();
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Re-enter your API keys" })).toBeVisible();
     await page.getByLabel(/· OpenAI · API key/).fill("match-fixture");
+    await page.getByRole("button", { name: "Keep paused", exact: true }).click();
     const before = await readSnapshot(page, game.gameId);
     await page.getByRole("button", { name: "Next move", exact: true }).click();
     await expect

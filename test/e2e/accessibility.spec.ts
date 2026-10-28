@@ -78,15 +78,17 @@ test("keyboard account, setup, key recovery, replay, export and history form one
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
   await page.reload();
   const key = page.getByLabel("Black · OpenAI · API key", { exact: true });
-  await expect(key).toBeVisible();
   const resume = page.getByRole("button", { name: "Resume", exact: true });
   await enter(page, resume);
   await expect(resume).toHaveAttribute("aria-disabled", "true");
   await expect(resume).toBeFocused();
   await expectRenderedContrast(page);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+  await enter(page, page.getByRole("button", { name: "Restore keys", exact: true }));
+  await expect(key).toBeVisible();
   await tabTo(page, key);
   await page.keyboard.insertText("match-fixture");
+  await enter(page, page.getByRole("button", { name: "Keep paused", exact: true }));
   await enter(page, resume);
   await expect(page.getByRole("grid")).toHaveAttribute("aria-readonly", "false");
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -136,6 +138,11 @@ test("keyboard account, setup, key recovery, replay, export and history form one
 
   await tabTo(page, page.getByRole("tab", { name: "Moves", exact: true }));
   await page.keyboard.press("ArrowRight");
+  const commentary = page.getByRole("tab", { name: "Commentary", exact: true });
+  if (await commentary.isVisible()) {
+    await expect(commentary).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+  }
   await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toBeFocused();
   await page.keyboard.press("Space");
   const slider = page.getByRole("slider", { name: "Replay position", exact: true });

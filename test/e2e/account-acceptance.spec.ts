@@ -118,6 +118,7 @@ for (const mode of ["ai_vs_ai", "ai_vs_human"] as const) {
       ).toBeVisible();
       await expect(recovered.getByRole("grid")).toHaveAttribute("data-fen", paused.fen);
       await expect(recovered.getByRole("grid")).toHaveAttribute("aria-readonly", "true");
+      await recovered.getByRole("button", { name: "Restore keys", exact: true }).click();
       const colors = mode === "ai_vs_ai" ? ["White", "Black"] : ["Black"];
       for (const color of colors) {
         const provider = color === "White" ? "OpenAI" : "Anthropic";

@@ -116,11 +116,12 @@ test("entry, live analysis, recovery and replay keep expanded telemetry and acti
     "Analysis",
   );
   await page.reload();
+  await page.getByLabel("Delay between moves").selectOption("500");
+  await page.getByRole("button", { name: "Restore keys", exact: true }).click();
   await expect(page.getByRole("button", { name: "Resume game", exact: true })).toBeVisible();
   await inspectLayouts(page, info, "recovery", page.getByRole("button", { name: /^Resume game/ }));
   await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("telemetry-fixture");
   await page.getByLabel("Black · OpenAI · API key", { exact: true }).fill("telemetry-fixture");
-  await page.getByLabel("Delay between moves").selectOption("500");
   await page.getByRole("button", { name: "Resume game", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Black wins by checkmate", exact: true }),

@@ -51,9 +51,11 @@ describe("Arena route lifetime", () => {
       const controls = await screen.findByRole("region", { name: "Game controls" });
       const step = within(controls).getByRole("button", { name: "Next move" });
       expect(step).toHaveAttribute("aria-disabled", "true");
+      await user.click(await screen.findByRole("button", { name: "Restore keys" }));
       for (const input of await screen.findAllByLabelText(/· OpenAI · API key/, { exact: false })) {
         await user.type(input, "fixture-key");
       }
+      await user.click(screen.getByRole("button", { name: "Keep paused" }));
       expect(step).toHaveAttribute("aria-disabled", String(!canStep));
       const resignations = within(controls).queryAllByRole("button", { name: /^Resign / });
       expect(resignations).toHaveLength(human ? 1 : 0);

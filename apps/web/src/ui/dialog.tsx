@@ -7,6 +7,7 @@ import { Icon } from "./icon";
 import { cancelHeldActivation } from "./keyboard";
 
 export interface DialogProps {
+  readonly open?: boolean;
   readonly title: ReactNode;
   readonly description: ReactNode;
   readonly onCancel: () => void;
@@ -16,8 +17,8 @@ export interface DialogProps {
 
 // Preflight removes native dialog margins; m-auto restores centering.
 const dialogClassName = cx(
-  "m-auto max-h-[calc(100dvh_-_32px)] w-[min(36rem,calc(100%_-_32px))] overflow-auto rounded-panel border border-control-border bg-surface-raised p-6 text-text",
-  "shadow-[0_1rem_4rem_var(--color-canvas)] backdrop:bg-canvas/85 max-sm:p-4",
+  "m-auto max-h-[calc(100dvh_-_32px)] w-[min(36rem,calc(100%_-_32px))] max-w-none overflow-auto rounded-panel border border-control-border bg-surface-raised p-6 text-text",
+  "shadow-[0_1rem_4rem_var(--color-canvas)] backdrop:bg-canvas/85 max-sm:p-[min(1rem,16px)]",
 );
 
 const focusableSelector = [
@@ -34,17 +35,24 @@ function focusable(dialog: HTMLDialogElement): HTMLElement[] {
 }
 
 /**
- * Mounting focuses the first control and contains Tab; unmounting restores trigger focus.
- * Escape requests cancellation through `onCancel`; the owner must unmount the dialog.
+ * Opening focuses the first control and contains Tab; closing restores trigger focus.
+ * A closed dialog retains its form DOM. Escape requests cancellation from the owner.
  */
-export function Dialog({ title, description, onCancel, closeLabel, children }: DialogProps) {
+export function Dialog({
+  open = true,
+  title,
+  description,
+  onCancel,
+  closeLabel,
+  children,
+}: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) return;
+    if (!dialog || !open) return;
     const trigger = document.activeElement;
     dialog.showModal();
     focusable(dialog)[0]?.focus();
@@ -58,7 +66,7 @@ export function Dialog({ title, description, onCancel, closeLabel, children }: D
         target?.focus({ preventScroll: true });
       }
     };
-  }, []);
+  }, [open]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
     if (cancelHeldActivation(event)) return;
@@ -82,6 +90,8 @@ export function Dialog({ title, description, onCancel, closeLabel, children }: D
   return createPortal(
     <dialog
       ref={dialogRef}
+      inert={!open}
+      aria-hidden={open ? undefined : true}
       className={dialogClassName}
       aria-modal="true"
       aria-labelledby={titleId}
@@ -95,14 +105,14 @@ export function Dialog({ title, description, onCancel, closeLabel, children }: D
       <div
         className={cx(
           closeLabel &&
-            "sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 bg-surface-raised",
+            "flex flex-wrap-reverse items-start gap-3 bg-surface-raised sm:sticky sm:top-0 sm:z-10",
         )}
       >
         <h2
           id={titleId}
           className={cx(
             "text-section font-semibold",
-            closeLabel && "flex min-h-target items-center",
+            closeLabel && "flex min-h-target min-w-0 flex-1 basis-48 items-center",
           )}
         >
           {title}
@@ -111,7 +121,7 @@ export function Dialog({ title, description, onCancel, closeLabel, children }: D
           <Button
             variant="dismiss"
             padding="compact"
-            className="size-target"
+            className="ml-auto size-target shrink-0"
             aria-label={closeLabel}
             onClick={onCancel}
           >

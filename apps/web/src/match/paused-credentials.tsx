@@ -1,17 +1,10 @@
 import type { AiGameConfiguration, ChessColor } from "@neurochess/contracts";
-import {
-  Activity,
-  type ReactNode,
-  type Ref,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CredentialSource, type SavedCredentialChoices } from "../arena/setup/credential-source";
 import { Button } from "../ui/button";
+import { Dialog } from "../ui/dialog";
 import { Icon } from "../ui/icon";
 import { inputFieldClass } from "../ui/input-styles";
 import { SecretInput } from "../ui/secret-input";
@@ -26,7 +19,7 @@ interface PausedCredentialsProps {
   readonly canContinue: boolean;
   readonly onKeyChange: (color: ChessColor, value: string) => void;
   readonly onResume: () => void;
-  readonly children: ReactNode;
+  readonly children?: ReactNode;
   readonly notice?: ReactNode;
   readonly savedCredentials?: SavedCredentialChoices;
   readonly selections?: Readonly<Record<ChessColor, string>>;
@@ -43,9 +36,6 @@ interface Recovery {
 export function PausedCredentials(props: PausedCredentialsProps) {
   const { t } = useTranslation();
   const [recovery, setRecovery] = useState<Recovery | null>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  const reopen = useRef<HTMLButtonElement>(null);
-  const focusTarget = useRef<"form" | "banner" | null>(null);
   const current = props.paused && recovery?.epoch === props.epoch ? recovery : null;
   const needed = (["white", "black"] as const).filter(
     (color) =>
@@ -58,60 +48,49 @@ export function PausedCredentials(props: PausedCredentialsProps) {
       epoch: props.epoch,
       colors: needed,
       missing: needed.some((color) => !props.keys[color]),
-      dismissed: false,
+      dismissed: true,
     });
   } else if (!props.paused && recovery) {
     setRecovery(null);
   }
 
-  useLayoutEffect(() => {
-    if (focusTarget.current === "form") heading.current?.focus();
-    if (focusTarget.current === "banner") reopen.current?.focus();
-    focusTarget.current = null;
-  }, [current?.dismissed]);
-
   return (
     <>
       {current ? (
         <>
-          <Activity mode={current.dismissed ? "hidden" : "visible"}>
-            <RecoveryForm
-              key={current.epoch}
-              {...props}
-              recovery={current}
-              headingRef={heading}
-              onDismiss={() => {
-                focusTarget.current = "banner";
-                setRecovery({ ...current, dismissed: true });
-              }}
-            />
-          </Activity>
-          {current.dismissed ? (
-            <div className="grid shrink-0 gap-2 border-l-2 border-warning bg-surface p-3 text-label">
-              <p>
-                {t(
-                  needed.some((color) => !props.keys[color])
+          <div className="flex min-w-0 flex-wrap items-center gap-3 border-l-2 border-warning bg-surface p-3 text-label">
+            <p className="min-w-0 grow basis-60">
+              {t(
+                props.rejectedColor
+                  ? props.savedCredentials
+                    ? "credentials.unavailable"
+                    : "match.keyRejected"
+                  : needed.some((color) => !props.keys[color])
                     ? "match.keysRequired"
                     : "match.returnPaused",
-                )}
-              </p>
-              <Button
-                ref={reopen}
-                variant="secondary"
-                onClick={() => {
-                  focusTarget.current = "form";
-                  setRecovery({ ...current, dismissed: false });
-                }}
-              >
-                {t(props.savedCredentials ? "credentials.recoveryTitle" : "match.reenterKeys")}
-              </Button>
-            </div>
-          ) : null}
+              )}
+            </p>
+            <Button
+              variant="secondary"
+              aria-haspopup="dialog"
+              onClick={(event) => {
+                // WebKit pointer activation does not focus buttons; Dialog restores the active element.
+                event.currentTarget.focus({ preventScroll: true });
+                setRecovery({ ...current, dismissed: false });
+              }}
+            >
+              {t("match.restoreKeys")}
+            </Button>
+          </div>
+          <RecoveryForm
+            key={current.epoch}
+            {...props}
+            recovery={current}
+            onDismiss={() => setRecovery({ ...current, dismissed: true })}
+          />
         </>
       ) : null}
-      <Activity mode={current && !current.dismissed ? "hidden" : "visible"}>
-        {props.children}
-      </Activity>
+      {props.children}
     </>
   );
 }
@@ -125,7 +104,6 @@ function RecoveryForm({
   onKeyChange,
   onResume,
   recovery,
-  headingRef,
   onDismiss,
   notice,
   savedCredentials,
@@ -133,7 +111,6 @@ function RecoveryForm({
   onCredentialChange,
 }: PausedCredentialsProps & {
   readonly recovery: Recovery;
-  readonly headingRef: Ref<HTMLHeadingElement>;
   readonly onDismiss: () => void;
 }) {
   const { t } = useTranslation();
@@ -143,125 +120,110 @@ function RecoveryForm({
   const rejected = rejectedColor !== null && !edited[rejectedColor];
   const usesSessionKey = (color: ChessColor) =>
     !selections?.[color] || selections[color] === "session";
+  function dismiss() {
+    setMaskEpoch((epoch) => epoch + 1);
+    onDismiss();
+  }
   return (
-    <section
-      aria-labelledby={`${id}-title`}
-      aria-describedby={`${id}-description`}
-      className="grid min-w-0 shrink-0 gap-6 rounded-panel border border-control-border bg-surface-raised p-4 sm:p-6"
+    <Dialog
+      open={!recovery.dismissed}
+      title={t(savedCredentials ? "credentials.recoveryTitle" : "match.reenterKeys")}
+      description={t(
+        savedCredentials
+          ? rejectedColor
+            ? "credentials.unavailable"
+            : "credentials.recovery"
+          : rejectedColor || !recovery.missing
+            ? "match.rejectedKeyDescription"
+            : "match.recoveryDescription",
+      )}
+      closeLabel={t("match.closeRecovery")}
+      onCancel={dismiss}
     >
-      <span className="flex size-target items-center justify-center rounded-control border border-control-border text-warning">
-        <Icon path="M6 10h12v11H6zM9 10V6a3 3 0 0 1 6 0v4M12 14v3" />
-      </span>
-      <div className="grid gap-3">
-        <h2
-          ref={headingRef}
-          id={`${id}-title`}
-          tabIndex={-1}
-          className="text-section font-semibold"
-        >
-          {t(savedCredentials ? "credentials.recoveryTitle" : "match.reenterKeys")}
-        </h2>
-        <p id={`${id}-description`} className="text-body text-text-secondary">
-          {t(
-            savedCredentials
-              ? recovery.missing
-                ? "credentials.recovery"
-                : "credentials.unavailable"
-              : recovery.missing
-                ? "match.recoveryDescription"
-                : "match.rejectedKeyDescription",
-          )}
-        </p>
+      <div className="mt-6 grid min-w-0 gap-6">
         {notice ? <p className="text-label text-warning">{notice}</p> : null}
-      </div>
-      {recovery.colors.map((color) => {
-        const seat = seats[color];
-        if (seat.type !== "ai") return null;
-        const invalid = rejectedColor === color && !edited[color];
-        return (
-          <div key={color} className="grid min-w-0 gap-2 text-label">
-            {savedCredentials ? (
-              <CredentialSource
-                provider={seat.provider}
-                value={selections?.[color] ?? "session"}
-                saved={savedCredentials}
-                disabled={disabled}
-                label={`${t(`players.${color}`)} · ${t(`setup.providers.${seat.provider}`)} · ${t("credentials.source")}`}
-                onChange={(value) => {
-                  setEdited((current) => ({ ...current, [color]: true }));
-                  onCredentialChange?.(color, value);
-                }}
-              />
-            ) : null}
-            {usesSessionKey(color) ? (
-              <>
-                <label htmlFor={`${id}-${color}-key`}>
-                  {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
-                  {t("setup.apiKey")}
-                </label>
-                <SecretInput
-                  id={`${id}-${color}-key`}
-                  aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
-                  aria-invalid={invalid}
-                  layout="icon"
-                  maskEpoch={maskEpoch}
-                  showLabel={t("match.showSeatKey", { color: t(`players.${color}`) })}
-                  hideLabel={t("match.hideSeatKey", { color: t(`players.${color}`) })}
-                  placeholder={t("match.keyPlaceholder")}
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  maxLength={4096}
-                  className={`${inputFieldClass} w-full pr-12`}
-                  readOnly={disabled}
-                  aria-disabled={disabled}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
+        {recovery.colors.map((color) => {
+          const seat = seats[color];
+          if (seat.type !== "ai") return null;
+          const invalid = rejectedColor === color && !edited[color];
+          return (
+            <div key={color} className="grid min-w-0 gap-2 text-label">
+              {savedCredentials ? (
+                <CredentialSource
+                  provider={seat.provider}
+                  value={selections?.[color] ?? "session"}
+                  saved={savedCredentials}
+                  disabled={disabled}
+                  label={`${t(`players.${color}`)} · ${t(`setup.providers.${seat.provider}`)} · ${t("credentials.source")}`}
+                  onChange={(value) => {
                     setEdited((current) => ({ ...current, [color]: true }));
-                    onKeyChange(color, value);
+                    onCredentialChange?.(color, value);
                   }}
                 />
-              </>
-            ) : null}
-            {invalid ? (
-              <p id={`${id}-${color}-error`} className="text-danger">
-                {t(savedCredentials ? "credentials.unavailable" : "match.keyRejected")}
-              </p>
-            ) : null}
+              ) : null}
+              {usesSessionKey(color) ? (
+                <>
+                  <label htmlFor={`${id}-${color}-key`}>
+                    {t(`players.${color}`)} · {t(`setup.providers.${seat.provider}`)} ·{" "}
+                    {t("setup.apiKey")}
+                  </label>
+                  <SecretInput
+                    id={`${id}-${color}-key`}
+                    aria-describedby={`${id}-session${invalid ? ` ${id}-${color}-error` : ""}`}
+                    aria-invalid={invalid}
+                    layout="icon"
+                    maskEpoch={maskEpoch}
+                    showLabel={t("match.showSeatKey", { color: t(`players.${color}`) })}
+                    hideLabel={t("match.hideSeatKey", { color: t(`players.${color}`) })}
+                    placeholder={t("match.keyPlaceholder")}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    maxLength={4096}
+                    className={`${inputFieldClass} w-full pr-12`}
+                    readOnly={disabled}
+                    aria-disabled={disabled}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setEdited((current) => ({ ...current, [color]: true }));
+                      onKeyChange(color, value);
+                    }}
+                  />
+                </>
+              ) : null}
+              {invalid ? (
+                <p id={`${id}-${color}-error`} className="text-danger">
+                  {t(savedCredentials ? "credentials.unavailable" : "match.keyRejected")}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+        {recovery.colors.some(usesSessionKey) ? (
+          <div id={`${id}-session`} className="grid gap-1 text-label text-text-secondary">
+            <p className="font-semibold">{t("setup.sessionOnly")}</p>
+            <p>{t("setup.sessionOnlyHint")}</p>
           </div>
-        );
-      })}
-      {recovery.colors.some(usesSessionKey) ? (
-        <div id={`${id}-session`} className="grid gap-1 text-label text-text-secondary">
-          <p className="font-semibold">{t("setup.sessionOnly")}</p>
-          <p>{t("setup.sessionOnlyHint")}</p>
+        ) : null}
+        <div className="grid gap-2">
+          <Button
+            variant="primary"
+            className="flex-wrap"
+            aria-label={t("match.resumeGame")}
+            aria-disabled={
+              disabled || !canContinue || rejected || recovery.colors.some((color) => !keys[color])
+            }
+            onClick={onResume}
+          >
+            <Icon path="m8 5 10 7-10 7z" />
+            {t("lifecycle.resume")}
+          </Button>
+          <Button variant="quiet" onClick={dismiss}>
+            {t("match.keepPaused")}
+          </Button>
+          <p className="text-center text-label text-text-muted">{t("match.returnPaused")}</p>
         </div>
-      ) : null}
-      <div className="grid gap-2">
-        <Button
-          variant="primary"
-          aria-label={t("match.resumeGame")}
-          aria-disabled={
-            disabled || !canContinue || rejected || recovery.colors.some((color) => !keys[color])
-          }
-          onClick={onResume}
-        >
-          <Icon path="m8 5 10 7-10 7z" />
-          {t("lifecycle.resume")}
-        </Button>
-        <Button
-          variant="quiet"
-          onClick={() => {
-            // Activity may skip hidden renders; retain dismissal until the fields render again.
-            setMaskEpoch((epoch) => epoch + 1);
-            onDismiss();
-          }}
-        >
-          {t("setup.returnToGame")}
-          <Icon path="M5 12h14m-5-5 5 5-5 5" />
-        </Button>
-        <p className="text-center text-label text-text-muted">{t("match.returnPaused")}</p>
       </div>
-    </section>
+    </Dialog>
   );
 }

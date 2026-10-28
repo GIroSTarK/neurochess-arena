@@ -105,6 +105,8 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
     const before = await readSnapshot(page, game.snapshot.gameId);
     const count = turns.length;
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
     for (const [color, provider, saved, key] of [
       ["White", "OpenAI", white, whiteKey],
       ["Black", "Anthropic", black, blackKey],
@@ -117,6 +119,15 @@ for (const combination of ["raw/raw", "saved/saved", "mixed"] as const) {
       if (saved) await source.selectOption(saved.credentialId);
       else await page.getByLabel(`${color} · ${provider} · API key`, { exact: true }).fill(key);
     }
+    await page.getByRole("button", { name: "Keep paused", exact: true }).click();
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
+    await expect(page.getByLabel("White · OpenAI · Credential source")).toHaveValue(
+      white?.credentialId ?? "session",
+    );
+    await expect(page.getByLabel("Black · Anthropic · Credential source")).toHaveValue(
+      black?.credentialId ?? "session",
+    );
+    await page.keyboard.press("Escape");
     expect(turns).toHaveLength(count);
     expect((await readSnapshot(page, game.snapshot.gameId)).state).toBe("paused");
     for (let index = 1; index <= 2; index++) {
@@ -164,6 +175,7 @@ for (const human of ["white", "black"] as const) {
     }
     await page.reload();
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
     await expect(page.getByLabel(/Credential source/)).toHaveCount(1);
     await page.getByLabel(`${ai} · Google · Credential source`).selectOption(saved.credentialId);
     expect((await readSnapshot(page, game.snapshot.gameId)).state).toBe("paused");
@@ -278,10 +290,12 @@ for (const failure of ["deleted", "undecryptable", "rejected"] as const) {
     await page.locator('[data-square="f3"]').click();
     await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
     await expect(page.getByText(/This key is unavailable or was rejected/).first()).toBeVisible();
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
     const source = page.getByLabel("Black · OpenAI · Credential source");
     await source.selectOption("session");
     await page.getByLabel("Black · OpenAI · API key", { exact: true }).fill("replacement-fixture");
     expect((await readSnapshot(page, game.snapshot.gameId)).moves).toHaveLength(1);
+    await page.getByRole("button", { name: "Keep paused", exact: true }).click();
     await page.getByRole("button", { name: "Next move", exact: true }).click();
     await expect
       .poll(async () => (await readSnapshot(page, game.snapshot.gameId)).moves.length)
@@ -360,6 +374,59 @@ test("account switching clears saved selections and raw keys and fences delayed 
     await switching.close();
   }
 });
+
+for (const dismiss of [false, true]) {
+  test(`account switching clears ${dismiss ? "dismissed" : "open"} recovery fields without continuation`, async ({
+    page,
+    context,
+    newContext,
+    expectedGame404s,
+  }) => {
+    await createAccount(page.request);
+    const other = await newContext();
+    const second = await createAccount(other.request);
+    await other.close();
+    await page.goto("/account/credentials");
+    const saved = await saveCredential(page, "Recovery saved", "saved-fixture", "anthropic");
+    await page.goto("/");
+    await configureCredential(page, "White", { apiKey: "slow-fixture" });
+    await configureCredential(page, "Black", { credentialId: saved.credentialId }, "anthropic");
+    const game = await startCredentialGame(page);
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
+    let writes = 0;
+    page.on("request", (request) => {
+      if (/\/(lifecycle|ai-turn|moves)$/.test(request.url())) writes++;
+    });
+    const expectPrivate = observeCredentialPrivacy(page, ["recovery-switch-fixture"]);
+    const input = page.getByLabel("White · OpenAI · API key", { exact: true });
+    await input.fill("recovery-switch-fixture");
+    await page.getByLabel("Black · Anthropic · Credential source").selectOption(saved.credentialId);
+    if (dismiss) await page.getByRole("button", { name: "Keep paused", exact: true }).click();
+    const switching = await context.newPage();
+    try {
+      expectedGame404s.set(page, new Set([`${API_ORIGIN}/games/${game.snapshot.gameId}/details`]));
+      await switching.goto(WEB_ORIGIN + "/auth/sign-in");
+      await switching.getByLabel("Email", { exact: true }).fill(second.email);
+      await switching.getByLabel("Password", { exact: true }).fill(second.password);
+      await switching.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(page.getByRole("link", { name: second.username })).toBeVisible();
+      await expect(input).toHaveCount(0);
+      await expect(page.locator("dialog")).toHaveCount(0);
+      await expect(page.getByRole("grid")).toHaveCount(0);
+      await expect(
+        page.getByRole("option", { name: /Recovery saved/, includeHidden: true }),
+      ).toHaveCount(0);
+      await expect.poll(() => expectedGame404s.get(page)?.size).toBe(0);
+      expect(writes).toBe(0);
+      await expectPrivate();
+    } finally {
+      await switching.close();
+    }
+  });
+}
 
 test("credential settings and selectors fit expanded text and remain keyboard accessible", async ({
   page,

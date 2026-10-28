@@ -40,11 +40,12 @@ async function read(page: Page, gameId: string) {
   expect(response.status()).toBe(200);
   return gameSnapshotSchema.parse(await response.json());
 }
-async function fillRecovery(page: Page) {
-  const reenter = page.getByRole("button", { name: "Re-enter your API keys", exact: true });
-  if (await reenter.isVisible()) await reenter.click();
+async function fillRecovery(page: Page, keepOpen = false) {
+  const reenter = page.getByRole("button", { name: "Restore keys", exact: true });
+  if (!(await page.getByRole("dialog").isVisible())) await reenter.click();
   await page.getByLabel("White · OpenAI · API key", { exact: true }).fill("match-fixture");
   await page.getByLabel("Black · Anthropic · API key", { exact: true }).fill("match-fixture");
+  if (!keepOpen) await page.getByRole("button", { name: "Keep paused", exact: true }).click();
 }
 async function stop(page: Page) {
   await page.getByRole("button", { name: "Stop", exact: true }).click();
@@ -153,7 +154,7 @@ test("Pause, speed, duplicate Next move and Resume use complete server snapshots
   await pause.press("Enter");
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeFocused();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Re-enter your API keys" })).toHaveCount(0);
   await page.reload();
   await fillRecovery(page);
   const before = await read(page, game.gameId);
@@ -199,7 +200,7 @@ test("ordinary Pause preserves keys and details without credential replacement c
   await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
-  const keys = page.getByRole("region", { name: "Re-enter your API keys" });
+  const keys = page.getByRole("dialog", { name: "Re-enter your API keys" });
   await expect(keys).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toHaveAttribute(
     "aria-disabled",
@@ -224,21 +225,26 @@ test("a provider-rejected key opens only its seat and replacement stays editable
 }) => {
   const game = await start(page, "expired-fixture");
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Restore keys", exact: true }).click();
   const whiteKey = page.getByLabel("White · OpenAI · API key", { exact: true });
   await expect(whiteKey).toHaveValue("");
   await expect(page.getByLabel("Black · Anthropic · API key", { exact: true })).toHaveCount(0);
   await expect(
-    page.getByText("The provider rejected this key. Enter a replacement, then retry.", {
-      exact: true,
-    }),
+    page
+      .getByRole("dialog")
+      .getByText("The provider rejected this key. Enter a replacement, then retry.", {
+        exact: true,
+      }),
   ).toBeVisible();
   await whiteKey.pressSequentially("match-fixture");
   await expect(whiteKey).toHaveValue("match-fixture");
   await expect(whiteKey).toBeFocused();
   expect((await read(page, game.gameId)).moves).toHaveLength(0);
+  await page.getByRole("button", { name: "Keep paused", exact: true }).click();
   await page.getByRole("button", { name: "Next move", exact: true }).click();
   await expect.poll(async () => (await read(page, game.gameId)).moves.length).toBe(1);
-  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Re-enter your API keys" })).toHaveCount(0);
   await page.getByLabel("Delay between moves").selectOption("500");
   await page.getByRole("button", { name: "Resume", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
@@ -251,29 +257,94 @@ test("recovery fields and match controls reflow with expanded text and keyboard 
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("region", { name: "Re-enter your API keys" })).toBeVisible();
+  await page.getByRole("button", { name: "Restore keys", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Re-enter your API keys" })).toBeVisible();
   await setPseudoLocalization(page, true);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "200%";
   });
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
-    await expectSelectArrowSpacing(page.getByLabel(/^Delay between moves/));
+    const dialog = page.getByRole("dialog");
+    expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await expectUnbrokenWords(page.getByRole("region", { name: /^Game controls/ }));
-    const resume = page
-      .getByRole("region", { name: /^Game controls/ })
-      .getByRole("button", { name: /^Resume/ });
-    await resume.focus();
-    await expect(resume).toBeFocused();
+    await expectUnbrokenWords(
+      dialog.getByRole("button").or(dialog.getByRole("heading")).or(dialog.locator("label")),
+    );
     const recoveryResume = page.getByRole("button", { name: /^Resume game/ });
     await recoveryResume.scrollIntoViewIfNeeded();
     await expect(recoveryResume).toBeInViewport();
   }
   await page.screenshot({ path: testInfo.outputPath("ai-expanded.png"), fullPage: true });
+  await page.getByRole("button", { name: /^Keep paused/ }).click();
   await setPseudoLocalization(page, false);
+  await stop(page);
+});
+
+test("credential dialog retains the board and inspector through dismissal and responsive resizing", async ({
+  page,
+}, info) => {
+  const game = await start(page, "slow-fixture");
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Game paused", exact: true })).toBeVisible();
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: info.outputPath(`recovery-entry-${width}.png`), fullPage: true });
+  }
+  const trigger = page.getByRole("button", { name: "Restore keys", exact: true });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
+  const board = await page.getByRole("grid").elementHandle();
+  const inspector = await page.getByRole("tablist").elementHandle();
+  const paused = await read(page, game.gameId);
+  let writes = 0;
+  page.on("request", (request) => {
+    if (/\/(lifecycle|ai-turn|moves)$/.test(request.url())) writes++;
+  });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Re-enter your API keys" });
+  const white = dialog.getByLabel("White · OpenAI · API key", { exact: true });
+  await white.fill("match-fixture");
+  await dialog.getByRole("button", { name: "Show White API key" }).click();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await trigger.click();
+  await expect(white).toHaveValue("match-fixture");
+  await expect(white).toHaveAttribute("type", "password");
+  await dialog.getByLabel("Black · Anthropic · API key", { exact: true }).fill("match-fixture");
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 600 : 900 });
+    await expect(dialog).toBeVisible();
+    await expect(white).toHaveValue("match-fixture");
+    expect(await board.evaluate((node) => node.isConnected)).toBe(true);
+    expect(await inspector.evaluate((node) => node.isConnected)).toBe(true);
+    const dismiss = dialog.getByRole("button", { name: "Keep paused", exact: true });
+    await dismiss.scrollIntoViewIfNeeded();
+    await expect(dismiss).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: info.outputPath(`recovery-dialog-${width}.png`),
+      fullPage: true,
+    });
+  }
+  expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+  await dialog.getByRole("button", { name: "Keep paused", exact: true }).click();
+  expect(writes).toBe(0);
+  expect(await read(page, game.gameId)).toEqual(paused);
+  await page.getByRole("button", { name: "Next move", exact: true }).click();
+  await expect
+    .poll(async () => (await read(page, game.gameId)).moves.length)
+    .toBe(paused.moves.length + 1);
   await stop(page);
 });
 
@@ -362,23 +433,23 @@ for (const during of ["inference", "delay"] as const) {
       "aria-disabled",
       "true",
     );
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("button", { name: "Restore keys", exact: true }).click();
     await expect(page.getByLabel("White · OpenAI · API key", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("Black · Anthropic · API key", { exact: true })).toHaveValue("");
-    const recovery = page.getByRole("region", { name: "Re-enter your API keys" });
+    const recovery = page.getByRole("dialog", { name: "Re-enter your API keys" });
     await expect(recovery).toBeVisible();
-    await expect(page.getByRole("tablist")).toHaveCount(0);
-    await expect(page.getByRole("region", { name: "Commentary & move details" })).toHaveCount(0);
-    await expect(page.getByRole("grid")).toHaveAttribute("data-fen", recovered.fen);
+    await expect(page.locator('[role="tablist"]')).toHaveCount(1);
+    await expect(page.locator('[role="grid"]')).toHaveCount(1);
+    await expect(page.locator('[role="grid"]')).toHaveAttribute("data-fen", recovered.fen);
     await page.screenshot({
       path: testInfo.outputPath(`key-recovery-${during}.png`),
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Return to game", exact: true }).click();
+    await page.getByRole("button", { name: "Keep paused", exact: true }).click();
     await expect(recovery).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Moves", exact: true })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Re-enter your API keys", exact: true }),
-    ).toBeFocused();
+    await expect(page.getByRole("button", { name: "Restore keys", exact: true })).toBeFocused();
     await expect(
       page.getByText("Re-enter the missing API keys before continuing.", { exact: true }),
     ).toBeVisible();
@@ -387,15 +458,16 @@ for (const during of ["inference", "delay"] as const) {
     await resume.focus();
     await resume.press("Enter");
     expect(turnsWithOriginalKey).toHaveLength(count);
-    await fillRecovery(page);
+    await page.getByLabel("Delay between moves").selectOption("5000");
+    await fillRecovery(page, true);
     expect(turnsWithOriginalKey).toHaveLength(count);
     await expectPrivate();
     await expect(recovery).toBeVisible();
-    await expect(page.getByRole("tablist")).toHaveCount(0);
-    expect((await new AxeBuilder({ page }).include("#arena-match").analyze()).violations).toEqual(
-      [],
-    );
-    await page.getByLabel("Delay between moves").selectOption("5000");
+    await expect(page.locator('[role="tablist"]')).toHaveCount(1);
+    expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+    if (during === "inference") {
+      await page.getByRole("button", { name: "Keep paused", exact: true }).click();
+    }
     await page
       .getByRole("button", { name: during === "delay" ? "Resume game" : "Next move", exact: true })
       .click();

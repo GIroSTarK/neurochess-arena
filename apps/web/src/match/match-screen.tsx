@@ -27,6 +27,7 @@ import { AiPacing } from "./panels/ai-pacing";
 import { MatchBoard } from "./panels/match-board";
 import { MatchDetails } from "./panels/match-details";
 import { MatchHeader } from "./panels/match-header";
+import { MatchRecovery } from "./panels/match-recovery";
 import { matchPresentation } from "./presentation";
 import type { MatchRouteData } from "./route-data";
 import type { MatchState } from "./state";
@@ -169,7 +170,18 @@ export function MatchScreen({
           playAreaLabel={t("arena.playArea")}
           detailsLabel={t("arena.gameDetails")}
           constrainDetails
-          notice={view.header.status ? <StatusSummary {...view.header.status} /> : undefined}
+          notice={
+            <div className="grid gap-3">
+              {view.header.status ? <StatusSummary {...view.header.status} /> : null}
+              <MatchRecovery
+                state={state}
+                view={view}
+                controller={controller}
+                credentials={savedState.credentials}
+                {...(savedCredentials ? { savedCredentials } : {})}
+              />
+            </div>
+          }
           boardTools={
             <div className="min-w-0">
               <div className="my-3">
@@ -216,9 +228,7 @@ export function MatchScreen({
               state={state}
               view={view}
               controller={controller}
-              credentials={savedState.credentials}
               evaluation={evaluation}
-              {...(savedCredentials ? { savedCredentials } : {})}
             />
           }
         />

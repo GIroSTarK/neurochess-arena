@@ -56,7 +56,9 @@ describe("committed Arena route data", () => {
     vi.stubGlobal("fetch", http.fetch);
     renderApp(options, { initialEntries: [gamePath] });
     const retry = await screen.findByRole("button", { name: "Retry analysis" });
+    await userEvent.click(await screen.findByRole("button", { name: "Restore keys" }));
     await userEvent.type(await screen.findByLabelText("Black · OpenAI · API key"), "fixture-key");
+    await userEvent.click(screen.getByRole("button", { name: "Keep paused" }));
     await userEvent.click(retry);
     expect(await screen.findByRole("button", { name: "Retry analysis" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Game paused" })).toBeVisible();

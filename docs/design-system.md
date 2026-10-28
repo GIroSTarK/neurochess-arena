@@ -1,10 +1,10 @@
 # Neurochess Arena design system
 
-**Version:** 1.6
+**Version:** 1.7
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
-**Last updated:** 2026-10-28
+**Last updated:** 2026-10-29
 
 ## Purpose and authority
 
@@ -250,7 +250,9 @@ All reference copy uses the localization layer. Invitation secrets remain only i
 - Session-only is the default. Label it **Use for this tab** with **Cleared when you refresh or close this tab.** Keep raw values only in page memory and the minimum backend request scope described in [ADR-0004](decisions/0004-bring-your-own-key-security.md).
 - Authenticated users may explicitly select an existing saved credential or check **Save this key to my account**. Explain persistence before submission. Never preselect the save checkbox, imply guests can save, or claim a key stays only on the user's device.
 - On refresh, show which seats/providers need keys. Accounts may choose a saved key explicitly for each seat; never preselect one or restore its previous selection. Dismissing recovery leaves a persistent banner. Preserve configuration and accepted position, but never restore raw keys from browser storage.
-- Ordinary Pause keeps the available keys and shows commentary and detail tabs without a key-editing action. Missing keys replace the rail contents with a recovery card: named AI-seat fields, reveal controls, the session-only explanation, gated Resume, and Return to game. Authentication failures open the same card for the rejected seat. Keep fields visible while typing; only explicit continuation resumes play. Return to game restores details and leaves a persistent re-entry action while paused. On mobile the card replaces details below the board and controls.
+- Ordinary Pause keeps the available keys and shows commentary and detail tabs without a key-editing action. Missing or rejected credentials show a cause and **Restore keys** beside the board; recovery never opens automatically or replaces the inspector. Restore keys opens a dialog with only the affected AI-seat fields, reveal controls, explicit session/saved source selection where available, the persistence explanation, and gated Resume. Keep fields mounted for that paused revision even when typing makes them ready.
+- **Keep paused**, the dialog close control, and Escape close recovery without a lifecycle request. Retain entered values in the existing page-memory owner and form DOM, mask them on dismissal, and restore focus to Restore keys. Closed dialog content is inert and absent from the accessibility tree. Reopening retains those same fields and source choices; refresh, route departure, identity loss, and existing credential/revision boundaries still clear them. Typing and source changes never resume or step; Resume or an eligible Next move remains explicit. The board and inspector retain their position and selection behind the dialog across resizing. On narrow or enlarged layouts the dialog scrolls, its header can wrap, and both continuation and dismissal remain reachable.
+- Provider quota, timeout, network, and availability failures retain a safe cause and explicit provider continuation near the board, separate from credential replacement. Uncertain commands retain **Synchronize and pause** and the applicable identical-command retry in that same area. These actions keep their existing controller callbacks; analysis Retry stays independent.
 - Use **Estimated cost** or **Est. cost** in compact rows. Unknown usage or pricing displays **Unavailable**, with a concise reason where available. Do not substitute zero or sum incomplete data as a complete total. Keep per-move details available even when an aggregate is unavailable.
 - “Latency” is measured response duration; it is not a countdown. All provider names, model names, usernames, avatars, commentary, and error details are untrusted rendering inputs.
 
@@ -308,12 +310,12 @@ Copy should identify the condition and the useful next action. Avoid technical e
 
 ## Core screen patterns
 
-| Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game   | Seats stack in the same order; fields remain labeled and full width                                 |
-| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                            |
-| Recovery | Same accepted position and player identities; key re-entry card replaces details, Resume gated on missing inputs           | Recovery card replaces details below the board, with required provider fields and reachable actions |
-| Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow    |
+| Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game   | Seats stack in the same order; fields remain labeled and full width                                        |
+| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                                   |
+| Recovery | Same accepted position and inspector; near-board cause and Restore keys open an explicit dialog, with gated Resume         | Scrollable dialog over the retained board and details; Keep paused/Escape preserve masked page-memory keys |
+| Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow           |
 
 ## Accessibility and acceptance
 
