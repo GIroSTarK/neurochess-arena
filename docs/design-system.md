@@ -89,13 +89,13 @@ Use restrained shadow only for overlays; ordinary panels separate through surfac
 
 ## Layout and hierarchy
 
-| Available arena width | Composition                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| At least `65rem`      | Centered frame with 16px insets, a 640px board, 24px gap, and approximately 344px information rail at default text size. |
-| Below `65rem`         | One column, board centered and capped at 640px; controls and supporting content follow in normal page flow.              |
-| Compact phones        | 16px shell gutters and a full available-width square board, equal-width player summaries, controls, then detail tabs.    |
+| Available arena width | Composition                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| At least `67rem`      | Centered frame with 32px horizontal insets, a 640px board, 24px gap, and approximately 344px information rail at default text size. |
+| Below `67rem`         | One column, board centered and capped at 640px; controls and supporting content follow in normal page flow.                         |
+| Compact phones        | 16px shell gutters and a full available-width square board, equal-width player summaries, controls, then detail tabs.               |
 
-The semantic `arena-wide` container query determines the arena columns and its shared layout-mode context. Shell gutters are additional: 16px on phones, 24px from `md` (768px), and 32px from `lg` (1025px), with safe-area insets respected. The shell content is capped at 1280px. The global `lg` breakpoint still applies to unrelated screens; it does not select the arena composition. At default text size the arena becomes wide at 1040px of available container width. Introducing the rail must not shrink an already 640px board. Enlarged text can return the arena to one column.
+The semantic `arena-wide` container query determines the arena columns and its shared layout-mode context. Shell gutters are additional: 16px on phones, 24px from `md` (768px), and 32px from `lg` (1025px), with safe-area insets respected. The shell content is capped at 1280px. The global `lg` breakpoint still applies to unrelated screens; it does not select the arena composition. At default text size the arena becomes wide at 1072px of available container width. Introducing the rail must not shrink an already 640px board. Enlarged text can return the arena to one column.
 
 Align the compact match header, player strip and board on shared edges without viewport-dependent board indentation. Keep primary controls at least 44px high; the board retains all 64 usable squares. Never hide essential actions to keep a screen within one viewport. Allow normal vertical scrolling. Layout changes retain the board, its keyboard handle, orientation and pending promotion, as well as mounted detail state and open identity dialogs. The optional near-board notice slot precedes the board in reading order and does not replace it.
 

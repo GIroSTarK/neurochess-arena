@@ -55,7 +55,7 @@ export function ArenaLayout({
       >
         <div
           className={cx(
-            "relative mx-auto grid max-w-[1040px] min-w-0 gap-6 @arena-wide/arena:chamfer-frame @arena-wide/arena:grid-cols-[640px_minmax(0,1fr)] @arena-wide/arena:px-4 @arena-wide/arena:pt-4 @arena-wide/arena:pb-8",
+            "relative mx-auto grid max-w-[1072px] min-w-0 gap-6 @arena-wide/arena:chamfer-frame @arena-wide/arena:grid-cols-[640px_minmax(0,1fr)] @arena-wide/arena:px-8 @arena-wide/arena:pt-4 @arena-wide/arena:pb-8",
             Boolean(introduction) &&
               "@max-arena-wide/arena:gap-4 @arena-wide/arena:grid-rows-[auto_1fr] @arena-wide/arena:gap-y-0",
             separateToolsRow && "@arena-wide/arena:gap-y-0",

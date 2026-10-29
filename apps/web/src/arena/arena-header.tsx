@@ -17,7 +17,7 @@ export function ArenaHeader({
     <div className="@container/arena mx-auto max-w-[1120px] min-w-0">
       <div
         className={cx(
-          "mx-auto flex max-w-[640px] flex-wrap justify-between gap-x-4 gap-y-2 py-4 @arena-wide/arena:max-w-[1040px] @arena-wide/arena:px-4",
+          "mx-auto flex max-w-[640px] flex-wrap justify-between gap-x-4 gap-y-2 py-4 @arena-wide/arena:max-w-[1072px] @arena-wide/arena:px-8",
           score ? "items-start @arena-wide/arena:items-center" : "items-center",
         )}
       >
