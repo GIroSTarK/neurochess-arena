@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { gameInvocationsSchema } from "@neurochess/contracts";
+import { gameInvocationsSchema, gameSnapshotSchema } from "@neurochess/contracts";
 import type { Page } from "@playwright/test";
 
 import { expectArenaTransition, isArenaWide } from "./arena-layout";
@@ -225,6 +225,11 @@ test("stored estimates compare identical seats, include retries and follow live 
   await expect(events.getByText("$0.00", { exact: true })).toBeVisible();
   await expect(events.getByText("$0.0012", { exact: true })).toHaveCount(5);
   await page.reload();
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   await expect(game.getByText("$0.006", { exact: true })).toBeVisible();
   await game.scrollIntoViewIfNeeded();
   await expect(game.getByText("$0.006", { exact: true })).toBeInViewport();
@@ -428,6 +433,12 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   const gameId = await start(page, "telemetry-fixture");
   await page.getByLabel("Delay between moves").selectOption("500");
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  const final = gameSnapshotSchema.parse(
+    await (await page.request.get(`${API_ORIGIN}/games/${gameId}`)).json(),
+  );
+  await expect(page.getByTestId("evaluation-score")).toHaveText("Black delivered checkmate", {
+    timeout: 25_000,
+  });
   await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -441,6 +452,12 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   await expect(gameTotals.getByText("Reported for 3 of 6 attempts", { exact: true })).toHaveCount(
     3,
   );
+  const totalText = await gameTotals.textContent();
+  await page.getByRole("button", { name: "Refresh details", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   const response = await page.request.get(`${API_ORIGIN}/games/${gameId}/invocations`);
   const records = gameInvocationsSchema.parse(await response.json());
   const commentary = page.getByRole("region", {
@@ -451,6 +468,8 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   await expect(commentary.getByText("No commentary provided", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "First", exact: true }).click();
   await expect(commentary.getByText("Initial position · no move selected.")).toBeVisible();
+  await expect(page.getByRole("grid").locator("[data-last-move]")).toHaveCount(0);
+  await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "0");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(
     commentary.getByText('<img src=x onerror="alert(1)"> **Viewer note**', { exact: true }),
@@ -463,9 +482,16 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   ).toBeVisible();
   await expect(commentary.getByText("0", { exact: true })).toHaveCount(2);
   await expect(commentary.getByText("Total tokens", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.moves[0]!.fen);
+  await expect(square(page, "f2")).toHaveAttribute("data-last-move", "true");
+  await expect(square(page, "f3")).toHaveAttribute("data-last-move", "true");
+  await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "1");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(commentary.getByText("No commentary provided", { exact: true })).toBeVisible();
   await expect(commentary.getByText("Unavailable", { exact: true })).toHaveCount(2);
+  await expect(page.getByRole("grid")).toHaveAttribute("data-fen", final.moves[1]!.fen);
+  await expect(page.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", "2");
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   const movesTab = page.getByRole("tab", { name: "Moves", exact: true });
   await movesTab.focus();
   await movesTab.press("ArrowRight");
@@ -476,6 +502,8 @@ test("accepted-move commentary follows replay; Analysis shows totals and Events 
   await expect(page.getByRole("tab", { name: "Analysis", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tabpanel", { name: "Analysis", exact: true })).toBeVisible();
+  expect(await gameTotals.textContent()).toBe(totalText);
+  await expect(page.getByTestId("evaluation-selected")).toContainText("Ply 2 · e5");
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "Events", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");

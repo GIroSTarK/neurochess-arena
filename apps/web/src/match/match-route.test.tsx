@@ -1,9 +1,12 @@
+import { createGame } from "@neurochess/chess";
+import { gameSnapshotSchema } from "@neurochess/contracts";
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   errorResponse,
+  FOOLS_MATE,
   GAME_ID,
   jsonResponse,
   OTHER_GAME_ID,
@@ -38,6 +41,127 @@ describe("committed Arena route data", () => {
   afterEach(() => {
     http.assertNoUnexpectedRequests();
     sessionStorage.clear();
+  });
+
+  it.each([
+    { ending: "checkmate", title: "Black wins by checkmate", score: "Result: 0-1" },
+    { ending: "draw", title: "Draw by threefold repetition", score: "Result: 1/2-1/2" },
+    { ending: "resignation", title: "Black wins by resignation", score: "Result: 0-1" },
+    { ending: "technical", title: "Black wins · Technical loss", score: "Result: 0-1" },
+    { ending: "aborted", title: "Game stopped", score: "Result: *" },
+  ])(
+    "keeps $ending result wording through terminal replay without provider credentials",
+    async ({ ending, title, score }) => {
+      const game = createGame();
+      game.start();
+      const line =
+        ending === "checkmate"
+          ? FOOLS_MATE
+          : ending === "draw"
+            ? ["g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1", "f6g8"]
+            : ["e2e4", "e7e5"];
+      for (const move of line) expect(game.playMove(move).ok).toBe(true);
+      if (ending === "resignation") game.resignHuman("white");
+      if (ending === "technical") game.recordTechnicalLoss("white");
+      if (ending === "aborted") game.abort();
+      const stored = gameSnapshotSchema.parse({
+        ...game.snapshot(),
+        gameId: GAME_ID,
+        version: line.length + 1,
+      });
+      http = createHttpMock({
+        "GET /api/auth/get-session": () => jsonResponse(null),
+        [`GET ${gamePath}/details`]: () =>
+          jsonResponse({
+            snapshot: stored,
+            configuration:
+              ending === "technical"
+                ? {
+                    mode: "ai_vs_ai",
+                    seats: { white: configuration.seats.black, black: configuration.seats.black },
+                  }
+                : configuration,
+          }),
+        [`GET ${gamePath}/replay`]: () =>
+          jsonResponse({ snapshot: stored, initialFen: snapshot().fen }),
+        [`GET ${gamePath}/invocations`]: () =>
+          jsonResponse({ gameId: GAME_ID, version: stored.version, turns: [] }),
+      });
+      vi.stubGlobal("fetch", http.fetch);
+      renderApp(options, { initialEntries: [gamePath] });
+      await screen.findByRole("heading", { name: title });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "First" })).toHaveAttribute(
+          "aria-disabled",
+          "false",
+        ),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "First" }));
+      expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+      expect(screen.getByRole("heading", { name: title })).toBeVisible();
+      expect(screen.getByTestId("game-score")).toHaveTextContent(score);
+      expect(screen.queryByRole("button", { name: "Restore keys" })).not.toBeInTheDocument();
+      expect(http.fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    },
+  );
+
+  it("opens terminal Moves and retains a chosen inspector through refresh, scrubbing and export recovery", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    const stored = snapshot(FOOLS_MATE);
+    let exportFailed = true;
+    let replayFailed = true;
+    http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(null),
+      [`GET ${gamePath}/details`]: () => jsonResponse({ snapshot: stored, configuration }),
+      [`GET ${gamePath}/invocations`]: () =>
+        jsonResponse({ gameId: GAME_ID, version: stored.version, turns: [] }),
+      [`GET ${gamePath}/replay`]: () =>
+        replayFailed
+          ? jsonResponse({})
+          : jsonResponse({ snapshot: stored, initialFen: snapshot().fen }),
+      [`GET ${gamePath}/pgn`]: () =>
+        exportFailed
+          ? jsonResponse({})
+          : jsonResponse({ gameId: GAME_ID, version: stored.version, pgn: stored.pgn }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    const { router } = renderApp(options, { initialEntries: [gamePath] });
+    await screen.findByRole("button", { name: "Retry replay" });
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", stored.fen);
+    expect(screen.getByText("Ply 4 of 4")).toBeVisible();
+    replayFailed = false;
+    await user.click(screen.getByRole("button", { name: "Retry replay" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "First" })).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      ),
+    );
+    const board = screen.getByRole("grid");
+    await user.click(screen.getByRole("tab", { name: "Events" }));
+    await user.click(screen.getByRole("button", { name: "First" }));
+    expect(board).toHaveAttribute("data-fen", snapshot().fen);
+    await act(() => router.revalidate());
+    expect(screen.getByRole("grid")).toBe(board);
+    expect(screen.getByRole("tab", { name: "Events" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Ply 0 of 4")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Moves" }));
+    await user.click(screen.getByRole("button", { name: "View ply 2: e5" }));
+    expect(board).toHaveAttribute("data-fen", stored.moves[1]!.fen);
+    expect(screen.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Copy PGN" }));
+    expect(await screen.findByText("PGN could not be loaded. Try again.")).toBeVisible();
+    exportFailed = false;
+    await user.click(screen.getByRole("button", { name: "Copy PGN" }));
+    const text = await screen.findByRole("textbox", { name: "PGN text" });
+    expect(text).toHaveValue(stored.pgn);
+    await user.click(text);
+    expect((text as HTMLTextAreaElement).selectionStart).toBe(0);
+    expect((text as HTMLTextAreaElement).selectionEnd).toBe(stored.pgn.length);
+    expect(screen.queryByRole("button", { name: "Restore keys" })).not.toBeInTheDocument();
+    expect(http.fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
   it("retries compact analysis without resuming or dispatching a provider turn", async () => {

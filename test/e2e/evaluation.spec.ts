@@ -83,6 +83,11 @@ test("account AI observation persists every prefix and replays saved analysis wi
     }
   });
   await page.reload();
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await graph(page);
   await expect(
     page.getByText("Current profile: 5 of 5 positions. Missing positions remain gaps.", {
       exact: true,
@@ -180,6 +185,11 @@ test("independent room accounts keep private samples through socket play, refres
     await expect(player.getByTestId("evaluation-score")).toHaveText("Black delivered checkmate");
   }
   await peer.reload();
+  await expect(peer.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await graph(peer);
   await expect(
     peer.getByText("Current profile: 5 of 5 positions. Missing positions remain gaps.", {
       exact: true,

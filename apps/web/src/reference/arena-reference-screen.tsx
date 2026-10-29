@@ -231,12 +231,22 @@ function ReferenceMatch({
           <ArenaDetails
             commentary={
               hasModels ? (
-                <ReferencePanels scenario={scenario} moves={visibleMoves} kind="commentary" />
+                <ReferencePanels
+                  scenario={scenario}
+                  moves={snapshot.moves}
+                  selectedPly={terminal ? ply : undefined}
+                  kind="commentary"
+                />
               ) : undefined
             }
             telemetry={
               hasModels ? (
-                <ReferencePanels scenario={scenario} moves={visibleMoves} kind="telemetry" />
+                <ReferencePanels
+                  scenario={scenario}
+                  moves={snapshot.moves}
+                  selectedPly={terminal ? ply : undefined}
+                  kind="telemetry"
+                />
               ) : undefined
             }
             moves={

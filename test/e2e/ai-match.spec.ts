@@ -124,7 +124,45 @@ test("public Arena completes a match, exposes private replay and PGN, and keeps 
   await page.getByRole("button", { name: "Download PGN" }).click();
   const stream = await (await download).createReadStream();
   expect(await streamText(stream)).toBe(final.pgn);
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath(`replay-${width}.png`), fullPage: true });
+  }
+  await page.getByRole("grid").hover();
+  await expect(page.getByRole("button", { name: "Download PGN", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(11, 22, 38)",
+  );
+  await expect(page.getByRole("button", { name: "Copy PGN", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(11, 22, 38)",
+  );
+  await expect(page.getByRole("button", { name: "New game", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(61, 231, 239)",
+  );
   await page.screenshot({ path: testInfo.outputPath("ai-replay.png"), fullPage: true });
+  await page.route("**/pgn", (route) => route.fulfill({ status: 200, json: {} }));
+  await page.getByRole("button", { name: "Copy PGN", exact: true }).click();
+  await expect(
+    page.getByText("PGN could not be loaded. Try again.", { exact: true }),
+  ).toBeVisible();
+  await page.unroute("**/pgn");
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.clipboard, "writeText", {
+      configurable: true,
+      value: () => Promise.reject(new DOMException("Denied", "NotAllowedError")),
+    });
+  });
+  await page.getByRole("button", { name: "Copy PGN", exact: true }).click();
+  const pgnText = page.getByRole("textbox", { name: "PGN text", exact: true });
+  await expect(pgnText).toHaveValue(final.pgn);
+  await pgnText.focus();
+  expect(
+    await pgnText.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd]),
+  ).toEqual([0, final.pgn.length]);
+  await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   expect(
     await page.evaluate(() => JSON.stringify({ localStorage, sessionStorage, name: window.name })),
   ).not.toContain("match-fixture");
@@ -132,6 +170,10 @@ test("public Arena completes a match, exposes private replay and PGN, and keeps 
   await expect(page.getByRole("heading", { name: "Set up a game" })).toBeVisible();
   await page.goto(url);
   await expect(page.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   const stranger = await newContext();
   try {
     expect((await stranger.request.get(`${API_ORIGIN}/games/${game.gameId}/replay`)).status()).toBe(

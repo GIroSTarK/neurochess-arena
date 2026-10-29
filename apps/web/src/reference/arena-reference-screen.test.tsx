@@ -59,8 +59,11 @@ describe("shared arena reference scenarios", () => {
     expect(screen.getByRole("grid")).toHaveAttribute("data-fen", standardPositionPreview.fen);
     expect(screen.getByText("Ply 0 of 4")).toBeVisible();
     if (scenario.models > 0) {
-      expect(screen.getAllByText("No commentary provided")).toHaveLength(scenario.models);
-      expect(screen.getAllByText("Unavailable")).toHaveLength(scenario.models * 3);
+      expect(screen.getByText("Initial position · no move selected.")).toBeInTheDocument();
+      expect(screen.queryByText("No commentary provided")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("group", { name: /telemetry$/, hidden: true }),
+      ).not.toBeInTheDocument();
     }
     await user.click(screen.getByRole("button", { name: "View ply 2: e5" }));
     expect(screen.getByText("Ply 2 of 4")).toBeVisible();
@@ -100,6 +103,28 @@ describe("shared arena reference scenarios", () => {
     expect(screen.getByRole("button", { name: "Abort game" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "Replay" })).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps replay details on the selected move and retains the chosen inspector", async () => {
+    const user = userEvent.setup();
+    renderRouteScreen(<ArenaReferenceScreen />);
+    await user.selectOptions(screen.getByLabelText("Test scenario"), "aiAi");
+    await user.selectOptions(screen.getByLabelText("Reference state"), "replay");
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: "Commentary" }));
+    expect(screen.getAllByRole("group", { name: /^(White|Black) commentary$/ })).toHaveLength(1);
+    expect(screen.getByRole("group", { name: "Black commentary" })).toHaveTextContent("Qh4#");
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    expect(screen.getByRole("tab", { name: "Commentary" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("group", { name: "White commentary" })).toHaveTextContent("g4");
+    expect(screen.queryByRole("group", { name: "Black commentary" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "First" }));
+    expect(screen.getByText("Initial position · no move selected.")).toBeVisible();
+    expect(screen.queryByRole("group", { name: /commentary$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
   });
 
   it("updates local pause, flip and confirmed human resignation through the shared controls", async () => {

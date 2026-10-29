@@ -1,6 +1,6 @@
 # Neurochess Arena design system
 
-**Version:** 1.7
+**Version:** 1.8
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
@@ -111,7 +111,7 @@ With further text enlargement, stack live controls in one column and allow parti
 
 On desktop, Sandbox move history fills the rail height available beside the play area after supporting content and spacing. Preserve a text-scaled minimum reading area that shows the table header and complete move rows; allow the rail and arena to grow when supporting content needs more room. Long histories scroll within the list rather than increasing the arena height. Supporting guidance, recovery messages, and New game retain their natural height below it. In the one-column layout, the move list remains bounded so later actions stay reachable.
 
-In the wide AI layout, the information rail pins both models' latest commentary above Moves / Analysis / Events. In the stacked layout, the switcher follows the board and controls with Moves / Commentary / Analysis / Events; Moves is the initial live selection. Human rooms expose only Moves / Analysis. Wide and stacked selections are remembered separately in component memory, falling back to the first available inspector tab if a selected extension disappears. Tabs retain explicit keyboard activation and their local panel state.
+In the wide AI layout, the information rail pins both models' latest commentary above Moves / Analysis / Events. In the stacked layout, the switcher follows the board and controls with Moves / Commentary / Analysis / Events; Moves is the initial selection for live games and newly opened replay. Human rooms expose only Moves / Analysis. Wide and stacked selections are remembered separately in component memory, falling back to the first available inspector tab if a selected extension disappears. Tabs retain explicit keyboard activation and their local panel state. Completion, data refresh and replay scrubbing preserve the user's current inspector selection.
 
 Commentary uses equal seat blocks, compact two-line previews, accepted-call latency/input/output tokens, and an explicitly separate all-attempt move estimate. Reserve preview, attempt, measurement and cost-reason space before the first move and while details load. Use the section heading size for Commentary & move details. A labeled Read action opens the full commentary in a dialog tied to that move; continued play and resizing preserve the dialog and its frozen text. Exactly one commentary subtree changes between a pinned labeled region and a tab panel. Escape or Close restores the Read trigger, or the visible Commentary tab if resizing has hidden the trigger. Resizing never focuses a hidden control or starts new data work. Labels and measurements reflow with enlarged text; human seats omit AI-only measurements, and missing AI data remains unavailable.
 
@@ -193,6 +193,8 @@ AI game screens use a compact indicator below the primary controls, separated by
 ### Keyboard and chess interaction
 
 Replay navigation keeps the selected SAN visible below the move list's sticky header without moving page scroll or keyboard focus. Returning to the initial position scrolls the list to the beginning.
+
+Replay opens at the final ply. Board position, last-move markers, selected SAN, commentary and current evaluation follow the same cursor; the initial position has no previous-move commentary. Terminal reason/result and whole-game totals stay unchanged. If replay loading fails, retain the accepted final board and matching ply count with explicit Retry. Copy PGN and Download PGN are secondary actions; New game or New private room is the primary next-game action, including in Sandbox. Export failure remains retryable, and denied clipboard access exposes selectable canonical PGN text. Replay never requires provider credentials.
 
 Use an accessible [grid interaction pattern](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) with one square in the page tab order. Arrows move by the board's visible orientation; square labels always announce the actual algebraic coordinate, piece/color, and applicable selection/check state. Enter or Space selects a movable piece and confirms a legal destination; Escape cancels the selection. Home/End move within a row; Ctrl+Home/End move to the first/last visual square. Keyboard navigation scrolls its destination into view; restoring focus after the promotion dialog closes preserves the scroll position. Tab leaves the board.
 
@@ -312,12 +314,12 @@ Copy should identify the condition and the useful next action. Avoid technical e
 
 ## Core screen patterns
 
-| Screen   | Default composition                                                                                                        | Mobile adaptation                                                                                          |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game   | Seats stack in the same order; fields remain labeled and full width                                        |
-| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected        | Board precedes controls, then commentary and detail tabs                                                   |
-| Recovery | Same accepted position and inspector; near-board cause and Restore keys open an explicit dialog, with gated Resume         | Scrollable dialog over the retained board and details; Keep paused/Escape preserve masked page-memory keys |
-| Replay   | Result and reason, board and move navigation; synchronized commentary, Analysis selected, graph, totals, copy/download PGN | Summary, board/navigation, analysis, metrics, and export actions remain reachable in normal flow           |
+| Screen   | Default composition                                                                                                      | Mobile adaptation                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game | Seats stack in the same order; fields remain labeled and full width                                        |
+| Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected      | Board precedes controls, then Moves / Commentary / Analysis / Events; human rooms use Moves / Analysis     |
+| Recovery | Same accepted position and inspector; near-board cause and Restore keys open an explicit dialog, with gated Resume       | Scrollable dialog over the retained board and details; Keep paused/Escape preserve masked page-memory keys |
+| Replay   | Result and reason, board/navigation, Moves initially selected; synchronized commentary/evaluation, secondary PGN actions | Summary, board/navigation, details and primary next-game action remain reachable in normal flow            |
 
 ## Accessibility and acceptance
 

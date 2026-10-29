@@ -30,7 +30,6 @@ export function MatchDetails({
   const { snapshot } = details;
   return (
     <ArenaDetails
-      initialTab={view.terminal ? "analysis" : "moves"}
       commentary={
         <CommentaryPanel
           key={snapshot.gameId}

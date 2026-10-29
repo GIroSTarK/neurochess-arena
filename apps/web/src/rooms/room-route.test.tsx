@@ -511,6 +511,7 @@ describe("production private room routes", () => {
   });
   it("loads direct terminal room links with replay and no AI or credential requests", async () => {
     const terminal = { ...joinedRoom(), snapshot: snapshot(FOOLS_MATE, { version: 5 }) };
+    let replayFailed = true;
     const http = createHttpMock({
       "GET /api/auth/get-session": () => jsonResponse(roomSession),
       "GET /profile": () => jsonResponse(roomProfile),
@@ -518,12 +519,20 @@ describe("production private room routes", () => {
         jsonResponse({ snapshot: terminal.snapshot, configuration }),
       [`GET /rooms/${GAME_ID}`]: () => jsonResponse(terminal),
       [`GET /games/${GAME_ID}/replay`]: () =>
-        jsonResponse({ snapshot: terminal.snapshot, initialFen: snapshot().fen }),
+        replayFailed
+          ? jsonResponse({})
+          : jsonResponse({ snapshot: terminal.snapshot, initialFen: snapshot().fen }),
     });
     vi.stubGlobal("fetch", http.fetch);
     vi.stubGlobal("WebSocket", Socket);
-    renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
+    const { router } = renderApp(options, { initialEntries: [`/games/${GAME_ID}`] });
     expect(await screen.findByRole("button", { name: "Download PGN" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("aria-selected", "true");
+    await screen.findByRole("button", { name: "Retry replay" });
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", terminal.snapshot.fen);
+    expect(screen.getByText("Ply 4 of 4")).toBeVisible();
+    replayFailed = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry replay" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /^First$/ })).toHaveAttribute(
         "aria-disabled",
@@ -531,9 +540,17 @@ describe("production private room routes", () => {
       ),
     );
     expect(screen.getByRole("status")).toHaveTextContent("Black wins by checkmate");
+    await userEvent.click(screen.getByRole("tab", { name: "Analysis" }));
     await userEvent.click(screen.getByRole("button", { name: /^First$/ }));
     expect(await screen.findByText("Ply 0 of 4")).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("Ply 0 of 4");
+    await act(() => router.revalidate());
+    expect(screen.getByRole("tab", { name: "Analysis" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("grid")).toHaveAttribute("data-fen", snapshot().fen);
+    expect(screen.getByRole("link", { name: "New private room" })).toHaveAttribute(
+      "href",
+      "/rooms",
+    );
     expect(screen.queryByRole("button", { name: "Resign" })).not.toBeInTheDocument();
     http.assertNoUnexpectedRequests();
   });

@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import { integrationDatabase } from "../database";
 
 import { createAccount } from "./account-helpers";
+import { isArenaWide } from "./arena-layout";
 import { API_ORIGIN, WEB_ORIGIN } from "./environment";
 import { expect, test } from "./fixtures";
 import { setPseudoLocalization } from "./text-layout";
@@ -239,9 +240,16 @@ test("history reopens canonical results on another session without controllers, 
     await replay.focus();
     await replay.press("Enter");
     await expect(review.getByRole("heading", { name: "Black wins by checkmate" })).toBeVisible();
+    await expect(review.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(review.getByRole("grid")).toHaveAttribute("data-fen", completed.fen);
     await review.getByRole("button", { name: "First", exact: true }).click();
     await review.getByRole("button", { name: "Next", exact: true }).click();
+    if (!(await isArenaWide(review))) {
+      await review.getByRole("tab", { name: "Commentary", exact: true }).click();
+    }
     await expect(
       review.getByText('<img src=x onerror="alert(1)"> **Viewer note**', { exact: true }),
     ).toBeVisible();

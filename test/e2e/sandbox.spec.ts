@@ -162,6 +162,15 @@ test("creates, recovers, completes, replays and exports a private game", async (
   await download.saveAs(path);
   expect(await readFile(path, "utf8")).toBe(restored.pgn);
   expect(await readSnapshot(page, current.gameId)).toEqual(restored);
+  await page.getByRole("grid").hover();
+  await expect(page.getByRole("button", { name: "New game", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(61, 231, 239)",
+  );
+  await expect(page.getByRole("button", { name: "Download PGN", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(11, 22, 38)",
+  );
   const creation = page.waitForResponse(
     (response) =>
       response.url() === API_ORIGIN + "/sandbox/games" && response.request().method() === "POST",

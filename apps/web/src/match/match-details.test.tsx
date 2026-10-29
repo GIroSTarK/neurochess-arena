@@ -1,18 +1,130 @@
+import { gameReplayResponseSchema } from "@neurochess/contracts";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ArenaDetails } from "../arena/arena-details";
 import { ArenaLayoutContext, type ArenaLayoutMode } from "../arena/layout-mode";
+import { emptyEvaluation, type EvaluationView } from "../gameplay/analysis-controller";
+import { createWebI18n } from "../i18n";
 import { invocationRecords, telemetryDetails, viewerCommentary } from "../test/ai-invocations";
-import { snapshot } from "../test/fixtures";
+import { initialTarget } from "../test/analysis";
+import { FOOLS_MATE, snapshot } from "../test/fixtures";
 import { renderLocalized } from "../test/render";
 
 import { CommentaryPanel } from "./commentary-panel";
+import type { MatchController } from "./controller";
 import { InvocationEvents } from "./invocation-events";
+import { MatchDetails } from "./panels/match-details";
+import { matchPresentation } from "./presentation";
+import type { MatchState } from "./state";
+import { MatchStore } from "./store";
 import { TelemetryPanel } from "./telemetry-panel";
 
 describe("minimal Arena telemetry panels", () => {
+  it.each(["wide", "stacked"] as const)(
+    "opens terminal Moves in %s and retains the inspector as replay details refresh",
+    async (mode) => {
+      const user = userEvent.setup();
+      const details = { ...telemetryDetails, snapshot: snapshot(FOOLS_MATE) };
+      const records = invocationRecords();
+      const evaluation: EvaluationView = {
+        ...emptyEvaluation,
+        gameId: details.snapshot.gameId,
+        plies: [0, 1, 2, 3, 4].map((ply) =>
+          ply === 2
+            ? { status: "unavailable", saved: "memory", reason: "engine_load_failed" }
+            : {
+                status: "ready",
+                saved: "memory",
+                sample: {
+                  ...initialTarget,
+                  ply,
+                  generation: 1,
+                  depth: 8,
+                  durationMs: 40,
+                  score:
+                    ply === 4
+                      ? { kind: "mate", winner: "black", moves: 0 }
+                      : { kind: "cp", value: 125 },
+                },
+              },
+        ),
+      };
+      const controller = {
+        selectPly: vi.fn(),
+        loadInvocations: vi.fn(),
+        newGame: vi.fn(),
+      } as unknown as MatchController;
+      const renderDetails = (ply: number, loading = false) => {
+        const state: MatchState = {
+          ...new MatchStore().get(),
+          phase: "ready",
+          details,
+          replay: gameReplayResponseSchema.parse({
+            snapshot: details.snapshot,
+            initialFen: snapshot().fen,
+          }),
+          replayPly: ply,
+          invocations: records,
+          invocationsMoveCount: 4,
+          invocationsLoading: loading,
+        };
+        return (
+          <ArenaLayoutContext value={mode}>
+            <MatchDetails
+              state={state}
+              view={matchPresentation(state, createWebI18n().t)}
+              controller={controller}
+              evaluation={{ view: evaluation, onRetrySave: vi.fn() }}
+            />
+          </ArenaLayoutContext>
+        );
+      };
+      const { rerender } = renderLocalized(renderDetails(4));
+      expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("button", { name: "View ply 4: Qh4#" })).toHaveAttribute(
+        "aria-current",
+        "step",
+      );
+      await user.click(screen.getByRole("tab", { name: "Analysis" }));
+      expect(screen.getByTestId("evaluation-selected")).toHaveTextContent(
+        "Black delivered checkmate",
+      );
+      const totals = screen.getByRole("region", { name: "Game totals" }).textContent;
+      const graph = screen.getByRole("img", { name: /evaluation/i });
+      expect(graph.querySelectorAll("polyline")).toHaveLength(1);
+      expect(graph.querySelectorAll("circle")).toHaveLength(3);
+      expect(within(graph).getByText("M")).toBeInTheDocument();
+      for (const ply of [1, 2, 0, 4]) {
+        rerender(renderDetails(ply, true));
+        expect(screen.getByRole("tab", { name: "Analysis" })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        expect(screen.getByTestId("evaluation-marker")).toHaveAttribute("data-ply", String(ply));
+        expect(screen.getByRole("region", { name: "Game totals" }).textContent).toBe(totals);
+        const commentary = screen.getByRole("region", {
+          name: "Commentary & move details",
+          hidden: true,
+        });
+        if (ply === 0) {
+          expect(commentary).toHaveTextContent("Initial position · no move selected.");
+          expect(commentary).not.toHaveTextContent(viewerCommentary);
+        } else if (ply === 1) {
+          expect(commentary).toHaveTextContent("White · 1. f3");
+          expect(commentary).toHaveTextContent(viewerCommentary);
+          expect(screen.getByTestId("evaluation-selected")).toHaveTextContent(
+            "+1.25 · White advantage",
+          );
+        } else if (ply === 2) {
+          expect(commentary).toHaveTextContent("Black · 1. e5");
+          expect(screen.getByTestId("evaluation-selected")).toHaveTextContent("No evaluation yet");
+        }
+        expect(screen.getByRole("button", { name: "New game" })).toBeVisible();
+      }
+    },
+  );
   it("retains commentary dialog text and focus across resize", async () => {
     const user = userEvent.setup();
     const renderDetails = (mode: ArenaLayoutMode, updated = false) => (

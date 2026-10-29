@@ -1,5 +1,6 @@
 import { useId, useRef, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import type { PublicIdentity } from "../api/identity";
 import { ArenaDetails } from "../arena/arena-details";
@@ -20,7 +21,6 @@ import { replayView } from "../position/replay";
 import { AppNavigation } from "../shell/app-navigation";
 import { AppShell } from "../shell/app-shell";
 import { Button } from "../ui/button";
-import { TextLink } from "../ui/text-link";
 
 import type { RoomController } from "./controller";
 import { InvitationShare } from "./invitation-share";
@@ -230,7 +230,7 @@ export function RoomScreen({
                     available={state.replay !== null}
                     loading={state.replayPhase === "loading"}
                     count={snapshot.moves.length}
-                    ply={state.replayPly}
+                    ply={state.replay ? state.replayPly : snapshot.moves.length}
                     notice={state.replayPhase === "error" ? t("match.replayError") : null}
                     onSelect={controller.selectPly}
                     onRetry={
@@ -293,7 +293,6 @@ export function RoomScreen({
                 </section>
               ) : null}
               <ArenaDetails
-                initialTab={terminal ? "analysis" : "moves"}
                 moves={
                   <MoveHistory
                     moves={snapshot.moves}
@@ -311,7 +310,14 @@ export function RoomScreen({
                   />
                 }
               />
-              {terminal ? <TextLink to="/rooms">{t("rooms.newRoom")}</TextLink> : null}
+              {terminal ? (
+                <Link
+                  to="/rooms"
+                  className="inline-flex min-h-target items-center justify-center rounded-control border border-accent bg-accent px-4 py-2 text-center text-label font-semibold text-on-accent hover:shadow-[inset_0_0_0_2px_var(--color-on-accent)] focus-visible:outline-focus"
+                >
+                  {t("rooms.newRoom")}
+                </Link>
+              ) : null}
             </>
           }
         />

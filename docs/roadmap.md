@@ -205,7 +205,7 @@ Presentation follow-up to the completed MVP, tracked in the [approved implementa
 - [x] Task 3: near-board AI status, primary lifecycle controls, separate pacing, and compact evaluation with accessible provenance and independent analysis retry.
 - [x] Task 4: explicit credential recovery dialog with retained masked page-memory fields, a persistent near-board action, preserved inspector state, and distinct provider/uncertain-command recovery.
 - [x] Task 5: near-board room status and recovery, explicit unfilled seats, grouped invitation sharing with focus access, and preserved human-room capabilities and synchronization.
-- [ ] Task 6: replay refinements, shared-consumer reconciliation, and complete redesign acceptance.
+- [x] Task 6: Moves-first replay with synchronized details, secondary PGN actions and primary next-game actions, reconciled shared consumers, and complete automated redesign acceptance across the configured browsers and performance budgets.
 
 ## Post-MVP candidates
 

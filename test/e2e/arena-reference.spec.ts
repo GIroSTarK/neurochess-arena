@@ -163,8 +163,10 @@ test("shared arena reference: mixed seats, live and replay", async ({ page }, te
   if (!(await isArenaWide(page))) {
     await page.getByRole("tab", { name: "Commentary", exact: true }).click();
   }
-  await expect(page.getByText("No commentary provided", { exact: true })).toHaveCount(1);
-  await expect(page.getByText("Unavailable", { exact: true })).toHaveCount(3);
+  await expect(
+    page.getByText("Initial position · no move selected.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("group", { name: /^(White|Black) commentary$/ })).toHaveCount(0);
   await page.getByRole("tab", { name: "Moves", exact: true }).click();
   await activate(page.getByRole("button", { name: "View ply 2: e5", exact: true }), touch);
   await expect(page.getByText("Ply 2 of 4")).toBeVisible();

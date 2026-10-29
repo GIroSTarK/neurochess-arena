@@ -499,12 +499,20 @@ for (const enlarged of [false, true]) {
         "data-fen",
         ply === 0 ? initialFen : current.moves[ply - 1]!.fen,
       );
+      await expect(page.getByRole("heading", { name: "Game stopped", exact: true })).toBeVisible();
       if (ply === 0) {
+        await expect(page.getByRole("grid").locator("[data-last-move]")).toHaveCount(0);
         expect(await scrollTop()).toBe(0);
         await expect(history.locator('[aria-current="step"]')).toHaveCount(0);
         return;
       }
       const selected = history.getByRole("button", { name: new RegExp("^View ply " + ply + ":") });
+      const uci = current.moves[ply - 1]!.uci;
+      for (const squareName of [uci.slice(0, 2), uci.slice(2, 4)]) {
+        await expect(
+          page.getByRole("grid").locator(`[data-square="${squareName}"]`),
+        ).toHaveAttribute("data-last-move", "true");
+      }
       await expect(selected).toHaveAttribute("aria-current", "step");
       const bounds = await selected.evaluate((element) => {
         const panel = element.closest('[role="region"]')!;

@@ -8,13 +8,23 @@ import { referenceMoveData, type ReferenceScenario } from "./scenarios";
 export function ReferencePanels({
   scenario,
   moves,
+  selectedPly,
   kind,
 }: {
   readonly scenario: ReferenceScenario;
   readonly moves: readonly MoveRecord[];
+  readonly selectedPly?: number | undefined;
   readonly kind: "commentary" | "telemetry";
 }) {
   const { t, i18n } = useTranslation();
+  const selected =
+    selectedPly === undefined ? undefined : moves.find((move) => move.ply === selectedPly);
+  const colors =
+    selectedPly === undefined
+      ? (["white", "black"] as const)
+      : selected
+        ? [plyColor(selected.ply)]
+        : [];
   const numbers = new Intl.NumberFormat(i18n.resolvedLanguage);
   const dollars = new Intl.NumberFormat(i18n.resolvedLanguage, {
     style: "currency",
@@ -27,10 +37,21 @@ export function ReferencePanels({
       <h2 className="border-b border-divider pb-2 text-section font-semibold">
         {t(`reference.${kind}`)}
       </h2>
-      {(["white", "black"] as const).map((color) => {
+      {selectedPly === 0 ? (
+        <p className="mt-2 text-body">
+          {t(kind === "commentary" ? "telemetry.initial" : "reference.unavailable")}
+        </p>
+      ) : null}
+      {colors.map((color) => {
         const identity = scenario.players[color];
-        if (identity.kind !== "ai") return null;
-        const move = moves.findLast((move) => plyColor(move.ply) === color);
+        if (identity.kind !== "ai") {
+          return kind === "commentary" && selected ? (
+            <p key={color} className="mt-2 text-body">
+              {t("telemetry.humanMove")}
+            </p>
+          ) : null;
+        }
+        const move = selected ?? moves.findLast((move) => plyColor(move.ply) === color);
         const data = move ? referenceMoveData[move.ply - 1] : undefined;
         const metrics = [
           {

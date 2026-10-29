@@ -46,7 +46,7 @@ export function MatchBoard({
             available={state.replay !== null}
             loading={state.replayLoading}
             count={board.snapshot.moves.length}
-            ply={state.replayPly}
+            ply={state.replay ? state.replayPly : board.snapshot.moves.length}
             notice={state.replayError ? t("match.replayError") : null}
             onSelect={(ply) => controller.selectPly(ply)}
             onRetry={

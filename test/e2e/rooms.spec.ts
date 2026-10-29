@@ -131,6 +131,20 @@ for (const ownerColor of ["White", "Black"] as const) {
         fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
       });
       await expectSharedResult([page, guest], final, "Black wins");
+      if (ownerColor === "White" && kind === "account") {
+        for (const width of [1440, 768, 390]) {
+          await page.setViewportSize({ width, height: 1000 });
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.screenshot({
+            path: testInfo.outputPath(`room-replay-${width}.png`),
+            fullPage: true,
+          });
+        }
+      }
+      await expect(page.getByRole("link", { name: "New private room", exact: true })).toHaveCSS(
+        "background-color",
+        "rgb(61, 231, 239)",
+      );
       for (const player of kind === "account" ? [page, guest] : [page]) {
         await player.getByRole("link", { name: "History", exact: true }).click();
         await player.locator(`a[href="/games/${gameId}"]`).click();
@@ -138,6 +152,10 @@ for (const ownerColor of ["White", "Black"] as const) {
           player.getByRole("heading", { name: "Black wins", exact: true }),
         ).toBeVisible();
         await expect(square(player, "h4").locator('[data-piece="black-q"]')).toBeVisible();
+        await expect(player.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
       }
       expect(forbidden).toEqual([]);
     });

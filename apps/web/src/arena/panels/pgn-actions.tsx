@@ -37,7 +37,7 @@ export function PgnActions({
           {t("export.copy")}
         </Button>
         <Button
-          variant="primary"
+          variant="secondary"
           className="flex-[1_1_8rem] wrap-normal"
           aria-disabled={busy}
           onClick={() => {

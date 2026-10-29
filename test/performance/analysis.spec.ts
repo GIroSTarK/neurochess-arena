@@ -330,6 +330,11 @@ test("200-ply private replay remains responsive while real analysis backfills", 
   await expect(page.getByRole("grid")).toHaveAttribute("data-fen", snapshot.fen);
   const openReplayMs = performance.now() - opened;
   await expect(page.getByTestId("evaluation-score")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("tab", { name: "Moves", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("tab", { name: "Analysis", exact: true }).click();
   const probe = await workerProbe(browser);
   await probe.startCpu();
   const selections: number[] = [];

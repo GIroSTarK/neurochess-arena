@@ -26,7 +26,7 @@ export function SandboxStartButton({
   return (
     <StartControl
       label={t(terminal ? "actions.newGame" : (phaseLabels[state.phase] ?? "actions.start"))}
-      variant={terminal ? "secondary" : "primary"}
+      variant="primary"
       disabled={
         state.readiness !== "ready" ||
         (terminal
