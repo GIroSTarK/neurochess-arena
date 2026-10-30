@@ -14,18 +14,22 @@ export function AccountDeletion() {
   const [confirming, setConfirming] = useState(false);
   return (
     <section
-      className="grid gap-3 border-t border-divider pt-6"
+      className="mt-2 grid min-w-0 gap-3 border-t border-divider pt-6"
       aria-label={t("account.deletion.title")}
     >
       <h2 className="text-section font-semibold">{t("account.deletion.title")}</h2>
-      <p className="text-text-secondary">{t("account.deletion.hint")}</p>
+      <p className="max-w-xl text-text-secondary">{t("account.deletion.hint")}</p>
       {state.deletion === "uncertain" ? (
         <p role="alert">{t("account.deletion.uncertain")}</p>
       ) : null}
       {state.issue === "AUTH_REAUTH_REQUIRED" ? (
         <TextLink to={authHref("sign-in", "/")}>{t("account.deletion.signIn")}</TextLink>
       ) : null}
-      <Button variant="danger" onClick={() => setConfirming(true)}>
+      <Button
+        variant="quiet-danger"
+        className="justify-self-start"
+        onClick={() => setConfirming(true)}
+      >
         {t("account.deletion.title")}
       </Button>
       {confirming ? (

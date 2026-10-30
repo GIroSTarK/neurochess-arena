@@ -1,6 +1,6 @@
 # Neurochess Arena design system
 
-**Version:** 1.8
+**Version:** 1.9
 
 **Scope:** MVP presentation and interaction contracts; see the [roadmap](roadmap.md) for implementation status
 
@@ -123,7 +123,7 @@ Background refresh keeps already received commentary, measurements, and events v
 
 Follow the [telemetry accounting contract](architecture/providers.md#telemetry-and-cost): label costs as USD estimates and identify all-attempt totals separately from accepted-call measurements. Show concise unavailable reasons, partial coverage and a clearly labeled known estimate subtotal when available. Complete-game and seat totals remain independent of replay selection; per-move details follow the selected ply. Events keep known failed/discarded calls and turns without an accepted move inspectable.
 
-Forms use two equal seat columns on desktop and stacked White then Black sections on mobile. Keep the provider, credential, and model fields together; advanced parameters start collapsed. Overlays center on desktop and become scrollable sheets on mobile. Opening the keyboard must leave the focused field and recovery action reachable.
+AI-AI setup uses two equal seat columns on desktop and stacked White then Black sections on mobile. AI-human uses one centered AI form with a compact human summary beside the mode/color controls. Keep provider, credential, discovery, and model fields together with compact field-group spacing; advanced parameters start collapsed. Show guest saving guidance once, while every session-key field retains its lifetime explanation. Keep keyed fields mounted when changing composition so the still-configured AI seat retains its page-memory input. Overlays center on desktop and become scrollable sheets on mobile. Opening the keyboard must leave the focused field and recovery action reachable.
 
 ## Component specifications
 
@@ -262,6 +262,12 @@ All reference copy uses the localization layer. Invitation secrets remain only i
 
 ## Supporting MVP patterns
 
+Supporting pages share an aligned title, description, optional return action, and a divider before content. Authentication, room entry, and AI-human setup use a 36rem maximum form width; profile uses 48rem; AI-AI setup, History, and saved-key management use 70rem. All shrink within the shell gutters. Use spacing and divided rows rather than nested cards; keep form widths readable and allow longer text to grow vertically.
+
+History rows emphasize participants, result, and the native Open replay link. Mode/date support the result, and a Game reference disclosure exposes the complete identifier. Deletion stays visually subordinate; its accessible name and confirmation always retain the full reference so identical games remain distinguishable. Keep pagination separate from the rows and retain focus recovery after deletion.
+
+Saved-key management presents the existing keys first in reading and keyboard order. At 56rem of page-container width, a bounded 24rem add-key form sits alongside the list; below that, it follows the list. Reflow and metadata refresh preserve the single mounted form, entered key, and explicit consent. Keep the persistence explanation beside Save, masked metadata in divided rows, and revoke/clear controls quiet until confirmation. Profile groups avatar and username editing above a separated account-deletion region. Authentication retains its focused form, with provider alternatives and recovery links grouped after the primary action.
+
 | Flow            | Design requirements                                                                                                                                                                                                                                                                                                                                |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | AI versus human | Reuse one AI configuration section plus the human color choice. Permit moves only on the authorized human turn. Human resignation uses explicit confirmation; no AI-resign control.                                                                                                                                                                |
@@ -316,7 +322,7 @@ Copy should identify the condition and the useful next action. Avoid technical e
 
 | Screen   | Default composition                                                                                                      | Mobile adaptation                                                                                          |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Setup    | Title, mode choice, equal White/Black configuration, session-only explanation, advanced parameters collapsed, Start game | Seats stack in the same order; fields remain labeled and full width                                        |
+| Setup    | Title, mode choice, equal AI seat sections or one AI form with compact human summary, collapsed parameters, Start game   | AI seats stack White then Black; fields remain labeled and full width                                      |
 | Live     | Board and player summaries, evaluation and toolbar; both latest commentary entries, compact metrics; Moves selected      | Board precedes controls, then Moves / Commentary / Analysis / Events; human rooms use Moves / Analysis     |
 | Recovery | Same accepted position and inspector; near-board cause and Restore keys open an explicit dialog, with gated Resume       | Scrollable dialog over the retained board and details; Keep paused/Escape preserve masked page-memory keys |
 | Replay   | Result and reason, board/navigation, Moves initially selected; synchronized commentary/evaluation, secondary PGN actions | Summary, board/navigation, details and primary next-game action remain reachable in normal flow            |

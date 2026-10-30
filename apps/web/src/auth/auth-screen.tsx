@@ -121,8 +121,7 @@ export function AuthScreen({
   const hasPassword = kind === "sign-in" || kind === "sign-up" || kind === "reset-password";
   const invalidReset = kind === "reset-password" && !entry.hasResetToken && notice !== "resetDone";
   return (
-    <AccountFrame title={t(`account.titles.${title}`)}>
-      <p className="text-body text-text-secondary">{t("account.separation")}</p>
+    <AccountFrame title={t(`account.titles.${title}`)} description={t("account.separation")}>
       {entry.verified ? <p role="status">{t("account.verified")}</p> : null}
       <fetcher.Form
         ref={form}
@@ -184,7 +183,7 @@ export function AuthScreen({
           </Button>
         ) : null}
         {kind === "sign-in" || kind === "sign-up" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="mt-2 grid gap-3 border-t border-divider pt-6 sm:grid-cols-2">
             {(["google", "github"] as const).map((provider) => (
               <Button
                 key={provider}
@@ -198,7 +197,7 @@ export function AuthScreen({
           </div>
         ) : null}
       </fetcher.Form>
-      <div className="flex flex-wrap gap-x-6 gap-y-2 text-label">
+      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-divider pt-4 text-label">
         {kind !== "sign-in" ? (
           <TextLink to={authHref("sign-in", entry.returnTo)}>{t("account.signIn")}</TextLink>
         ) : null}

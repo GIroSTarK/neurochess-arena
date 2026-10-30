@@ -27,7 +27,7 @@ describe("saved credential label interpolation", () => {
           maxBuffer: 16_384,
         },
       );
-      expect(JSON.parse(output)).toBe(`Revoke ${label}`);
+      expect(JSON.parse(output)).toBe(`Revoke key: ${label}`);
     },
     10_000,
   );

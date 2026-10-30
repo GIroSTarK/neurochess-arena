@@ -21,10 +21,10 @@ function GameParticipants({ game }: { readonly game: GameHistoryEntry }) {
         return (
           <div
             key={color}
-            className="grid min-w-0 gap-x-3 gap-y-1 @min-[24rem]:grid-cols-[auto_minmax(0,1fr)]"
+            className="grid min-w-0 gap-x-3 gap-y-1 @min-[16rem]:grid-cols-[auto_minmax(0,1fr)]"
           >
-            <dt className="text-text-secondary">{t(`players.${color}`)}</dt>
-            <dd className="min-w-0 wrap-anywhere">
+            <dt className="text-label text-text-secondary">{t(`players.${color}`)}</dt>
+            <dd className="min-w-0 font-semibold wrap-anywhere">
               {seat.type === "human"
                 ? player?.kind === "account"
                   ? player.username
@@ -44,10 +44,11 @@ function GameParticipants({ game }: { readonly game: GameHistoryEntry }) {
 export function GuestHistory() {
   const { t } = useTranslation();
   return (
-    <AccountFrame title={t("history.title")} page="history">
-      <p>{t("history.guest")}</p>
-      <TextLink to={authHref("sign-in", "/history")}>{t("account.signIn")}</TextLink>
-      <TextLink to="/">{t("history.arena")}</TextLink>
+    <AccountFrame title={t("history.title")} page="history" description={t("history.guest")}>
+      <div className="flex flex-wrap items-center gap-6">
+        <TextLink to={authHref("sign-in", "/history")}>{t("account.signIn")}</TextLink>
+        <TextLink to="/">{t("history.arena")}</TextLink>
+      </div>
     </AccountFrame>
   );
 }
@@ -66,9 +67,13 @@ export function HistoryScreen() {
     timeStyle: "short",
   });
   return (
-    <AccountFrame title={t("history.title")} page="history">
-      <p className="text-body text-text-secondary">{t("history.description")}</p>
-      <TextLink to="/">{t("history.arena")}</TextLink>
+    <AccountFrame
+      title={t("history.title")}
+      page="history"
+      width="wide"
+      description={t("history.description")}
+      actions={<TextLink to="/">{t("history.arena")}</TextLink>}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2
           ref={listHeading}
@@ -79,7 +84,7 @@ export function HistoryScreen() {
           {t("history.list")}
         </h2>
         <Button
-          variant="secondary"
+          variant="quiet-danger"
           aria-disabled={
             state.phase === "loading" ||
             state.deleting ||
@@ -110,44 +115,53 @@ export function HistoryScreen() {
         </div>
       ) : null}
       {state.result?.games.length === 0 ? <p>{t("history.empty")}</p> : null}
-      <ul className="grid min-w-0 gap-4" aria-label={t("history.list")}>
+      <ul
+        className="grid min-w-0 divide-y divide-divider border-y border-divider"
+        aria-label={t("history.list")}
+      >
         {state.result?.games.map((game) => {
           const date = dateFormat.format(new Date(game.finishedAt));
           const gameReference = t("history.gameReference", { gameId: game.gameId });
           return (
             <li
               key={game.gameId}
-              className="grid min-w-0 gap-3 rounded-control border border-divider bg-surface-raised p-4"
+              className="grid min-w-0 items-start gap-4 py-6 @min-[48rem]/page:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] @min-[48rem]/page:gap-6"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="rounded-control border border-control-border px-2 py-1 text-label">
-                  {t(`history.states.${game.state}`)}
-                </span>
-                <time dateTime={game.finishedAt} className="text-label text-text-secondary">
-                  {date}
-                </time>
+              <div className="grid min-w-0 gap-3">
+                <p className="text-label text-text-secondary">
+                  {t(`history.modes.${game.configuration.mode}`)}
+                </p>
+                <GameParticipants game={game} />
               </div>
-              <p className="text-label text-text-secondary">
-                {t(`history.modes.${game.configuration.mode}`)}
-              </p>
-              <GameParticipants game={game} />
-              <p className="text-label wrap-anywhere text-text-secondary">{gameReference}</p>
-              <p>
-                {t("game.resultWithScore", {
-                  result: resultTitle(game, t),
-                  reason: t(`reasons.${game.terminationReason}`),
-                  score: game.result,
-                })}
-              </p>
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="grid min-w-0 gap-2">
+                <p className="font-semibold">
+                  {t("game.resultWithScore", {
+                    result: resultTitle(game, t),
+                    reason: t(`reasons.${game.terminationReason}`),
+                    score: game.result,
+                  })}
+                </p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-label text-text-secondary">
+                  <span>{t(`history.states.${game.state}`)}</span>
+                  <time dateTime={game.finishedAt}>{date}</time>
+                </div>
+                <details className="min-w-0 text-label text-text-secondary">
+                  <summary className="min-h-target cursor-pointer content-center rounded-control py-2">
+                    {t("history.reference")}
+                  </summary>
+                  <p className="pb-2 font-mono wrap-anywhere">{gameReference}</p>
+                </details>
+              </div>
+              <div className="flex max-w-full flex-wrap items-center gap-3 @min-[48rem]/page:flex-col @min-[48rem]/page:items-stretch">
                 <TextLink
                   to={gameHref("arena", game.gameId)}
                   aria-label={t("history.replayLabel", { date, result: resultTitle(game, t) })}
+                  className="justify-center rounded-control border border-accent px-4 py-2 text-center text-label font-semibold no-underline hover:bg-surface-raised"
                 >
                   {t("history.replay")}
                 </TextLink>
                 <Button
-                  variant="secondary"
+                  variant="quiet-danger"
                   aria-label={t("history.deleteLabel", {
                     date,
                     result: resultTitle(game, t),
@@ -164,7 +178,7 @@ export function HistoryScreen() {
         })}
       </ul>
       {state.result ? (
-        <div className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p role="status">{t("history.page", { number: state.page + 1 })}</p>
           <div className="flex flex-wrap gap-3">
             <Button

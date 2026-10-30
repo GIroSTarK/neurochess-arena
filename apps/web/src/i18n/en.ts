@@ -207,6 +207,7 @@ export const en = {
     delete: "Delete game",
     deleteLabel: "Delete game · {{date}} · {{result}} · {{gameReference}}",
     gameReference: "Game reference: {{gameId}}",
+    reference: "Game reference",
     deleteTitle: "Delete this game?",
     deleteHint:
       "Permanently remove this finished game and its moves, players, commentary, invocation attempts, replay, PGN and execution records from your account. This cannot be undone. Other games, saved provider keys and your profile are kept.",
@@ -244,7 +245,7 @@ export const en = {
     suffix: "Ends in {{suffix}}",
     masked: "Key hidden",
     created: "Saved {{date}}",
-    revokeLabel: "Revoke {{label}}",
+    revokeLabel: "Revoke key: {{label}}",
     revoke: "Revoke key",
     revokeTitle: "Revoke this saved key?",
     clear: "Clear all saved keys",

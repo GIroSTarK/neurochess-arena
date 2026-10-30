@@ -203,12 +203,12 @@ test("settings confirms individual revoke and clear-all, and revocation removes 
     await settings.goto(WEB_ORIGIN + "/account/credentials");
     await page.goto("/");
     await configureCredential(page, "White", { credentialId: first.credentialId });
-    await settings.getByRole("button", { name: "Revoke First saved" }).click();
+    await settings.getByRole("button", { name: "Revoke key: First saved" }).click();
     let dialog = settings.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(settings.getByText("First saved", { exact: true })).toBeVisible();
-    await settings.getByRole("button", { name: "Revoke First saved" }).click();
+    await settings.getByRole("button", { name: "Revoke key: First saved" }).click();
     dialog = settings.getByRole("dialog");
     await dialog.getByRole("button", { name: "Revoke key", exact: true }).click();
     const seat = page.getByRole("group", { name: "White", exact: true });
@@ -434,6 +434,16 @@ test("credential settings and selectors fit expanded text and remain keyboard ac
   await createAccount(page.request);
   await page.goto("/account/credentials");
   await saveCredential(page, "A".repeat(64), "long-label-fixture-1234", "openrouter");
+  const draftLabel = page.locator('input[name="label"]');
+  const draftKey = page.locator('input[name="apiKey"]');
+  const consent = page.getByRole("checkbox");
+  await draftLabel.fill("Unsaved draft");
+  await draftKey.fill("responsive-draft-fixture-5678");
+  await consent.check();
+  let saves = 0;
+  page.on("request", (request) => {
+    if (request.url() === API_ORIGIN + "/credentials" && request.method() === "POST") saves++;
+  });
   await setPseudoLocalization(page, true);
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -450,11 +460,24 @@ test("credential settings and selectors fit expanded text and remain keyboard ac
         })),
     );
     expect(overflow).toEqual([]);
+    await expect(draftLabel).toHaveValue("Unsaved draft");
+    await expect(draftKey).toHaveValue("responsive-draft-fixture-5678");
+    await expect(consent).toBeChecked();
   }
   await setPseudoLocalization(page, false);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "";
   });
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url() === API_ORIGIN + "/credentials" && response.request().method() === "GET",
+  );
+  await page.getByRole("button", { name: "Refresh saved keys" }).click();
+  await refreshed;
+  await expect(draftLabel).toHaveValue("Unsaved draft");
+  await expect(draftKey).toHaveValue("responsive-draft-fixture-5678");
+  await expect(consent).toBeChecked();
+  expect(saves).toBe(0);
   await page.getByLabel("Label", { exact: true }).focus();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("API key", { exact: true })).toBeFocused();

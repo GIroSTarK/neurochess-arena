@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { AccountField } from "../auth/account-field";
 import type { PublicAccess } from "../routing/route-runtime";
 import { authHref, gameHref, withReturnTo } from "../routing/route-urls";
+import { PageLayout } from "../shell/page-layout";
 import { Button } from "../ui/button";
 import { TextLink } from "../ui/text-link";
 
@@ -31,13 +32,10 @@ export function RoomEntryScreen({
   const admittedIdentity = access === "guest" || access === "account";
   const returnTo = mode === "join" ? "/rooms/join" : "/rooms";
   return (
-    <section className="mx-auto my-8 grid w-full max-w-xl min-w-0 gap-6 rounded-panel border border-divider bg-surface p-4 md:p-8">
-      <h1 className="font-display text-title font-medium">
-        {t(mode === "join" ? "rooms.joinTitle" : "rooms.title")}
-      </h1>
-      <p className="text-text-secondary">
-        {t(mode === "join" ? "rooms.joinDescription" : "rooms.description")}
-      </p>
+    <PageLayout
+      title={t(mode === "join" ? "rooms.joinTitle" : "rooms.title")}
+      description={t(mode === "join" ? "rooms.joinDescription" : "rooms.description")}
+    >
       {mode === "setup" ? (
         <>
           {access === "account" ? (
@@ -147,6 +145,6 @@ export function RoomEntryScreen({
         </Button>
       ) : null}
       {state.busy ? <p role="status">{t("rooms.working")}</p> : null}
-    </section>
+    </PageLayout>
   );
 }

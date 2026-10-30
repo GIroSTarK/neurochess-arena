@@ -270,13 +270,13 @@ test("keyboard credential consent, reveal and revoke keep safe dialog focus", as
   await enter(page, page.getByRole("button", { name: "Save key", exact: true }));
   await expect(page.getByText("Keyboard fixture", { exact: true })).toBeVisible();
   await expect(key).toHaveValue("");
-  await enter(page, page.getByRole("button", { name: "Revoke Keyboard fixture" }));
+  await enter(page, page.getByRole("button", { name: "Revoke key: Keyboard fixture" }));
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(dialog.getByRole("button", { name: "Revoke key", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Revoke Keyboard fixture" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Revoke key: Keyboard fixture" })).toBeFocused();
   await page.keyboard.press("Enter");
   await enter(
     page,

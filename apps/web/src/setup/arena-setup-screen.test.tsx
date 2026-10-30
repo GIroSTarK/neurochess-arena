@@ -148,6 +148,32 @@ async function selectModel(color: "White" | "Black", { keyboard = false } = {}) 
 }
 
 describe("Arena setup presentation and validated API handoff", () => {
+  it("retains the opposing AI form and clears only the seat changed to human", async () => {
+    const { credentials } = fixture();
+    const { user, seat: black } = await selectModel("Black");
+    const blackKey = black.getByLabelText("API key");
+    await user.click(black.getByRole("button", { name: "Show key" }));
+    const white = within(screen.getByRole("group", { name: "White" }));
+    await user.type(white.getByLabelText("API key"), "white-key-sentinel");
+
+    await user.selectOptions(screen.getByLabelText("Game mode"), "ai_vs_human");
+    const human = within(screen.getByRole("group", { name: "White" }));
+    expect(human.getByText("You · Human player")).toBeVisible();
+    expect(human.queryByLabelText("API key")).not.toBeInTheDocument();
+    expect(black.getByLabelText("API key")).toBe(blackKey);
+    expect(blackKey).toHaveValue("Black-key-sentinel");
+    expect(blackKey).toHaveAttribute("type", "text");
+    expect(black.getByRole("combobox", { name: "Model" })).toHaveValue("Model A (test fixture)");
+    expect(() => credentials.require("white", "openai")).toThrow();
+
+    await user.selectOptions(screen.getByLabelText("Game mode"), "ai_vs_ai");
+    expect(black.getByLabelText("API key")).toBe(blackKey);
+    expect(blackKey).toHaveValue("Black-key-sentinel");
+    const restored = within(screen.getByRole("group", { name: "White" }));
+    expect(restored.getByLabelText("API key")).toHaveValue("");
+    expect(restored.getByLabelText("API key")).toHaveAttribute("type", "password");
+  });
+
   it.each(["white", "black"] as const)(
     "selects a %s human and renders only the AI credential controls",
     async (color) => {

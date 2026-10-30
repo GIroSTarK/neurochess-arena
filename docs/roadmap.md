@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–5 completed; MVP release accepted by the deployment owner.
 
-**Last updated:** 2026-10-28
+**Last updated:** 2026-10-29
 
 The MVP contains all three game modes. The phases below are completed implementation checkpoints, not separate product editions. Their acceptance summaries describe evidence at phase closure; the current [release checklist](operations.md#mvp-release-acceptance) governs each new release candidate.
 
@@ -204,6 +204,16 @@ Exit condition: every MVP acceptance criterion in `docs/product.md` is verified 
 - [x] Task 4: explicit credential recovery dialog with retained masked page-memory fields, a persistent near-board action, preserved inspector state, and distinct provider/uncertain-command recovery.
 - [x] Task 5: near-board room status and recovery, explicit unfilled seats, grouped invitation sharing with focus access, and preserved human-room capabilities and synchronization.
 - [x] Task 6: Moves-first replay with synchronized details, secondary PGN actions and primary next-game actions, reconciled shared consumers, and complete automated redesign acceptance across the configured browsers and performance budgets.
+
+## Supporting-screen redesign — redesign Phase 5
+
+**Status:** Completed. Presentation follows the [supporting-page patterns](design-system.md#supporting-mvp-patterns); existing validation boundaries remain unchanged.
+
+- [x] Shared page hierarchy for authentication, profile, and private-room entry, with separated destructive actions.
+- [x] Compact independent AI setup and a centered single-opponent form for AI-human play, preserving page-memory credential lifetimes.
+- [x] Wide private History with divided rows, prominent replay access, and complete game-reference disclosure and confirmation.
+- [x] Saved-key management with the existing-key list first, responsive form composition, retained drafts/consent, and accessible revocation labels.
+- [x] Responsive, enlarged-text, keyboard, accessibility, privacy, and lifecycle regression checks across the affected configured browser journeys and the full contribution baseline.
 
 ## Post-MVP candidates
 

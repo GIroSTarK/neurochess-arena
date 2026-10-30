@@ -62,23 +62,31 @@ export function ProfileScreen({
     if (!removingAvatar) setUsernameDraft(null);
   }
   return (
-    <AccountFrame title={t(profile.completed ? "account.profile" : "account.onboarding")}>
-      <p className="text-body text-text-secondary">{t("account.profileHint")}</p>
-      <div className="flex flex-wrap items-center gap-4">
+    <AccountFrame
+      title={t(profile.completed ? "account.profile" : "account.onboarding")}
+      description={t("account.profileHint")}
+      width="content"
+      actions={
+        profile.completed ? <TextLink to={returnTo}>{t("account.return")}</TextLink> : undefined
+      }
+    >
+      <div className="flex max-w-xl flex-wrap items-center gap-4">
         <Avatar avatar={profile.avatar} />
+        <p className="min-w-0 flex-[1_1_16rem] text-label text-text-secondary">
+          {t("account.avatarHint")}
+        </p>
         {profile.avatar.source !== "initials" ? (
           <Button variant="secondary" aria-disabled={busy} onClick={() => save(true)}>
             {t("account.removeAvatar")}
           </Button>
         ) : null}
-        <p className="text-label text-text-secondary">{t("account.avatarHint")}</p>
       </div>
       <fetcher.Form
         ref={form}
         method="post"
         action={action}
         noValidate
-        className="grid gap-4"
+        className="grid max-w-xl min-w-0 gap-4"
         onSubmit={(event) => {
           event.preventDefault();
           save();
@@ -105,11 +113,15 @@ export function ProfileScreen({
         {busy || saved ? (
           <p role="status">{t(busy ? "account.working" : "account.saved")}</p>
         ) : null}
-        <Button variant="primary" type="submit" aria-disabled={busy}>
+        <Button
+          variant="primary"
+          type="submit"
+          aria-disabled={busy}
+          className="sm:justify-self-start"
+        >
           {t(profile.completed ? "account.saveProfile" : "account.finishProfile")}
         </Button>
       </fetcher.Form>
-      {profile.completed ? <TextLink to={returnTo}>{t("account.return")}</TextLink> : null}
       <AccountDeletion />
     </AccountFrame>
   );

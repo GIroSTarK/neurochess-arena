@@ -204,7 +204,7 @@ export function SaveCredentialForm({
       method="post"
       action="/account/credentials"
       ref={form}
-      className="grid min-w-0 gap-4"
+      className="grid w-full max-w-xl min-w-0 gap-4 rounded-panel border border-divider bg-surface p-4 @min-[32rem]/page:p-6"
       noValidate
       onSubmit={(event) => {
         event.preventDefault();

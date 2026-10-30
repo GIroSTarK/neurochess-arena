@@ -44,6 +44,30 @@ function visit() {
 }
 
 describe("private history presentation", () => {
+  it("keeps the full game reference available through disclosure and deletion confirmation", async () => {
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /games/history?limit=20": () => jsonResponse({ games: [entry], nextCursor: null }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    visit();
+    const list = await screen.findByRole("list", { name: "Finished games" });
+    const reference = within(list).getByText(GAME_ID, { exact: false });
+    expect(reference).not.toBeVisible();
+    await userEvent.click(within(list).getByText("Game reference", { exact: true }));
+    expect(reference).toBeVisible();
+    const remove = within(list).getByRole("button", { name: /Delete game/ });
+    expect(remove).toHaveAccessibleName(expect.stringContaining(GAME_ID));
+    await userEvent.click(remove);
+    const dialog = screen.getByRole("dialog", { name: "Delete this game?" });
+    expect(within(dialog).getByText(GAME_ID, { exact: false })).toBeVisible();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(remove).toHaveFocus();
+    expect(reference).toBeVisible();
+    http.assertNoUnexpectedRequests();
+  });
+
   it.each([
     [{ kind: "account", username: "Opponent" }, "Opponent"],
     [{ kind: "guest" }, "Guest player"],

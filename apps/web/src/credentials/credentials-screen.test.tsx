@@ -28,6 +28,36 @@ afterEach(() => {
 });
 
 describe("credential settings", () => {
+  it("retains the draft key and consent while saved metadata refreshes", async () => {
+    let refreshed = false;
+    const http = createHttpMock({
+      "GET /api/auth/get-session": () => jsonResponse(session),
+      "GET /profile": () => jsonResponse(profile),
+      "GET /credentials": () => jsonResponse({ credentials: refreshed ? [saved] : [] }),
+    });
+    vi.stubGlobal("fetch", http.fetch);
+    renderApp(
+      { apiBaseUrl: "http://localhost:3001", sandboxEnabled: false },
+      { initialEntries: ["/account/credentials"] },
+    );
+    const input = await screen.findByLabelText("API key", { exact: true });
+    await userEvent.type(screen.getByLabelText("Label"), "Draft key");
+    await userEvent.type(input, "draft-refresh-canary");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Save this key to my account" }));
+    refreshed = true;
+    await userEvent.click(screen.getByRole("button", { name: "Refresh saved keys" }));
+    await screen.findByText("Arena key");
+    expect(screen.getByText("Revoke key", { exact: true })).toHaveAccessibleName(
+      "Revoke key: Arena key",
+    );
+    expect(screen.getByLabelText("API key", { exact: true })).toBe(input);
+    expect(input).toHaveValue("draft-refresh-canary");
+    expect(input).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Label")).toHaveValue("Draft key");
+    expect(screen.getByRole("checkbox", { name: "Save this key to my account" })).toBeChecked();
+    http.assertNoUnexpectedRequests();
+  });
+
   it.each([false, true])(
     "reconciles a canceled same-page save without changing its UUID (stored: %s)",
     async (stored) => {
@@ -449,7 +479,7 @@ describe("credential settings", () => {
       provider: "openai",
     });
     expect(new Headers(call?.[1]?.headers).get("x-neurochess-expected-account")).toBe(GAME_ID);
-    await userEvent.click(screen.getByRole("button", { name: "Revoke Arena key" }));
+    await userEvent.click(screen.getByRole("button", { name: "Revoke key: Arena key" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
     await userEvent.click(within(dialog).getByRole("button", { name: "Revoke key" }));

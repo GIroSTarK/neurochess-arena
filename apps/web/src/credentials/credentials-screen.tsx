@@ -74,69 +74,85 @@ export function CredentialsScreen({
       });
   }
   return (
-    <AccountFrame title={t("credentials.title")}>
-      <p className="text-body text-text-secondary">{t("credentials.description")}</p>
-      <SaveCredentialForm identity={identity} catalog={state} version={version} refresh={refresh} />
-      <section className="grid min-w-0 gap-4 border-t border-divider pt-6">
-        <h2 ref={listHeading} tabIndex={-1} className="text-section font-semibold">
-          {t("credentials.list")}
-        </h2>
-        {state.phase === "loading" ? <p role="status">{t("account.loading")}</p> : null}
-        {state.phase === "error" ? <p role="alert">{t("credentials.loadError")}</p> : null}
-        {state.phase === "ready" && state.credentials.length === 0 ? (
-          <p>{t("credentials.empty")}</p>
-        ) : null}
-        <ul className="grid min-w-0 gap-3">
-          {state.credentials.map((item) => (
-            <li
-              key={item.credentialId}
-              className="grid min-w-0 grid-cols-1 gap-2 rounded-control border border-divider p-3"
-            >
-              <p className="font-semibold break-words">{item.label}</p>
-              <p className="text-label text-text-secondary">
-                {t(`setup.providers.${item.provider}`)} ·{" "}
-                {item.maskedSuffix
-                  ? t("credentials.suffix", { suffix: item.maskedSuffix })
-                  : t("credentials.masked")}
-              </p>
-              <p className="text-label text-text-secondary">
-                {t("credentials.created", {
-                  date: new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
-                    new Date(item.createdAt),
-                  ),
-                })}
-              </p>
-              <Button
-                variant="secondary"
-                aria-label={t("credentials.revokeLabel", { label: item.label })}
-                aria-disabled={busy}
-                onClick={() => {
-                  reset();
-                  setConfirmation(item);
-                }}
+    <AccountFrame
+      title={t("credentials.title")}
+      width="wide"
+      description={t("credentials.description")}
+      actions={<TextLink to={returnTo}>{t("account.return")}</TextLink>}
+    >
+      <div className="grid min-w-0 items-start gap-8 @min-[56rem]/page:grid-cols-[minmax(0,1fr)_24rem]">
+        <section className="grid min-w-0 gap-4" aria-label={t("credentials.list")}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 ref={listHeading} tabIndex={-1} className="text-section font-semibold">
+              {t("credentials.list")}
+            </h2>
+            <Button variant="quiet" onClick={() => void refresh()}>
+              {t("credentials.refresh")}
+            </Button>
+          </div>
+          {state.phase === "loading" ? <p role="status">{t("account.loading")}</p> : null}
+          {state.phase === "error" ? <p role="alert">{t("credentials.loadError")}</p> : null}
+          {state.phase === "ready" && state.credentials.length === 0 ? (
+            <p className="border-y border-divider py-6 text-text-secondary">
+              {t("credentials.empty")}
+            </p>
+          ) : null}
+          <ul className="grid min-w-0 divide-y divide-divider">
+            {state.credentials.map((item) => (
+              <li
+                key={item.credentialId}
+                className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2 py-4"
               >
-                {t("credentials.revoke")}
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => void refresh()}>
-            {t("credentials.refresh")}
-          </Button>
-          <Button
-            variant="secondary"
-            aria-disabled={busy || state.credentials.length === 0}
-            onClick={() => {
-              reset();
-              setConfirmation("all");
-            }}
-          >
-            {t("credentials.clear")}
-          </Button>
-        </div>
-      </section>
-      <TextLink to={returnTo}>{t("account.return")}</TextLink>
+                <div className="grid min-w-0 flex-[1_1_16rem] gap-2">
+                  <p className="font-semibold wrap-anywhere">{item.label}</p>
+                  <p className="text-label text-text-secondary">
+                    {t(`setup.providers.${item.provider}`)} ·{" "}
+                    {item.maskedSuffix
+                      ? t("credentials.suffix", { suffix: item.maskedSuffix })
+                      : t("credentials.masked")}
+                  </p>
+                  <p className="text-label text-text-secondary">
+                    {t("credentials.created", {
+                      date: new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
+                        new Date(item.createdAt),
+                      ),
+                    })}
+                  </p>
+                </div>
+                <Button
+                  variant="quiet-danger"
+                  aria-label={t("credentials.revokeLabel", { label: item.label })}
+                  aria-disabled={busy}
+                  onClick={() => {
+                    reset();
+                    setConfirmation(item);
+                  }}
+                >
+                  {t("credentials.revoke")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap justify-end border-t border-divider pt-4">
+            <Button
+              variant="quiet-danger"
+              aria-disabled={busy || state.credentials.length === 0}
+              onClick={() => {
+                reset();
+                setConfirmation("all");
+              }}
+            >
+              {t("credentials.clear")}
+            </Button>
+          </div>
+        </section>
+        <SaveCredentialForm
+          identity={identity}
+          catalog={state}
+          version={version}
+          refresh={refresh}
+        />
+      </div>
       {confirmation ? (
         <ConfirmDialog
           title={t(confirmation === "all" ? "credentials.clearTitle" : "credentials.revokeTitle")}
